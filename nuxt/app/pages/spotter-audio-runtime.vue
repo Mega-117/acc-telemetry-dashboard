@@ -29,6 +29,8 @@ import {
 import { subscribeTrackVoiceReferencesChanged } from '~/services/spotter/trackVoiceReferenceChanges'
 import {
   isSpotterFeatureAllowed,
+  resolveSpotterSessionMode,
+  voiceSessionType,
   isSpotterSessionChange,
 } from '~/services/spotter/spotterSessionPolicy'
 import {
@@ -57,6 +59,7 @@ const { getPublicPath } = usePublicPath()
 const {
   selectedVoice,
   targetLapVoiceEnabled,
+  targetLapSessionModes,
   pressureWarningsEnabled,
   pressureWarningSessionModes,
   referencesEnabled,
@@ -118,8 +121,8 @@ const getRuntimeApi = useOverlayRegionApi()
 
 const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(getRuntimeApi, true)
 const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStatePoller(getRuntimeApi, true)
-const audioSessionType = computed(() => fastState.value.commonLive?.gameId !== 'acc' && fastState.value.commonLive
-  ? fastState.value.commonLive.sessionKind : fastState.value.sessionType)
+// PIP-533: the same session type Ctrl+K shows for each alert.
+const audioSessionType = computed(() => voiceSessionType(fastState.value))
 const matchingReferences = computed(() => trackVoiceReferences.value.filter(point => referenceMatchesContext(
   point, fastState.value.commonLive?.gameId ?? 'acc', fastState.value.context?.track ?? liveLap.value.track,
   fastState.value.commonLive?.identity?.variant ?? null,
@@ -319,7 +322,10 @@ let targetSettingsDisposed = false
 const targetLapVoiceRuntime = createTargetLapVoiceRuntime({
   getTarget: () => targetSettings,
   getVoice: () => selectedVoice.value,
-  canAnnounce: () => canRunSpotterAudio.value && targetLapVoiceEnabled.value && audioFeatureAvailable(fastState.value, 'lapAnnouncement'),
+  // PIP-533: sessions decide; an unknown session keeps the old target rule (switch only).
+  canAnnounce: () => canRunSpotterAudio.value && targetLapVoiceEnabled.value && audioFeatureAvailable(fastState.value, 'lapAnnouncement')
+    && (resolveSpotterSessionMode(audioSessionType.value) === null
+      || isSpotterFeatureAllowed(true, targetLapSessionModes.value, audioSessionType.value)),
   enqueue: cue => voiceQueue.enqueue(bindAudioCue(cue, () => fastState.value)),
 })
 

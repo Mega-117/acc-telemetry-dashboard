@@ -43,6 +43,7 @@ import QuickCountdown from '~/components/overlay/QuickCountdown.vue'
 import { useQuickCountdown } from '~/composables/useQuickCountdown'
 import QuickPanelLayoutToggle from '~/components/overlay/QuickPanelLayoutToggle.vue'
 import QuickPanelVoiceControls from '~/components/overlay/QuickPanelVoiceControls.vue'
+import { SPOTTER_SESSION_LABELS, isSpotterFeatureAllowed, resolveSpotterSessionMode, toggleCurrentSessionMode, voiceSessionType, type SpotterSessionMode } from '~/services/spotter/spotterSessionPolicy'
 import { quickPanelActionHint } from '~/services/overlay/quickPanelActionHint'
 import OverlaySelectSetup from '~/components/overlay/OverlaySelectSetup.vue'
 import OverlayHud from '~/components/overlay/OverlayHud.vue'
@@ -148,7 +149,15 @@ const {
   targetLapVoiceEnabled,
   setTargetLapVoiceEnabled,
   pressureWarningsEnabled,
-  togglePressureWarnings,
+  setPressureWarningsEnabled,
+  referenceSessionModes,
+  lapTimeSessionModes,
+  pressureWarningSessionModes,
+  targetLapSessionModes,
+  setReferenceSessionModes,
+  setLapTimeSessionModes,
+  setPressureWarningSessionModes,
+  setTargetLapSessionModes,
 } = useSpotterVoiceSettings()
 const { canEnterApp, isSecondaryLocalRuntime, isLocalRuntimeAttested } = useFirebaseAuth()
 const canUseSpotterControls = computed(() => resolveLocalRuntimeCapability({
@@ -419,6 +428,15 @@ const { liveLap, startLiveStatePolling, stopLiveStatePolling, resetLiveLap } =
   useLiveStatePoller(getOverlayApi, true)
 const { fastState, startFastStatePolling, stopFastStatePolling } =
   useFastStatePoller(getOverlayApi, true)
+// PIP-533: Ctrl+K shows and changes each alert for the session being driven;
+// the webapp keeps the same per-session choices (one source: the settings store).
+const voiceSessionMode = computed<SpotterSessionMode | null>(() => resolveSpotterSessionMode(voiceSessionType(fastState.value)))
+const voiceSessionLabel = computed(() => voiceSessionMode.value ? SPOTTER_SESSION_LABELS[voiceSessionMode.value] : null)
+const voiceOnForSession = (enabled: boolean, modes: SpotterSessionMode[]) => isSpotterFeatureAllowed(enabled, modes, voiceSessionType(fastState.value))
+const coachVoiceOn = computed(() => voiceOnForSession(spotterEnabled.value, lapTimeSessionModes.value))
+const referencesVoiceOn = computed(() => voiceOnForSession(trackVoiceReferencesEnabled.value, referenceSessionModes.value))
+const pressureVoiceOn = computed(() => voiceOnForSession(pressureWarningsEnabled.value, pressureWarningSessionModes.value))
+const targetVoiceOn = computed(() => voiceOnForSession(targetLapVoiceEnabled.value, targetLapSessionModes.value))
 // PIP-510: the game is known from the menus on (not only when driving) and the
 // layout never flickers on a silent source; see useSimulatorPresence.
 const simulatorPresence = useSimulatorPresence(computed(() => fastState.value.commonLive))
@@ -715,7 +733,7 @@ const {
   liveLap, startLiveStatePolling, stopLiveStatePolling, resetLiveLap,
   trackingStart, trackingComplete, trackingAbandon, savePreferences,
   stepBudgetMs,
-  () => spotterEnabled.value,
+  () => coachVoiceOn.value,
 )
 
 let trainingSourceKey: string | null = null
@@ -805,9 +823,25 @@ async function confirmInfoTarget() {
 }
 
 
+/** Adds or removes the current session from one alert; null when the session is unknown. */
+function toggleVoiceForSession(on: boolean, enabled: boolean, setEnabled: (value: boolean) => void,
+  modes: SpotterSessionMode[], setModes: (value: SpotterSessionMode[]) => void): boolean | null {
+  const next = toggleCurrentSessionMode(modes, voiceSessionType(fastState.value), on)
+  if (!next) return null
+  if (next.on && !enabled) setEnabled(true)
+  setModes(next.modes)
+  return next.on
+}
+
 function togglePressureAudio() {
   if (!canUseSpotterControls.value) return
-  togglePressureWarnings()
+  toggleVoiceForSession(pressureVoiceOn.value, pressureWarningsEnabled.value, setPressureWarningsEnabled,
+    pressureWarningSessionModes.value, setPressureWarningSessionModes)
+}
+
+function toggleTargetVoice() {
+  toggleVoiceForSession(targetVoiceOn.value, targetLapVoiceEnabled.value, setTargetLapVoiceEnabled,
+    targetLapSessionModes.value, setTargetLapSessionModes)
 }
 
 function toggleCoachAudio() {
@@ -816,8 +850,9 @@ function toggleCoachAudio() {
     showVoicePointNotice('Login richiesto per gli avvisi vocali.', 'error')
     return
   }
-  const enabled = !spotterEnabled.value
-  setCoachEnabled(enabled)
+  const enabled = toggleVoiceForSession(coachVoiceOn.value, spotterEnabled.value, setCoachEnabled,
+    lapTimeSessionModes.value, setLapTimeSessionModes)
+  if (enabled === null) return
   if (!enabled) stopVoice()
   void savePreferences()
   setDebugEvent(enabled ? 'avvisi giro attivati' : 'avvisi giro disattivati')
@@ -954,8 +989,9 @@ function toggleTrackVoiceReferences() {
     showVoicePointNotice('Login richiesto per i riferimenti vocali.', 'error')
     return
   }
-  const enabled = !trackVoiceReferencesEnabled.value
-  setReferencesEnabled(enabled)
+  const enabled = toggleVoiceForSession(referencesVoiceOn.value, trackVoiceReferencesEnabled.value, setReferencesEnabled,
+    referenceSessionModes.value, setReferenceSessionModes)
+  if (enabled === null) return
   showVoicePointNotice(enabled ? 'Riferimenti vocali attivi.' : 'Riferimenti vocali disattivi.', 'ok')
 }
 
@@ -1418,15 +1454,16 @@ onBeforeUnmount(() => {
                     <!-- PIP-509: audio alerts are always the last row (vertical) or last column (horizontal). -->
                     <QuickPanelVoiceControls v-if="quickPanelSupport.quickVoiceControls"
                       :extended-controls="quickPanelSupport.extendedVoiceControls"
-                      :coach="isFullQuickPanelPreview || spotterEnabled"
-                      :references="isFullQuickPanelPreview || trackVoiceReferencesEnabled"
-                      :pressure="isFullQuickPanelPreview || pressureWarningsEnabled"
-                      :target="isFullQuickPanelPreview || targetLapVoiceEnabled"
-                      :disabled="!isFullQuickPanelPreview && !canUseSpotterControls"
+                      :coach="isFullQuickPanelPreview || coachVoiceOn"
+                      :references="isFullQuickPanelPreview || referencesVoiceOn"
+                      :pressure="isFullQuickPanelPreview || pressureVoiceOn"
+                      :target="isFullQuickPanelPreview || targetVoiceOn"
+                      :session-label="isFullQuickPanelPreview ? 'Gara' : voiceSessionLabel"
+                      :disabled="!isFullQuickPanelPreview && (!canUseSpotterControls || !voiceSessionMode)"
                       @toggle-coach="toggleCoachAudio"
                       @toggle-references="toggleTrackVoiceReferences"
                       @toggle-pressure="togglePressureAudio"
-                      @toggle-target="setTargetLapVoiceEnabled(!targetLapVoiceEnabled)"
+                      @toggle-target="toggleTargetVoice"
                     />
                     </div>
                     <!-- PIP-518: horizontal layout keeps every message in one column, last on the right. -->

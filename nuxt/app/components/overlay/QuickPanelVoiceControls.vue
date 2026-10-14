@@ -8,7 +8,9 @@ withDefaults(defineProps<{
   target: boolean
   disabled: boolean
   extendedControls?: boolean
-}>(), { extendedControls: true })
+  /** PIP-533: the session the ON/OFF refers to ("Gara"); null when unknown. */
+  sessionLabel?: string | null
+}>(), { extendedControls: true, sessionLabel: null })
 const emit = defineEmits<{
   'toggle-coach': []
   'toggle-references': []
@@ -19,7 +21,7 @@ const emit = defineEmits<{
 
 <template>
   <section class="quick-panel-section" aria-label="Avvisi vocali">
-    <h2 class="quick-panel-heading">Avvisi vocali</h2>
+    <h2 class="quick-panel-heading">Avvisi vocali<template v-if="sessionLabel"> · {{ sessionLabel }}</template></h2>
     <div class="quick-panel-voice-grid">
       <button type="button" role="switch" class="quick-panel-voice-button" :class="{ 'is-on': coach }"
         :aria-checked="coach" aria-label="Avvisi giro" :disabled="disabled"

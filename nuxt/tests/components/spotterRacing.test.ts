@@ -24,8 +24,8 @@ beforeEach(() => {
   vi.stubGlobal('definePageMeta', vi.fn())
   fake.settings = { selectedVoice: ref('if_sara'), voiceLabel: ref('Sara'), adaptiveCoachMode: ref('focus') }
   for (const name of ['referencesEnabled', 'coachEnabled', 'adaptiveCoachEnabled', 'pressureWarningsEnabled']) fake.settings[name] = ref(true)
-  for (const name of ['referenceSessionModes', 'adaptiveCoachSessionModes', 'lapTimeSessionModes', 'pressureWarningSessionModes']) fake.settings[name] = ref(['practice'])
-  for (const name of ['toggleReferences', 'toggleCoach', 'toggleAdaptiveCoach', 'togglePressureWarnings', 'selectVoice', 'setAdaptiveCoachMode', 'setReferenceSessionModes', 'setAdaptiveCoachSessionModes', 'setLapTimeSessionModes', 'setPressureWarningSessionModes']) fake.settings[name] = vi.fn()
+  for (const name of ['referenceSessionModes', 'adaptiveCoachSessionModes', 'lapTimeSessionModes', 'pressureWarningSessionModes', 'targetLapSessionModes']) fake.settings[name] = ref(['practice'])
+  for (const name of ['toggleReferences', 'toggleCoach', 'toggleAdaptiveCoach', 'togglePressureWarnings', 'selectVoice', 'setAdaptiveCoachMode', 'setReferenceSessionModes', 'setAdaptiveCoachSessionModes', 'setLapTimeSessionModes', 'setPressureWarningSessionModes', 'setTargetLapSessionModes']) fake.settings[name] = vi.fn()
 })
 afterEach(() => { wrapper?.unmount(); vi.unstubAllGlobals() })
 
@@ -52,17 +52,12 @@ describe('Spotter racing controls', () => {
     expect(wrapper.findAll('.reference-metrics dd')[0]!.text()).toBe('1')
     expect(wrapper.get('.reference-panel a').attributes('href')).toContain('game=acc&variant=&track=Spa')
   })
-  it('keeps all four feature switches, session policies, voice and coach mode wired', async () => {
+  it('PIP-533: sessions only (no global switch), target included, voice and coach mode wired', async () => {
     wrapper = mount(Spotter, { global: { components: { UiRacingSwitch: RacingSwitch }, stubs: { LayoutPageContainer: { template: '<main><slot /></main>' }, NuxtLink: { template: '<a><slot /></a>' } } } })
     await flushPromises()
-    const switches = wrapper.findAll('[role="switch"]')
-    expect(switches).toHaveLength(4)
-    for (const [index, handler] of ['toggleReferences', 'toggleAdaptiveCoach', 'toggleCoach', 'togglePressureWarnings'].entries()) {
-      await switches[index]!.trigger('click')
-      expect(fake.settings[handler]).toHaveBeenCalledOnce()
-    }
+    expect(wrapper.findAll('.features [role="switch"]')).toHaveLength(0)
     const groups = wrapper.findAll('.session-mode-picker')
-    for (const [index, handler] of ['setReferenceSessionModes', 'setAdaptiveCoachSessionModes', 'setLapTimeSessionModes', 'setPressureWarningSessionModes'].entries()) {
+    for (const [index, handler] of ['setReferenceSessionModes', 'setAdaptiveCoachSessionModes', 'setLapTimeSessionModes', 'setPressureWarningSessionModes', 'setTargetLapSessionModes'].entries()) {
       await groups[index]!.findAll('button')[1]!.trigger('click')
       expect(fake.settings[handler]).toHaveBeenCalledWith(['practice', 'qualify'])
     }

@@ -42,24 +42,18 @@ const selectedVariant = ref('')
 const voiceLabRuntime = useVoiceLabRuntime()
 const {
   selectedVoice,
-  pressureWarningsEnabled,
   pressureWarningSessionModes,
-  togglePressureWarnings,
   setPressureWarningSessionModes,
   voiceLabel,
-  referencesEnabled,
-  coachEnabled,
-  adaptiveCoachEnabled,
   adaptiveCoachSessionModes,
   adaptiveCoachMode,
-  toggleAdaptiveCoach,
   setAdaptiveCoachSessionModes,
   setAdaptiveCoachMode,
   referenceSessionModes,
   lapTimeSessionModes,
+  targetLapSessionModes,
+  setTargetLapSessionModes,
   selectVoice,
-  toggleReferences,
-  toggleCoach,
   setReferenceSessionModes,
   setLapTimeSessionModes,
 } = useSpotterVoiceSettings()
@@ -180,13 +174,7 @@ onMounted(() => {
             </div>
             <div class="feature-row">
               <h3>Riferimenti pista</h3>
-              <div class="feature-control">
-                <UiRacingSwitch
-                  :model-value="referencesEnabled"
-                  label="Riferimenti pista"
-                  @update:model-value="toggleReferences"
-                />
-              </div>
+              <div class="feature-control" />
               <SessionModePicker
                 :model-value="referenceSessionModes"
                 label="Sessioni abilitate per i riferimenti pista"
@@ -196,16 +184,11 @@ onMounted(() => {
             <div v-if="support.adaptiveCoach" class="feature-row">
               <h3>Feedback coach</h3>
               <div class="feature-control">
-                <UiRacingSwitch
-                  :model-value="adaptiveCoachEnabled"
-                  label="Feedback coach"
-                  @update:model-value="toggleAdaptiveCoach"
-                />
                 <div class="select-shell"><select
                   class="racing-select"
                   aria-label="Modalità feedback coach"
                   :value="adaptiveCoachMode"
-                  :disabled="!adaptiveCoachEnabled"
+                  :disabled="!adaptiveCoachSessionModes.length"
                   @change="setAdaptiveCoachMode(($event.target as HTMLSelectElement).value as 'focus' | 'all')"
                 >
                   <option value="focus">
@@ -223,13 +206,7 @@ onMounted(() => {
             </div>
             <div class="feature-row">
               <h3>Avvisi giro</h3>
-              <div class="feature-control">
-                <UiRacingSwitch
-                  :model-value="coachEnabled"
-                  label="Avvisi giro"
-                  @update:model-value="toggleCoach"
-                />
-              </div>
+              <div class="feature-control" />
               <SessionModePicker
                 :model-value="lapTimeSessionModes"
                 label="Sessioni abilitate per gli avvisi giro"
@@ -240,17 +217,21 @@ onMounted(() => {
               <h3 title="Correzioni pressioni alla fine del terzo giro di ogni stint">
                 Avvisi pressioni
               </h3>
-              <div class="feature-control">
-                <UiRacingSwitch
-                  :model-value="pressureWarningsEnabled"
-                  label="Avvisi pressioni"
-                  @update:model-value="togglePressureWarnings"
-                />
-              </div>
+              <div class="feature-control" />
               <SessionModePicker
                 :model-value="pressureWarningSessionModes"
                 label="Sessioni abilitate per gli avvisi pressioni"
                 @update:model-value="setPressureWarningSessionModes"
+              />
+            </div>
+            <!-- PIP-533: the target lap voice follows sessions like the other alerts. -->
+            <div class="feature-row">
+              <h3>Voce target</h3>
+              <div class="feature-control" />
+              <SessionModePicker
+                :model-value="targetLapSessionModes"
+                label="Sessioni abilitate per la voce target"
+                @update:model-value="setTargetLapSessionModes"
               />
             </div>
           </section>

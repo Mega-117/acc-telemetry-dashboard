@@ -26,17 +26,18 @@ afterEach(() => {
 })
 
 describe('useSpotterVoiceSettings session modes', () => {
-  it('defaults target voice on and persists its own switch across reloads independently', () => {
+  it('PIP-533: target voice defaults on in every session; a switched-off target becomes "no session" once', () => {
     const settings = useSpotterVoiceSettings()
     settings.load(); expect(settings.targetLapVoiceEnabled.value).toBe(true)
+    expect(settings.targetLapSessionModes.value).toEqual(['practice', 'qualify', 'race'])
     settings.setTargetLapVoiceEnabled(false); settings.load()
-    expect(settings.targetLapVoiceEnabled.value).toBe(false)
-    expect(settings.pressureWarningsEnabled.value).toBe(true)
-    expect(storage.get('acc.spotter.targetLap.enabled')).toBe('0')
-    storage.set('acc.spotter.targetLap.enabled', '1'); settings.load()
     expect(settings.targetLapVoiceEnabled.value).toBe(true)
-    settings.setTargetLapVoiceEnabled(false); settings.setTargetLapVoiceEnabled(true)
+    expect(settings.targetLapSessionModes.value).toEqual([])
     expect(storage.get('acc.spotter.targetLap.enabled')).toBe('1')
+    expect(storage.get('acc.spotter.targetLap.sessionModes')).toBe('none')
+    expect(settings.pressureWarningsEnabled.value).toBe(true)
+    settings.setTargetLapSessionModes(['race']); settings.load()
+    expect(settings.targetLapSessionModes.value).toEqual(['race'])
     expect(window.dispatchEvent).toHaveBeenCalled()
   })
 
@@ -52,19 +53,22 @@ describe('useSpotterVoiceSettings session modes', () => {
     const settings = useSpotterVoiceSettings()
     settings.load()
     settings.setPressureWarningSessionModes(['qualify', 'race'])
+    expect(storage.get('acc.spotter.pressureWarnings.sessionModes')).toBe('qualify,race')
+    // PIP-533: an old global switch-off migrates to "no session" on the next load.
     settings.togglePressureWarnings()
     expect(storage.get('acc.spotter.pressureWarnings.enabled')).toBe('0')
-    expect(storage.get('acc.spotter.pressureWarnings.sessionModes')).toBe('qualify,race')
     settings.load()
-    expect(settings.pressureWarningsEnabled.value).toBe(false)
-    expect(settings.pressureWarningSessionModes.value).toEqual(['qualify', 'race'])
+    expect(settings.pressureWarningsEnabled.value).toBe(true)
+    expect(settings.pressureWarningSessionModes.value).toEqual([])
     storage.set('acc.spotter.pressureWarnings.enabled', '1')
     storage.set('acc.spotter.pressureWarnings.sessionModes', 'race')
     settings.load()
     expect(settings.pressureWarningsEnabled.value).toBe(true)
     expect(settings.pressureWarningSessionModes.value).toEqual(['race'])
+    // No session is a real choice now: the alert is off everywhere.
     settings.setPressureWarningSessionModes([])
-    expect(settings.pressureWarningSessionModes.value.length).toBeGreaterThan(0)
+    expect(settings.pressureWarningSessionModes.value).toEqual([])
+    expect(storage.get('acc.spotter.pressureWarnings.sessionModes')).toBe('none')
     expect(window.dispatchEvent).toHaveBeenCalled()
   })
 
@@ -98,10 +102,12 @@ describe('useSpotterVoiceSettings session modes', () => {
     expect(storage.get('acc.trackVoiceReferences.sessionModes')).toBe('practice,qualify')
   })
 
-  it('does not allow toggling away the last selected mode', () => {
+  it('PIP-533: toggling away the last mode turns the alert off and survives a reload', () => {
     const settings = useSpotterVoiceSettings()
     settings.load()
     settings.toggleReferenceSessionMode('practice')
-    expect(settings.referenceSessionModes.value).toEqual(['practice'])
+    expect(settings.referenceSessionModes.value).toEqual([])
+    settings.load()
+    expect(settings.referenceSessionModes.value).toEqual([])
   })
 })

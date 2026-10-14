@@ -120,6 +120,19 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     // The lap badge keeps the Pressioni button visible while the measurement runs.
     expect(source).toMatch(/quickPanelPressureState\.value\.state === 'ready' \|\| !!pressureBadge\.value\)/)
   })
+  it('PIP-533: voice buttons show and change the alert for the session being driven', () => {
+    expect(source).toContain(':coach="isFullQuickPanelPreview || coachVoiceOn"')
+    expect(source).toContain(':references="isFullQuickPanelPreview || referencesVoiceOn"')
+    expect(source).toContain(':pressure="isFullQuickPanelPreview || pressureVoiceOn"')
+    expect(source).toContain(":session-label=\"isFullQuickPanelPreview ? 'Gara' : voiceSessionLabel\"")
+    // Unknown session (menus): nothing to toggle.
+    expect(source).toContain(':disabled="!isFullQuickPanelPreview && (!canUseSpotterControls || !voiceSessionMode)"')
+    expect(source).toContain('const next = toggleCurrentSessionMode(modes, voiceSessionType(fastState.value), on)')
+    // The training voice follows the same effective lap-time alert.
+    expect(source).toContain('() => coachVoiceOn.value,')
+    // Computed before any consumer reads it (training orchestrator setup).
+    expect(source.indexOf('const coachVoiceOn = computed')).toBeLessThan(source.indexOf('() => coachVoiceOn.value,'))
+  })
   it('shows a waiting placeholder instead of partial tools when no simulator is detected', () => {
     expect(source).toContain(`<p v-if="waitingForSimulator" class="quick-panel-waiting" role="status">{{ simulatorPresence.choiceRequired.value ? 'Scegli il gioco nella webapp' : 'In attesa del simulatore' }}</p>`)
     expect(source).toContain('<div v-else class="quick-panel-main"')

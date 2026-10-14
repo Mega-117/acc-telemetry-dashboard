@@ -1,6 +1,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   DEFAULT_SPOTTER_SESSION_MODES,
+  NO_SPOTTER_SESSION_MODES,
   SPOTTER_SESSION_MODES,
   normalizeSpotterSessionModes,
   serializeSpotterSessionModes,
@@ -18,6 +19,7 @@ export const spotterVoiceOptions: Array<{ id: SpotterVoiceId; label: string }> =
 const STORAGE_KEYS = {
   voice: 'acc.spotter.voice',
   targetLapVoiceEnabled: 'acc.spotter.targetLap.enabled',
+  targetLapSessionModes: 'acc.spotter.targetLap.sessionModes',
   pressureWarningsEnabled: 'acc.spotter.pressureWarnings.enabled',
   pressureWarningSessionModes: 'acc.spotter.pressureWarnings.sessionModes',
   referencesEnabled: 'acc.trackVoiceReferences.enabled',
@@ -47,6 +49,22 @@ const loaded = ref(false)
 const targetLapVoiceEnabled = ref(true)
 const pressureWarningsEnabled = ref(true)
 const pressureWarningSessionModes = ref<SpotterSessionMode[]>([...SPOTTER_SESSION_MODES])
+const targetLapSessionModes = ref<SpotterSessionMode[]>([...SPOTTER_SESSION_MODES])
+
+// PIP-533: the global on/off is gone from the webapp. An alert switched off
+// becomes "no session" once, so every alert is decided by its sessions only.
+const MIGRATED_MASTERS: Array<[keyof typeof STORAGE_KEYS, keyof typeof STORAGE_KEYS]> = [
+  ['referencesEnabled', 'referenceSessionModes'], ['coachEnabled', 'lapTimeSessionModes'],
+  ['pressureWarningsEnabled', 'pressureWarningSessionModes'], ['adaptiveCoachEnabled', 'adaptiveCoachSessionModes'],
+  ['targetLapVoiceEnabled', 'targetLapSessionModes'],
+]
+function migrateMasterSwitches() {
+  for (const [master, modes] of MIGRATED_MASTERS) {
+    if (window.localStorage.getItem(STORAGE_KEYS[master]) !== '0') continue
+    window.localStorage.setItem(STORAGE_KEYS[modes], NO_SPOTTER_SESSION_MODES)
+    window.localStorage.setItem(STORAGE_KEYS[master], '1')
+  }
+}
 
 function resolveVoiceId(value: unknown): SpotterVoiceId {
   return value === 'im_nicola' ? 'im_nicola' : 'if_sara'
@@ -58,8 +76,12 @@ function canUseStorage() {
 
 function readSettings() {
   if (!canUseStorage()) return
+  migrateMasterSwitches()
   selectedVoice.value = resolveVoiceId(window.localStorage.getItem(STORAGE_KEYS.voice))
   targetLapVoiceEnabled.value = window.localStorage.getItem(STORAGE_KEYS.targetLapVoiceEnabled) !== '0'
+  const targetModesRaw = window.localStorage.getItem(STORAGE_KEYS.targetLapSessionModes)
+  // The target voice spoke in every session before it had session choices.
+  targetLapSessionModes.value = targetModesRaw === null ? [...SPOTTER_SESSION_MODES] : normalizeSpotterSessionModes(targetModesRaw)
   const pressureRaw = window.localStorage.getItem(STORAGE_KEYS.pressureWarningsEnabled)
   pressureWarningsEnabled.value = pressureRaw === null ? true : pressureRaw === '1'
   const pressureModesRaw = window.localStorage.getItem(STORAGE_KEYS.pressureWarningSessionModes)
@@ -169,6 +191,11 @@ function togglePressureWarnings() {
   setPressureWarningsEnabled(!pressureWarningsEnabled.value)
 }
 
+function setTargetLapSessionModes(modes: SpotterSessionMode[]) {
+  targetLapSessionModes.value = normalizeSpotterSessionModes(modes)
+  writeSetting(STORAGE_KEYS.targetLapSessionModes, serializeSpotterSessionModes(targetLapSessionModes.value))
+}
+
 function setPressureWarningSessionModes(modes: SpotterSessionMode[]) {
   pressureWarningSessionModes.value = normalizeSpotterSessionModes(modes)
   writeSetting(STORAGE_KEYS.pressureWarningSessionModes, serializeSpotterSessionModes(pressureWarningSessionModes.value))
@@ -198,6 +225,8 @@ export function useSpotterVoiceSettings() {
   return {
     targetLapVoiceEnabled,
     setTargetLapVoiceEnabled,
+    targetLapSessionModes,
+    setTargetLapSessionModes,
     pressureWarningsEnabled,
     pressureWarningSessionModes,
     setPressureWarningsEnabled,

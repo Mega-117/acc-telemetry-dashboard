@@ -38,7 +38,8 @@ beforeEach(() => {
   mocks.settings = { targetLapVoiceEnabled: ref(true), selectedVoice: ref('if_sara'), coachEnabled: ref(true), pressureWarningsEnabled: ref(true),
     referencesEnabled: ref(false), adaptiveCoachEnabled: ref(false), adaptiveCoachMode: ref('all'),
     lapTimeSessionModes: ref(['practice']), pressureWarningSessionModes: ref(['practice']),
-    referenceSessionModes: ref(['practice']), adaptiveCoachSessionModes: ref(['practice']), load() {} }
+    referenceSessionModes: ref(['practice']), adaptiveCoachSessionModes: ref(['practice']),
+    targetLapSessionModes: ref(['practice', 'qualify', 'race']), load() {} }
   vi.stubGlobal('definePageMeta', () => {})
   vi.stubGlobal('useHead', () => {})
   vi.stubGlobal('Audio', class {

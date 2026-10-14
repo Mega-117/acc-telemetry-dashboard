@@ -9,7 +9,9 @@ const runtime = readFileSync(resolve(process.cwd(), 'app/pages/spotter-audio-run
 describe('Spotter session settings wiring', () => {
   it('uses the same accessible multi-select picker for references, coach and lap alerts', () => {
     // PIP-260: terzo picker per la voce dedicata "Feedback coach"
-    expect(page.match(/<SessionModePicker/g)).toHaveLength(4)
+    // PIP-533: the target voice has its sessions too.
+    expect(page.match(/<SessionModePicker/g)).toHaveLength(5)
+    expect(page).toContain('Sessioni abilitate per la voce target')
     expect(page).toContain('Sessioni abilitate per gli avvisi pressioni')
     expect(page).toContain('Sessioni abilitate per i riferimenti pista')
     expect(page).toContain('Sessioni abilitate per il feedback coach')

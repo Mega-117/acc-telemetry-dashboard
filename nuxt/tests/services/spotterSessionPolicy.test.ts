@@ -5,7 +5,9 @@ import {
   normalizeSpotterSessionModes,
   resolveSpotterSessionMode,
   serializeSpotterSessionModes,
+  toggleCurrentSessionMode,
   toggleSpotterSessionMode,
+  voiceSessionType,
 } from '~/services/spotter/spotterSessionPolicy'
 
 describe('spotterSessionPolicy', () => {
@@ -29,8 +31,8 @@ describe('spotterSessionPolicy', () => {
     expect(serializeSpotterSessionModes(['race', 'qualify'])).toBe('qualify,race')
   })
 
-  it('allows multiple modes but never deselects the last one', () => {
-    expect(toggleSpotterSessionMode(['practice'], 'practice')).toEqual(['practice'])
+  it('PIP-533: allows multiple modes and deselecting the last one (= off everywhere)', () => {
+    expect(toggleSpotterSessionMode(['practice'], 'practice')).toEqual([])
     expect(toggleSpotterSessionMode(['practice'], 'qualify')).toEqual(['practice', 'qualify'])
     expect(toggleSpotterSessionMode(['practice', 'qualify'], 'practice')).toEqual(['qualify'])
   })
@@ -51,5 +53,26 @@ describe('spotterSessionPolicy', () => {
     expect(isSpotterSessionChange(null, 0)).toBe(false)
     expect(isSpotterSessionChange(0, null)).toBe(false)
     expect(isSpotterSessionChange(Number.NaN, 1)).toBe(false)
+  })
+})
+
+describe('PIP-533 per-session voice alerts', () => {
+  it('stores an explicit empty choice as "none" and reads it back as off everywhere', () => {
+    expect(serializeSpotterSessionModes([])).toBe('none')
+    expect(normalizeSpotterSessionModes('none')).toEqual([])
+    expect(normalizeSpotterSessionModes(null)).toEqual(['practice'])
+    expect(isSpotterFeatureAllowed(true, 'none', 2)).toBe(false)
+  })
+  it('a Ctrl+K click adds or removes only the session being driven', () => {
+    expect(toggleCurrentSessionMode(['practice'], 1, false)).toEqual({ modes: ['practice', 'qualify'], on: true })
+    expect(toggleCurrentSessionMode(['practice', 'qualify'], 1, true)).toEqual({ modes: ['practice'], on: false })
+    expect(toggleCurrentSessionMode(['race'], 2, true)).toEqual({ modes: [], on: false })
+    expect(toggleCurrentSessionMode(['race'], 'race', false)).toEqual({ modes: ['race'], on: true })
+    expect(toggleCurrentSessionMode(['race'], null, false)).toBeNull()
+  })
+  it('follows ACC numbers and other simulators by session kind', () => {
+    expect(voiceSessionType({ sessionType: 1, commonLive: { gameId: 'acc', sessionKind: 'race' } })).toBe(1)
+    expect(voiceSessionType({ sessionType: 1, commonLive: { gameId: 'evo', sessionKind: 'race' } })).toBe('race')
+    expect(voiceSessionType({ sessionType: 2, commonLive: null })).toBe(2)
   })
 })

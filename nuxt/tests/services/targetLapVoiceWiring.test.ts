@@ -28,8 +28,9 @@ describe('target voice renderer/IPC wiring contract', () => {
   })
   it('persists voice directly from the main list, independently of target edits', () => {
     const panel = source('pages/training-overlay.vue')
-    expect(panel).toContain('@toggle-target="setTargetLapVoiceEnabled(!targetLapVoiceEnabled)"')
-    expect(panel).toContain(':target="isFullQuickPanelPreview || targetLapVoiceEnabled"')
+    // PIP-533: Ctrl+K toggles the target voice for the session being driven.
+    expect(panel).toContain('@toggle-target="toggleTargetVoice"')
+    expect(panel).toContain(':target="isFullQuickPanelPreview || targetVoiceOn"')
     const controls = source('components/overlay/QuickPanelVoiceControls.vue')
     expect(controls).toContain('data-overlay-wheel-action="target-voice"')
     expect(controls).toContain(':aria-checked="target"')
