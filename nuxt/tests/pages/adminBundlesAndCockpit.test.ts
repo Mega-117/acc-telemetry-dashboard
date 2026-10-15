@@ -40,13 +40,15 @@ const item = (over: Record<string, unknown> = {}) => ({
 
 describe('admin diagnostic bundles page', () => {
   it('lists bundles, labels the kind in Italian and filters by installation on click', async () => {
-    mocks.list.mockResolvedValue({ items: [item(), item({ key: 'k2', kind: 'anomaly', size: 5 })], cursor: null })
+    mocks.list.mockResolvedValue({ items: [item(), item({ key: 'k2', kind: 'anomaly', size: 5 }),
+      item({ key: 'k3', kind: 'capture', size: 5 }), item({ key: 'k4', kind: 'shutdown', size: 5 }),
+      item({ key: 'k5', kind: 'future-kind', size: 5 })], cursor: null })
     const view = mount(BundlesPage, { global: { stubs: { NuxtLink: true } } })
     await flushPromises()
-    expect(view.text()).toContain('giornaliero')
-    expect(view.text()).toContain('anomalia')
+    const kinds = view.findAll('.kind').map((cell) => cell.text())
+    expect(kinds).toEqual(['giornaliero', 'anomalia', 'cattura', 'chiusura', 'future-kind'])
     expect(view.text()).toContain('2.0 KB')
-    expect(view.text()).toContain('2 pacchetti')
+    expect(view.text()).toContain('5 pacchetti')
     await view.get('button.link-button').trigger('click')
     await flushPromises()
     expect(mocks.list).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ installationId: '11111111-2222' }))
@@ -107,5 +109,23 @@ describe('admin cockpit scope', () => {
     for (const box of boxes) await box.setValue(false)
     await flushPromises()
     expect(view.get('.rows').text()).toBe('4')
+  })
+
+  it('warns that zero attention is not proof of health when in-scope installations have not reported recently', async () => {
+    const quiet = installation('real-a', '0.4.5-dev.3', 1)
+    const fresh = { ...installation('real-b', '0.4.5-dev.3', 0), lastContactAt: new Date(NOW - 60_000).toISOString() }
+    mocks.snapshot.mockResolvedValue({ rows: [row(quiet), row(fresh)], pilotCount: 2, installationCount: 2, attentionCount: 0,
+      coverageLimited: false, directoryLimitReached: false, installationLimitReached: false,
+      budget: { readRequests: 2, maxDocuments: 300, writes: 0 } })
+    const view = mount(CockpitPage, { global: { stubs: { AdminCockpitTable: true } } })
+    await flushPromises()
+    expect(view.get('.metric-caveat').text()).toContain('1 senza contatto nelle ultime 2 ore')
+
+    mocks.snapshot.mockResolvedValue({ rows: [row(fresh)], pilotCount: 1, installationCount: 1, attentionCount: 0,
+      coverageLimited: false, directoryLimitReached: false, installationLimitReached: false,
+      budget: { readRequests: 2, maxDocuments: 300, writes: 0 } })
+    const allFresh = mount(CockpitPage, { global: { stubs: { AdminCockpitTable: true } } })
+    await flushPromises()
+    expect(allFresh.find('.metric-caveat').exists()).toBe(false)
   })
 })

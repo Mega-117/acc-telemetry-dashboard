@@ -68,7 +68,10 @@ export function mapPilotDirectoryDocument(docSnap: any): PilotDirectoryItem {
     role: data.role || 'pilot',
     coachId: data.coachId || null,
     lastSession: data.lastSessionDate || undefined,
-    totalSessions: data.sessionsLast7Days ?? 0,
+    // Un conteggio assente resta assente ("—" in pagina): uno zero inventato sembrerebbe inattività.
+    totalSessions: data.sessionsLast7Days != null && Number.isFinite(Number(data.sessionsLast7Days))
+      ? Number(data.sessionsLast7Days)
+      : undefined,
     suiteVersion: data.suiteVersion || undefined,
     suiteVersionUpdatedAt: data.suiteVersionUpdatedAt || undefined,
     clientChannel: data.clientChannel || undefined,

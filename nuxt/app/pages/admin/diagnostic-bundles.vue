@@ -69,6 +69,11 @@ function pickInstallation(item: DiagnosticBundleItem) {
   void load()
 }
 
+// I tipi creati dall'app desktop (diagnosticBundle.js); uno sconosciuto si mostra com'e'.
+const KIND_LABELS: Record<string, string> = {
+  daily: 'giornaliero', anomaly: 'anomalia', capture: 'cattura', shutdown: 'chiusura'
+}
+
 const timeFormat = new Intl.DateTimeFormat('it-IT', { dateStyle: 'short', timeStyle: 'medium' })
 const formatTime = (iso: string) => {
   const ms = Date.parse(iso)
@@ -85,7 +90,8 @@ onMounted(() => load())
         <p class="context-line">Amministrazione · cronologia delle installazioni</p>
         <h1>Pacchetti diagnostici</h1>
         <p>
-          Cronologia compressa inviata da ogni installazione (un pacchetto al giorno e uno dopo ogni anomalia).
+          Cronologia compressa inviata da ogni installazione: uno al giorno, uno dopo ogni anomalia, uno alla chiusura
+          dell'app e, su Windows 10, uno per ogni sessione di cattura della finestra di ACC.
           Si conservano 30 giorni. Il file scaricato è un gzip di righe JSON.
         </p>
       </div>
@@ -125,7 +131,7 @@ onMounted(() => load())
         <tbody>
           <tr v-for="item in items" :key="item.key">
             <td>{{ formatTime(item.uploadedAt) }}</td>
-            <td><span class="kind" :class="`kind--${item.kind}`">{{ item.kind === 'anomaly' ? 'anomalia' : item.kind === 'daily' ? 'giornaliero' : item.kind }}</span></td>
+            <td><span class="kind" :class="`kind--${item.kind}`">{{ KIND_LABELS[item.kind] || item.kind }}</span></td>
             <td>
               <button type="button" class="link-button mono" :title="item.installationId" @click="pickInstallation(item)">
                 {{ item.installationId.slice(0, 8) }}…
@@ -261,7 +267,8 @@ tr:last-child td { border-bottom: 0; }
 .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-variant-numeric: tabular-nums; }
 
 .kind { padding: 2px 8px; font-size: 11px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); }
-.kind--anomaly { color: #fcd34d; background: rgba($accent-warning, 0.12); }
+.kind--anomaly,
+.kind--capture { color: #fcd34d; background: rgba($accent-warning, 0.12); }
 
 .link-button { padding: 0; color: var(--theme-accent-light); background: none; border: 0; cursor: pointer; }
 .more { display: flex; justify-content: center; margin-top: $spacing-md; }

@@ -47,9 +47,15 @@ const latestVersions = computed(() => latestVersionByChannel(
 ))
 const latestSummary = computed(() => Object.entries(population.value.byChannel)
   .map(([channel, info]) => `${channel} ${info.version ?? '—'}`).join(' · ') || 'nessuna installazione attiva')
-const scopedAttention = computed(() => allInstallations.value.filter((item) => (
+const scopedInstallations = computed(() => allInstallations.value.filter((item) => (
   !isTestOwner(item.ownerUid) && isActiveWithinDays(item, now.value)
-  && isOnLatestVersion(item, latestVersions.value) && installationNeedsAttention(item)
+  && isOnLatestVersion(item, latestVersions.value)
+)))
+const scopedAttention = computed(() => scopedInstallations.value.filter(installationNeedsAttention).length)
+// Uno zero vale solo per le installazioni che hanno scritto di recente: le altre non hanno potuto
+// segnalare problemi, quindi lo diciamo invece di lasciar credere che stiano bene.
+const scopedWithoutRecentContact = computed(() => scopedInstallations.value.filter((item) => (
+  getClientHeartbeatStatus(item.lastContactAt) !== 'recent'
 )).length)
 
 function passesScope(row: { installation: AdminCockpitInstallation | null }): boolean {
@@ -164,6 +170,9 @@ onMounted(loadSnapshot)
         <span>Richiedono attenzione</span>
         <strong>{{ snapshot ? scopedAttention : '—' }}</strong>
         <small>nel perimetro: update, health o migrazione</small>
+        <small v-if="snapshot && scopedWithoutRecentContact > 0" class="metric-caveat">
+          {{ scopedWithoutRecentContact }} senza contatto nelle ultime 2 ore: per loro lo stato può essere vecchio
+        </small>
       </div>
       <div class="budget-note">
         <span>Budget lettura</span>
@@ -336,6 +345,7 @@ h1 {
 }
 
 .metric--primary strong { color: var(--theme-accent-light); }
+.metric small.metric-caveat { margin-top: 2px; color: #eab308; }
 
 .budget-note {
   display: grid;

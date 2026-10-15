@@ -192,6 +192,7 @@ export default defineConfig({
         'app/services/gateway/overviewProjectionLoadPolicy.ts',
         'app/services/monitoring/clientHeartbeatService.ts',
         'app/repositories/adminActivityRepository.ts',
+        'app/repositories/pilotDirectoryRepository.ts',
         'app/services/monitoring/clientRuntimeReportingService.ts',
         'app/services/monitoring/clientDiagnosticsService.ts',
         'app/services/monitoring/diagnosticsTokenResponder.ts',
