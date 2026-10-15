@@ -195,6 +195,8 @@ export default defineConfig({
         'app/services/monitoring/clientRuntimeReportingService.ts',
         'app/services/monitoring/clientDiagnosticsService.ts',
         'app/services/monitoring/diagnosticsTokenResponder.ts',
+        'app/utils/adminInstallationScope.ts',
+        'app/repositories/diagnosticBundlesRepository.ts',
         'app/services/monitoring/browserDiagnosticStore.ts',
         'app/repositories/adminCockpitRepository.ts',
         'app/repositories/clientDiagnosticsRepository.ts',

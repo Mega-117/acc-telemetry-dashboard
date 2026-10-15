@@ -83,6 +83,9 @@ const isAdminRouteActive = (path: string) => route.path === path || route.path.s
           <NuxtLink to="/admin-diagnostics" :aria-current="isAdminRouteActive('/admin-diagnostics') ? 'page' : undefined">
             Diagnostica
           </NuxtLink>
+          <NuxtLink to="/admin/diagnostic-bundles" :aria-current="isAdminRouteActive('/admin/diagnostic-bundles') ? 'page' : undefined">
+            Pacchetti
+          </NuxtLink>
         </nav>
 
         <!-- Spacer -->

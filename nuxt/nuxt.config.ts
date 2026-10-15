@@ -100,7 +100,7 @@ export default defineNuxtConfig({
             // acc-voice: e' il protocollo Electron che serve i WAV locali dei
             // riferimenti nella release desktop (PIP-211).
             "media-src 'self' data: blob: acc-voice: http://127.0.0.1:5112 http://localhost:5112",
-            `connect-src 'self' http://127.0.0.1:5112 http://localhost:5112${isDev ? ' http://127.0.0.1:8080 http://localhost:8080 http://127.0.0.1:9099 http://localhost:9099 http://127.0.0.1:9000 http://localhost:9000 ws://127.0.0.1:9000 ws://localhost:9000' : ''}${qaEmulatorSources} https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app`,
+            `connect-src 'self' http://127.0.0.1:5112 http://localhost:5112${isDev ? ' http://127.0.0.1:8080 http://localhost:8080 http://127.0.0.1:9099 http://localhost:9099 http://127.0.0.1:9000 http://localhost:9000 ws://127.0.0.1:9000 ws://localhost:9000' : ''}${qaEmulatorSources} https://*.googleapis.com https://racercore-diagnostics-ingest.enricosaian.workers.dev https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app`,
 
             "frame-ancestors 'none'",
           ].join('; ')

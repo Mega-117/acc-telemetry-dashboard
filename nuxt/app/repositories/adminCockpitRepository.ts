@@ -128,7 +128,7 @@ function fallbackPilot(uid: string): PilotDirectoryItem {
   }
 }
 
-function installationNeedsAttention(installation: AdminCockpitInstallation): boolean {
+export function installationNeedsAttention(installation: AdminCockpitInstallation): boolean {
   const health = installation.health.status.toLowerCase()
   const migration = installation.migration.status.toLowerCase()
   const update = installation.updateState.toLowerCase()

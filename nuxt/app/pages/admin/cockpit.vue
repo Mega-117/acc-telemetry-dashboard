@@ -2,9 +2,19 @@
 import { PRODUCT } from '../../../shared/productIdentity'
 import { computed, onMounted, ref } from 'vue'
 import {
+  installationNeedsAttention,
   loadAdminCockpitSnapshot,
+  type AdminCockpitInstallation,
   type AdminCockpitSnapshot,
 } from '~/repositories/adminCockpitRepository'
+import {
+  ACTIVE_WINDOW_DAYS,
+  isActiveWithinDays,
+  isOnLatestVersion,
+  isTestOwner,
+  latestVersionByChannel,
+  summarizeStabilityPopulation,
+} from '~/utils/adminInstallationScope'
 import { getClientHeartbeatStatus } from '~/services/monitoring/clientHeartbeatService'
 import { normalizePilotDirectoryText } from '~/utils/pilotDirectoryFields'
 
@@ -21,10 +31,40 @@ const errorMessage = ref('')
 const searchTerm = ref('')
 const contactFilter = ref('all')
 const healthFilter = ref('all')
+// Perimetro del cancello di stabilita': reali, attive negli ultimi 7 giorni, ultima versione
+// del proprio canale. Sono filtri di lettura: nessun documento viene cancellato.
+const hideTests = ref(true)
+const activeOnly = ref(true)
+const latestOnly = ref(true)
+const now = ref(Date.now())
+
+const allInstallations = computed<AdminCockpitInstallation[]>(() => (
+  (snapshot.value?.rows || []).flatMap((row) => (row.installation ? [row.installation] : []))
+))
+const population = computed(() => summarizeStabilityPopulation(allInstallations.value, now.value))
+const latestVersions = computed(() => latestVersionByChannel(
+  allInstallations.value.filter((item) => !isTestOwner(item.ownerUid) && isActiveWithinDays(item, now.value)),
+))
+const latestSummary = computed(() => Object.entries(population.value.byChannel)
+  .map(([channel, info]) => `${channel} ${info.version ?? '—'}`).join(' · ') || 'nessuna installazione attiva')
+const scopedAttention = computed(() => allInstallations.value.filter((item) => (
+  !isTestOwner(item.ownerUid) && isActiveWithinDays(item, now.value)
+  && isOnLatestVersion(item, latestVersions.value) && installationNeedsAttention(item)
+)).length)
+
+function passesScope(row: { installation: AdminCockpitInstallation | null }): boolean {
+  const installation = row.installation
+  if (!installation) return !activeOnly.value && !latestOnly.value
+  if (hideTests.value && isTestOwner(installation.ownerUid)) return false
+  if (activeOnly.value && !isActiveWithinDays(installation, now.value)) return false
+  if (latestOnly.value && !isOnLatestVersion(installation, latestVersions.value)) return false
+  return true
+}
 
 const filteredRows = computed(() => {
   const search = normalizePilotDirectoryText(searchTerm.value)
   return (snapshot.value?.rows || []).filter((row) => {
+    if (!passesScope(row)) return false
     const searchable = normalizePilotDirectoryText([
       row.pilot.uid,
       row.pilot.firstName,
@@ -63,6 +103,7 @@ const filteredRows = computed(() => {
 
 const filtersActive = computed(() => (
   Boolean(searchTerm.value)
+  || !hideTests.value || !activeOnly.value || !latestOnly.value
   || contactFilter.value !== 'all'
   || healthFilter.value !== 'all'
 ))
@@ -71,6 +112,7 @@ async function loadSnapshot() {
   loading.value = true
   errorMessage.value = ''
   try {
+    now.value = Date.now()
     snapshot.value = await loadAdminCockpitSnapshot()
   } catch (error: any) {
     errorMessage.value = error?.message || 'Impossibile leggere le proiezioni runtime.'
@@ -83,6 +125,9 @@ function resetFilters() {
   searchTerm.value = ''
   contactFilter.value = 'all'
   healthFilter.value = 'all'
+  hideTests.value = true
+  activeOnly.value = true
+  latestOnly.value = true
 }
 
 onMounted(loadSnapshot)
@@ -106,19 +151,19 @@ onMounted(loadSnapshot)
 
     <section class="metric-strip" aria-label="Riepilogo fotografia">
       <div class="metric metric--primary">
-        <span>Installazioni</span>
-        <strong>{{ snapshot?.installationCount ?? '—' }}</strong>
-        <small>report per-installazione letti</small>
+        <span>Contano per la settimana di stabilità</span>
+        <strong>{{ snapshot ? population.counted : '—' }}</strong>
+        <small>reali, attive negli ultimi {{ ACTIVE_WINDOW_DAYS }} giorni, ultima versione · {{ latestSummary }}</small>
       </div>
       <div class="metric">
-        <span>Profili</span>
-        <strong>{{ snapshot?.pilotCount ?? '—' }}</strong>
-        <small>nella fotografia unita</small>
+        <span>Attive negli ultimi {{ ACTIVE_WINDOW_DAYS }} giorni</span>
+        <strong>{{ snapshot ? population.active : '—' }}</strong>
+        <small>{{ population.onLatest }} sull'ultima versione · {{ population.testHidden }} di prova escluse</small>
       </div>
       <div class="metric">
         <span>Richiedono attenzione</span>
-        <strong>{{ snapshot?.attentionCount ?? '—' }}</strong>
-        <small>update, health o migrazione</small>
+        <strong>{{ snapshot ? scopedAttention : '—' }}</strong>
+        <small>nel perimetro: update, health o migrazione</small>
       </div>
       <div class="budget-note">
         <span>Budget lettura</span>
@@ -159,6 +204,12 @@ onMounted(loadSnapshot)
           <option value="unknown">Sconosciuto</option>
         </select>
       </label>
+      <fieldset class="scope-toggles">
+        <legend>Perimetro</legend>
+        <label><input v-model="hideTests" type="checkbox" /> Nascondi prove</label>
+        <label><input v-model="activeOnly" type="checkbox" /> Solo attive {{ ACTIVE_WINDOW_DAYS }} g</label>
+        <label><input v-model="latestOnly" type="checkbox" /> Solo ultima versione</label>
+      </fieldset>
       <button v-if="filtersActive" type="button" class="reset-button" @click="resetFilters">
         Azzera filtri
       </button>
@@ -335,6 +386,19 @@ h1 {
   flex: 1;
   min-width: 280px;
 }
+
+.scope-toggles {
+  display: flex;
+  gap: $spacing-md;
+  margin: 0;
+  padding: 0 $spacing-sm;
+  border: 0;
+  color: $text-secondary;
+  font-size: $font-size-xs;
+}
+
+.scope-toggles legend { padding: 0; color: $text-muted; font-size: 11px; }
+.scope-toggles label { display: flex; align-items: center; gap: $spacing-xs; min-height: 40px; }
 
 .filter-bar input,
 .filter-bar select {
