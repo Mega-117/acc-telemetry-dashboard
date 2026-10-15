@@ -11,6 +11,7 @@ import {
   type DiagnosticSuiteContext,
   type LocalClientDiagnostic
 } from '~/services/monitoring/clientDiagnosticsService'
+import { createDiagnosticsTokenResponder, type DiagnosticsTokenUser } from '~/services/monitoring/diagnosticsTokenResponder'
 import { createOwnerOperationTracker } from '~/services/sync/ownerOperationTracker'
 import { createBrowserDiagnosticStore } from '~/services/monitoring/browserDiagnosticStore'
 
@@ -23,6 +24,8 @@ type ElectronDiagnosticsApi = {
   reserveDiagnostic?: (eventId: string) => Promise<LocalClientDiagnostic | null>
   failDiagnostic?: (eventId: string, quota: boolean) => Promise<unknown>
   getSuiteVersion?: () => Promise<DiagnosticSuiteContext | null>
+  onDiagnosticsIdTokenRequest?: (callback: (requestId: string) => void) => () => void
+  replyDiagnosticsIdToken?: (requestId: string, token: string | null) => Promise<unknown>
 }
 
 function getElectronApi(): ElectronDiagnosticsApi | null {
@@ -195,6 +198,18 @@ export function useClientDiagnostics(options: {
     intervalId = window.setInterval(() => void flush(), CLIENT_DIAGNOSTIC_FLUSH_INTERVAL_MS)
   }
 
+  // PIP-539: il main chiede qui l'ID token per caricare i pacchetti diagnostici su R2.
+  let stopTokenRequests: (() => void) | null = null
+  const tokenApi = getElectronApi()
+  if (tokenApi?.onDiagnosticsIdTokenRequest && tokenApi.replyDiagnosticsIdToken) {
+    const respond = createDiagnosticsTokenResponder({
+      getUser: () => (canEnterApp.value ? (currentUser.value as unknown as DiagnosticsTokenUser | null) : null),
+      isAllowed: (uid) => canFlush() && (!options.isLeaseCurrent || options.isLeaseCurrent(uid)),
+      reply: (requestId, token) => tokenApi.replyDiagnosticsIdToken!(requestId, token)
+    })
+    stopTokenRequests = tokenApi.onDiagnosticsIdTokenRequest((requestId) => void respond(requestId))
+  }
+
   const stopWatch = watch(
     [currentUser, canEnterApp, options.flushEnabled || options.enabled!],
     ([user, canEnter, enabled]) => {
@@ -205,6 +220,7 @@ export function useClientDiagnostics(options: {
 
   onBeforeUnmount(() => {
     stopWatch()
+    stopTokenRequests?.()
     if (typeof window !== 'undefined') {
       window.removeEventListener('error', onWindowError)
       window.removeEventListener('unhandledrejection', onUnhandledRejection)

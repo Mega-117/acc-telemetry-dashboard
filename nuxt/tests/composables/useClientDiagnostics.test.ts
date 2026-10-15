@@ -90,4 +90,39 @@ describe('useClientDiagnostics', () => {
 
     vi.unstubAllGlobals()
   })
+
+  it('PIP-539: risponde al main con il token ID solo a utente dentro e lease corrente', async () => {
+    let handler!: (requestId: string) => void
+    const reply = vi.fn().mockResolvedValue(true)
+    const getIdToken = vi.fn().mockResolvedValue('a.b.c')
+    mocks.auth.currentUser.value = { uid: 'pilot-a', getIdToken }
+    vi.stubGlobal('window', {
+      electronAPI: {
+        listDiagnostics: vi.fn().mockResolvedValue([]),
+        acknowledgeDiagnostics: vi.fn(),
+        onDiagnosticsIdTokenRequest: (cb: (id: string) => void) => { handler = cb; return () => {} },
+        replyDiagnosticsIdToken: reply
+      },
+      setInterval: vi.fn(() => 1),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn()
+    })
+    let current = true
+    useClientDiagnostics({ flushEnabled: ref(true), captureEnabled: ref(false), isLeaseCurrent: () => current })
+    handler('r1')
+    await settle()
+    expect(reply).toHaveBeenLastCalledWith('r1', 'a.b.c')
+
+    current = false
+    handler('r2')
+    await settle()
+    expect(reply).toHaveBeenLastCalledWith('r2', null)
+
+    current = true
+    mocks.auth.canEnterApp.value = false
+    handler('r3')
+    await settle()
+    expect(reply).toHaveBeenLastCalledWith('r3', null)
+    vi.unstubAllGlobals()
+  })
 })
