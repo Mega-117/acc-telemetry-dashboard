@@ -4,6 +4,7 @@ export function createQuickPanelPreview() {
     pressure: {
       state: 'unavailable', reason: 'pit_pause_required', consumed: false,
       qaAvailable: true, qaActive: true,
+      retained: true, origin: { session_type: 1, stint_number: 1, source_lap: 5, air_temp_c: 26 },
       recommendation: { completed_laps: 3, valid_laps: 3, required_valid_laps: 1, compound: 'DRY', wheels: {} },
       preview: ['FL', 'FR', 'RL', 'RR'].map((wheel, index) => ({
         wheel, averagePsi: 26.3 + index * 0.1, totalLossPsi: 0.4,

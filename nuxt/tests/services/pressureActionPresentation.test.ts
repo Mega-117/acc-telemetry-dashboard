@@ -1,16 +1,27 @@
 import { describe, expect, it } from 'vitest'
-import { pressureActionPresentation, pressureOutcomeMessage, pressureProgressBadge } from '~/services/overlay/pressureActionPresentation'
+import { pressureActionPresentation, pressureOriginLine, pressureOutcomeMessage, pressureProgressBadge } from '~/services/overlay/pressureActionPresentation'
 
 describe('pressureActionPresentation', () => {
   it('keeps the actual reason visible for recoverable and uncertain failures', () => {
     expect(pressureActionPresentation({ state: 'ready', actionReasonCode: 'pressure_precondition_failed', reason: 'Telemetria non fresca.' }).guidance).toBe('Telemetria non fresca.')
     expect(pressureActionPresentation({ state: 'blocked', reason: 'Esito incerto: controlla i PSI.' }).guidance).toBe('Esito incerto: controlla i PSI.')
   })
-  it('shows pit-only notice while retaining a ready recommendation', () => {
+  it('PIP-552: asks to stop the car, at the box or on the grid, while retaining a ready recommendation', () => {
     const result = pressureActionPresentation({ state: 'unavailable', reason: 'pit_pause_required', recommendation: { status: 'ready' } })
-    expect(result.alert?.guidance).toContain('Torna ai box')
-    expect(result.buttonLabel).toContain('solo ai box')
+    expect(result.alert?.guidance).toContain('ai box o in griglia')
+    expect(result.buttonLabel).toBe('Regola pressioni · da fermo')
     expect(result.guidance).not.toContain('giri')
+  })
+
+  it('PIP-552: origin line of a retained correction, with missing parts left out', () => {
+    expect(pressureOriginLine({ session_type: 1, stint_number: 1, source_lap: 5, air_temp_c: 26.4 }))
+      .toBe('Calcolata in Qualifica · stint 1 · giro 5 · aria 26 °C')
+    expect(pressureOriginLine({ session_type: 0, stint_number: 2, source_lap: 7, air_temp_c: null }))
+      .toBe('Calcolata in Prove libere · stint 2 · giro 7')
+    expect(pressureOriginLine({ session_type: 2 })).toBe('Calcolata in Gara')
+    expect(pressureOriginLine({ session_type: null, source_lap: 4 })).toBe('Calcolata · giro 4')
+    expect(pressureOriginLine({})).toBeNull()
+    expect(pressureOriginLine(null)).toBeNull()
   })
   it('does not mention lap validity when the producer disables that requirement', () => {
     expect(pressureActionPresentation({
@@ -41,7 +52,7 @@ describe('pressureActionPresentation', () => {
     expect(pressureActionPresentation({
       state: 'ready',
       actionReasonCode: 'pit_pause_required',
-    }).guidance).toBe('Torna ai box, ferma l’auto e apri il menu Pausa.')
+    }).guidance).toBe('Ferma l’auto (ai box o in griglia) e apri il menu Pausa.')
   })
 
   it('spiega i prerequisiti senza nascondere l azione', () => {
@@ -115,7 +126,7 @@ describe('pressureActionPresentation', () => {
       state: 'unavailable',
       testReady: false,
       recommendation: { status: 'ready' },
-    }).guidance).toBe('Ferma l’auto ai box e apri il menu Pausa.')
+    }).guidance).toBe('Ferma l’auto (ai box o in griglia) e apri il menu Pausa.')
   })
 
   it('riconosce un piano gia consumato', () => {

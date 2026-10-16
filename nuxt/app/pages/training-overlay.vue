@@ -62,7 +62,7 @@ import {
   qaBotPresentation,
   type QaBotSnapshot,
 } from '~/services/overlay/qaBotPresentation'
-import { pressureActionPresentation, pressureOutcomeMessage, pressureProgressBadge } from '~/services/overlay/pressureActionPresentation'
+import { pressureActionPresentation, pressureOriginLine, pressureOutcomeMessage, pressureProgressBadge } from '~/services/overlay/pressureActionPresentation'
 import { usePublicPath } from '~/composables/usePublicPath'
 import { useDevTestMode } from '~/composables/useDevTestMode'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
@@ -305,6 +305,8 @@ const dryPressureState = ref<any>({ state: 'unavailable', reason: 'telemetry_not
 const dryPressurePresentation = computed(() => pressureActionPresentation(quickPanelPressureState.value))
 const pressureBadge = computed(() => pressureProgressBadge(quickPanelPressureState.value))
 // PIP-527: the target is the same for every tyre: shown once in the box header.
+// PIP-552: origin of the correction (session, stint, lap, air temperature).
+const pressureOrigin = computed(() => pressureOriginLine(quickPanelPressureState.value.origin))
 const pressurePlanTargetPsi = computed<number | null>(() => {
   const value = (quickPanelPressureState.value.preview || []).find((row: any) => Number.isFinite(row?.targetPsi))?.targetPsi
   return Number.isFinite(value) ? value : null
@@ -1436,6 +1438,7 @@ onBeforeUnmount(() => {
                       <strong v-if="pressurePlanTargetPsi !== null">Obiettivo {{ pressurePlanTargetPsi.toFixed(1).replace('.', ',') }} psi</strong>
                       <span>{{ quickPanelPressureState.recommendation?.completed_laps || 0 }}/3 giri · {{ quickPanelPressureState.recommendation?.compound || '—' }}</span>
                     </div>
+                    <p v-if="pressureOrigin" class="pressure-plan__origin" :title="pressureOrigin">{{ pressureOrigin }}</p>
                     <table v-if="quickPanelPressureState.recommendation?.wheels" class="pressure-plan__table">
                       <thead><tr><th>Gomma</th><th>Misurata</th><th>Click</th></tr></thead>
                       <tbody>
@@ -1707,6 +1710,16 @@ onBeforeUnmount(() => {
 
   strong { color: #f6fff9; font-size: 10px; }
   span { margin-left: auto; }
+}
+
+/* PIP-552: where a retained correction was computed; same tone as the meta row. */
+.pressure-plan__origin {
+  margin: 0;
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pressure-plan__table {

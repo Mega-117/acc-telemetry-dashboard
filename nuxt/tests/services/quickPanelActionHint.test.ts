@@ -12,7 +12,7 @@ describe('vertical quick panel command help', () => {
     ['fuel', 'Imposta il carburante per i minuti scelti.'],
     ['fuel-session', 'Imposta il carburante per l’intera sessione.'],
     ['pitwall', 'Apri o chiudi la stanza Pitwall.'],
-    ['pressure', 'Regola le pressioni ai valori ottimali.'],
+    ['pressure', 'Regola le pressioni da fermo (box o griglia).'],
     ['target', 'Giro obiettivo: imposta il tempo da battere.'],
     ['target-disable', 'Tempo giro:'],
     ['sector-references', 'Settori obiettivo:'], ['sector-disable', 'Settori:'], ['timer', 'Timer:'],

@@ -30,6 +30,9 @@ describe('training overlay Setup pressure contract', () => {
     expect(source).toContain('<thead><tr><th>Gomma</th><th>Misurata</th><th>Click</th></tr></thead>')
     expect(source).toContain('row?.targetPsi')
     expect(source).toContain('pressure-plan__table')
+    // PIP-552: origin line of a retained correction under the meta row.
+    expect(source).toContain('pressureOriginLine(quickPanelPressureState.value.origin)')
+    expect(source).toContain('<p v-if="pressureOrigin" class="pressure-plan__origin"')
     expect(source).not.toContain('pressurePopupVisible')
     expect(source).not.toContain('pressureNotification')
     expect(source).not.toContain('pressure-recommendation-popup')

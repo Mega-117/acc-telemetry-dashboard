@@ -1,9 +1,21 @@
+import { resolveSpotterSessionMode, SPOTTER_SESSION_LABELS } from '../spotter/spotterSessionPolicy'
+
+/** PIP-552: where a retained correction was computed (logger `origin`). */
+export interface PressureOrigin {
+  session_type?: number | null
+  stint_number?: number | null
+  source_lap?: number | null
+  air_temp_c?: number | null
+}
+
 export interface PressureActionInput {
   state?: string | null
   reason?: string | null
   actionReasonCode?: string | null
   testReady?: boolean | null
   consumed?: boolean | null
+  retained?: boolean | null
+  origin?: PressureOrigin | null
   recommendation?: {
     status?: string | null
     completed_laps?: number | null
@@ -50,7 +62,7 @@ function unavailableGuidance(input: PressureActionInput): string {
 
   if (input.consumed === true) return 'Questa correzione è già stata applicata.'
   if (reason === 'within_tolerance') return 'Pressioni già nella fascia ottimale.'
-  if (reason === 'ready' && input.testReady !== true) return 'Ferma l’auto ai box e apri il menu Pausa.'
+  if (reason === 'ready' && input.testReady !== true) return 'Ferma l’auto (ai box o in griglia) e apri il menu Pausa.'
   if (reason === 'waiting_for_valid_lap') return 'Completa almeno un giro valido.'
   if (reason === 'compound_unavailable') return 'Mescola non ancora rilevata.'
   if (reason === 'source_unavailable') return 'Dati delle pressioni non ancora disponibili.'
@@ -77,6 +89,24 @@ export function pressureProgressBadge(input: PressureActionInput | null | undefi
   return required > 0 && completed < required ? `${completed}/${required}` : null
 }
 
+/**
+ * PIP-552: "Calcolata in Qualifica · stint 1 · giro 5 · aria 26 °C". Missing
+ * parts are left out; null when nothing is known. Information only: the
+ * clicks are never adapted to the temperature.
+ */
+export function pressureOriginLine(origin: PressureOrigin | null | undefined): string | null {
+  if (!origin) return null
+  const mode = resolveSpotterSessionMode(origin.session_type)
+  const parts = [mode ? `Calcolata in ${SPOTTER_SESSION_LABELS[mode]}` : 'Calcolata']
+  const stint = Number(origin.stint_number)
+  if (Number.isInteger(stint) && stint > 0) parts.push(`stint ${stint}`)
+  const lap = Number(origin.source_lap)
+  if (Number.isInteger(lap) && lap > 0) parts.push(`giro ${lap}`)
+  const air = origin.air_temp_c === null || origin.air_temp_c === undefined ? Number.NaN : Number(origin.air_temp_c)
+  if (Number.isFinite(air)) parts.push(`aria ${Math.round(air)} °C`)
+  return parts.length > 1 || mode ? parts.join(' · ') : null
+}
+
 /** PIP-522: outcomes of a pressure command are messages; idle states are not. */
 export function pressureOutcomeMessage(input: PressureActionInput | null | undefined): { text: string; tone: 'ok' | 'error' | 'progress' } | null {
   const presentation = pressureActionPresentation(input)
@@ -100,8 +130,8 @@ export function pressureActionPresentation(input: PressureActionInput | null | u
     if (input?.actionReasonCode === 'pit_pause_required') {
       return {
         stateLabel: 'Pronto',
-        guidance: 'Torna ai box, ferma l’auto e apri il menu Pausa.',
-        ariaLabel: 'Regola pressioni pronta: torna ai box e apri il menu Pausa',
+        guidance: 'Ferma l’auto (ai box o in griglia) e apri il menu Pausa.',
+        ariaLabel: 'Regola pressioni pronta: ferma l’auto e apri il menu Pausa',
       }
     }
     if (input?.actionReasonCode === 'pause_menu_required') {
@@ -149,13 +179,14 @@ export function pressureActionPresentation(input: PressureActionInput | null | u
   }
 
   if (input?.reason === 'pit_pause_required') {
-    const guidance = 'Torna ai box, ferma l’auto e apri il menu Pausa per regolare le pressioni.'
+    // PIP-552: the correction also applies from the race grid, stopped.
+    const guidance = 'Ferma l’auto (ai box o in griglia) e apri il menu Pausa per regolare le pressioni.'
     return {
-      stateLabel: 'In attesa dei box',
+      stateLabel: 'Ferma l’auto',
       guidance,
       ariaLabel: guidance,
-      buttonLabel: 'Regola pressioni · solo ai box',
-      alert: { title: 'FERMATI AI BOX', guidance },
+      buttonLabel: 'Regola pressioni · da fermo',
+      alert: { title: 'FERMA L’AUTO', guidance },
     }
   }
 
