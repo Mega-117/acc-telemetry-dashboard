@@ -370,6 +370,12 @@ watch([authSessionStatus, localProfile], ([status, profile]) => {
     if (accepted && outcome !== 'recoverable') terminalAuthStartupOutcomePublished = true
   })
 }, { immediate: true })
+// PIP-550: once the automatic recovery is spent, a tray-only autostart must
+// surface the window so the Riprova button is actually visible. Non-terminal.
+watch(() => authRecovery.value.canRetry, (canRetry) => {
+  if (!canRetry || !isPrimaryClientRuntime.value || terminalAuthStartupOutcomePublished) return
+  void publishAuthStartupOutcome('retry-required')
+})
 
 // Restore the owner cache for entries that bypass enterDashboard.
 watch([appState, () => profileUser.value?.uid || null], ([state, uid]) => {

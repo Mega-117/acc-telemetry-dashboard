@@ -85,7 +85,12 @@ describe('auth session policy', () => {
   })
 
   it('descrive il recupero senza mai rimandare al login (PIP-550)', () => {
-    expect(describeAuthRecovery({ status: 'initializing', error: 'x', exhausted: true }))
+    expect(describeAuthRecovery({ status: 'initializing', error: null, exhausted: true }))
+      .toEqual({ message: AUTH_RECOVERY_DEFAULT_MESSAGE, canRetry: false })
+    // retry in flight: the explanation stays, the button never shows mid-attempt
+    expect(describeAuthRecovery({ status: 'initializing', error: 'Avvio del programma non riuscito. Riprovo...', exhausted: true }))
+      .toEqual({ message: 'Avvio del programma non riuscito. Riprovo...', canRetry: false })
+    expect(describeAuthRecovery({ status: 'ready', error: 'stale', exhausted: false }))
       .toEqual({ message: AUTH_RECOVERY_DEFAULT_MESSAGE, canRetry: false })
     expect(describeAuthRecovery({ status: 'recoverable', error: 'Avvio del programma non riuscito. Riprovo...', exhausted: false }))
       .toEqual({ message: 'Avvio del programma non riuscito. Riprovo...', canRetry: false })

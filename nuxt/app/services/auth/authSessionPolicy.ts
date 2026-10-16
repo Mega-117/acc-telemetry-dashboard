@@ -11,6 +11,7 @@ export type AuthSessionStatus =
 export type AuthStartupOutcome =
   | 'ready'
   | 'recoverable'
+  | 'retry-required'
   | 'login-required'
   | 'verification-required'
 
@@ -104,8 +105,11 @@ export function describeAuthRecovery({ status, error, exhausted }: {
   error: string | null
   exhausted: boolean
 }): AuthRecoveryPresentation {
-  if (status !== 'recoverable') return { message: AUTH_RECOVERY_DEFAULT_MESSAGE, canRetry: false }
-  if (exhausted) return { message: AUTH_RECOVERY_EXHAUSTED_MESSAGE, canRetry: true }
+  // A retry in flight passes through `initializing` for ~20 s on a cold PC: keep
+  // the explanation on screen instead of flashing back to the generic copy.
+  const retrying = status === 'recoverable' || (status === 'initializing' && !!error?.trim())
+  if (!retrying) return { message: AUTH_RECOVERY_DEFAULT_MESSAGE, canRetry: false }
+  if (status === 'recoverable' && exhausted) return { message: AUTH_RECOVERY_EXHAUSTED_MESSAGE, canRetry: true }
   return { message: error?.trim() || AUTH_RECOVERY_DEFAULT_MESSAGE, canRetry: false }
 }
 
