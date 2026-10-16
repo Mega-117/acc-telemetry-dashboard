@@ -29,7 +29,8 @@ const showVoiceControls = false
 const showNotificationBell = false
 
 const goToCoachArea = () => {
-  navigateTo(isAdmin.value ? '/admin/cockpit' : '/piloti')
+  // PIP-540: l'admin entra dalla pagina Stato (problemi in chiaro), il Cockpit resta a un clic.
+  navigateTo(isAdmin.value ? '/admin/stato' : '/piloti')
 }
 
 // ============================================

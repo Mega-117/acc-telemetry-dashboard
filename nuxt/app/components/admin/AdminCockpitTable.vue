@@ -6,6 +6,8 @@ const props = defineProps<{
   rows: AdminCockpitRow[]
   loading?: boolean
   error?: string
+  // PIP-547: Windows dichiarato nei pacchetti, per installazione; manca per le versioni precedenti.
+  osByInstallation?: Record<string, string>
 }>()
 
 const emit = defineEmits<{
@@ -136,6 +138,7 @@ const skeletonRows = Array.from({ length: 6 }, (_, index) => index)
                   G {{ row.installation.components.logger || '—' }} ·
                   K {{ row.installation.components.kokoroRuntime || '—' }}
                 </span>
+                <span class="secondary os-line">{{ props.osByInstallation?.[row.installation.installationId] || 'Windows: non ancora noto' }}</span>
               </td>
               <td>
                 <time class="mono" :datetime="row.installation.installationRegisteredAt || undefined">

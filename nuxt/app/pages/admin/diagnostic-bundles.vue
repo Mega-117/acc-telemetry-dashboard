@@ -3,9 +3,9 @@ import { PRODUCT } from '../../../shared/productIdentity'
 import { computed, onMounted, ref } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import {
-  downloadDiagnosticBundle,
   formatBundleSize,
   listDiagnosticBundles,
+  saveDiagnosticBundle,
   type DiagnosticBundleItem
 } from '~/repositories/diagnosticBundlesRepository'
 
@@ -50,13 +50,7 @@ async function download(item: DiagnosticBundleItem) {
   downloading.value = item.key
   errorMessage.value = ''
   try {
-    const blob = await downloadDiagnosticBundle({ getToken }, item.key)
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `${item.installationId.slice(0, 8)}-${item.bundleId}.jsonl.gz`
-    link.click()
-    URL.revokeObjectURL(url)
+    await saveDiagnosticBundle({ getToken }, item)
   } catch (error: any) {
     errorMessage.value = error?.message || 'Scarico non riuscito.'
   } finally {

@@ -6,7 +6,8 @@ import { ref } from 'vue'
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   download: vi.fn(),
-  snapshot: vi.fn()
+  snapshot: vi.fn(),
+  recent: vi.fn()
 }))
 
 vi.mock('~/composables/useFirebaseAuth', () => ({
@@ -15,7 +16,8 @@ vi.mock('~/composables/useFirebaseAuth', () => ({
 vi.mock('~/repositories/diagnosticBundlesRepository', async (importOriginal) => ({
   ...(await importOriginal<typeof import('~/repositories/diagnosticBundlesRepository')>()),
   listDiagnosticBundles: mocks.list,
-  downloadDiagnosticBundle: mocks.download
+  listRecentDiagnosticBundles: mocks.recent,
+  saveDiagnosticBundle: mocks.download
 }))
 vi.mock('~/repositories/adminCockpitRepository', async (importOriginal) => ({
   ...(await importOriginal<typeof import('~/repositories/adminCockpitRepository')>()),
@@ -29,6 +31,7 @@ beforeEach(() => {
   vi.stubGlobal('definePageMeta', vi.fn())
   vi.stubGlobal('useHead', vi.fn())
   vi.clearAllMocks()
+  mocks.recent.mockResolvedValue({ items: [], complete: true })
 })
 afterEach(() => vi.unstubAllGlobals())
 
@@ -127,5 +130,31 @@ describe('admin cockpit scope', () => {
     const allFresh = mount(CockpitPage, { global: { stubs: { AdminCockpitTable: true } } })
     await flushPromises()
     expect(allFresh.find('.metric-caveat').exists()).toBe(false)
+  })
+
+  it('shows Windows from the latest bundle and filters by Windows 10 (PIP-547)', async () => {
+    const a = installation('real-a', '0.4.5-dev.3', 1)
+    const b = installation('real-b', '0.4.5-dev.3', 1)
+    mocks.snapshot.mockResolvedValue({ rows: [row(a), row(b)], pilotCount: 2, installationCount: 2, attentionCount: 0,
+      coverageLimited: false, directoryLimitReached: false, installationLimitReached: false,
+      budget: { readRequests: 2, maxDocuments: 300, writes: 0 } })
+    mocks.recent.mockResolvedValue({ complete: true, items: [
+      item({ installationId: 'real-a-i', os: 'Windows 10 (19045)' }),
+      item({ installationId: 'real-a-i', os: 'Windows 11 (26200)', uploadedAt: '2026-10-01T00:00:00Z' }),
+      item({ installationId: 'real-b-i', os: 'Windows 11 (26200)' }),
+    ] })
+    const view = mount(CockpitPage, { global: { stubs: {
+      AdminCockpitTable: { props: ['rows', 'osByInstallation'], template: '<div class="rows">{{ rows.length }}|{{ osByInstallation["real-a-i"] }}</div>' }
+    } } })
+    await flushPromises()
+    expect(view.get('.rows').text()).toBe('2|Windows 10 (19045)')
+    expect(view.text()).toContain('dettagli in Stato')
+    const windowsSelect = view.findAll('select').find((select) => select.text().includes('Windows 10'))!
+    await windowsSelect.setValue('windows10')
+    expect(view.get('.rows').text()).toBe('1|Windows 10 (19045)')
+    mocks.recent.mockRejectedValueOnce(new Error('offline'))
+    const offline = mount(CockpitPage, { global: { stubs: { AdminCockpitTable: { props: ['rows'], template: '<div class="rows">{{ rows.length }}</div>' } } } })
+    await flushPromises()
+    expect(offline.get('.rows').text()).toBe('2')
   })
 })

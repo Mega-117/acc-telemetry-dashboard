@@ -17,6 +17,9 @@ import {
 } from '~/utils/adminInstallationScope'
 import { getClientHeartbeatStatus } from '~/services/monitoring/clientHeartbeatService'
 import { normalizePilotDirectoryText } from '~/utils/pilotDirectoryFields'
+import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { listRecentDiagnosticBundles } from '~/repositories/diagnosticBundlesRepository'
+import { osFamily } from '~/utils/adminStatusSummary'
 
 definePageMeta({
   layout: 'coach',
@@ -36,7 +39,11 @@ const healthFilter = ref('all')
 const hideTests = ref(true)
 const activeOnly = ref(true)
 const latestOnly = ref(true)
+const windowsFilter = ref('all')
 const now = ref(Date.now())
+// PIP-547: Windows di ogni installazione, dal pacchetto piu' recente (Worker, non Firestore).
+const { currentUser } = useFirebaseAuth()
+const osByInstallation = ref<Record<string, string>>({})
 
 const allInstallations = computed<AdminCockpitInstallation[]>(() => (
   (snapshot.value?.rows || []).flatMap((row) => (row.installation ? [row.installation] : []))
@@ -86,6 +93,10 @@ const filteredRows = computed(() => {
       row.installation?.migration.code,
     ].filter(Boolean).join(' '))
     if (search && !searchable.includes(search)) return false
+    if (windowsFilter.value !== 'all') {
+      const os = row.installation ? osByInstallation.value[row.installation.installationId] : undefined
+      if (osFamily(os) !== windowsFilter.value) return false
+    }
 
     if (contactFilter.value !== 'all') {
       const contact = getClientHeartbeatStatus(row.installation?.lastContactAt)
@@ -112,13 +123,30 @@ const filtersActive = computed(() => (
   || !hideTests.value || !activeOnly.value || !latestOnly.value
   || contactFilter.value !== 'all'
   || healthFilter.value !== 'all'
+  || windowsFilter.value !== 'all'
 ))
+
+async function loadOs() {
+  try {
+    const { items } = await listRecentDiagnosticBundles(
+      { getToken: async () => (await currentUser.value?.getIdToken()) ?? null },
+      { days: 30, nowMs: now.value },
+    )
+    const map: Record<string, string> = {}
+    for (const item of items) if (item.os && !map[item.installationId]) map[item.installationId] = item.os
+    osByInstallation.value = map
+  } catch (_) {
+    // Senza Worker il Cockpit resta completo: manca solo la colonna Windows.
+    osByInstallation.value = {}
+  }
+}
 
 async function loadSnapshot() {
   loading.value = true
   errorMessage.value = ''
   try {
     now.value = Date.now()
+    void loadOs()
     snapshot.value = await loadAdminCockpitSnapshot()
   } catch (error: any) {
     errorMessage.value = error?.message || 'Impossibile leggere le proiezioni runtime.'
@@ -131,6 +159,7 @@ function resetFilters() {
   searchTerm.value = ''
   contactFilter.value = 'all'
   healthFilter.value = 'all'
+  windowsFilter.value = 'all'
   hideTests.value = true
   activeOnly.value = true
   latestOnly.value = true
@@ -169,7 +198,7 @@ onMounted(loadSnapshot)
       <div class="metric">
         <span>Richiedono attenzione</span>
         <strong>{{ snapshot ? scopedAttention : '—' }}</strong>
-        <small>nel perimetro: update, health o migrazione</small>
+        <small>hanno segnalato un problema: aggiornamento, avvio o spostamento dei dati · dettagli in Stato</small>
         <small v-if="snapshot && scopedWithoutRecentContact > 0" class="metric-caveat">
           {{ scopedWithoutRecentContact }} senza contatto nelle ultime 2 ore: per loro lo stato può essere vecchio
         </small>
@@ -213,6 +242,15 @@ onMounted(loadSnapshot)
           <option value="unknown">Sconosciuto</option>
         </select>
       </label>
+      <label>
+        <span>Windows</span>
+        <select v-model="windowsFilter">
+          <option value="all">Tutti</option>
+          <option value="windows10">Windows 10</option>
+          <option value="windows11">Windows 11</option>
+          <option value="other">Non noto</option>
+        </select>
+      </label>
       <fieldset class="scope-toggles">
         <legend>Perimetro</legend>
         <label><input v-model="hideTests" type="checkbox" /> Nascondi prove</label>
@@ -227,6 +265,7 @@ onMounted(loadSnapshot)
 
     <AdminCockpitTable
       :rows="filteredRows"
+      :os-by-installation="osByInstallation"
       :loading="loading"
       :error="errorMessage"
       @retry="loadSnapshot"

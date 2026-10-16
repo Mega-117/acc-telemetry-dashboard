@@ -74,6 +74,9 @@ const isAdminRouteActive = (path: string) => route.path === path || route.path.s
         </div>
 
         <nav v-if="isAdmin" class="admin-nav" aria-label="Navigazione amministratore">
+          <NuxtLink to="/admin/stato" :aria-current="isAdminRouteActive('/admin/stato') ? 'page' : undefined">
+            Stato
+          </NuxtLink>
           <NuxtLink to="/admin/cockpit" :aria-current="isAdminRouteActive('/admin/cockpit') ? 'page' : undefined">
             Cockpit
           </NuxtLink>
