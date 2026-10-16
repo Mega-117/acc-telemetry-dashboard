@@ -121,6 +121,26 @@ it.each(['auth/network-request-failed', 'auth/user-token-expired'])('cloud error
   expect(auth.currentUser.value).toBeNull()
   expect(mock.clear).not.toHaveBeenCalled()
 })
+it('un avvio del core fallito non fa logout e riprova senza chiedere il login (PIP-550)', async () => {
+  const auth = await initialized()
+  mock.save.mockResolvedValue(false)
+  const user = { uid: 'A', email: 'a@example.invalid', emailVerified: true, reload: async () => {}, getIdToken: async () => 'fixture' }
+  mock.auth.currentUser = user
+  await mock.observe(user)
+  await vi.waitFor(() => expect(auth.authSessionStatus.value).toBe('recoverable'))
+  expect(mock.signOut).not.toHaveBeenCalled()
+  expect(mock.clear).toHaveBeenCalledTimes(1) // only the signed-out bootstrap
+  expect(auth.canEnterApp.value).toBe(false)
+  expect(auth.authError.value).toContain('Riprovo')
+  expect(auth.authRecoveryExhausted.value).toBe(false)
+  // The launcher recovers: a manual retry (same path as online/focus) enters the app.
+  mock.save.mockResolvedValue(true)
+  await auth.retryRecoverableAuthSession()
+  await vi.waitFor(() => expect(auth.canEnterApp.value).toBe(true))
+  expect(auth.currentUser.value?.uid).toBe('A')
+  expect(auth.authError.value).toBeNull()
+  expect(mock.signOut).not.toHaveBeenCalled()
+})
 it('another observed cloud account never replaces the prepared owner', async () => {
   mock.restore.mockResolvedValue(offlineProfile)
   const auth = await initialized()

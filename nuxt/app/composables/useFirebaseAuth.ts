@@ -37,6 +37,8 @@ const firestoreNickname = ref<string>('')
 const isLoading = ref(true)
 const authSessionStatus = ref<AuthSessionStatus>('initializing')
 const authError = ref<string | null>(null)
+// True when the bounded automatic recovery is spent; the shell offers Riprova.
+const authRecoveryExhausted = ref(false)
 const isSecondaryLocalRuntime = ref(false)
 const isLocalRuntimeAttested = ref(false)
 type CachedUserProfile = UserProfileDocument
@@ -126,7 +128,7 @@ async function syncAuthenticatedUser(
     user: User,
     isCurrentRevision: () => boolean = () => true,
 ): Promise<AuthenticatedUserSyncResult> {
-    const { ensureUserDocument, logoutCurrentUser } = await getAuthDependencies()
+    const { ensureUserDocument } = await getAuthDependencies()
     const refreshStarted = performance.now()
     const refreshResult = await reloadPersistedUser(user)
     console.info('[AUTH_TIMING] refreshMs=' + Math.round(performance.now() - refreshStarted))
@@ -179,13 +181,15 @@ async function syncAuthenticatedUser(
         console.info('[AUTH_TIMING] runtimeMs=' + Math.round(performance.now() - runtimeStarted))
         if (!isCurrentRevision()) return { status: 'recoverable', user: null }
         if (requiresLocalIdentityBridge() && !saved) {
-            authError.value = 'Avvio del programma non riuscito. Riprova il login.'
-            console.error('[AUTH] Local runtime rejected identity; signing out fail-closed')
-            await logoutCurrentUser().catch(() => {})
-            localProfile.value = null
-            await syncLoggedOutUser()
-            return { status: 'signed-out', user: null }
+            // PIP-550: a slow or failed core start (cold PC, launcher timeout)
+            // must not erase the cloud login. The core stays closed (the main
+            // process already rolled the identity back) and the recovery
+            // coordinator retries; the pilot never sees the login form again.
+            authError.value = 'Avvio del programma non riuscito. Riprovo...'
+            console.warn('[AUTH] Local runtime start failed; keeping cloud session and retrying')
+            return { status: 'recoverable', user: null }
         }
+        authError.value = null
         const restored = await restoreLocalProfile()
         if (!isCurrentRevision()) return { status: 'recoverable', user: null }
         if (restored?.uid === user.uid) localProfile.value = restored
@@ -352,10 +356,11 @@ const authRecoveryCoordinator = createAuthSessionRecoveryCoordinator({
         await applyObservedAuthUser(target.user)
     },
     getEventTarget: () => typeof window === 'undefined' ? null : window,
+    onChange: () => { authRecoveryExhausted.value = authRecoveryCoordinator.isExhausted() },
 })
 
 async function retryRecoverableAuthSession() {
-    return authRecoveryCoordinator.retryNow()
+    return authRecoveryCoordinator.retryFromUser()
 }
 
 async function initializeAuthListener() {
@@ -671,6 +676,7 @@ export function useFirebaseAuth() {
         isSecondaryLocalRuntime,
         isLocalRuntimeAttested,
         authError,
+        authRecoveryExhausted,
         isAuthenticated,
         isEmailVerified,
         needsEmailVerification,

@@ -1,7 +1,10 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
 import {
+  AUTH_RECOVERY_DEFAULT_MESSAGE,
+  AUTH_RECOVERY_EXHAUSTED_MESSAGE,
   classifyPersistedAuthError,
+  describeAuthRecovery,
   refreshUserCredentials,
   refreshPersistedAuthSession,
   toAuthStartupOutcome,
@@ -79,6 +82,17 @@ describe('auth session policy', () => {
       errorCode: error.code,
     })
     expect(signOut).toHaveBeenCalledOnce()
+  })
+
+  it('descrive il recupero senza mai rimandare al login (PIP-550)', () => {
+    expect(describeAuthRecovery({ status: 'initializing', error: 'x', exhausted: true }))
+      .toEqual({ message: AUTH_RECOVERY_DEFAULT_MESSAGE, canRetry: false })
+    expect(describeAuthRecovery({ status: 'recoverable', error: 'Avvio del programma non riuscito. Riprovo...', exhausted: false }))
+      .toEqual({ message: 'Avvio del programma non riuscito. Riprovo...', canRetry: false })
+    expect(describeAuthRecovery({ status: 'recoverable', error: '  ', exhausted: false }))
+      .toEqual({ message: AUTH_RECOVERY_DEFAULT_MESSAGE, canRetry: false })
+    expect(describeAuthRecovery({ status: 'recoverable', error: null, exhausted: true }))
+      .toEqual({ message: AUTH_RECOVERY_EXHAUSTED_MESSAGE, canRetry: true })
   })
 
   it('mappa lo stato canonico sul solo esito startup osservabile', () => {

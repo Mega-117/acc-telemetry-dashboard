@@ -12,6 +12,7 @@ describe('auth session recovery coordinator', () => {
     const user = { uid: 'pilot-1' } as any
     const listeners = new Map<string, () => void>()
     const retryTarget = vi.fn().mockResolvedValue(undefined)
+    const onChange = vi.fn()
     const coordinator = createAuthSessionRecoveryCoordinator({
       getStatus: () => status,
       getRecoverableTarget: () => status === 'recoverable' ? user : null,
@@ -20,14 +21,43 @@ describe('auth session recovery coordinator', () => {
         addEventListener: (type, listener) => listeners.set(type, listener),
       }),
       delaysMs: [10, 20],
+      onChange,
     })
     return {
       coordinator,
       listeners,
       retryTarget,
+      onChange,
       markReady: () => { status = 'ready' },
     }
   }
+
+  it('segnala il backoff esaurito e Riprova lo riavvia da capo (PIP-550)', async () => {
+    vi.useFakeTimers()
+    const { coordinator, retryTarget, onChange } = setup()
+    coordinator.schedule()
+    expect(coordinator.isExhausted()).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(10)
+    await vi.advanceTimersByTimeAsync(20)
+    expect(retryTarget).toHaveBeenCalledTimes(2)
+    expect(coordinator.isExhausted()).toBe(true)
+    expect(onChange).toHaveBeenCalled()
+
+    await coordinator.retryFromUser()
+    expect(retryTarget).toHaveBeenCalledTimes(3)
+    expect(coordinator.isExhausted()).toBe(false)
+    await vi.advanceTimersByTimeAsync(10)
+    expect(retryTarget).toHaveBeenCalledTimes(4)
+  })
+
+  it('Riprova non fa nulla quando la sessione non e recuperabile', async () => {
+    const { coordinator, retryTarget, markReady } = setup()
+    markReady()
+    await coordinator.retryFromUser()
+    expect(retryTarget).not.toHaveBeenCalled()
+    expect(coordinator.isExhausted()).toBe(false)
+  })
 
   it('ritenta con backoff bounded mentre lo stato resta recuperabile', async () => {
     vi.useFakeTimers()

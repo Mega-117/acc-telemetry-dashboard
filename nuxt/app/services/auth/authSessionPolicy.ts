@@ -88,6 +88,27 @@ export async function refreshPersistedAuthSession(
   }
 }
 
+export type AuthRecoveryPresentation = {
+  message: string
+  canRetry: boolean
+}
+
+export const AUTH_RECOVERY_DEFAULT_MESSAGE = 'Caricamento Dashboard...'
+export const AUTH_RECOVERY_EXHAUSTED_MESSAGE = 'Il programma non è riuscito ad avviarsi.'
+
+// What the loading screen says while a recoverable session is being retried.
+// The cloud login is kept: a failed local start never sends the pilot back to
+// the login form (PIP-550).
+export function describeAuthRecovery({ status, error, exhausted }: {
+  status: AuthSessionStatus
+  error: string | null
+  exhausted: boolean
+}): AuthRecoveryPresentation {
+  if (status !== 'recoverable') return { message: AUTH_RECOVERY_DEFAULT_MESSAGE, canRetry: false }
+  if (exhausted) return { message: AUTH_RECOVERY_EXHAUSTED_MESSAGE, canRetry: true }
+  return { message: error?.trim() || AUTH_RECOVERY_DEFAULT_MESSAGE, canRetry: false }
+}
+
 export function toAuthStartupOutcome(status: AuthSessionStatus): AuthStartupOutcome | null {
   switch (status) {
     case 'ready':

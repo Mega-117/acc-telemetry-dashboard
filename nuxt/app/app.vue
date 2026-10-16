@@ -23,7 +23,7 @@ import { useOwnerDataMaintenance } from '~/composables/useOwnerDataMaintenance'
 import { useOwnerCacheLifecycle } from '~/composables/useOwnerCacheLifecycle'
 import { AUTH_EMAIL_VERIFICATION_REQUIRED } from '~/config/authPolicy'
 import { canUseDevTools } from '~/utils/devToolsAccess'
-import { toAuthStartupOutcome, type AuthSessionStatus } from '~/services/auth/authSessionPolicy'
+import { toAuthStartupOutcome, describeAuthRecovery, type AuthSessionStatus } from '~/services/auth/authSessionPolicy'
 import { publishAuthStartupOutcome } from '~/services/auth/localIdentityBridge'
 import { useWheelInputBridge } from '~/composables/useWheelInputBridge'
 import { useWindowPresentationVisibility } from '~/composables/usePresentationVisibility'
@@ -158,9 +158,18 @@ const {
   isSecondaryLocalRuntime,
   isLocalRuntimeAttested,
   authSessionStatus,
+  authError,
+  authRecoveryExhausted,
+  retryRecoverableAuthSession,
   canEnterApp,
   logout: firebaseLogout
 } = useFirebaseAuth()
+// Loading screen copy while a recoverable session retries (PIP-550).
+const authRecovery = computed(() => describeAuthRecovery({
+  status: authSessionStatus.value,
+  error: authError.value,
+  exhausted: authRecoveryExhausted.value,
+}))
 watch([cloudSessionReady, canEnterApp], ([cloudReady]) => {
   if (typeof window === 'undefined') return
   const api = (window as Window & { electronAPI?: { reportRuntimeHealth?: (value: { cloud: string }) => void } }).electronAPI
@@ -629,8 +638,16 @@ provide('goToSettings', handleGoToSettings)
         <!-- Loading Screen -->
         <div v-else-if="appState === 'loading'" key="loading" class="loading-screen">
           <div class="loading-content">
-            <div class="loading-spinner"></div>
-            <p class="loading-text">Caricamento Dashboard...</p>
+            <div v-if="!authRecovery.canRetry" class="loading-spinner"></div>
+            <p class="loading-text">{{ authRecovery.message }}</p>
+            <button
+              v-if="authRecovery.canRetry"
+              type="button"
+              class="loading-retry"
+              @click="retryRecoverableAuthSession()"
+            >
+              Riprova
+            </button>
           </div>
         </div>
 
@@ -843,6 +860,18 @@ body:has(.sessions-page),
   font-family: $font-family;
   font-size: 16px;
   color: rgba(255, 255, 255, 0.6);
+}
+
+.loading-retry {
+  margin-top: 20px;
+  padding: 10px 28px;
+  font-family: $font-family;
+  font-size: 15px;
+  color: #fff;
+  background: $color-racing-red;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
 }
 
 // === INITIALIZING SCREEN (minimal, fast) ===
