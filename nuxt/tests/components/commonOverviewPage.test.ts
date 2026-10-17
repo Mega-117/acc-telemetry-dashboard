@@ -30,8 +30,35 @@ it('PIP-555: preparata prima del cloud senza dati resta in caricamento, poi cari
   cloudReady.value = true
   cloudReadyEvent()
   await flushPromises()
+  expect(mocks.acc).toHaveBeenCalledTimes(1)
   expect(mocks.acc).toHaveBeenCalledWith('qa')
   expect(wrapper.text()).toContain('Dal cloud')
+  wrapper.unmount()
+})
+it('PIP-555: il cloud e\' gia\' pronto quando la pagina si monta (evento perso): carica subito', async () => {
+  cloudReady.value = true
+  mocks.acc.mockResolvedValue(projection('Subito'))
+  const wrapper = mount(Page, { props: { prepared: { uid: 'qa', projection: null, events: [], pending: true } }, global: { stubs } })
+  await flushPromises()
+  expect(mocks.acc).toHaveBeenCalledTimes(1)
+  expect(wrapper.text()).toContain('Subito')
+  cloudReadyEvent()
+  await flushPromises()
+  expect(mocks.acc).toHaveBeenCalledTimes(1)
+  wrapper.unmount()
+})
+it('PIP-555: il cloud diventa pronto senza evento: la pagina si carica da sola, una volta', async () => {
+  cloudReady.value = false
+  mocks.acc.mockResolvedValue(projection('Da stato cloud'))
+  const wrapper = mount(Page, { props: { prepared: { uid: 'qa', projection: null, events: [], pending: true } }, global: { stubs } })
+  await flushPromises()
+  expect(mocks.acc).not.toHaveBeenCalled()
+  cloudReady.value = true
+  await flushPromises()
+  cloudReadyEvent()
+  await flushPromises()
+  expect(mocks.acc).toHaveBeenCalledTimes(1)
+  expect(wrapper.text()).toContain('Da stato cloud')
   wrapper.unmount()
 })
 it('PIP-555: preparata con il cloud, un cloud-ready non la ricarica; una sync si\'', async () => {

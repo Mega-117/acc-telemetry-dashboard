@@ -79,6 +79,12 @@ watch(
   { immediate: true, flush: 'sync' }
 )
 
+// PIP-555: the cloud may become ready before this page listens to the cloud-ready event
+// (dashboard entry and page preparation take a couple of seconds): follow the state itself.
+watch(cloudSessionReady, (ready) => {
+  if (ready && !loadedWithCloud && targetUserId.value) void loadOverview()
+}, { immediate: true })
+
 onMounted(() => {
   window.addEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)
 })
