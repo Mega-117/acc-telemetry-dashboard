@@ -28,6 +28,8 @@ type OwnerCacheSession = {
   saver: OwnerCacheSaver
   watcher: OwnerRevisionWatcher
   unsubscribe: () => void
+  /** PIP-555: preparata senza cloud (profilo locale): le liste mostrate vengono dal disco o dai file. */
+  offline: boolean
 }
 
 export interface OwnerCacheLifecycle {
@@ -103,7 +105,7 @@ export function useOwnerCacheLifecycle(options: {
         invalidateTelemetryCaches({ uid, scope: 'sync' })
       }
     }) : { stop: () => {} } as OwnerRevisionWatcher
-    session = { uid, saver, watcher, unsubscribe }
+    session = { uid, saver, watcher, unsubscribe, offline: !online }
     console.info(`[OWNER_CACHE] prepared uid=${uid.slice(0, 6)}… disk=${outcome} revision=${snapshot?.revision || 'offline'}`)
     return outcome
   }
@@ -140,7 +142,8 @@ export function useOwnerCacheLifecycle(options: {
   )
 
   // A cloud outage changes freshness, never ownership or the local archive.
-  const stopCloudWatch = options.cloudReady ? watch(options.cloudReady, () => {
+  const stopCloudWatch = options.cloudReady ? watch(options.cloudReady, (cloudReady) => {
+    const wasOffline = session?.offline === true
     revision += 1
     preparing = null
     session?.watcher.stop()
@@ -148,7 +151,14 @@ export function useOwnerCacheLifecycle(options: {
     session?.unsubscribe()
     session = null
     const uid = options.currentUser.value?.uid
-    if (uid && options.canEnterApp.value) void prepare(uid)
+    if (!uid || !options.canEnterApp.value) return
+    const prepared = prepare(uid)
+    // PIP-555: la dashboard e' entrata con il profilo locale e il cloud e' arrivato dopo:
+    // le liste calcolate offline vanno rifatte (una volta), le pagine che ascoltano si aggiornano.
+    if (!wasOffline || !cloudReady) return
+    void prepared.then(() => {
+      if (options.currentUser.value?.uid === uid && options.cloudReady?.value) invalidateTelemetryCaches({ uid, scope: 'cloud-ready' })
+    })
   }, { flush: 'sync' }) : () => {}
 
   onScopeDispose(() => {

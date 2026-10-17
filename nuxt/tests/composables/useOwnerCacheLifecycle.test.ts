@@ -32,6 +32,10 @@ import { useOwnerCacheLifecycle } from '~/composables/useOwnerCacheLifecycle'
 
 const bridge = { ownerCacheGet: vi.fn(), ownerCacheSet: vi.fn(), ownerCacheClear: vi.fn() }
 
+async function flushLifecycle() {
+  for (let i = 0; i < 6; i += 1) { await nextTick(); await Promise.resolve() }
+}
+
 function setup() {
   const currentUser = ref<{ uid: string } | null>({ uid: 'a' })
   const canEnterApp = ref(true)
@@ -66,9 +70,28 @@ describe('useOwnerCacheLifecycle', () => {
     expect(mocks.startWatch).not.toHaveBeenCalled()
     cloudReady.value = true
     await lifecycle.prepare('a')
+    await flushLifecycle()
     expect(fake.getDoc).toHaveBeenCalledOnce()
     expect(mocks.clearDisk).not.toHaveBeenCalled()
-    expect(mocks.invalidate).not.toHaveBeenCalled()
+    // PIP-555: il cloud e' arrivato dopo l'ingresso offline: le liste calcolate senza cloud
+    // vengono rifatte una volta (evento cloud-ready), senza toccare owner e proiezioni idratate.
+    expect(mocks.invalidate).toHaveBeenCalledTimes(1)
+    expect(mocks.invalidate).toHaveBeenCalledWith({ uid: 'a', scope: 'cloud-ready' })
+    expect(mocks.startWatch).toHaveBeenCalledWith(expect.objectContaining({ uid: 'a', revision: 'rev-a' }))
+    scope.stop()
+  })
+  it('PIP-555: una caduta del cloud non invalida; al ritorno le liste offline vengono rifatte una volta', async () => {
+    const scope = effectScope()
+    const cloudReady = ref(true)
+    const lifecycle = scope.run(() => useOwnerCacheLifecycle({ currentUser: ref({ uid: 'a' }),
+      canEnterApp: ref(true), cloudReady, bridge }))!
+    await lifecycle.prepare('a')
+    cloudReady.value = false
+    await flushLifecycle()
+    expect(mocks.invalidate).not.toHaveBeenCalledWith(expect.objectContaining({ scope: 'cloud-ready' }))
+    cloudReady.value = true
+    await flushLifecycle()
+    expect(mocks.invalidate.mock.calls.filter(([arg]) => arg?.scope === 'cloud-ready')).toHaveLength(1)
     scope.stop()
   })
   it('prepare: legge users/{uid} una volta, idrata con la revisione e avvia salvataggio e controllo', async () => {

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { loadOverviewProjectionRecoverably } from '../../app/services/gateway/overviewProjectionLoadPolicy'
+import { OverviewNotReadyError } from '../../app/services/gateway/offlineOverviewPolicy'
 
 describe('loadOverviewProjectionRecoverably', () => {
   it('returns the cloud projection when loading succeeds', async () => {
@@ -22,6 +23,11 @@ describe('loadOverviewProjectionRecoverably', () => {
       error: offline
     })
     expect(loadProjection).toHaveBeenCalledOnce()
+  })
+
+  it('PIP-555: "non pronta" (cloud in arrivo) non e\' un errore ne\' un risultato vuoto', async () => {
+    await expect(loadOverviewProjectionRecoverably(async () => { throw new OverviewNotReadyError() }))
+      .resolves.toEqual({ status: 'not-ready' })
   })
 })
 

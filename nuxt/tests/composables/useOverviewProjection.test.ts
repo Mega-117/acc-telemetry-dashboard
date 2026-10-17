@@ -1,6 +1,7 @@
 
 import { expect, it, vi } from 'vitest'
 import { useOverviewProjection } from '~/composables/useOverviewProjection'
+import { OverviewNotReadyError } from '~/services/gateway/offlineOverviewPolicy'
 it('preserva il contenuto preparato durante un refresh dello stesso proprietario', async () => {
   const fetch = vi.fn().mockResolvedValue({ marker: 'updated' })
   const overview = useOverviewProjection(fetch, { uid: 'A', projection: { marker: 'initial' } as any })
@@ -43,4 +44,14 @@ it('distingue assenza riuscita da errore e conserva dati durante refresh dello s
   expect(overview.projection.value).toBeNull()
   await overview.load(null)
   expect(fetch).toHaveBeenCalledTimes(3)
+})
+it('PIP-555: "non pronta" lascia la pagina in caricamento invece di dichiararla vuota', async () => {
+  const fetch = vi.fn().mockRejectedValueOnce(new OverviewNotReadyError()).mockResolvedValueOnce({ marker: 'cloud' })
+  const overview = useOverviewProjection(fetch)
+  await overview.load('A')
+  expect(overview.status.value).toBe('pending')
+  expect(overview.projection.value).toBeNull()
+  await overview.load('A')
+  expect(overview.status.value).toBe('ready')
+  expect(overview.projection.value).toEqual({ marker: 'cloud' })
 })

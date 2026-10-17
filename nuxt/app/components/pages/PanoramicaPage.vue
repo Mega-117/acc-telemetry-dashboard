@@ -12,24 +12,31 @@ import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { usePilotContext, useTargetUserId } from '~/composables/usePilotContext'
 import { useOverviewProjection } from '~/composables/useOverviewProjection'
 import { useGameContext } from '~/composables/useGameContext'
+import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { OVERVIEW_CAR_SIZES } from '~/utils/responsiveImage'
 import { getOverviewCarImage } from '~/utils/overviewCarImage'
 import { overviewEntryKey } from '~/services/auth/overviewEntryPreparation'
 import type { OverviewProjection } from '~/types/overviewProjections'
 import type { RaceCalendarEvent } from '~/repositories/raceCalendarRepository'
 
-const props = defineProps<{ prepared?: { uid: string; projection: OverviewProjection | null; events: RaceCalendarEvent[] } }>()
+// PIP-555: `pending` = prepared before the cloud with nothing to show; the page stays
+// "in caricamento" and loads at the cloud-ready event.
+const props = defineProps<{ prepared?: { uid: string; projection: OverviewProjection | null; events: RaceCalendarEvent[]; pending?: boolean } }>()
 
 const pilotContext = usePilotContext()
 const targetUserId = useTargetUserId()
 const { consultedGame } = useGameContext()
+const { cloudSessionReady } = useFirebaseAuth()
 // The legacy projection is ACC-only; common requests carry their explicit game.
 const telemetryGateway = useTelemetryGateway('acc')
 const entry = inject(overviewEntryKey, null)
+const preparedForThisOwner = consultedGame.value === 'acc' && props.prepared?.uid === targetUserId.value
 const overview = useOverviewProjection(uid => {
   if (consultedGame.value !== 'acc') return telemetryGateway.getCommonOverviewProjection(uid, consultedGame.value)
   return entry?.value?.takeProjection(uid) || telemetryGateway.getOverviewProjection(uid)
-}, consultedGame.value === 'acc' && props.prepared?.uid === targetUserId.value ? props.prepared : undefined)
+}, preparedForThisOwner && !props.prepared?.pending ? props.prepared : undefined)
+// Whether what is on screen was computed with the cloud: a cloud-ready event then changes nothing.
+let loadedWithCloud = preparedForThisOwner && !props.prepared?.pending && cloudSessionReady.value
 const { projection: overviewProjection, status: overviewStatus } = overview
 const calendarBusy = ref(false)
 const isOverviewPlaceholder = computed(() => !overviewProjection.value && overviewStatus.value !== 'empty')
@@ -41,6 +48,7 @@ const emptyActivityTotals = {
 
 
 async function loadOverview() {
+  loadedWithCloud = cloudSessionReady.value
   await overview.load(targetUserId.value)
 }
 
@@ -49,6 +57,8 @@ function handleCacheInvalidated(event: Event) {
   const detail = (event as CustomEvent<{ uid?: string | null; scope?: string }>).detail || {}
   if (!targetUserId.value) return
   if (detail.uid && detail.uid !== targetUserId.value) return
+  // PIP-555: the cloud arrived after the entry: reload only what was computed without it.
+  if (detail.scope === 'cloud-ready' && loadedWithCloud) return
 
   void loadOverview()
 

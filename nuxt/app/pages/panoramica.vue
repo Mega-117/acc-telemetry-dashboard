@@ -8,6 +8,7 @@ import { loadRaceCalendarEvents } from '~/repositories/raceCalendarRepository'
 import { responsiveImage, OVERVIEW_CAR_SIZES } from '~/utils/responsiveImage'
 import { getOverviewCarImage } from '~/utils/overviewCarImage'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { OverviewNotReadyError } from '~/services/gateway/offlineOverviewPolicy'
 definePageMeta({
   layout: 'dashboard'
 })
@@ -20,13 +21,18 @@ async function prepare() {
   if (useGameContext().consultedGame.value !== 'acc') return { ok: true as const, value: undefined }
   return preparePage(async () => {
     if (!uid) throw new Error('No owner')
+    // PIP-555: before the cloud, with nothing known, the page waits instead of saying "empty".
+    const NOT_READY = 'not-ready' as const
     const [projection, events] = await Promise.all([
-      entry?.value?.takeProjection(uid) || gateway.getOverviewProjection(uid),
+      (entry?.value?.takeProjection(uid) || gateway.getOverviewProjection(uid))
+        .catch((error: unknown) => { if (error instanceof OverviewNotReadyError) return NOT_READY; throw error }),
       cloudSessionReady.value ? entry?.value?.takeEvents(uid) || loadRaceCalendarEvents(uid, 25) : [],
       preparePageFonts(),
     ])
-    await decodeOverviewImage(responsiveImage(getOverviewCarImage(projection?.lastCar.rawName), baseURL, OVERVIEW_CAR_SIZES)).catch(() => {})
-    return { uid, projection, events }
+    const pending = projection === NOT_READY
+    const ready = pending ? null : projection
+    await decodeOverviewImage(responsiveImage(getOverviewCarImage(ready?.lastCar.rawName), baseURL, OVERVIEW_CAR_SIZES)).catch(() => {})
+    return { uid, projection: ready, events, pending }
   })
 }
 const prepared = shallowRef(await prepare())

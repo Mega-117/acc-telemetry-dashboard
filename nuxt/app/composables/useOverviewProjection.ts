@@ -20,6 +20,9 @@ export function useOverviewProjection(loadProjection: (uid: string) => Promise<O
     if (result.status === 'ready') {
       projection.value = result.projection
       status.value = result.projection ? 'ready' : 'empty'
+    } else if (result.status === 'not-ready') {
+      // PIP-555: resta "in caricamento" finche' il cloud arriva (evento cloud-ready).
+      status.value = 'pending'
     } else {
       status.value = 'error'
     }

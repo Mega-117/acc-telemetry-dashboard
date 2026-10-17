@@ -364,6 +364,13 @@ export function hydrateSessionListProjectionCache(uid: string, entries: SessionL
   return true
 }
 
+/** PIP-555: la lista gia' in cache (disco o lettura precedente), senza toccare Firebase. */
+export function peekSessionListProjectionCache(uid: string): SessionDocument[] | null {
+  const cached = projectionCache.get(uid)
+  if (!cached || !checkFirebaseCacheFreshness('sessionListProjection', cached.cachedAt, ownerDataCacheTtlFor(uid))) return null
+  return cached.sessions
+}
+
 /** Voci in cache da salvare su disco; `null` se la lista non e' stata letta in questo avvio. */
 export function exportSessionListProjectionEntries(uid: string): SessionListProjectionEntry[] | null {
   return projectionCache.get(uid)?.entries ?? null

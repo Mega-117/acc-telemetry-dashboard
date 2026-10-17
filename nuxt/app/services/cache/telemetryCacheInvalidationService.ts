@@ -16,6 +16,9 @@ export type TelemetryCacheInvalidationScope =
   | 'calendar'
   | 'coach-lessons'
   | 'coach-directory'
+  // PIP-555: la sessione cloud e' arrivata dopo l'ingresso con il profilo locale. Le liste
+  // calcolate offline vanno rifatte; owner, proiezioni idratate dal disco e calendario restano.
+  | 'cloud-ready'
   | 'all'
 
 export interface TelemetryCacheInvalidationOptions {
@@ -32,6 +35,11 @@ export function invalidateTelemetryCaches(options: TelemetryCacheInvalidationOpt
     // vuole dati freschi: la prossima lettura porta la revisione nuova.
     clearOwnerDocumentCache(uid)
     clearTelemetryProjectionRepositoryCache(uid)
+    clearTelemetryGatewayCache(uid)
+    clearSessionPagerCache(uid)
+    clearSessionLoaderCache(uid)
+  }
+  if (scope === 'cloud-ready') {
     clearTelemetryGatewayCache(uid)
     clearSessionPagerCache(uid)
     clearSessionLoaderCache(uid)

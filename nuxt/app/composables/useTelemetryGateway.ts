@@ -41,6 +41,8 @@ import { checkFirebaseCacheFreshness, recordFirebaseCacheHit } from '~/services/
 // pilota (coach) 15 minuti.
 import { ownerDataCacheTtlFor } from '~/services/cache/cachePolicy'
 import { loadLocalTelemetrySessions } from '~/repositories/telemetryLocalRepository'
+import { peekSessionListProjectionCache } from '~/services/sync/sessionListProjectionService'
+import { OverviewNotReadyError, selectOfflineOverviewSessions, shouldWaitForCloud } from '~/services/gateway/offlineOverviewPolicy'
 import {
     loadOverviewSessionSummary,
     loadTrackBest,
@@ -532,7 +534,9 @@ export function useTelemetryGateway(explicitGameId?: string) {
         const local = isElectron.value && uid === currentUser.value?.uid
             ? await loadLocalTelemetrySessions({ electronAPI: (window as any).electronAPI, ownerId: uid,
                 isOnline: canReadCloud() }) : []
-        if (!canReadCloud()) return local // The shell labels this as the archive on this computer.
+        // PIP-555: before the cloud is ready, the list already in cache (disk, same owner
+        // revision) stands in for it; without it, the archive on this computer alone.
+        if (!canReadCloud()) return selectOfflineOverviewSessions(peekSessionListProjectionCache(uid), local)
         const source = await loadLightweightSessionSource(uid)
         if (!source) return null // A bounded fallback cannot prove whole-archive totals.
         return mergePendingLocal(source.sessions, local, true)
@@ -566,7 +570,13 @@ export function useTelemetryGateway(explicitGameId?: string) {
     async function getCommonOverviewProjection(targetUserId: string, selectedGame: string) {
         const sessions = await loadCommonOverviewSessions(targetUserId)
         if (!sessions) throw new Error('Complete session index unavailable')
-        const latest = filterHistory(sessions, selectedGame)[0]
+        const history = filterHistory(sessions, selectedGame)
+        // PIP-555: nothing known yet and the cloud still to come: wait, do not answer "empty".
+        if (shouldWaitForCloud({ sessions: history.length, cloudReady: cloudSessionReady.value,
+            browserOnline: typeof navigator === 'undefined' || navigator.onLine !== false })) {
+            throw new OverviewNotReadyError()
+        }
+        const latest = history[0]
         if (!latest) return buildCommonOverviewProjection([], selectedGame)
         const references = await hydrateHistorySummaries(targetUserId,
             filterHistory(sessions, selectedGame, { car: latest.meta.car }, historyTrackId(latest.meta.track, latest.meta.trackVariant)))

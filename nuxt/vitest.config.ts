@@ -190,6 +190,7 @@ export default defineConfig({
         'app/services/gateway/bestTimesBuilders.ts',
         'app/services/gateway/trackDetailProjectionBuilder.ts',
         'app/services/gateway/overviewProjectionLoadPolicy.ts',
+        'app/services/gateway/offlineOverviewPolicy.ts',
         'app/services/monitoring/clientHeartbeatService.ts',
         'app/repositories/adminActivityRepository.ts',
         'app/repositories/pilotDirectoryRepository.ts',
