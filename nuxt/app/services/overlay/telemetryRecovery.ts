@@ -1,4 +1,5 @@
 import { nextTick } from 'vue'
+import { readCommonLive } from '../telemetry/commonLive'
 
 type Receipt = { version: number; bootId: string; sequence: number; valid?: boolean }
 const applied: Record<string, Receipt | null> = { fast: null, live: null }
@@ -14,13 +15,17 @@ export function withRecoveryDeadline<T>(operation: () => Promise<T>, fallback: T
 }
 // Called only after a consumer assigned its normalized Vue state.
 export function telemetryApplied(raw: any, valid = true, stream: 'fast' | 'live' = 'fast') {
+  // An authoritative fresh OFF frame is valid presentation, not valid driving data.
+  // Consumers keep their normalized empty state; only the post-Vue receipt is healthy.
+  const common = !valid ? readCommonLive(raw?.live ?? raw) : null
+  const presentationValid = valid || !!(common?.fresh && !common.connected && common.lifecycle === 'off')
   const token = received[stream] = (received[stream] ?? 0) + 1
   const receipt = raw?.hud_transport
   if (receipt?.version !== 1 || typeof receipt.bootId !== 'string'
     || receipt.bootId.length > 100 || !Number.isSafeInteger(receipt.sequence)) return
   deliveries[stream] = { version: 1, bootId: receipt.bootId, sequence: receipt.sequence }
   void nextTick(() => {
-    if (token === received[stream]) applied[stream] = { version: 1, bootId: receipt.bootId, sequence: receipt.sequence, valid }
+    if (token === received[stream]) applied[stream] = { version: 1, bootId: receipt.bootId, sequence: receipt.sequence, valid: presentationValid }
   })
 }
 
