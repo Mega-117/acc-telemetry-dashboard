@@ -36,7 +36,8 @@ describe('Pressioni Test isolated panel', () => {
     host.querySelector('button')!.click(); await settle()
     expect(host.querySelectorAll('dd')).toHaveLength(0); expect(host.querySelector('button')!.disabled).toBe(true)
     resolve(ready); await settle(); expect(host.textContent).toContain('applicate e verificate')
-    expect(host.querySelector('button small')?.textContent).toBe('BETA')
+    expect(host.querySelector('button .quick-action-badge')?.textContent).toBe('BETA')
+    expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Stima pressioni BETA')
     expect(host.textContent).toContain('27,1'); expect(run).toHaveBeenCalledOnce()
   })
   it('displays failure without old suggestions and blocks preview activation', async () => {

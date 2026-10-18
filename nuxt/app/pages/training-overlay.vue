@@ -126,7 +126,9 @@ const activeStepIndex = ref(0)
 const phase = ref<OverlayPhase>('loading')
 // Restored from the existing local Electron preferences before showing the launcher.
 const quickPanelLayout = ref<'vertical' | 'horizontal'>('vertical')
+const isAccQuickPanel = computed(() => simulatorPresence.gameId.value === 'acc')
 async function setQuickPanelLayout(value: 'vertical' | 'horizontal') {
+  if (isAccQuickPanel.value) return
   quickPanelLayout.value = value
   if (isFullQuickPanelPreview.value) return
   try {
@@ -137,7 +139,7 @@ async function setQuickPanelLayout(value: 'vertical' | 'horizontal') {
 }
 const isHorizontalQuickPanel = computed(() => phase.value === 'launcher'
   && !isTargetSetupOpen.value && !isSectorReferenceSetupOpen.value && !isFuelSetupOpen.value && !isQuickTimerOpen.value
-  && quickPanelLayout.value === 'horizontal')
+  && (isAccQuickPanel.value || quickPanelLayout.value === 'horizontal'))
 const remainingMs = ref(0)
 const isElectronRuntime = ref(false)
 const {
@@ -1315,7 +1317,7 @@ onBeforeUnmount(() => {
                   <header class="launcher-tools__header">
                     <img class="quick-panel-logo" src="/branding/auth/racercore-rc.svg" alt="Racer Core" width="56" height="28">
                     <!-- PIP-532: the Notifiche view owns the corner (its X); the switch steps aside. -->
-                    <QuickPanelLayoutToggle v-show="!isNotificationsOpen" :model-value="quickPanelLayout" @update:model-value="setQuickPanelLayout" />
+                    <QuickPanelLayoutToggle v-if="!isAccQuickPanel" v-show="!isNotificationsOpen" :model-value="quickPanelLayout" @update:model-value="setQuickPanelLayout" />
                     <div class="quick-panel-header-actions" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
                     <!-- PIP-526: reachable from the wheel, last in the cycle (data-overlay-wheel-last). -->
                     <button type="button" class="launcher-tool-button quick-panel-timer" title="Timer" aria-label="Timer" data-overlay-wheel-action="timer" data-overlay-wheel-last @click="openQuickTimer">
@@ -1383,6 +1385,10 @@ onBeforeUnmount(() => {
                       data-overlay-wheel-action="pitwall"
                       @focus="selectedWheelActionId = 'pitwall'"
                     />
+
+                    </div>
+                    <div class="quick-panel-pressure-pair" aria-label="Pressioni pneumatici">
+                    <PressureTestPanel :api="getOverlayApi()" :disabled="isFullQuickPanelPreview" :horizontal="isHorizontalQuickPanel" feedback-target="#quick-panel-pressure-test-feedback" />
                     <button
                       type="button"
                       class="launcher-tool-button launcher-tool-button--training launcher-tool-button--pressure"
@@ -1400,7 +1406,7 @@ onBeforeUnmount(() => {
                       <LoaderCircle v-if="isDryPressureApplying" class="quick-state-icon" :size="16" aria-hidden="true" />
                       <CircleCheck v-else-if="quickPanelPressureState.state === 'ready'" class="quick-state-icon" :size="16" aria-hidden="true" />
                       <CircleMinus v-else class="quick-state-icon" :size="16" aria-hidden="true" />
-                      <span>Pressioni</span>
+                      <span>Correggi<br>pressioni</span>
                       <small v-if="pressureBadge" class="quick-action-badge" aria-hidden="true">{{ pressureBadge }}</small>
                     </button>
                     </div>
@@ -1464,8 +1470,8 @@ onBeforeUnmount(() => {
                       @toggle-pressure="togglePressureAudio"
                       @toggle-target="toggleTargetVoice"
                     />
-                    <PressureTestPanel :api="getOverlayApi()" :disabled="isFullQuickPanelPreview" :horizontal="isHorizontalQuickPanel" />
                     </div>
+                    <div id="quick-panel-pressure-test-feedback" class="quick-panel-pressure-test-feedback" />
                     <!-- PIP-518: horizontal layout keeps every message in one column, last on the right. -->
                     <div v-show="isHorizontalQuickPanel && !waitingForSimulator && !isNotificationsOpen" class="quick-panel-horizontal-side" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
                       <div id="quick-panel-horizontal-feedback" class="quick-panel-horizontal-feedback" />

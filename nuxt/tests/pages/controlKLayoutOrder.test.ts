@@ -20,6 +20,18 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     expect(styles).toMatch(/\.quick-panel-section\[aria-label='Riferimenti numerici'\] \{\s*display: grid;\s*grid-row: 1;/)
     expect(styles).not.toContain("border-bottom: 1px solid #ffffff1a; }\n    .quick-panel-automations")
   })
+  it('forces ACC horizontal despite old preferences and removes its layout switch', () => {
+    expect(source).toContain("const isAccQuickPanel = computed(() => simulatorPresence.gameId.value === 'acc')")
+    expect(source).toContain("&& (isAccQuickPanel.value || quickPanelLayout.value === 'horizontal')")
+    expect(source).toContain('<QuickPanelLayoutToggle v-if="!isAccQuickPanel"')
+  })
+  it('pairs the initial estimate before measured correction', () => {
+    const pair = source.slice(source.indexOf('class="quick-panel-pressure-pair"'), source.indexOf('id="control-k-fuel-preview"'))
+    expect(pair.indexOf('<PressureTestPanel')).toBeLessThan(pair.indexOf('data-overlay-wheel-action="pressure"'))
+    expect(pair).toContain('<span>Correggi<br>pressioni</span>')
+    expect(source.match(/<PressureTestPanel/g)).toHaveLength(1)
+    expect(source).toContain('id="quick-panel-pressure-test-feedback"')
+  })
   it('keeps Pressioni visible in driving without enabling unavailable commands', () => {
     expect(source).not.toContain('showPressureButton')
     expect(source).toContain(':disabled="isDryPressureApplying || quickPanelPressureState.state !== \'ready\'"')
@@ -65,7 +77,7 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     // PIP-532: inside the panel (at -12 px the icons were clipped and not clickable).
     expect(block).toContain('.quick-panel-layout { position: absolute; top: 0; right: 0;')
     expect(block).toContain('.quick-panel-layout button { width: 22px; height: 14px; min-height: 0; }')
-    expect(source).toContain('<QuickPanelLayoutToggle v-show="!isNotificationsOpen"')
+    expect(source).toContain('<QuickPanelLayoutToggle v-if="!isAccQuickPanel" v-show="!isNotificationsOpen"')
     expect(block).not.toMatch(/quick-panel-layout \{ position: absolute; top: -/)
     // The logo stays: the switch no longer covers it (PIP-527).
     expect(styles).not.toContain('.quick-panel-logo { opacity: 0; }')

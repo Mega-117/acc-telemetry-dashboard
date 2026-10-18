@@ -20,7 +20,7 @@ type Snapshot = {
 const props = defineProps<{ api?: {
   trainingOverlayPressureTestState?: () => Promise<Snapshot>
   trainingOverlayPressureTest?: () => Promise<Snapshot>
-} | null; disabled?: boolean; horizontal?: boolean }>()
+} | null; disabled?: boolean; horizontal?: boolean; feedbackTarget?: string }>()
 const state = ref<Snapshot>({})
 const requesting = ref(false)
 let generation = 0
@@ -47,11 +47,11 @@ onMounted(() => { void refresh(); polling.start() })
 </script>
 
 <template>
-  <section v-if="state.available" class="pressure-test" :class="{ 'pressure-test--horizontal': horizontal }" aria-label="Pressioni Test">
+  <section v-if="state.available" class="pressure-test" :class="{ 'pressure-test--horizontal': horizontal }" aria-label="Stima pressioni">
     <button type="button" class="pressure-test__button" data-overlay-wheel-action="pressure-test"
-      title="Legge il setup e applica le pressioni iniziali stimate" aria-label="Pressioni Test BETA"
-      :disabled="pending || disabled" :aria-busy="pending" @click="run"><Gauge :size="20" aria-hidden="true" /><span>Pressioni<br>Test</span><small>BETA</small></button>
-    <Teleport defer to="#quick-panel-horizontal-feedback" :disabled="!horizontal">
+      title="Legge il setup e applica le pressioni iniziali stimate" aria-label="Stima pressioni BETA"
+      :disabled="pending || disabled" :aria-busy="pending" @click="run"><Gauge :size="20" aria-hidden="true" /><span>Stima<br>pressioni</span><small class="quick-action-badge">BETA</small></button>
+    <Teleport defer :to="feedbackTarget || '#quick-panel-horizontal-feedback'" :disabled="!feedbackTarget && !horizontal">
     <div class="pressure-test__feedback" aria-live="polite">
     <p v-if="pending" class="launcher-hint" role="status">{{ state.message || 'Calcolo in corso…' }}</p>
     <div v-else-if="state.status === 'error'" class="launcher-hint" role="alert">
@@ -79,9 +79,9 @@ onMounted(() => { void refresh(); polling.start() })
 
 <style scoped>
 .pressure-test { display: grid; gap: 6px; min-width: 0; grid-column: 1 / -1; order: 99; }
-.pressure-test--horizontal { flex: 0 0 64px; align-content: start; order: 5; grid-column: auto; padding-top: 20px; }
-.pressure-test__button { width: 64px; height: 64px; padding: 3px 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; border: 1px solid #626262; background: #292929; color: #eee; font: inherit; font-size: 10px; line-height: 11px; cursor: pointer; }
-.pressure-test__button small { color: #ffe27a; font-size: 8px; font-weight: 700; line-height: 9px; }
+.pressure-test--horizontal { flex: 0 0 64px; align-content: start; }
+.pressure-test__button { position: relative; width: 64px; height: 64px; padding: 8px 2px 3px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; border: 1px solid #626262; background: #292929; color: #eee; font: inherit; font-size: 10px; line-height: 11px; cursor: pointer; }
+.pressure-test__button .quick-action-badge { position: absolute; top: 3px; right: 3px; padding: 0 3px; border: 1px solid #ffffff30; color: #ffe27a; background: #0b0b0b; font-size: 9px; font-weight: 700; line-height: 12px; }
 .pressure-test__feedback:empty { display: none; }
 .pressure-test__button:disabled { opacity: .5; cursor: default; }
 .pressure-test__button:focus-visible, .pressure-test__button[data-overlay-selected] { outline: 2px solid #ffe27a; outline-offset: 1px; }
