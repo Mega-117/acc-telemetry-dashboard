@@ -2591,7 +2591,8 @@ button.is-active {
   .quick-panel-horizontal-pressure,
   .quick-panel-horizontal-requests,
   .quick-panel-horizontal-side > .control-k-fuel-status { width: 240px; }
-  .quick-panel-dev { order: 7; }
+  // Full-row feedback must not contribute its intrinsic width to the button row.
+  .quick-panel-dev { order: 7; width: 0; min-width: 100%; }
 }
 
 // PIP-527: vertical layout while driving: Pitwall and the four voice alerts on one row.
@@ -2600,7 +2601,9 @@ button.is-active {
   // Five buttons must fit the fixed vertical width: 56 px each, 5 px apart.
   // The main box is normally transparent in the 4-column grid: span it all.
   grid-column: 1 / -1;
-  display: flex; flex-direction: row; align-items: flex-end; gap: 5px; min-width: 0;
+  display: flex; flex-direction: row; flex-wrap: wrap; align-items: flex-end; gap: 5px; min-width: 0;
+  // Beta feedback stays below the compact controls, never outside the card.
+  .pressure-test { flex: 0 0 100%; min-width: 0; }
   .quick-panel-secondary {
     display: flex; flex-direction: column; align-items: center; flex: none; width: 56px; padding: 12px 0 0; gap: 8px;
   }

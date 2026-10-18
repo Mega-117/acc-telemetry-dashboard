@@ -20,10 +20,9 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     expect(styles).toMatch(/\.quick-panel-section\[aria-label='Riferimenti numerici'\] \{\s*display: grid;\s*grid-row: 1;/)
     expect(styles).not.toContain("border-bottom: 1px solid #ffffff1a; }\n    .quick-panel-automations")
   })
-  it('hides a disabled Pressioni button while driving, keeps it when usable or in the box', () => {
-    expect(source).toContain('v-if="showPressureButton"')
-    // PIP-532: ...or while the lap measurement runs (its badge must be seen while driving).
-    expect(source).toMatch(/const showPressureButton = computed\(\(\) => isFullQuickPanelPreview\.value \|\| !hideStintWhileDriving\.value\s*\|\| isDryPressureApplying\.value \|\| quickPanelPressureState\.value\.state === 'ready' \|\| !!pressureBadge\.value\)/)
+  it('keeps Pressioni visible in driving without enabling unavailable commands', () => {
+    expect(source).not.toContain('showPressureButton')
+    expect(source).toContain(':disabled="isDryPressureApplying || quickPanelPressureState.state !== \'ready\'"')
   })
   it('PIP-509: the horizontal Tools group reserves no column for a hidden button', () => {
     const horizontal = styles.slice(styles.indexOf('.overlay-content--horizontal'))
@@ -117,8 +116,8 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     expect(source).toMatch(/function runBackAction\(\) \{\s*if \(isNotificationsOpen\.value\) \{ closeNotifications\(\); return \}/)
     expect(source).toContain('if (errors > notificationErrorCount) openNotifications()')
     expect(source).toContain('data-overlay-wheel-action="notifications-close" @click="closeNotifications"')
-    // The lap badge keeps the Pressioni button visible while the measurement runs.
-    expect(source).toMatch(/quickPanelPressureState\.value\.state === 'ready' \|\| !!pressureBadge\.value\)/)
+    // The lap badge remains available on the always-visible Pressioni button.
+    expect(source).toContain('v-if="pressureBadge"')
   })
   it('PIP-533: voice buttons show and change the alert for the session being driven', () => {
     expect(source).toContain(':coach="isFullQuickPanelPreview || coachVoiceOn"')

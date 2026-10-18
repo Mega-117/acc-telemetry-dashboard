@@ -631,10 +631,6 @@ const isCarStoppedWithEngineOff = computed(() => !fastState.value.isEngineRunnin
   && fastState.value.speedKmh !== null && Math.abs(fastState.value.speedKmh) <= 0.5)
 const showAllQuickPanelButtons = computed(() => isCarStoppedWithEngineOff.value
   || (showQuickPanelDevTools && previewAllQuickPanelButtons.value))
-// PIP-509: while driving a disabled Pressioni button is noise: show it only when usable.
-// PIP-532: ...and while the measurement is running, so its lap badge is seen in driving.
-const showPressureButton = computed(() => isFullQuickPanelPreview.value || !hideStintWhileDriving.value
-  || isDryPressureApplying.value || quickPanelPressureState.value.state === 'ready' || !!pressureBadge.value)
 // PIP-509: no supported simulator detected -> waiting placeholder (dev synthetic source excluded).
 const waitingForSimulator = computed(() => !isFullQuickPanelPreview.value
   && simulatorPresence.gameId.value !== 'synthetic'
@@ -1388,7 +1384,6 @@ onBeforeUnmount(() => {
                       @focus="selectedWheelActionId = 'pitwall'"
                     />
                     <button
-                      v-if="showPressureButton"
                       type="button"
                       class="launcher-tool-button launcher-tool-button--training launcher-tool-button--pressure"
                       :class="{ 'is-ready': quickPanelPressureState.state === 'ready', 'is-awaiting-pit': quickPanelPressureState.reason === 'pit_pause_required', 'is-selected': selectedWheelActionId === 'pressure' }"
