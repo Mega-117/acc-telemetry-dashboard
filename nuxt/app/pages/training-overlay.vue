@@ -43,6 +43,7 @@ import QuickCountdown from '~/components/overlay/QuickCountdown.vue'
 import { useQuickCountdown } from '~/composables/useQuickCountdown'
 import QuickPanelLayoutToggle from '~/components/overlay/QuickPanelLayoutToggle.vue'
 import QuickPanelVoiceControls from '~/components/overlay/QuickPanelVoiceControls.vue'
+import PressureTestPanel from '~/components/overlay/PressureTestPanel.vue'
 import { SPOTTER_SESSION_LABELS, isSpotterFeatureAllowed, resolveSpotterSessionMode, toggleCurrentSessionMode, voiceSessionType, type SpotterSessionMode } from '~/services/spotter/spotterSessionPolicy'
 import { quickPanelActionHint } from '~/services/overlay/quickPanelActionHint'
 import OverlaySelectSetup from '~/components/overlay/OverlaySelectSetup.vue'
@@ -1468,6 +1469,7 @@ onBeforeUnmount(() => {
                       @toggle-pressure="togglePressureAudio"
                       @toggle-target="toggleTargetVoice"
                     />
+                    <PressureTestPanel :api="getOverlayApi()" :disabled="isFullQuickPanelPreview" />
                     </div>
                     <!-- PIP-518: horizontal layout keeps every message in one column, last on the right. -->
                     <div v-show="isHorizontalQuickPanel && !waitingForSimulator && !isNotificationsOpen" class="quick-panel-horizontal-side" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
