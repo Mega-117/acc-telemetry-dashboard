@@ -38,7 +38,8 @@ import {
   resolveAutoAdvanceSeconds,
   type OverlayOriginCorner, type OverlayOriginMode,
 } from '~/composables/useOverlaySettings'
-import { Bell, CircleCheck, CircleMinus, Dumbbell, Timer, Power, Check, LoaderCircle, Target, Flag, Info, X, Volume2 } from '@lucide/vue'
+import { ArrowLeft, Bell, ChevronLeft, ChevronRight, CircleCheck, CircleMinus, Dumbbell, Timer, Power, Check, LoaderCircle, Target, Flag, Info, X, Volume2 } from '@lucide/vue'
+import ControlKViewHeader from '~/components/overlay/ControlKViewHeader.vue'
 import QuickCountdown from '~/components/overlay/QuickCountdown.vue'
 import { useQuickCountdown } from '~/composables/useQuickCountdown'
 import QuickPanelLayoutToggle from '~/components/overlay/QuickPanelLayoutToggle.vue'
@@ -239,7 +240,14 @@ function countNotifications() {
     .filter(element => !element.parentElement?.closest(NOTIFICATION_ITEMS))
     .map(element => ({ element, item: readNotificationItem(element) })) : []
   for (const { element, item } of items) element.hidden = clearedNotifications.has(item.key)
-  visibleNotifications = items.filter(({ item }) => !clearedNotifications.has(item.key)).map(({ item }) => item)
+  const visible = items.filter(({ item }) => !clearedNotifications.has(item.key))
+  // ACC shows one whole card at a time: errors first, then decisions, then outcomes.
+  const order: Record<ControlKNotificationKind, number> = { error: 0, action: 1, info: 2 }
+  visible.sort((a, b) => order[a.item.kind] - order[b.item.kind])
+  notificationPages.value = visible.length
+  notificationPage.value = Math.min(notificationPage.value, Math.max(0, visible.length - 1))
+  visible.forEach(({ element }, index) => element.toggleAttribute('data-ck-offpage', usesAccLayout.value && index !== notificationPage.value))
+  visibleNotifications = visible.map(({ item }) => item)
   notificationCount.value = visibleNotifications.length
   if (isNotificationsOpen.value) visibleNotifications.forEach(item => seenNotifications.add(item.key))
   const unread = visibleNotifications.filter(item => !seenNotifications.has(item.key))
@@ -260,8 +268,16 @@ function clearNotifications(kinds: ControlKNotificationKind[]) {
   visibleNotifications.filter(item => kinds.includes(item.kind)).forEach(item => clearedNotifications.add(item.key))
   countNotifications()
 }
+const notificationPage = ref(0)
+const notificationPages = ref(0)
+function showNotificationPage(step: 1 | -1) {
+  if (notificationPages.value < 2) return
+  notificationPage.value = (notificationPage.value + step + notificationPages.value) % notificationPages.value
+  countNotifications()
+}
 function openNotifications() {
   isVoiceViewOpen.value = false
+  notificationPage.value = 0
   isNotificationsOpen.value = true
   countNotifications()
   void nextTick(() => actionSelection.select('notifications-close'))
@@ -640,6 +656,17 @@ function closeQuickTimer() {
 function openQuickTimer() {
   isQuickTimerOpen.value = true
   void nextTick(() => actionSelection.select(quickTimer.status.value === 'idle' ? 'timer-start' : 'timer-end'))
+}
+// PIP-556: a running timer is cancelled from the wheel with two presses: the first
+// reveals "Annulla timer" (hidden selection until then), the second OK cancels it.
+const timerCancelArmed = ref(false)
+watch([isQuickTimerOpen, () => quickTimer.status.value], () => { timerCancelArmed.value = false })
+function armTimerCancel(command: string | undefined): boolean {
+  if (!isQuickTimerOpen.value || quickTimer.status.value !== 'running' || timerCancelArmed.value) return false
+  if (!['next-action', 'previous-action', 'activate-action', 'primary'].includes(command || '')) return false
+  timerCancelArmed.value = true
+  actionSelection.select('timer-end')
+  return true
 }
 function leaveQuickTimer() {
   // A running timer hides Ctrl+K as before and brings it back at the end.
@@ -1208,6 +1235,7 @@ function handleOverlayCommand(payload: OverlayCommand | { command?: OverlayComma
   if (command === 'prepare-reopen') { void prepareOverlayReopen(typeof payload === 'string' ? undefined : payload.revision); return }
   if (isFullQuickPanelPreview.value) return
   if (isQuickTimerOpen.value && !['back', 'next-action', 'previous-action', 'activate-action'].includes(command || '')) return
+  if (armTimerCancel(command)) return
   if (command === 'main-menu') { returnToMainMenu(); return }
   // PIP-526: a value being edited takes Next/Previous/OK/Back first.
   if (isTargetSetupOpen.value && targetSetup.value?.handleWheelCommand(command)) return
@@ -1482,9 +1510,10 @@ onBeforeUnmount(() => {
                       <Volume2 :size="20" aria-hidden="true" /><span>Avvisi</span>
                       <small class="quick-action-badge" aria-hidden="true">{{ [coachVoiceOn, referencesVoiceOn, pressureVoiceOn, targetVoiceOn].filter(Boolean).length }}/4</small>
                     </button>
-                    <button v-if="usesAccLayout && isVoiceViewOpen" type="button" class="launcher-tool-button ck-view-close" title="Torna ai comandi"
-                      aria-label="Chiudi avvisi vocali" data-overlay-wheel-action="voice-close" @click="closeVoiceView">
-                      <X :size="16" aria-hidden="true" />
+                    <!-- PIP-556: the same ← as every other view. -->
+                    <button v-if="usesAccLayout && isVoiceViewOpen" type="button" class="launcher-tool-button ck-view-close" title="Indietro"
+                      aria-label="Indietro" data-overlay-wheel-action="voice-close" @click="closeVoiceView">
+                      <ArrowLeft :size="16" aria-hidden="true" />
                     </button>
                     <!-- PIP-526: reachable from the wheel, last in the cycle (data-overlay-wheel-last). -->
                     <button type="button" class="launcher-tool-button quick-panel-timer" title="Timer" aria-label="Timer" data-overlay-wheel-action="timer" :data-overlay-wheel-last="usesAccLayout ? undefined : ''" @click="openQuickTimer">
@@ -1653,11 +1682,22 @@ onBeforeUnmount(() => {
                     <!-- PIP-532: one view for everything worth reading; the buttons give way to it. -->
                     <section v-show="isNotificationsOpen && !waitingForSimulator" class="quick-panel-notifications" aria-label="Notifiche"
                       :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
-                      <header class="quick-panel-notifications__header">
-                        <h2 class="quick-panel-heading">Notifiche</h2>
-                        <!-- PIP-556: clears what is only to read; decisions (plan, friend requests) stay. -->
-                        <button v-if="usesAccLayout" type="button" class="launcher-tool-button quick-panel-notifications__clear" title="Svuota le notifiche da leggere"
+                      <!-- PIP-556: one card at a time (errors, then decisions, then outcomes), ‹ n/N ›,
+                           "Svuota" clears what is only to read; decisions (plan, friend requests) stay. -->
+                      <ControlKViewHeader v-if="usesAccLayout" title="Notifiche"
+                        :subtitle="notificationPages > 1 ? `${notificationPage + 1} di ${notificationPages}` : null"
+                        action="notifications-close" @back="closeNotifications">
+                        <template v-if="notificationPages > 1">
+                          <button type="button" class="launcher-tool-button quick-panel-notifications__page" aria-label="Notifica precedente"
+                            data-overlay-wheel-action="notifications-prev" @click="showNotificationPage(-1)"><ChevronLeft :size="16" aria-hidden="true" /></button>
+                          <button type="button" class="launcher-tool-button quick-panel-notifications__page" aria-label="Notifica successiva"
+                            data-overlay-wheel-action="notifications-next" @click="showNotificationPage(1)"><ChevronRight :size="16" aria-hidden="true" /></button>
+                        </template>
+                        <button type="button" class="launcher-tool-button quick-panel-notifications__clear" title="Svuota le notifiche da leggere"
                           data-overlay-wheel-action="notifications-clear" @click="clearNotifications(['info', 'error'])">Svuota</button>
+                      </ControlKViewHeader>
+                      <header v-else class="quick-panel-notifications__header">
+                        <h2 class="quick-panel-heading">Notifiche</h2>
                         <button type="button" class="launcher-tool-button quick-panel-notifications__close" title="Chiudi notifiche" aria-label="Chiudi notifiche"
                           data-overlay-wheel-action="notifications-close" @click="closeNotifications">
                           <X :size="16" aria-hidden="true" />
@@ -1711,7 +1751,8 @@ onBeforeUnmount(() => {
                     <Info v-if="controlKStatus" :size="12" aria-hidden="true" /><span>{{ controlKStatus?.text }}</span>
                   </p>
                 </div>
-                <QuickCountdown v-else-if="isQuickTimerOpen" ref="quickCountdownView" :status="quickTimer.status.value" :display="quickTimer.display.value" @start="startQuickTimer" @cancel="closeQuickTimer" />
+                <QuickCountdown v-else-if="isQuickTimerOpen" ref="quickCountdownView" :status="quickTimer.status.value" :display="quickTimer.display.value" @start="startQuickTimer" @cancel="closeQuickTimer"
+                  :armed="timerCancelArmed" @back="leaveQuickTimer" />
                 <InfoTargetSetup
                   v-else-if="isTargetSetupOpen"
                   ref="targetSetup"

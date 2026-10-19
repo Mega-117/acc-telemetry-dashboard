@@ -104,7 +104,7 @@ function onKey(event: KeyboardEvent) {
   display: grid; align-content: center; justify-items: center; gap: 2px; min-width: 0; height: 52px; padding: 0;
   border: 1px solid #ffffff30; border-radius: 0; background: #ffffff05; color: #fff; font: inherit; cursor: pointer;
 }
-.ck-field small { color: #aaa; font-size: 9px; font-weight: 600; letter-spacing: .08em; }
+.ck-field small { color: #aaa; font-size: 10px; font-weight: 600; letter-spacing: .06em; }
 .ck-field strong { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .ck-field em { margin-left: 2px; font-size: 10px; font-style: normal; font-weight: 500; color: #bbb; }
 .ck-field:hover:not(:disabled) { background: #ffffff12; }

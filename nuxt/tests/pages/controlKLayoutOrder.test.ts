@@ -179,7 +179,10 @@ describe('ACC Control K single layout (PIP-556)', () => {
     expect(acc).toContain("'logo est cor fmin fses pit'")
     expect(acc).toContain("'logo tgt sec voice timer bell'")
     expect(acc).toContain("'status status status status status status'")
-    expect(acc).toMatch(/\.ck-status \{[\s\S]{0,200}?height: 18px;[\s\S]{0,120}?white-space: nowrap;/)
+    expect(acc).toMatch(/\.ck-status \{[\s\S]{0,200}?height: 20px;[\s\S]{0,120}?white-space: nowrap;/)
+    // Notifications: one whole card at a time, the height follows the card.
+    expect(acc).toContain('.quick-panel-notifications__body :is([hidden], [data-ck-offpage]) { display: none !important; }')
+    expect(source).toContain("element.toggleAttribute('data-ck-offpage', usesAccLayout.value && index !== notificationPage.value)")
   })
   it('Guida keeps Pitwall, Correggi pressioni and the alerts; Riferimenti, Target and the bell only when useful', () => {
     const drive = acc.slice(acc.indexOf('.launcher-tools.ck.ck--drive {'))

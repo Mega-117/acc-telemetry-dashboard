@@ -10,6 +10,7 @@ import {
 } from '~/utils/infoTargetPicker'
 import { stepNumberField, type NumberFieldLimits } from '~/utils/controlKNumberField'
 import ControlKNumberField from '~/components/overlay/ControlKNumberField.vue'
+import ControlKViewHeader from '~/components/overlay/ControlKViewHeader.vue'
 
 const props = withDefaults(defineProps<{
   targetTimeMs: number
@@ -115,25 +116,33 @@ function onWheel(control: PickerControl, event: WheelEvent) {
     data-overlay-interactive
     aria-label="Configura Target giro"
   >
-    <header>
-      <span v-if="appearance !== 'quick-panel'">{{ contextLabel }}</span>
-      <strong>{{ appearance === 'quick-panel' ? 'Giro obiettivo' : 'Target giro' }}</strong>
-      <p v-if="appearance !== 'quick-panel'">Imposta il riferimento del giro completo.</p>
+    <!-- PIP-556: Control K editors share one structure: ← header, fields, shortcuts, hint, one primary action. -->
+    <ControlKViewHeader v-if="appearance === 'quick-panel'" title="Giro obiettivo" subtitle="Valido per questa sessione" action="target-cancel" @back="emit('cancel')" />
+    <header v-else>
+      <span>{{ contextLabel }}</span>
+      <strong>Target giro</strong>
+      <p>Imposta il riferimento del giro completo.</p>
     </header>
 
-    <div v-if="appearance === 'quick-panel'" class="target-quick" role="group" aria-label="Tempo obiettivo">
-      <div class="target-quick__fields">
+    <template v-if="appearance === 'quick-panel'">
+      <div class="ck-editor__fields" role="group" aria-label="Tempo obiettivo">
         <ControlKNumberField v-for="field in quickFields" :key="field.id" :value="field.value" :label="field.label"
           :action="`target-${field.id}`" :name="field.ariaLabel" :min="field.min" :max="field.max" :digits="field.digits"
           :wrap="field.wrap" :prefix="field.prefix" :suffix="field.suffix" :format="field.format"
-          :editing="editingControl === field.id" :class="{ 'target-quick__tolerance': field.id === 'tolerance' }"
+          :editing="editingControl === field.id" :class="`ck-field--${field.id}`"
           @toggle="toggleEditing(field.id)" @update:value="setQuickField(field.id, $event)" />
       </div>
-      <div class="target-quick__sources">
+      <div v-if="usableLap(bestLapMs) || usableLap(lastLapMs)" class="ck-editor__shortcuts">
         <button v-if="usableLap(bestLapMs)" type="button" data-overlay-wheel-action="target-use-best" @click="useLap(bestLapMs!)">Usa best {{ formatInfoLapTime(Math.round(bestLapMs! / 100) * 100) }}</button>
         <button v-if="usableLap(lastLapMs)" type="button" data-overlay-wheel-action="target-use-last" @click="useLap(lastLapMs!)">Usa ultimo {{ formatInfoLapTime(Math.round(lastLapMs! / 100) * 100) }}</button>
       </div>
-    </div>
+      <p class="ck-editor__hint" role="status">{{ editingControl
+        ? 'Su/Giù o rotella cambiano solo questo campo · OK fatto'
+        : 'OK o clic su un campo, poi Su/Giù, rotella o cifre' }}</p>
+      <div class="ck-editor__actions">
+        <button type="button" class="ck-editor__primary" data-overlay-wheel-action="target-confirm" @click="emit('confirm')">Conferma</button>
+      </div>
+    </template>
 
     <div v-if="appearance !== 'quick-panel'" class="target-preview" aria-live="polite">
       <span>Tempo target</span>
@@ -221,10 +230,7 @@ function onWheel(control: PickerControl, event: WheelEvent) {
       <span>Mantieni tra sessioni dello stesso server</span>
     </button>
 
-    <p v-if="appearance === 'quick-panel'" class="target-edit-hint" role="status">{{ editingControl
-      ? 'Su/Giù o rotella cambiano solo questo campo · OK fatto'
-      : 'OK o clic su un campo, poi Su/Giù, rotella o cifre' }}</p>
-    <div class="target-actions">
+    <div v-if="appearance !== 'quick-panel'" class="target-actions">
       <button type="button" class="target-confirm" data-overlay-wheel-action="target-confirm" @click="emit('confirm')">Conferma</button>
       <button type="button" class="target-cancel" data-overlay-wheel-action="target-cancel" @click="emit('cancel')">Annulla</button>
     </div>
@@ -233,14 +239,7 @@ function onWheel(control: PickerControl, event: WheelEvent) {
 
 <style scoped>
 .target-field-value { border: 0; background: transparent; color: inherit; font: inherit; font-size: 22px; font-weight: 600; cursor: pointer; }
-/* PIP-556: MIN | SEC | DEC side by side, best/last on the right; fits the Ctrl+K frame. */
-.target-quick { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: stretch; }
-.target-quick__fields { display: grid; grid-template-columns: 48px 56px 48px 84px; gap: 4px; }
-.target-quick__sources { display: grid; grid-template-rows: 1fr 1fr; gap: 4px; }
-.target-quick__sources button { min-height: 26px; border: 1px solid #ffffff30; border-radius: 0; background: #ffffff05; color: inherit; font: inherit; font-size: 11px; cursor: pointer; }
 .target-tolerance__control .target-field-value { font-size: 14px; }
-.info-target-setup--quick .is-editing { outline: 2px solid #00e5ff; outline-offset: 2px; background: #00e5ff18; }
-.target-edit-hint { margin: 0; font-size: 11px; color: #00e5ff; }
 .info-target-setup {
   display: grid;
   gap: 9px;
@@ -417,46 +416,8 @@ header p { margin: 4px 0 0; color: rgba(255,255,255,.62); font-size: 13px; }
 }
 
 
-/* Ctrl+K uses the same neutral, compact chrome as its main menu. */
-.info-target-setup--quick {
-  padding: 0; gap: 8px; border: 0; border-radius: 0;
-  background: #0b0b0b; box-shadow: none;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas: "head head" "quick quick" "hint actions";
-}
-.info-target-setup--quick > header { grid-area: head; }
-.info-target-setup--quick > .target-quick { grid-area: quick; }
-.info-target-setup--quick > .target-tolerance { grid-area: tolerance; }
-.info-target-setup--quick > .target-actions { grid-area: actions; }
-.info-target-setup--quick > .target-edit-hint { grid-area: hint; align-self: center; min-width: 0; font-size: 10px; line-height: 1.3; }
-.info-target-setup--quick header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 6px; border-bottom: 1px solid #ffffff25; }
-.info-target-setup--quick header strong { margin: 0; font-size: 16px; font-weight: 600; }
-.info-target-setup--quick header output { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.info-target-setup--quick .target-picker { gap: 8px; }
-.info-target-setup--quick .target-drum { grid-template-rows: 20px 24px 28px 24px; border-radius: 0; background: #ffffff04; overflow: visible; }
-.info-target-setup--quick .target-drum > span { padding: 0; color: #aaa; font-weight: 600; }
-.info-target-setup--quick .target-drum > strong { font-size: 22px; font-weight: 600; }
-.info-target-setup--quick .target-drum:hover,
-.info-target-setup--quick .target-tolerance__control:hover { border-color: #ffffff50; box-shadow: none; }
-.info-target-setup--quick .target-drum:focus-within,
-.info-target-setup--quick .target-drum:focus,
-.info-target-setup--quick .target-tolerance__control:focus-within { border-color: #ffffff80; box-shadow: none; }
-.info-target-setup--quick button { border-radius: 0; }
-.info-target-setup--quick button:hover { color: #fff; background: #ffffff12; }
-.info-target-setup--quick button:focus-visible { outline: 1px solid white; outline-offset: -2px; }
-.info-target-setup--quick .target-tolerance { padding: 0; border: 0; border-radius: 0; background: transparent; }
-.info-target-setup--quick .target-tolerance__copy strong { font-weight: 500; letter-spacing: 0; }
-.info-target-setup--quick .target-tolerance__control { min-height: 32px; border-radius: 0; background: #ffffff04; }
-.info-target-setup--quick .target-tolerance__control strong { font-size: 14px; font-weight: 600; }
-.info-target-setup--quick .target-keep { padding: 4px 0; gap: 8px; grid-template-columns: 18px 1fr; border: 0; background: transparent; }
-.info-target-setup--quick .target-keep i { width: 16px; height: 16px; border-radius: 0; font-size: 12px; }
-.info-target-setup--quick .target-keep span { font-size: 12px; font-weight: 500; }
-.info-target-setup--quick .target-keep.is-active i { color: #21ff83; border-color: #21ff83; background: #21ff831a; }
-.info-target-setup--quick .target-actions { grid-template-columns: 1fr 1fr; gap: 4px; }
-.info-target-setup--quick .target-actions button { min-height: 32px; padding-inline: 12px; font-size: 12px; font-weight: 600; }
-.info-target-setup--quick .target-tolerance { grid-template-columns: auto auto; justify-content: start; gap: 8px; }
-.info-target-setup--quick .target-confirm { color: #fff; border: 1px solid #ff002480; background: #ff00241a; }
-.info-target-setup--quick .target-confirm:hover { background: #ff002430; }
+/* PIP-556: Ctrl+K uses the shared editor structure (.ck-editor__* in _training-overlay.scss). */
+.info-target-setup--quick { padding: 0; gap: 10px; border: 0; border-radius: 0; background: #0b0b0b; box-shadow: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .info-target-setup *,

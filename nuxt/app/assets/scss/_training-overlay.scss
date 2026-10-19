@@ -2893,9 +2893,9 @@ $ck-width: 56px + 5 * $ck-cell + 5 * $ck-gap;
     :is(.pressure-test__button, .launcher-tool-button--pressure, .fuel-open, [data-overlay-wheel-action='pitwall'],
       .quick-reference > .launcher-tool-button, .ck-voice-alerts, .quick-panel-timer, .quick-panel-notifications-button) {
       display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 4px;
-      padding: 10px 2px 0; font-size: 10px; font-weight: 500; line-height: 11px; text-align: center;
+      padding: 8px 2px 0; font-size: 11px; font-weight: 500; line-height: 12px; text-align: center;
       > svg:not(.quick-reference-check) { width: 20px; height: 20px; flex: none; }
-      > span { display: flex; align-items: center; justify-content: center; min-height: 22px; white-space: normal; }
+      > span { display: flex; align-items: center; justify-content: center; min-height: 24px; white-space: normal; }
     }
     // Stima pressioni: square corners and the same surface as its neighbours.
     .pressure-test__button { border: 1px solid #ffffff30; border-radius: 0; background: #ffffff08; color: #eee; }
@@ -2910,8 +2910,8 @@ $ck-width: 56px + 5 * $ck-cell + 5 * $ck-gap;
     .quick-panel-logo { width: 48px; height: 24px; align-self: center; justify-self: center; }
 
     .ck-status {
-      display: flex; align-items: center; gap: 5px; grid-column: 1 / -1; min-width: 0; height: 18px; margin: 0;
-      color: #aaa; font-size: 10px; line-height: 18px; white-space: nowrap;
+      display: flex; align-items: center; gap: 6px; grid-column: 1 / -1; min-width: 0; height: 20px; margin: 0;
+      color: #aaa; font-size: 11px; line-height: 20px; white-space: nowrap;
       span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
       svg { flex-shrink: 0; }
     }
@@ -2924,7 +2924,7 @@ $ck-width: 56px + 5 * $ck-cell + 5 * $ck-gap;
   .launcher-tools.ck--pause {
     display: grid;
     grid-template-columns: 56px repeat(5, $ck-cell);
-    grid-template-rows: $ck-cell $ck-cell auto;
+    grid-template-rows: minmax($ck-cell, auto) minmax($ck-cell, auto) auto;
     grid-template-areas:
       'logo est cor fmin fses pit'
       'logo tgt sec voice timer bell'
@@ -2949,73 +2949,57 @@ $ck-width: 56px + 5 * $ck-cell + 5 * $ck-gap;
     :is(.pressure-test__button, .launcher-tool-button--pressure, .fuel-open, [data-overlay-wheel-action='pitwall'],
       .quick-reference, .ck-voice-alerts, .quick-panel-timer, .quick-panel-notifications-button) { display: none; }
     .quick-panel-notifications {
-      grid-area: 1 / 2 / 3 / -1; align-content: start; gap: 6px; height: 2 * $ck-cell + $ck-gap; min-width: 0;
-      overflow: hidden auto; scrollbar-width: thin;
+      grid-area: 1 / 2 / 3 / -1; align-content: start; gap: 10px; min-height: 2 * $ck-cell + $ck-gap; min-width: 0;
     }
-    .quick-panel-notifications__body > div { flex: 1 1 150px; }
-    .quick-panel-notifications__body > .quick-panel-notification-estimate:not(:has(p, dl)) { display: none; }
-    // Cleared cards are hidden in place; a container left without visible cards takes no room.
-    .quick-panel-notifications__body [hidden] { display: none !important; }
+    .quick-panel-notifications__body { display: grid; gap: 0; }
+    .quick-panel-notifications__body > div { min-width: 0; }
+    // Cleared cards and cards of other pages are hidden in place; an empty container takes no room.
+    .quick-panel-notifications__body :is([hidden], [data-ck-offpage]) { display: none !important; }
     .quick-panel-notifications__body > div:not(:has(:is(.fuel-status, .pressure-plan, .control-k-request, .quick-panel-pressure-status,
-      .pressure-test__result, .pressure-test__error):not([hidden]))) { display: none; }
-    .quick-panel-notifications__header { gap: 6px; }
-    .quick-panel-notifications__header .quick-panel-heading { margin-right: auto; }
-    .quick-panel-notifications__clear { min-height: 30px; height: 30px; padding: 0 10px; font-size: 11px; }
-    // The estimate card reads like the pressure plan: title, four values, one line.
-    .pressure-test__result { padding: 6px 8px; border-radius: 0; font-size: 10px; }
-    .pressure-test__result > strong { font-size: 11px; }
-    .pressure-test__result dl { grid-template-columns: 1fr 1fr; gap: 2px 10px; margin: 4px 0; }
-    .pressure-test__result dl > div { gap: 4px; }
+      .pressure-test__result, .pressure-test__error):not([hidden], [data-ck-offpage]))) { display: none; }
+    .quick-panel-notifications__page { display: grid; place-items: center; width: 32px; height: 32px; min-height: 32px; padding: 0; }
+    .quick-panel-notifications__clear { min-height: 32px; height: 32px; padding: 0 12px; font-size: 12px; }
+    // Cards read comfortably at full width.
+    .pressure-test__result, .pressure-plan, .control-k-request, .fuel-status, .pressure-test__error { padding: 10px 12px; border-radius: 0; font-size: 12px; }
+    .pressure-test__result > strong { font-size: 13px; }
+    .pressure-test__result dl { grid-template-columns: 1fr 1fr; gap: 4px 16px; margin: 8px 0; }
+    .pressure-test__result dl > div { gap: 8px; }
     .pressure-test__result dt { white-space: nowrap; color: #aaa; }
-    .pressure-test__result dd { font-size: 12px; }
-    .pressure-test__result dd small { display: none; }
-    .pressure-test__result p:not(:first-of-type) { display: none; }
+    .pressure-test__result dd { font-size: 16px; }
   }
 
   // Editors live in the same frame width, with the same square language.
   &.overlay-content--target .fuel-panel--editor {
-    gap: 6px;
-    .overlay-menu-back { min-height: 26px; margin: 0; border-radius: 0; font-size: 11px; }
-    .fuel-body { grid-template-columns: auto minmax(0, 1fr); gap: 6px; padding: 0; border: 0; background: transparent; }
-    .fuel-body > strong { grid-column: 1 / -1; font-size: 13px; }
-    .fuel-duration, .fuel-minutes-field { grid-column: 1; gap: 4px; }
-    .fuel-minutes-field { width: 84px; }
-    .fuel-presets button { border-color: #ffffff30; background: #ffffff08; }
+    gap: 10px;
+    .fuel-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 0; border: 0; background: transparent; }
+    .fuel-minutes-field { order: 1; width: 96px; }
+    .fuel-presets { order: 2; display: flex; flex-wrap: wrap; gap: 8px; }
+    .fuel-presets button { min-height: 32px; padding: 0 12px; border-color: #ffffff30; background: #ffffff08; font-size: 12px; }
     .fuel-presets button[aria-pressed=true] { border-color: #ffffff90; color: #fff; background: #ffffff14; box-shadow: inset 0 -2px #ff0024; }
-    .fuel-presets { grid-column: 2; }
-    .fuel-apply, .fuel-body > .fuel-status { grid-column: 1 / -1; }
-    .fuel-apply { min-height: 30px; border: 1px solid #ff002480; color: #fff; background: #ff00241a; }
-    .fuel-status { padding: 6px 8px; font-size: 11px; }
+    .ck-editor__hint { order: 3; }
+    .fuel-body > .fuel-status { order: 4; padding: 10px 12px; font-size: 12px; }
+    // Same place and look as every primary action: bottom right, above a separator.
+    .fuel-apply { order: 6; justify-self: end; width: auto; min-width: 140px; min-height: 36px; padding: 0 16px; border: 1px solid #ff002480; color: #fff; background: #ff00241a; font-size: 13px; }
+    .fuel-body::after { content: ''; order: 5; height: 1px; background: #ffffff25; }
     :is(button, input, .fuel-status) { border-radius: 0; }
   }
-  &.overlay-content--target .quick-countdown {
-    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px;
-    > header { grid-column: 1 / -1; padding-bottom: 6px; }
-    .quick-countdown__presets, .quick-countdown__fields, .quick-countdown__actions, > p,
-    .quick-countdown__time, .quick-countdown__end { margin: 0; grid-column: 1 / -1; }
-    .quick-countdown__presets button { min-height: 28px; }
-    .quick-countdown__field { gap: 2px; }
-    .quick-countdown__stepper input { padding: 2px 0; font-size: 20px; }
-    > p { font-size: 10px; line-height: 1.3; }
-    .quick-countdown__actions button { min-height: 30px; }
-    .quick-countdown__time { margin-top: 0; font-size: 48px; }
-  }
-  // Same frame as the grid (two rows = 2 × cell + gap): a title line, the four
-  // switches and the close button on one row, centred; explicit lines only.
+  // Voice alerts: ← and title on the first row (as every view), the four switches below.
   .launcher-tools.ck--pause.ck--voice-view {
     grid-template-areas: none;
-    grid-template-rows: 16px $ck-cell ($ck-cell - 16px - $ck-gap) auto;
-    .quick-panel-logo { grid-area: 1 / 1 / 4 / 2; }
+    grid-template-rows: 32px $ck-cell auto;
+    .quick-panel-logo { grid-area: 1 / 1 / 3 / 2; }
+    .ck-view-close { display: grid; place-items: center; grid-area: 1 / 2 / 2 / 3; width: 32px; height: 32px; min-height: 32px; padding: 0; }
     .quick-panel-section[aria-label='Avvisi vocali'] > .quick-panel-heading {
-      display: block; grid-area: 1 / 2 / 2 / -1; align-self: center; margin: 0; text-align: left;
+      display: block; grid-area: 1 / 3 / 2 / -1; align-self: center; margin: 0; text-align: left;
+      // Same title look as every other view header.
+      color: #fff; font-size: 14px; font-weight: 600; letter-spacing: 0; text-transform: none;
     }
     [data-overlay-wheel-action='coach'] { grid-area: 2 / 2 / 3 / 3; }
     [data-overlay-wheel-action='references'] { grid-area: 2 / 3 / 3 / 4; }
     [data-overlay-wheel-action='pressure-audio'] { grid-area: 2 / 4 / 3 / 5; }
     [data-overlay-wheel-action='target-voice'] { grid-area: 2 / 5 / 3 / 6; }
     .quick-panel-voice-button { display: flex; }
-    .ck-view-close { display: grid; place-items: center; grid-area: 2 / 6 / 3 / 7; width: $ck-cell; height: $ck-cell; }
-    .ck-status { grid-area: 4 / 1 / 5 / -1; }
+    .ck-status { grid-area: 3 / 1 / 4 / -1; }
   }
 
   // Guida: one compact row with only what helps while driving.
@@ -3050,4 +3034,35 @@ $ck-width: 56px + 5 * $ck-cell + 5 * $ck-gap;
       .quick-panel-notifications { order: 0; flex: 0 0 360px; max-height: 180px; overflow: hidden auto; }
     }
   }
+}
+
+// PIP-556: one structure for every Control K editor (giro, settori, timer, benzina):
+// ← header, fields row, shortcuts row, hint line, one primary action bottom right.
+.training-overlay {
+  .ck-editor__fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+  .ck-editor__fields .ck-field { width: 64px; }
+  .ck-editor__fields .ck-field--tolerance { width: 96px; }
+  .ck-editor__shortcuts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .ck-editor__shortcuts > button {
+    min-height: 32px; padding: 0 12px; border: 1px solid #ffffff30; border-radius: 0; background: #ffffff08;
+    color: #eee; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer;
+  }
+  .ck-editor__shortcuts > button[aria-pressed=true] { border-color: #ffffff90; color: #fff; background: #ffffff14; box-shadow: inset 0 -2px #ff0024; }
+  .ck-editor__shortcuts > button:disabled { opacity: .4; cursor: default; }
+  .ck-editor__hint { margin: 0; color: #9fb3c8; font-size: 11px; line-height: 1.4; }
+  .ck-editor__alert { margin: 0; color: #fecaca; font-size: 12px; line-height: 1.4; }
+  .ck-editor__actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 10px; border-top: 1px solid #ffffff25; }
+  .ck-editor__primary {
+    min-width: 140px; min-height: 36px; padding: 0 16px; border: 1px solid #ff002480; border-radius: 0; background: #ff00241a;
+    color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .ck-editor__primary:hover:not(:disabled) { background: #ff002430; }
+  .ck-editor__primary:disabled { opacity: .4; cursor: default; }
+  // Settori: S1 S2 S3, each with its SEC and DEC fields.
+  .ck-sector-fields { gap: 12px; }
+  .ck-sector { display: grid; gap: 4px; }
+  .ck-sector > span { color: #aaa; font-size: 11px; font-weight: 600; }
+  .ck-sector__pair { display: flex; gap: 4px; }
+  .ck-sector__pair .ck-field { width: 60px; }
+  .ck-sector__pair .ck-field:last-child { width: 44px; }
 }

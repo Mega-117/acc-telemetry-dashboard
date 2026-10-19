@@ -2,6 +2,7 @@
 import { Fuel, LoaderCircle } from '@lucide/vue'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import ControlKNumberField from '~/components/overlay/ControlKNumberField.vue'
+import ControlKViewHeader from '~/components/overlay/ControlKViewHeader.vue'
 import { stepNumberField, type NumberFieldLimits } from '~/utils/controlKNumberField'
 const props = defineProps<{ api: any; separateView?: boolean; editorOnly?: boolean; showHeading?: boolean; statusTarget?: string; previewExpanded?: boolean; bodyTarget?: string
   /** PIP-556: unavailable commands stay pressable and explain why through `notice`. */
@@ -160,10 +161,12 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); clea
       <div v-if="!open && (pending || error)" class="fuel-status" :class="{ 'fuel-status--error': !pending && !applicationSucceeded }" role="status" aria-live="polite"><strong>{{ pending ? 'Carburante' : applicationSucceeded ? 'Carburante impostato' : 'Problema carburante' }}</strong><p>{{ statusMessage }}</p></div>
     </Teleport>
     <button v-if="!editorOnly" class="fuel-open" type="button" data-overlay-wheel-action="fuel" aria-label="Carburante durata stint" :aria-expanded="open" :disabled="pending" @click="separateView ? emit('open') : open = !open"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8 3 5l3-2 2 3h10a2 2 0 0 1 2 2v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V10a2 2 0 0 1 1-2Z" /><path d="M10 6V3h7v3M8 11l8 6m0-6-8 6" /></svg><span>A minuti</span></button>
-    <button v-if="editorOnly" type="button" class="utility-action overlay-menu-back" data-overlay-wheel-action="fuel-back" :disabled="pending" @click="emit('cancel')">← Torna al pannello</button>
+    <!-- PIP-556: in Control K ACC the editor has the shared ← header. -->
+    <ControlKViewHeader v-if="editorOnly && numberField" title="Benzina a minuti" subtitle="Carburante per la durata dello stint" action="fuel-back" @back="!pending && emit('cancel')" />
+    <button v-else-if="editorOnly" type="button" class="utility-action overlay-menu-back" data-overlay-wheel-action="fuel-back" :disabled="pending" @click="emit('cancel')">← Torna al pannello</button>
     <Teleport defer :to="bodyTarget || 'body'" :disabled="!bodyTarget">
     <div v-if="open" class="fuel-body">
-      <strong>Prepara il carburante per lo stint</strong>
+      <strong v-if="!numberField">Prepara il carburante per lo stint</strong>
       <ControlKNumberField v-if="numberField" class="fuel-minutes-field" :value="Number(minutes)" label="MINUTI" action="fuel-minutes"
         name="Minuti stint" v-bind="MINUTES_LIMITS" :format="String" :disabled="pending" :editing="editingMinutes"
         @toggle="editingMinutes = !editingMinutes" @update:value="setMinutes" />
@@ -177,6 +180,7 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); clea
         <button v-for="value in [10, 20, 30, 45]" :key="value" type="button" :data-overlay-wheel-action="`fuel-preset-${value}`"
           :aria-pressed="Number(minutes) === value" :disabled="pending" @click="minutes = value">{{ value }} min</button>
       </div>
+      <p v-if="numberField" class="ck-editor__hint">{{ editingMinutes ? 'Su/Giù o rotella cambiano i minuti · OK fatto' : 'OK o clic sul campo, poi Su/Giù, rotella o cifre' }}</p>
       <button class="fuel-apply" type="button" data-overlay-wheel-action="fuel-apply" :aria-busy="pending" :aria-label="pending ? 'Applicazione in corso' : undefined" :disabled="!state?.available || pending || previewPending" @click="apply"><template v-if="pending">Applicazione<span class="fuel-pending-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></template><template v-else>{{ `Applica carburante${plan?.ok ? ` · ${plan.totalLitres} L` : ''}` }}</template></button>
       <div v-if="minutesProblem" class="fuel-status" role="status" aria-live="polite"><strong>Problema carburante</strong><p>{{ minutesProblem }}</p></div>
     </div>

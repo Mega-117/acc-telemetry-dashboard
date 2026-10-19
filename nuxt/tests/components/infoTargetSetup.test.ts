@@ -19,7 +19,8 @@ it.each([
   const instance = app.mount(el) as unknown as { handleWheelCommand(command: string): boolean }
   expect(instance.handleWheelCommand('next-action')).toBe(false)
   expect([...el.querySelectorAll('[data-overlay-wheel-action]')].map(e => e.getAttribute('data-overlay-wheel-action'))).toEqual([
-    'target-minutes', 'target-seconds', 'target-tenths', 'target-tolerance', 'target-use-best', 'target-use-last', 'target-confirm', 'target-cancel'])
+    // PIP-556: ← (same as Back, discards) first, then fields, shortcuts, the one primary action.
+    'target-cancel', 'target-minutes', 'target-seconds', 'target-tenths', 'target-tolerance', 'target-use-best', 'target-use-last', 'target-confirm'])
   ;(el.querySelector(`[data-overlay-wheel-action="target-${field}"]`) as HTMLButtonElement).click()
   await nextTick(); expect(el.querySelector('.is-editing')).not.toBeNull()
   expect(instance.handleWheelCommand('next-action')).toBe(true)

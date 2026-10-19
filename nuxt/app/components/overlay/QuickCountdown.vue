@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Timer } from '@lucide/vue'
 import ControlKNumberField from '~/components/overlay/ControlKNumberField.vue'
+import ControlKViewHeader from '~/components/overlay/ControlKViewHeader.vue'
 import { stepNumberField, type NumberFieldLimits } from '~/utils/controlKNumberField'
-defineProps<{ status: 'idle' | 'running' | 'finished'; display: string }>()
-const emit = defineEmits<{ start: [seconds: number]; cancel: [] }>()
+// armed: while running, the first wheel press only reveals "Annulla timer";
+// a second OK cancels it (no accidental stop while driving, no permanent highlight).
+defineProps<{ status: 'idle' | 'running' | 'finished'; display: string; armed?: boolean }>()
+const emit = defineEmits<{ start: [seconds: number]; cancel: []; back: [] }>()
 const minutes = ref(1)
 const seconds = ref(0)
 const duration = computed(() => Number(minutes.value) * 60 + Number(seconds.value))
@@ -33,50 +35,43 @@ defineExpose({ handleWheelCommand })
 </script>
 
 <template>
-  <section class="quick-countdown" aria-label="Timer">
-    <header><Timer :size="20" aria-hidden="true" /><h2>Timer</h2></header>
+  <section class="quick-countdown" :class="{ 'quick-countdown--quiet': status === 'running' && !armed }" aria-label="Timer">
+    <!-- PIP-556: shared Control K structure: ← header, fields, shortcuts, hint, one primary action. -->
+    <ControlKViewHeader title="Timer" :subtitle="status === 'idle' ? 'Conto alla rovescia' : null" action="timer-back"
+      @back="status === 'idle' ? emit('cancel') : emit('back')" />
     <template v-if="status === 'idle'">
-      <div class="quick-countdown__presets" role="group" aria-label="Durate rapide">
-        <button v-for="value in PRESETS" :key="value" type="button" :data-overlay-wheel-action="`timer-preset-${value}`"
-          :aria-pressed="minutes === value && seconds === 0" @click="preset(value)">{{ value }} min</button>
-      </div>
-      <div class="quick-countdown__fields">
+      <div class="ck-editor__fields">
         <ControlKNumberField :value="minutes" label="MIN" action="timer-minutes" name="Minuti timer" v-bind="LIMITS.minutes"
           :editing="editing === 'minutes'" @toggle="toggle('minutes')" @update:value="set('minutes', $event)" />
         <ControlKNumberField :value="seconds" label="SEC" action="timer-seconds" name="Secondi timer" v-bind="LIMITS.seconds"
           :editing="editing === 'seconds'" @toggle="toggle('seconds')" @update:value="set('seconds', $event)" />
-        <p>Riappare negli ultimi 5 secondi, tre bip alla fine.</p>
       </div>
-      <div class="quick-countdown__actions">
-        <button type="button" aria-label="Avvia timer" data-overlay-wheel-action="timer-start" :disabled="!valid" @click="emit('start', duration)">Avvia</button>
-        <button type="button" data-overlay-wheel-action="timer-back" @click="emit('cancel')">Indietro</button>
+      <div class="ck-editor__shortcuts" role="group" aria-label="Durate rapide">
+        <button v-for="value in PRESETS" :key="value" type="button" :data-overlay-wheel-action="`timer-preset-${value}`"
+          :aria-pressed="minutes === value && seconds === 0" @click="preset(value)">{{ value }} min</button>
+      </div>
+      <p class="ck-editor__hint">Il pannello si chiude e riappare negli ultimi 5 secondi; tre bip alla fine.</p>
+      <div class="ck-editor__actions">
+        <button type="button" class="ck-editor__primary" aria-label="Avvia timer" data-overlay-wheel-action="timer-start" :disabled="!valid" @click="emit('start', duration)">Avvia</button>
       </div>
     </template>
     <template v-else>
       <div class="quick-countdown__time" role="timer" aria-label="Tempo rimanente">{{ display }}</div>
-      <p role="status">{{ status === 'finished' ? 'Tempo scaduto' : 'Timer in corso' }}</p>
-      <button type="button" class="quick-countdown__end" data-overlay-wheel-action="timer-end" @click="emit('cancel')">{{ status === 'finished' ? 'Chiudi timer' : 'Annulla timer' }}</button>
+      <p class="ck-editor__hint quick-countdown__state" role="status">{{ status === 'finished' ? 'Tempo scaduto.'
+        : armed ? 'Premi OK di nuovo per annullare il timer.' : 'Timer in corso · Indietro chiude il pannello, il timer continua.' }}</p>
+      <div class="ck-editor__actions">
+        <button type="button" class="quick-countdown__end" :class="{ 'ck-editor__primary': status === 'finished' || armed }"
+          data-overlay-wheel-action="timer-end" @click="emit('cancel')">{{ status === 'finished' ? 'Chiudi timer' : 'Annulla timer' }}</button>
+      </div>
     </template>
   </section>
 </template>
 
 <style scoped>
-.quick-countdown { width: 100%; color: #eee; }
-header { display:flex; align-items:center; gap:8px; padding-bottom:16px; border-bottom:1px solid #ffffff24; }
-h2 { font-size:16px; margin:0; }
-.quick-countdown__fields { display:grid; grid-template-columns:72px 72px minmax(0,1fr); align-items:center; gap:6px; margin-top:12px; }
-.quick-countdown__fields p { margin:0; }
-.quick-countdown__presets { display:grid; grid-template-columns:repeat(4, 1fr); gap:6px; margin-top:16px; }
-.quick-countdown__presets button { min-height:34px; font-size:12px; }
-.quick-countdown__presets button[aria-pressed="true"] { border-color:#ffffff90; background:#ffffff14; box-shadow:inset 0 -2px #ff0024; }
-button[data-overlay-selected] { outline:2px solid #ffff00; outline-offset:2px; }
-p { font-size:12px; color:#bbb; line-height:1.5; }
-.quick-countdown__actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-.quick-countdown__actions button, .quick-countdown__presets button, .quick-countdown__end { min-height:40px; border:1px solid #555; border-radius:0; background:#191919; color:#fff; font-weight:600; cursor:pointer; }
-.quick-countdown__actions button:disabled { opacity:.35; cursor:default; }
-.quick-countdown__actions button:focus-visible, .quick-countdown__presets button:focus-visible { outline:2px solid #ffff00; outline-offset:2px; }
-.quick-countdown__actions button:first-child { background:#49000b; border-color:#ff2440; }
-.quick-countdown__time { margin-top:20px; font-size:64px; font-weight:700; text-align:center; font-variant-numeric:tabular-nums; }
-.quick-countdown__time + p { text-align:center; }
-.quick-countdown__end { width:100%; }
+.quick-countdown { display: grid; gap: 10px; width: 100%; color: #eee; }
+.quick-countdown__time { margin: 4px 0 0; font-size: 56px; font-weight: 700; line-height: 1; text-align: center; font-variant-numeric: tabular-nums; }
+.quick-countdown__state { text-align: center; }
+.quick-countdown__end { min-width: 140px; min-height: 36px; padding: 0 16px; border: 1px solid #ffffff30; border-radius: 0; background: #ffffff08; color: #eee; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+/* Running and not armed: the wheel selection is not shown until a command is pressed. */
+.quick-countdown--quiet :deep([data-overlay-selected]) { outline: none !important; box-shadow: none !important; }
 </style>
