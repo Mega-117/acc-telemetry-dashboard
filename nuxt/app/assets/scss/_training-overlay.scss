@@ -2469,7 +2469,7 @@ button.is-active {
 }
 
 .control-k-fuel-status:empty { display: none; }
-.overlay-content--launcher:not(.overlay-content--horizontal) .control-k-fuel-status {
+.overlay-content--launcher:not(.overlay-content--horizontal, .overlay-content--acc) .control-k-fuel-status {
   grid-column: 1 / -1;
   order: 99;
   min-width: 0;
@@ -2596,7 +2596,7 @@ button.is-active {
 }
 
 // PIP-527: vertical layout while driving: Pitwall and the four voice alerts on one row.
-.training-overlay--launcher .overlay-content--launcher:not(.overlay-content--horizontal)
+.training-overlay--launcher .overlay-content--launcher:not(.overlay-content--horizontal, .overlay-content--acc)
   .quick-panel-main:has(.quick-panel-automations.quick-panel-driving:not(.quick-panel-show-all)) {
   // Five buttons must fit the fixed vertical width: 56 px each, 5 px apart.
   // The main box is normally transparent in the 4-column grid: span it all.
@@ -2611,7 +2611,7 @@ button.is-active {
   .quick-panel-secondary > .launcher-tool-button { width: 56px; min-width: 56px; flex: none; }
 }
 // PIP-527: vertical header: logo on the left, timer, then the switch in the corner.
-.training-overlay--launcher .overlay-content--launcher:not(.overlay-content--horizontal) .launcher-tools__header {
+.training-overlay--launcher .overlay-content--launcher:not(.overlay-content--horizontal, .overlay-content--acc) .launcher-tools__header {
   // The timer keeps the corner; the switch appears just left of it on hover.
   grid-template-columns: 56px minmax(0, 1fr) auto auto;
   .quick-panel-layout { grid-column: 3; grid-row: 1; justify-self: end; }
@@ -2653,7 +2653,7 @@ button.is-active {
 }
 
 // Vertical quick panel: three categories sharing the existing actions.
-.training-overlay--launcher .overlay-content--launcher:has(.quick-panel-automations):not(.overlay-content--horizontal) {
+.training-overlay--launcher .overlay-content--launcher:has(.quick-panel-automations):not(.overlay-content--horizontal, .overlay-content--acc) {
   .launcher-tools__actions {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px 10px;
@@ -2841,4 +2841,168 @@ button.is-active {
 .training-overlay--launcher .overlay-content--horizontal:has(.quick-panel-automations)
   .quick-panel-automations > .quick-panel-pressure-pair {
   order: 1; flex-basis: auto; padding-top: 20px;
+}
+
+// ─── PIP-556: ACC Control K, one layout with two contexts ───────────────────
+// The shared components keep their DOM; every wrapper is flattened
+// (display: contents) so each command is placed directly in one grid.
+// Pausa: logo + two fixed rows of five commands + one status line.
+// Guida: one compact row. Views (notifiche, avvisi) replace the buttons in the
+// same frame instead of stretching it. The wheel follows the visual order.
+$ck-cell: 64px;
+$ck-drive-cell: 56px;
+$ck-gap: 6px;
+// Logo column + five cells: the frame width shared by grid and editors.
+$ck-width: 56px + 5 * $ck-cell + 5 * $ck-gap;
+
+.training-overlay--acc .voice-point-notice { display: none; }
+
+.training-overlay--launcher .overlay-content--launcher.overlay-content--acc {
+  --overlay-preferred-content-width: 0px;
+  width: max-content;
+  &.overlay-content--target { width: $ck-width; }
+
+  .launcher-tools.ck {
+    gap: $ck-gap;
+    :is(.launcher-tools__header, .quick-panel-header-actions, .launcher-tools__actions, .quick-panel-main,
+      .quick-panel-categories, .quick-panel-section, .quick-panel-pair, .quick-panel-automations, .fuel-panel,
+      .quick-panel-secondary, .quick-panel-pressure-pair, .pressure-test, .quick-panel-voice-grid) {
+      display: contents;
+    }
+    :is(.quick-panel-heading:not(.quick-panel-notifications .quick-panel-heading), .quick-panel-training,
+      .control-k-pressure-info, .quick-panel-pressure-test-feedback,
+      .quick-panel-horizontal-side, .control-k-fuel-preview) {
+      display: none;
+    }
+    .quick-panel-waiting, .quick-panel-dev, .quick-panel-notifications { grid-column: 1 / -1; }
+    .quick-panel-dev { padding-top: 0; border-top: 0; font-size: 10px; }
+
+    // One square language for every command.
+    :is(.pressure-test__button, .launcher-tool-button--pressure, .fuel-open, [data-overlay-wheel-action='pitwall'],
+      .quick-reference, .ck-voice-alerts, .quick-panel-timer, .quick-panel-notifications-button, .quick-panel-voice-button) {
+      position: relative; box-sizing: border-box; width: $ck-cell; height: $ck-cell; min-height: $ck-cell; margin: 0;
+    }
+    :is(.ck-voice-alerts, .quick-panel-timer, .quick-panel-notifications-button) {
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+      padding: 6px 2px; font-size: 10px; font-weight: 500; line-height: 1.1; letter-spacing: 0; text-transform: none;
+      span { font: inherit; letter-spacing: 0; text-transform: none; }
+    }
+    .quick-panel-notifications-button:disabled { opacity: .35; }
+    .quick-action-badge--error { border-color: #ff6b6b88; color: #fecaca; }
+    .quick-panel-logo { width: 48px; height: 24px; align-self: center; justify-self: center; }
+
+    .ck-status {
+      display: flex; align-items: center; gap: 5px; grid-column: 1 / -1; min-width: 0; height: 18px; margin: 0;
+      color: #aaa; font-size: 10px; line-height: 18px; white-space: nowrap;
+      span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+      svg { flex-shrink: 0; }
+    }
+    .ck-status--ok { color: #86efac; }
+    .ck-status--progress { color: #ffe08a; }
+    .ck-status--error { color: #fecaca; }
+  }
+
+  // Pausa: fixed grid, every command always in the same place.
+  .launcher-tools.ck--pause {
+    display: grid;
+    grid-template-columns: 56px repeat(5, $ck-cell);
+    grid-template-rows: $ck-cell $ck-cell auto;
+    grid-template-areas:
+      'logo est cor fmin fses pit'
+      'logo tgt sec voice timer bell'
+      'status status status status status status';
+    .quick-panel-logo { grid-area: logo; }
+    .pressure-test__button { grid-area: est; }
+    .launcher-tool-button--pressure { grid-area: cor; }
+    [data-overlay-wheel-action='fuel'] { grid-area: fmin; }
+    [data-overlay-wheel-action='fuel-session'] { grid-area: fses; }
+    [data-overlay-wheel-action='pitwall'] { grid-area: pit; }
+    .quick-reference:has([data-overlay-wheel-action='target']) { grid-area: tgt; }
+    .quick-reference:has([data-overlay-wheel-action='sector-references']) { grid-area: sec; }
+    .ck-voice-alerts { grid-area: voice; }
+    .quick-panel-timer { grid-area: timer; }
+    .quick-panel-notifications-button { grid-area: bell; }
+    .ck-status { grid-area: status; }
+    .quick-panel-voice-button, .ck-view-close { display: none; }
+  }
+
+  // Views replace the ten commands inside the same two rows.
+  .launcher-tools.ck--pause.ck--view {
+    :is(.pressure-test__button, .launcher-tool-button--pressure, .fuel-open, [data-overlay-wheel-action='pitwall'],
+      .quick-reference, .ck-voice-alerts, .quick-panel-timer, .quick-panel-notifications-button) { display: none; }
+    .quick-panel-notifications {
+      grid-area: 1 / 2 / 3 / -1; align-content: start; gap: 6px; height: 2 * $ck-cell + $ck-gap; min-width: 0;
+      overflow: hidden auto; scrollbar-width: thin;
+    }
+    .quick-panel-notifications__body > div { flex: 1 1 150px; }
+    .quick-panel-notifications__body > .quick-panel-notification-estimate:not(:has(p, dl)) { display: none; }
+    // The estimate card reads like the pressure plan: title, four values, one line.
+    .pressure-test__result { padding: 6px 8px; border-radius: 0; font-size: 10px; }
+    .pressure-test__result > strong { font-size: 11px; }
+    .pressure-test__result dl { grid-template-columns: 1fr 1fr; gap: 2px 10px; margin: 4px 0; }
+    .pressure-test__result dl > div { gap: 4px; }
+    .pressure-test__result dt { white-space: nowrap; color: #aaa; }
+    .pressure-test__result dd { font-size: 12px; }
+    .pressure-test__result dd small { display: none; }
+    .pressure-test__result p:not(:first-of-type) { display: none; }
+  }
+
+  // Editors live in the same frame width, with the same square language.
+  &.overlay-content--target .fuel-panel--editor {
+    gap: 6px;
+    .overlay-menu-back { min-height: 26px; margin: 0; border-radius: 0; font-size: 11px; }
+    .fuel-body { grid-template-columns: auto minmax(0, 1fr); gap: 6px; padding: 0; border: 0; background: transparent; }
+    .fuel-body > strong { grid-column: 1 / -1; font-size: 13px; }
+    .fuel-duration { grid-column: 1; gap: 4px; }
+    .fuel-presets { grid-column: 2; }
+    .fuel-apply, .fuel-body > .fuel-status { grid-column: 1 / -1; }
+    .fuel-apply { min-height: 30px; border: 1px solid #ff002480; color: #fff; background: #ff00241a; }
+    .fuel-status { padding: 6px 8px; font-size: 11px; }
+    :is(button, input, .fuel-status) { border-radius: 0; }
+  }
+  &.overlay-content--target .quick-countdown {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px;
+    > header { grid-column: 1 / -1; padding-bottom: 6px; }
+    .quick-countdown__presets, .quick-countdown__fields, .quick-countdown__actions, > p { margin: 0; grid-column: 1 / -1; }
+    .quick-countdown__presets button { min-height: 28px; }
+    .quick-countdown__field { gap: 2px; }
+    .quick-countdown__stepper input { padding: 2px 0; font-size: 20px; }
+    > p { font-size: 10px; line-height: 1.3; }
+    .quick-countdown__actions button { min-height: 30px; }
+    .quick-countdown__time { margin-top: 0; font-size: 48px; }
+  }
+  .launcher-tools.ck--voice-view {
+    .quick-panel-section[aria-label='Avvisi vocali'] > .quick-panel-heading {
+      display: block; grid-area: 1 / 2 / 2 / -1; align-self: end; text-align: left;
+    }
+    .quick-panel-voice-button { display: flex; grid-row: 2; }
+    .ck-view-close { display: grid; place-items: center; grid-area: 2 / -2 / 3 / -1; width: $ck-cell; height: $ck-cell; }
+  }
+
+  // Guida: one compact row with only what helps while driving.
+  .launcher-tools.ck--drive {
+    display: flex; flex-wrap: wrap; align-items: flex-start; gap: 5px; width: max-content;
+    :is(.quick-panel-logo, .pressure-test__button, .fuel-open, .quick-reference, .ck-voice-alerts, .ck-view-close,
+      .quick-panel-timer, .quick-panel-dev) { display: none; }
+    :is(.launcher-tool-button--pressure, [data-overlay-wheel-action='pitwall'], .quick-panel-voice-button, .quick-panel-notifications-button) {
+      width: $ck-drive-cell; height: $ck-drive-cell; min-height: $ck-drive-cell;
+    }
+    [data-overlay-wheel-action='pitwall'] { order: 1; }
+    .launcher-tool-button--pressure { order: 2; }
+    [data-overlay-wheel-action='coach'] { order: 3; }
+    [data-overlay-wheel-action='pressure-audio'] { order: 4; }
+    [data-overlay-wheel-action='references'] { order: 5; }
+    [data-overlay-wheel-action='target-voice'] { order: 6; }
+    .quick-panel-notifications-button { order: 7; }
+    &.ck--no-track-references [data-overlay-wheel-action='references'],
+    &.ck--no-target [data-overlay-wheel-action='target-voice'],
+    &.ck--no-notifications .quick-panel-notifications-button { display: none; }
+    .ck-status { order: 9; flex-basis: 100%; width: 0; min-width: 100%; }
+    .ck-status--empty { display: none; }
+    &.ck--view {
+      :is(.launcher-tool-button--pressure, [data-overlay-wheel-action='pitwall'], .quick-panel-voice-button,
+        .quick-panel-notifications-button) { display: none; }
+      .quick-panel-notifications { order: 0; flex: 0 0 360px; max-height: 180px; overflow: hidden auto; }
+    }
+  }
 }

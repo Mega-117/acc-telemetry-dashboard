@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { Gauge } from '@lucide/vue'
 import { usePresentationInterval } from '~/composables/usePresentationVisibility'
+import type { ControlKStatusMessage } from '~/services/overlay/controlKStatus'
 
 type Snapshot = {
   available?: boolean
@@ -20,12 +21,29 @@ type Snapshot = {
 const props = defineProps<{ api?: {
   trainingOverlayPressureTestState?: () => Promise<Snapshot>
   trainingOverlayPressureTest?: () => Promise<Snapshot>
-} | null; disabled?: boolean; horizontal?: boolean; feedbackTarget?: string }>()
+} | null; disabled?: boolean; horizontal?: boolean; feedbackTarget?: string
+  /** PIP-556: progress goes to the Control K status line; only final outcomes go to the feedback target. */
+  statusLine?: boolean }>()
+const emit = defineEmits<{ status: [message: ControlKStatusMessage | null] }>()
 const state = ref<Snapshot>({})
 const requesting = ref(false)
 let generation = 0
 const pending = computed(() => requesting.value || ['reading', 'calculating', 'applying'].includes(state.value.status || ''))
 const psi = (value: number) => value.toFixed(1).replace('.', ',')
+// One line for the Control K status: progress, error, or the four applied PSI.
+// An expired estimate (PIP-556) is a state of the button, never a message.
+const statusMessage = computed<ControlKStatusMessage | null>(() => {
+  if (pending.value) return { tone: 'progress', text: `Stima pressioni: ${state.value.message || 'calcolo in corso…'}` }
+  if (state.value.status === 'error') return { tone: 'error', text: `Stima pressioni: ${state.value.reason || 'non riuscita.'}${state.value.partial ? ' Controlla il setup.' : ''}` }
+  if (state.value.status === 'ready' && state.value.result) {
+    const values = state.value.result.wheels.map(w => `${w.wheel} ${psi(w.cold)}`).join(' · ')
+    return state.value.applied
+      ? { tone: 'ok', text: `Stima applicata: ${values} PSI` }
+      : { tone: 'error', text: `Stima ${values} PSI: applicazione non confermata, controlla il setup.` }
+  }
+  return null
+})
+watch(statusMessage, message => emit('status', message), { immediate: true })
 async function refresh() {
   const current = generation
   try { const next = await props.api?.trainingOverlayPressureTestState?.(); if (current === generation && next) state.value = next }
@@ -53,14 +71,14 @@ onMounted(() => { void refresh(); polling.start() })
       :disabled="pending || disabled" :aria-busy="pending" @click="run"><Gauge :size="20" aria-hidden="true" /><span>Stima<br>pressioni</span><small class="quick-action-badge">BETA</small></button>
     <Teleport defer :to="feedbackTarget || '#quick-panel-horizontal-feedback'" :disabled="!feedbackTarget && !horizontal">
     <div class="pressure-test__feedback" aria-live="polite">
-    <p v-if="pending" class="launcher-hint" role="status">{{ state.message || 'Calcolo in corso…' }}</p>
-    <div v-else-if="state.status === 'error'" class="launcher-hint" role="alert">
+    <p v-if="pending && !statusLine" class="launcher-hint" role="status">{{ state.message || 'Calcolo in corso…' }}</p>
+    <div v-else-if="!pending && state.status === 'error'" class="launcher-hint pressure-test__error" role="alert">
       <p>{{ state.reason }}</p>
       <p v-if="state.partial">Applicazione incompleta: alcune pressioni potrebbero essere cambiate. Controlla il setup.</p>
       <p v-if="state.partial && state.result">Previste: {{ state.result.wheels.map(w => `${w.wheel} ${psi(w.cold)}`).join(' · ') }} PSI</p>
       <p v-if="state.observed">Ultime lette: {{ Object.entries(state.observed).map(([w, v]) => `${w} ${psi(v / 10)}`).join(' · ') }} PSI</p>
     </div>
-    <div v-else-if="state.status === 'ready' && state.result" class="pressure-test__result" role="status">
+    <div v-else-if="!pending && state.status === 'ready' && state.result" class="pressure-test__result" role="status">
       <strong>Stima iniziale · obiettivo {{ psi(state.result.target) }} PSI</strong>
       <dl>
         <div v-for="wheel in state.result.wheels" :key="wheel.wheel">

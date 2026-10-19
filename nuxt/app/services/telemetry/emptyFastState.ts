@@ -20,6 +20,8 @@ export const EMPTY_FAST_STATE: FastOverlayState = {
   isEngineRunning: false,
   pitLimiterOn: false,
   isInPitLane: false,
+  isInPitBox: false,
+  isSetupMenuVisible: false,
   sessionType: null,
   normalizedCarPosition: null,
   speedKmh: null,

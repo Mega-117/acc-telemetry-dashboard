@@ -45,6 +45,24 @@ export function splitInfoTargetTime(valueMs: number): {
   }
 }
 
+/**
+ * PIP-556: independent MIN | SEC | DEC fields. Seconds cycle 0..59 and tenths
+ * 0..9 without carrying into the next field; minutes stop at the limits.
+ */
+export function adjustInfoTargetField(
+  valueMs: number,
+  unit: InfoTargetTimeUnit,
+  direction: number,
+): number {
+  const parts = splitInfoTargetTime(valueMs)
+  const sign = directionSign(direction)
+  const maxMinutes = Math.floor(INFO_TARGET_MAX_MS / 60_000) - 1
+  if (unit === 'minutes') parts.minutes = clamp(parts.minutes + sign, 0, maxMinutes)
+  if (unit === 'seconds') parts.seconds = (parts.seconds + sign + 60) % 60
+  if (unit === 'tenths') parts.tenths = (parts.tenths + sign + 10) % 10
+  return normalizeInfoTargetTime(parts.minutes * 60_000 + parts.seconds * 1_000 + parts.tenths * 100)
+}
+
 export function adjustInfoTargetTolerance(valueMs: number, direction: number): number {
   const rounded = Math.round(Number(valueMs || 0) / 100) * 100
   return clamp(

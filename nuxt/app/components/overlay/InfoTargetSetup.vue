@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { formatInfoLapTime } from '~/utils/infoPresentation'
 import {
-  adjustInfoTargetTime,
+  adjustInfoTargetField,
   adjustInfoTargetTolerance,
   splitInfoTargetTime,
   type InfoTargetTimeUnit,
@@ -52,11 +52,16 @@ const toleranceControl = computed<PickerControl>(() => ({
   ariaLabel: 'Tolleranza massima',
 }))
 
-const editingControl = ref<PickerControl['id'] | 'time' | null>(null)
+const editingControl = ref<PickerControl['id'] | null>(null)
 const usableLap = (value: number | null | undefined) => typeof value === 'number' && value >= 1_000 ? value : null
 function useLap(valueMs: number) {
   emit('set-target-time', Math.round(valueMs / 100) * 100)
 }
+function toggleEditing(id: PickerControl['id']) {
+  editingControl.value = editingControl.value === id ? null : id
+}
+// PIP-556: OK on MIN, SEC or DEC edits only that field; Up/Down change it
+// (holding repeats), OK or Back leave it. Fields never carry into each other.
 function handleWheelCommand(command: string | undefined): boolean {
   if (!editingControl.value || props.appearance !== 'quick-panel') return false
   if (command === 'activate-action' || command === 'primary' || command === 'back') {
@@ -64,14 +69,8 @@ function handleWheelCommand(command: string | undefined): boolean {
     return true
   }
   if (command !== 'next-action' && command !== 'previous-action') return false
-  const direction = command === 'next-action' ? 1 : -1
-  if (editingControl.value === 'time') {
-    // One value, one step (0,1 s); holding the button repeats it (PIP-526).
-    emit('set-target-time', adjustInfoTargetTime(props.targetTimeMs, 'tenths', direction))
-    return true
-  }
   const control = [...timeControls.value, toleranceControl.value].find(value => value.id === editingControl.value)
-  if (control) adjustControl(control, direction)
+  if (control) adjustControl(control, command === 'next-action' ? 1 : -1)
   return true
 }
 defineExpose({ handleWheelCommand })
@@ -81,7 +80,7 @@ function adjustControl(control: PickerControl, direction: number) {
     emit('select-tolerance', adjustInfoTargetTolerance(props.toleranceMs, direction))
     return
   }
-  emit('set-target-time', adjustInfoTargetTime(props.targetTimeMs, control.id, direction))
+  emit('set-target-time', adjustInfoTargetField(props.targetTimeMs, control.id, direction))
 }
 
 function onWheel(control: PickerControl, event: WheelEvent) {
@@ -104,9 +103,12 @@ function onWheel(control: PickerControl, event: WheelEvent) {
     </header>
 
     <div v-if="appearance === 'quick-panel'" class="target-quick" role="group" aria-label="Tempo obiettivo">
-      <button type="button" class="target-field-value target-quick__time" data-overlay-wheel-action="target-time"
-        aria-label="Tempo obiettivo" :aria-pressed="editingControl === 'time'" :class="{ 'is-editing': editingControl === 'time' }"
-        @click="editingControl = editingControl === 'time' ? null : 'time'">{{ formatInfoLapTime(targetTimeMs) }}</button>
+      <div class="target-quick__fields">
+        <button v-for="control in timeControls" :key="control.id" type="button" class="target-quick__field"
+          :data-overlay-wheel-action="`target-${control.id}`" :aria-label="`${control.ariaLabel}: ${control.value}`"
+          :aria-pressed="editingControl === control.id" :class="{ 'is-editing': editingControl === control.id }"
+          @click="toggleEditing(control.id)"><small>{{ control.label }}</small><strong>{{ control.value }}</strong></button>
+      </div>
       <div class="target-quick__sources">
         <button v-if="usableLap(bestLapMs)" type="button" data-overlay-wheel-action="target-use-best" @click="useLap(bestLapMs!)">Usa best {{ formatInfoLapTime(Math.round(bestLapMs! / 100) * 100) }}</button>
         <button v-if="usableLap(lastLapMs)" type="button" data-overlay-wheel-action="target-use-last" @click="useLap(lastLapMs!)">Usa ultimo {{ formatInfoLapTime(Math.round(lastLapMs! / 100) * 100) }}</button>
@@ -172,7 +174,7 @@ function onWheel(control: PickerControl, event: WheelEvent) {
         >
           −
         </button>
-        <button v-if="appearance === 'quick-panel'" type="button" class="target-field-value" data-overlay-wheel-action="target-tolerance" aria-label="Tolleranza massima" :aria-pressed="editingControl === 'tolerance'" @click="editingControl = editingControl === 'tolerance' ? null : 'tolerance'">{{ toleranceControl.value }}</button>
+        <button v-if="appearance === 'quick-panel'" type="button" class="target-field-value" data-overlay-wheel-action="target-tolerance" aria-label="Tolleranza massima" :aria-pressed="editingControl === 'tolerance'" :class="{ 'is-editing': editingControl === 'tolerance' }" @click="toggleEditing('tolerance')">{{ toleranceControl.value }}</button>
         <strong v-else>{{ toleranceControl.value }}</strong>
         <button
           type="button"
@@ -201,8 +203,8 @@ function onWheel(control: PickerControl, event: WheelEvent) {
     </button>
 
     <p v-if="appearance === 'quick-panel'" class="target-edit-hint" role="status">{{ editingControl
-      ? 'Su/Giù cambia il valore (tieni premuto per andare veloce) · OK conferma'
-      : 'OK sul tempo per modificarlo · Indietro per uscire' }}</p>
+      ? 'Su/Giù cambia solo questo campo (tieni premuto per andare veloce) · OK fatto'
+      : 'OK su minuti, secondi o decimi per cambiarli · Indietro per uscire' }}</p>
     <div class="target-actions">
       <button type="button" class="target-confirm" data-overlay-wheel-action="target-confirm" @click="emit('confirm')">Conferma</button>
       <button type="button" class="target-cancel" data-overlay-wheel-action="target-cancel" @click="emit('cancel')">Annulla</button>
@@ -212,10 +214,14 @@ function onWheel(control: PickerControl, event: WheelEvent) {
 
 <style scoped>
 .target-field-value { border: 0; background: transparent; color: inherit; font: inherit; font-size: 22px; font-weight: 600; cursor: pointer; }
-.target-quick { display: grid; gap: 8px; }
-.target-quick__time { width: 100%; padding: 10px 0; border: 1px solid #ffffff30; font-size: 30px; font-variant-numeric: tabular-nums; }
-.target-quick__sources { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.target-quick__sources button { min-height: 32px; border: 1px solid #ffffff30; border-radius: 0; background: #ffffff05; color: inherit; font: inherit; font-size: 11px; cursor: pointer; }
+/* PIP-556: MIN | SEC | DEC side by side, best/last on the right; fits the Ctrl+K frame. */
+.target-quick { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: stretch; }
+.target-quick__fields { display: grid; grid-template-columns: repeat(3, 58px); gap: 4px; }
+.target-quick__field { display: grid; align-content: center; justify-items: center; gap: 2px; height: 56px; padding: 0; border: 1px solid #ffffff30; border-radius: 0; background: #ffffff05; color: inherit; font: inherit; cursor: pointer; }
+.target-quick__field small { color: #aaa; font-size: 9px; font-weight: 600; letter-spacing: .08em; }
+.target-quick__field strong { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.target-quick__sources { display: grid; grid-template-rows: 1fr 1fr; gap: 4px; }
+.target-quick__sources button { min-height: 26px; border: 1px solid #ffffff30; border-radius: 0; background: #ffffff05; color: inherit; font: inherit; font-size: 11px; cursor: pointer; }
 .target-tolerance__control .target-field-value { font-size: 14px; }
 .info-target-setup--quick .is-editing { outline: 2px solid #00e5ff; outline-offset: 2px; background: #00e5ff18; }
 .target-edit-hint { margin: 0; font-size: 11px; color: #00e5ff; }
@@ -397,10 +403,17 @@ header p { margin: 4px 0 0; color: rgba(255,255,255,.62); font-size: 13px; }
 
 /* Ctrl+K uses the same neutral, compact chrome as its main menu. */
 .info-target-setup--quick {
-  padding: 0; gap: 12px; border: 0; border-radius: 0;
+  padding: 0; gap: 8px; border: 0; border-radius: 0;
   background: #0b0b0b; box-shadow: none;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "head head" "quick quick" "tolerance actions" "hint hint";
 }
-.info-target-setup--quick header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid #ffffff25; }
+.info-target-setup--quick > header { grid-area: head; }
+.info-target-setup--quick > .target-quick { grid-area: quick; }
+.info-target-setup--quick > .target-tolerance { grid-area: tolerance; }
+.info-target-setup--quick > .target-actions { grid-area: actions; }
+.info-target-setup--quick > .target-edit-hint { grid-area: hint; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.info-target-setup--quick header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 6px; border-bottom: 1px solid #ffffff25; }
 .info-target-setup--quick header strong { margin: 0; font-size: 16px; font-weight: 600; }
 .info-target-setup--quick header output { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .info-target-setup--quick .target-picker { gap: 8px; }
@@ -423,8 +436,9 @@ header p { margin: 4px 0 0; color: rgba(255,255,255,.62); font-size: 13px; }
 .info-target-setup--quick .target-keep i { width: 16px; height: 16px; border-radius: 0; font-size: 12px; }
 .info-target-setup--quick .target-keep span { font-size: 12px; font-weight: 500; }
 .info-target-setup--quick .target-keep.is-active i { color: #21ff83; border-color: #21ff83; background: #21ff831a; }
-.info-target-setup--quick .target-actions { grid-template-columns: 1fr 1fr; padding-top: 12px; border-top: 1px solid #ffffff25; }
-.info-target-setup--quick .target-actions button { min-height: 34px; font-size: 12px; font-weight: 600; }
+.info-target-setup--quick .target-actions { grid-template-columns: 1fr 1fr; gap: 4px; }
+.info-target-setup--quick .target-actions button { min-height: 32px; padding-inline: 12px; font-size: 12px; font-weight: 600; }
+.info-target-setup--quick .target-tolerance { grid-template-columns: auto auto; justify-content: start; gap: 8px; }
 .info-target-setup--quick .target-confirm { color: #fff; border: 1px solid #ff002480; background: #ff00241a; }
 .info-target-setup--quick .target-confirm:hover { background: #ff002430; }
 

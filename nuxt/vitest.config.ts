@@ -40,6 +40,11 @@ export default defineConfig({
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
+        // PIP-556: ACC Control K single layout.
+        'app/services/overlay/controlKContext.ts',
+        'app/services/overlay/controlKStatus.ts',
+        'app/composables/useTrackVoiceReferenceAvailability.ts',
+        'app/utils/infoTargetPicker.ts',
         'app/services/auth/dashboardEntryRecovery.ts',
         'app/components/overlay/PressureTestPanel.vue',
         'app/services/spotter/pitStrategyVoice.ts',

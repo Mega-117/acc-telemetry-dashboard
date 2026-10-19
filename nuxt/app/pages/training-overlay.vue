@@ -38,7 +38,7 @@ import {
   resolveAutoAdvanceSeconds,
   type OverlayOriginCorner, type OverlayOriginMode,
 } from '~/composables/useOverlaySettings'
-import { Bell, CircleCheck, CircleMinus, Dumbbell, Timer, Power, Check, LoaderCircle, Target, Flag, Info, X } from '@lucide/vue'
+import { Bell, CircleCheck, CircleMinus, Dumbbell, Timer, Power, Check, LoaderCircle, Target, Flag, Info, X, Volume2 } from '@lucide/vue'
 import QuickCountdown from '~/components/overlay/QuickCountdown.vue'
 import { useQuickCountdown } from '~/composables/useQuickCountdown'
 import QuickPanelLayoutToggle from '~/components/overlay/QuickPanelLayoutToggle.vue'
@@ -64,6 +64,9 @@ import {
   type QaBotSnapshot,
 } from '~/services/overlay/qaBotPresentation'
 import { pressureActionPresentation, pressureOriginLine, pressureOutcomeMessage, pressureProgressBadge } from '~/services/overlay/pressureActionPresentation'
+import { resolveControlKContext, type ControlKContext } from '~/services/overlay/controlKContext'
+import { pickControlKStatus, shouldAutoOpenNotifications, type ControlKStatusMessage } from '~/services/overlay/controlKStatus'
+import { useTrackVoiceReferenceAvailability } from '~/composables/useTrackVoiceReferenceAvailability'
 import { usePublicPath } from '~/composables/usePublicPath'
 import { useDevTestMode } from '~/composables/useDevTestMode'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
@@ -137,9 +140,17 @@ async function setQuickPanelLayout(value: 'vertical' | 'horizontal') {
     console.error('[CONTROL_K] Layout preference save failed:', error)
   }
 }
-const isHorizontalQuickPanel = computed(() => phase.value === 'launcher'
+// Only the local development build exposes QA tools, never the installer build.
+// Declared before any watcher reads the layout (the preview is part of it).
+const showQuickPanelDevTools = import.meta.dev
+const previewAllQuickPanelButtons = ref(false)
+const isFullQuickPanelPreview = computed(() => showQuickPanelDevTools && previewAllQuickPanelButtons.value)
+// PIP-556: ACC has its own single layout (Guida/Pausa), neither vertical nor horizontal.
+// The development preview shows the same full ACC set.
+const usesAccLayout = computed(() => isAccQuickPanel.value || isFullQuickPanelPreview.value)
+const isHorizontalQuickPanel = computed(() => phase.value === 'launcher' && !usesAccLayout.value
   && !isTargetSetupOpen.value && !isSectorReferenceSetupOpen.value && !isFuelSetupOpen.value && !isQuickTimerOpen.value
-  && (isAccQuickPanel.value || quickPanelLayout.value === 'horizontal'))
+  && quickPanelLayout.value === 'horizontal')
 const remainingMs = ref(0)
 const isElectronRuntime = ref(false)
 const {
@@ -203,26 +214,53 @@ const notificationsBody = ref<HTMLElement | null>(null)
 const notificationCount = ref(0)
 let notificationErrorCount = 0
 let notificationObserver: MutationObserver | null = null
-const NOTIFICATION_ITEMS = '.fuel-status, .pressure-plan, .control-k-request, .quick-panel-pressure-status'
-const NOTIFICATION_ERRORS = '.fuel-status--error, .quick-panel-pressure-status--error, .control-k-request__error'
+const NOTIFICATION_ITEMS = '.fuel-status, .pressure-plan, .control-k-request, .quick-panel-pressure-status, .pressure-test__result, .pressure-test__error'
+const NOTIFICATION_ERRORS = '.fuel-status--error, .quick-panel-pressure-status--error, .control-k-request__error, .pressure-test__error'
+const notificationErrors = ref(0)
+let lastNotificationAutoOpenAt: number | null = null
 function countNotifications() {
   const body = notificationsBody.value
   const count = body ? body.querySelectorAll(NOTIFICATION_ITEMS).length : 0
   const errors = body ? body.querySelectorAll(NOTIFICATION_ERRORS).length : 0
   notificationCount.value = count
-  // A new error opens the view by itself; an empty view closes.
-  if (errors > notificationErrorCount) openNotifications()
+  notificationErrors.value = errors
+  // PIP-556: a new error opens the view by itself only in pause, never while
+  // driving or over another view, and at most once every 30 s; an empty view closes.
+  const now = Date.now()
+  if (shouldAutoOpenNotifications({
+    errors, previousErrors: notificationErrorCount, otherViewOpen: isOtherQuickViewOpen.value,
+    context: usesAccLayout.value ? effectiveControlKContext.value : hideStintWhileDriving.value ? 'drive' : 'pause',
+    lastAutoOpenAt: lastNotificationAutoOpenAt, now,
+  })) {
+    lastNotificationAutoOpenAt = now
+    openNotifications()
+  }
   notificationErrorCount = errors
   if (!count && isNotificationsOpen.value) closeNotifications()
 }
 function openNotifications() {
+  isVoiceViewOpen.value = false
   isNotificationsOpen.value = true
   void nextTick(() => actionSelection.select('notifications-close'))
 }
 function closeNotifications() {
   isNotificationsOpen.value = false
-  void nextTick(() => actionSelection.select('pitwall'))
+  void nextTick(() => actionSelection.select(usesAccLayout.value ? 'notifications' : 'pitwall'))
 }
+// PIP-556: in Pausa the four voice alerts live behind one "Avvisi" button.
+const isVoiceViewOpen = ref(false)
+function openVoiceView() {
+  isNotificationsOpen.value = false
+  isVoiceViewOpen.value = true
+  void nextTick(() => actionSelection.select('coach'))
+}
+function closeVoiceView() {
+  if (!isVoiceViewOpen.value) return
+  isVoiceViewOpen.value = false
+  void nextTick(() => actionSelection.select('voice-alerts'))
+}
+const isOtherQuickViewOpen = computed(() => isVoiceViewOpen.value || isTargetSetupOpen.value
+  || isSectorReferenceSetupOpen.value || isFuelSetupOpen.value || isQuickTimerOpen.value)
 watch(notificationsBody, (body) => {
   notificationObserver?.disconnect()
   notificationObserver = null
@@ -442,9 +480,51 @@ const coachVoiceOn = computed(() => voiceOnForSession(spotterEnabled.value, lapT
 const referencesVoiceOn = computed(() => voiceOnForSession(trackVoiceReferencesEnabled.value, referenceSessionModes.value))
 const pressureVoiceOn = computed(() => voiceOnForSession(pressureWarningsEnabled.value, pressureWarningSessionModes.value))
 const targetVoiceOn = computed(() => voiceOnForSession(targetLapVoiceEnabled.value, targetLapSessionModes.value))
+
+// ─── PIP-556: ACC single layout ─────────────────────────────────────────────
+// Pausa (full grid) only when stopped in the box, pit lane, setup screen or on
+// the grid; everything else, including a car stopped on track, is Guida.
+const controlKContext = ref<ControlKContext>('pause')
+watch(() => {
+  const fast = fastState.value
+  return resolveControlKContext({
+    isLive: fast.isFresh && fast.isLive, speedKmh: fast.speedKmh, isInPitBox: fast.isInPitBox,
+    isInPitLane: fast.isInPitLane, isSetupMenuVisible: fast.isSetupMenuVisible, isEngineRunning: fast.isEngineRunning,
+    sessionType: fast.sessionType, lapsCompleted: fast.lapsCompleted,
+  }, controlKContext.value)
+}, (next) => { controlKContext.value = next }, { immediate: true })
+const effectiveControlKContext = computed<ControlKContext>(() => isFullQuickPanelPreview.value ? 'pause' : controlKContext.value)
+watch(effectiveControlKContext, (next) => { if (next === 'drive') closeVoiceView() })
+const pressureTestStatus = ref<ControlKStatusMessage | null>(null)
+// One status line of fixed height: error > in progress > outcome > hint.
+// While driving only real messages are shown, never the button hints.
+const controlKStatus = computed<ControlKStatusMessage | null>(() => pickControlKStatus([
+  voicePointNotice.value && { tone: voicePointNotice.value.tone === 'error' ? 'error' : 'ok', text: voicePointNotice.value.text },
+  pressureTestStatus.value,
+  pressureOutcome.value && { tone: pressureOutcome.value.tone, text: pressureOutcome.value.text },
+  notificationErrors.value > 0 && !isNotificationsOpen.value
+    && { tone: 'error', text: notificationErrors.value === 1 ? 'Un problema da leggere: apri le notifiche.' : `${notificationErrors.value} problemi da leggere: apri le notifiche.` },
+  effectiveControlKContext.value === 'pause' && { tone: 'hint', text: quickPanelHint.value },
+]))
+const accLayoutClasses = computed(() => usesAccLayout.value ? [
+  'ck', `ck--${effectiveControlKContext.value}`,
+  {
+    'ck--view': isNotificationsOpen.value || isVoiceViewOpen.value,
+    'ck--voice-view': isVoiceViewOpen.value,
+    'ck--no-track-references': !isFullQuickPanelPreview.value && trackVoiceReferences.available.value === false,
+    'ck--no-target': !isFullQuickPanelPreview.value && !infoTargetActive.value,
+    'ck--no-notifications': notificationCount.value === 0,
+  },
+] : [])
 // PIP-510: the game is known from the menus on (not only when driving) and the
 // layout never flickers on a silent source; see useSimulatorPresence.
 const simulatorPresence = useSimulatorPresence(computed(() => fastState.value.commonLive))
+// Riferimenti is offered only on tracks with audio references (today Spa); unknown keeps it visible.
+const trackVoiceReferences = useTrackVoiceReferenceAvailability(getOverlayApi, computed(() => ({
+  gameId: simulatorPresence.gameId.value,
+  track: fastState.value.context?.track ?? null,
+  variant: fastState.value.commonLive?.identity?.variant ?? null,
+})))
 const support = computed(() => gameUiSupport(simulatorPresence.gameId.value))
 watch(() => support.value.quickAutomations, allowed => { if (!allowed) isFuelSetupOpen.value = false }, { flush: 'sync' })
 watch(() => support.value.quickSectorReferences, allowed => { if (!allowed) isSectorReferenceSetupOpen.value = false }, { flush: 'sync' })
@@ -561,8 +641,6 @@ const activeTask = computed(() => {
   if (phase.value === 'completed') return 'Allenamento completato.'
   return activeStep.value.hud
 })
-// Only the local development build exposes QA tools, never the installer build.
-const showQuickPanelDevTools = import.meta.dev
 const accMenuStateLogMessage = ref('')
 const isCheckingPauseMenu = ref(false)
 async function checkPauseMenu() {
@@ -586,14 +664,17 @@ async function logAccMenuState() {
   }
   scheduleOverlaySizeSync()
 }
-const previewAllQuickPanelButtons = ref(false)
 let layoutBeforePreview: 'vertical' | 'horizontal' = 'vertical'
 const quickPanelPreview = shallowRef<ReturnType<typeof import('~/services/overlay/quickPanelPreview').createQuickPanelPreview> | null>(null)
-const isFullQuickPanelPreview = computed(() => showQuickPanelDevTools && previewAllQuickPanelButtons.value)
 const quickPanelPressureState = computed(() => isFullQuickPanelPreview.value ? quickPanelPreview.value!.pressure : dryPressureState.value)
+// PIP-556: the plan is a notification only while it can still be applied (or is
+// being applied); once applied or blocked the outcome message takes over and the
+// plan leaves Notifiche, instead of staying until the next flying lap.
 const showQuickPanelPressurePreview = computed(() => !quickPanelPressureState.value.consumed
   && !!quickPanelPressureState.value.recommendation?.wheels
-  && (isFullQuickPanelPreview.value || isCarStoppedWithEngineOff.value))
+  && !['completed', 'blocked'].includes(quickPanelPressureState.value.state)
+  && (isFullQuickPanelPreview.value || isCarStoppedWithEngineOff.value
+    || (usesAccLayout.value && effectiveControlKContext.value === 'pause')))
 let pressureOutcomeTimer: ReturnType<typeof setTimeout> | null = null
 watch(() => pressureOutcomeMessage(quickPanelPressureState.value), (outcome) => {
   if (pressureOutcomeTimer) clearTimeout(pressureOutcomeTimer)
@@ -787,7 +868,8 @@ function openInfoTargetSetup() {
     }
   }
   isTargetSetupOpen.value = true
-  selectedWheelActionId.value = 'target-time'
+  // PIP-556: seconds are the field a driver changes most often.
+  selectedWheelActionId.value = 'target-seconds'
   scheduleOverlaySizeSync()
 }
 
@@ -816,7 +898,8 @@ async function confirmInfoTarget() {
   const saved = await getOverlayApi()?.infoTargetSaveSettings?.({
     targetTimeMs: infoTargetTimeMs.value,
     toleranceMs: infoTargetToleranceMs.value,
-    keepBetweenSessions: infoTargetKeepBetweenSessions.value,
+    // PIP-556: in ACC Control K the target lap lasts for the session only.
+    keepBetweenSessions: usesAccLayout.value ? false : infoTargetKeepBetweenSessions.value,
   }) as InfoTargetSettings | undefined
   applyInfoTargetSettings(saved)
   closeInfoTargetSetup()
@@ -879,6 +962,7 @@ async function prepareOverlayReopen(revision?: number) {
   actionSelection.resetPointer()
   if (resetsOverlayMenuOnHide(phase.value)) {
     isFuelSetupOpen.value = false
+    isVoiceViewOpen.value = false
     cancelInfoTargetSetup()
     closeSectorReferenceSetup()
     isTrainingPickerOpen.value = false
@@ -909,6 +993,7 @@ async function prepareOverlayReopen(revision?: number) {
 
 function runBackAction() {
   if (isNotificationsOpen.value) { closeNotifications(); return }
+  if (isVoiceViewOpen.value) { closeVoiceView(); return }
   if (isQuickTimerOpen.value) { leaveQuickTimer(); return }
   if (isFuelSetupOpen.value) { closeFuelSetup(); return }
   if (isSectorReferenceSetupOpen.value) { closeSectorReferenceSetup(); return }
@@ -1197,7 +1282,8 @@ watch(isShortcutStopConfirmOpen, (open) => {
 
 watch(
   [() => fastState.value.commonLive?.gameId, phase, placementActive, selectedTrainingId, selectedModeId, soundEnabled, originMode, originCorner,
-    spotterEnabled, trackVoiceReferencesEnabled, isTrainingPickerOpen, isSettingsOpen, isTargetSetupOpen, isSectorReferenceSetupOpen, isFuelSetupOpen, isQuickTimerOpen, isNotificationsOpen, notificationCount, quickTimer.status, liveHudResizeKey],
+    spotterEnabled, trackVoiceReferencesEnabled, isTrainingPickerOpen, isSettingsOpen, isTargetSetupOpen, isSectorReferenceSetupOpen, isFuelSetupOpen, isQuickTimerOpen, isNotificationsOpen, notificationCount, quickTimer.status, liveHudResizeKey,
+    isVoiceViewOpen, effectiveControlKContext, () => trackVoiceReferences.available.value, infoTargetActive],
   () => { scheduleOverlaySizeSync(); actionSelection.refresh() },
   { flush: 'post' }
 )
@@ -1253,6 +1339,7 @@ onBeforeUnmount(() => {
         'training-overlay--preparing': preparingReopen,
         'training-overlay--web': !isElectronRuntime,
         'training-overlay--voice-points': voicePointRecorderEnabled,
+        'training-overlay--acc': usesAccLayout && phase === 'launcher',
       }
     ]"
   >
@@ -1306,29 +1393,41 @@ onBeforeUnmount(() => {
                 { 'overlay-content--target': isTargetSetupOpen || isSectorReferenceSetupOpen || isFuelSetupOpen || isQuickTimerOpen,
                   'overlay-content--target-lap': isTargetSetupOpen,
                   'overlay-content--horizontal': isHorizontalQuickPanel,
+                  'overlay-content--acc': usesAccLayout && phase === 'launcher',
                   'overlay-content--preview': isFullQuickPanelPreview },
               ]"
             >
 
               <template v-if="phase === 'launcher'">
-                <div v-if="!isTargetSetupOpen && !isSectorReferenceSetupOpen && !isFuelSetupOpen && !isQuickTimerOpen" class="launcher-tools" aria-label="Strumenti live overlay"
+                <div v-if="!isTargetSetupOpen && !isSectorReferenceSetupOpen && !isFuelSetupOpen && !isQuickTimerOpen" class="launcher-tools" :class="accLayoutClasses" aria-label="Strumenti live overlay"
                   @pointerover="updateQuickPanelHint" @pointerleave="hoveredQuickPanelAction = null"
                   @focusin="updateQuickPanelHint" @focusout="hoveredQuickPanelAction = null">
                   <header class="launcher-tools__header">
                     <img class="quick-panel-logo" src="/branding/auth/racercore-rc.svg" alt="Racer Core" width="56" height="28">
                     <!-- PIP-532: the Notifiche view owns the corner (its X); the switch steps aside. -->
-                    <QuickPanelLayoutToggle v-if="!isAccQuickPanel" v-show="!isNotificationsOpen" :model-value="quickPanelLayout" @update:model-value="setQuickPanelLayout" />
+                    <QuickPanelLayoutToggle v-if="!usesAccLayout" v-show="!isNotificationsOpen" :model-value="quickPanelLayout" @update:model-value="setQuickPanelLayout" />
                     <div class="quick-panel-header-actions" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
-                    <!-- PIP-526: reachable from the wheel, last in the cycle (data-overlay-wheel-last). -->
-                    <button type="button" class="launcher-tool-button quick-panel-timer" title="Timer" aria-label="Timer" data-overlay-wheel-action="timer" data-overlay-wheel-last @click="openQuickTimer">
-                      <Timer :size="18" aria-hidden="true" />
+                    <!-- PIP-556: ACC Pausa keeps the four voice alerts behind one button (own view). -->
+                    <button v-if="usesAccLayout && !isVoiceViewOpen" type="button" class="launcher-tool-button ck-voice-alerts" title="Avvisi vocali"
+                      aria-label="Avvisi vocali" data-overlay-wheel-action="voice-alerts" @click="openVoiceView">
+                      <Volume2 :size="20" aria-hidden="true" /><span>Avvisi</span>
+                      <small class="quick-action-badge" aria-hidden="true">{{ [coachVoiceOn, referencesVoiceOn, pressureVoiceOn, targetVoiceOn].filter(Boolean).length }}/4</small>
                     </button>
-                    <!-- PIP-532: next to the timer only while something is waiting to be read. -->
-                    <button v-if="notificationCount > 0 && !isNotificationsOpen" type="button" class="launcher-tool-button quick-panel-notifications-button"
-                      :title="`Notifiche (${notificationCount})`" :aria-label="`Apri notifiche (${notificationCount})`"
-                      data-overlay-wheel-action="notifications" data-overlay-wheel-last @click="openNotifications">
-                      <Bell :size="18" aria-hidden="true" />
-                      <small class="quick-action-badge" aria-hidden="true">{{ notificationCount }}</small>
+                    <button v-if="usesAccLayout && isVoiceViewOpen" type="button" class="launcher-tool-button ck-view-close" title="Torna ai comandi"
+                      aria-label="Chiudi avvisi vocali" data-overlay-wheel-action="voice-close" @click="closeVoiceView">
+                      <X :size="16" aria-hidden="true" />
+                    </button>
+                    <!-- PIP-526: reachable from the wheel, last in the cycle (data-overlay-wheel-last). -->
+                    <button type="button" class="launcher-tool-button quick-panel-timer" title="Timer" aria-label="Timer" data-overlay-wheel-action="timer" :data-overlay-wheel-last="usesAccLayout ? undefined : ''" @click="openQuickTimer">
+                      <Timer :size="18" aria-hidden="true" /><span v-if="usesAccLayout">Timer</span>
+                    </button>
+                    <!-- PIP-532: next to the timer only while something is waiting to be read.
+                         PIP-556: ACC Pausa keeps its place in the grid, disabled when empty. -->
+                    <button v-if="(usesAccLayout || notificationCount > 0) && !isNotificationsOpen" type="button" class="launcher-tool-button quick-panel-notifications-button"
+                      :title="`Notifiche (${notificationCount})`" :aria-label="`Apri notifiche (${notificationCount})`" :disabled="notificationCount === 0"
+                      data-overlay-wheel-action="notifications" :data-overlay-wheel-last="usesAccLayout ? undefined : ''" @click="openNotifications">
+                      <Bell :size="18" aria-hidden="true" /><span v-if="usesAccLayout">Notifiche</span>
+                      <small v-if="notificationCount > 0" class="quick-action-badge" :class="{ 'quick-action-badge--error': notificationErrors > 0 }" aria-hidden="true">{{ notificationCount }}</small>
                     </button>
                     <button
                       v-if="!hideStintWhileDriving"
@@ -1347,7 +1446,7 @@ onBeforeUnmount(() => {
                     <p v-if="waitingForSimulator" class="quick-panel-waiting" role="status">{{ simulatorPresence.choiceRequired.value ? 'Scegli il gioco nella webapp' : 'In attesa del simulatore' }}</p>
                     <div v-else class="quick-panel-main" :class="{ 'quick-panel-main--behind-notifications': isNotificationsOpen }" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
                     <div class="quick-panel-categories">
-                    <section v-if="!quickPanelSupport.quickAutomations || showAllQuickPanelButtons || !fastState.isEngineRunning" class="quick-panel-section" aria-label="Riferimenti numerici">
+                    <section v-if="usesAccLayout || !quickPanelSupport.quickAutomations || showAllQuickPanelButtons || !fastState.isEngineRunning" class="quick-panel-section" aria-label="Riferimenti numerici">
                       <h2 class="quick-panel-heading">Riferimenti</h2>
                       <div class="quick-panel-pair">
                     <div class="quick-reference" :class="{ 'is-active': (isFullQuickPanelPreview || infoTargetActive) }">
@@ -1374,7 +1473,7 @@ onBeforeUnmount(() => {
                     </div>
                       </div>
                     </section>
-                    <section v-if="quickPanelSupport.quickAutomations" class="quick-panel-section quick-panel-automations" :class="{ 'quick-panel-show-all': showAllQuickPanelButtons, 'quick-panel-driving': hideStintWhileDriving }" aria-label="Automazioni">
+                    <section v-if="quickPanelSupport.quickAutomations" class="quick-panel-section quick-panel-automations" :class="{ 'quick-panel-show-all': showAllQuickPanelButtons, 'quick-panel-driving': hideStintWhileDriving && !usesAccLayout }" aria-label="Automazioni">
                     <SetupFuelPanel :key="isFullQuickPanelPreview ? 'preview' : 'live'" :preview-expanded="isFullQuickPanelPreview" :body-target="isFullQuickPanelPreview ? '#control-k-fuel-preview' : undefined" show-heading :minutes="isFullQuickPanelPreview ? 30 : fuelStintMinutes" @update:minutes="!isFullQuickPanelPreview && (fuelStintMinutes = $event)" :api="isFullQuickPanelPreview ? quickPanelPreview!.api : getOverlayApi()" status-target="#quick-panel-notification-fuel" separate-view @open="openFuelSetup" />
                     <div class="quick-panel-pair quick-panel-secondary">
                     <h2 class="quick-panel-heading">Pit</h2>
@@ -1388,7 +1487,9 @@ onBeforeUnmount(() => {
 
                     </div>
                     <div class="quick-panel-pressure-pair" aria-label="Pressioni pneumatici">
-                    <PressureTestPanel :api="getOverlayApi()" :disabled="isFullQuickPanelPreview" :horizontal="isHorizontalQuickPanel" feedback-target="#quick-panel-pressure-test-feedback" />
+                    <PressureTestPanel :api="getOverlayApi()" :disabled="isFullQuickPanelPreview" :horizontal="isHorizontalQuickPanel"
+                      :feedback-target="usesAccLayout ? '#quick-panel-notification-estimate' : '#quick-panel-pressure-test-feedback'"
+                      :status-line="usesAccLayout" @status="pressureTestStatus = $event" />
                     <button
                       type="button"
                       class="launcher-tool-button launcher-tool-button--training launcher-tool-button--pressure"
@@ -1487,6 +1588,7 @@ onBeforeUnmount(() => {
                         </button>
                       </header>
                       <div ref="notificationsBody" class="quick-panel-notifications__body">
+                        <div id="quick-panel-notification-estimate" class="quick-panel-notification-estimate" />
                         <div id="quick-panel-notification-fuel" class="control-k-fuel-status" />
                         <div id="quick-panel-notification-pressure" class="quick-panel-notification-pressure" />
                         <div id="quick-panel-notification-requests" class="quick-panel-notification-requests" />
@@ -1527,6 +1629,11 @@ onBeforeUnmount(() => {
                     </p>
                     </details>
                   </div>
+                  <!-- PIP-556: one status line of fixed height for every message (ACC). -->
+                  <p v-if="usesAccLayout && !waitingForSimulator" class="ck-status" :class="controlKStatus ? `ck-status--${controlKStatus.tone}` : 'ck-status--empty'"
+                    role="status" aria-live="polite" :title="controlKStatus?.text">
+                    <Info v-if="controlKStatus" :size="12" aria-hidden="true" /><span>{{ controlKStatus?.text }}</span>
+                  </p>
                 </div>
                 <QuickCountdown v-else-if="isQuickTimerOpen" :status="quickTimer.status.value" :display="quickTimer.display.value" @start="startQuickTimer" @cancel="closeQuickTimer" />
                 <InfoTargetSetup

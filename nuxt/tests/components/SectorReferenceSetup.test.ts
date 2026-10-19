@@ -45,16 +45,16 @@ describe('sector reference editor',()=>{
   button('sector-mode-bestSector').click();await flush();button('sector-save').click();await flush()
   expect(api.hudOverlaySaveSettings).toHaveBeenCalledWith('sectors',{deltaReference:'bestSector'})
  })
- // PIP-526: in Ctrl+K one value per sector, pre-filled from the best sectors,
- // edited with OK + Up/Down (0,1 s) and left with OK or Back.
- it('starts from the best sectors and edits one sector from the wheel',async()=>{
+ // PIP-556: in Ctrl+K each sector has independent SEC and DEC fields, pre-filled
+ // from the best sectors, edited with OK + Up/Down and left with OK or Back.
+ it('starts from the best sectors and edits one sector field from the wheel',async()=>{
   const sectorHud={sectors:[{bestMs:31_249},{bestMs:42_050},{bestMs:30_970}]}
   const {api}=await setup(true,{sectorHud})
-  expect([...document.querySelectorAll('.sector-reference-value')].map(el=>el.textContent)).toEqual(['31,2','42,1','31,0'])
+  expect([...document.querySelectorAll('.sector-reference-value')].map(el=>el.textContent)).toEqual(['31',',2','42',',1','31',',0'])
   expect(document.querySelector('input')).toBeNull()
   const editor=(app as any)._instance.exposed as {handleWheelCommand(command:string):boolean}
   expect(editor.handleWheelCommand('next-action')).toBe(false)
-  button('sector-1').click();await flush()
+  button('sector-1-tenths').click();await flush()
   expect(editor.handleWheelCommand('next-action')).toBe(true);expect(editor.handleWheelCommand('next-action')).toBe(true)
   expect(editor.handleWheelCommand('previous-action')).toBe(true)
   expect(editor.handleWheelCommand('back')).toBe(true);await flush()
@@ -71,12 +71,19 @@ describe('sector reference editor',()=>{
 
 it('offers the best sectors again after manual changes',async()=>{
  await setup(true,{sectorHud:{sectors:[{bestMs:31_000},{bestMs:42_000},{bestMs:31_000}]}})
- button('sector-0').click();await flush()
+ button('sector-0-tenths').click();await flush()
  const editor=(app as any)._instance.exposed as {handleWheelCommand(command:string):boolean}
  editor.handleWheelCommand('next-action');editor.handleWheelCommand('back');await flush()
- expect(document.querySelector('.sector-reference-value')!.textContent).toBe('31,1')
+ expect(button('sector-0-tenths').textContent).toBe(',1')
  button('sector-use-best').click();await flush()
- expect(document.querySelector('.sector-reference-value')!.textContent).toBe('31,0')
+ expect(button('sector-0-tenths').textContent).toBe(',0')
+})
+it('changes seconds without touching the tenths, up to 4:00 per sector',async()=>{
+ await setup(true,{sectorHud:{sectors:[{bestMs:159_900},{bestMs:42_000},{bestMs:31_000}]}})
+ button('sector-0-seconds').click();await flush()
+ const editor=(app as any)._instance.exposed as {handleWheelCommand(command:string):boolean}
+ editor.handleWheelCommand('next-action');await flush()
+ expect([button('sector-0-seconds').textContent,button('sector-0-tenths').textContent]).toEqual(['160',',9'])
 })
 it('restores existing times and ignores late settings after unmount',async()=>{
  const {api}=await setup();app!.unmount();app=null
