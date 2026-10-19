@@ -20,29 +20,43 @@ export function pickControlKStatus(candidates: Array<ControlKStatusMessage | nul
   return best
 }
 
-// ─── Notifications ──────────────────────────────────────────────────────────
+// ─── Driver-readable reasons ────────────────────────────────────────────────
 
-/** In pause a new error may open Notifiche by itself, at most once in this window. */
-export const CONTROL_K_AUTO_OPEN_INTERVAL_MS = 30_000
+// Technical prefixes kept in logs and audits ("[dati:stale]", "[visione:pausa-setup]")
+// become plain words for the driver; unknown ones are simply removed.
+const KNOWN_REASONS: Array<[RegExp, string]> = [
+  [/\[visione:pausa-setup\]/, 'Apri il menu pausa (ESC) ai box o in griglia e riprova.'],
+  [/\[dati:(stale|state-missing|disconnected)\]/, 'Dati di ACC non aggiornati: riprova tra un istante.'],
+  [/\[dati:session\]/, 'Sessione ACC non riconosciuta: riprova tra un istante.'],
+  [/\[dati:capability\]/, 'Comandi verso ACC non pronti: riprova tra un istante.'],
+]
 
-export interface ControlKAutoOpenInput {
-  /** Number of errors now visible in Notifiche and before this change. */
-  errors: number
-  previousErrors: number
-  context: 'pause' | 'drive'
-  /** Another view (editor, timer, voice alerts) is open: never steal it. */
-  otherViewOpen: boolean
-  lastAutoOpenAt: number | null
-  now: number
+export function readableReason(reason: string | null | undefined): string {
+  const text = String(reason ?? '').trim()
+  for (const [pattern, readable] of KNOWN_REASONS) if (pattern.test(text)) return readable
+  const plain = text.replace(/\[[a-z]+:[^\]]*\]\s*/gi, '').replace(/^[^:]{0,40}…:\s*/, '').trim()
+  return plain || 'Operazione non riuscita.'
 }
 
-/**
- * Driving never opens Notifiche (only the bell badge changes); in pause a new
- * error opens it unless the driver is busy in another view or it already
- * opened by itself within the last 30 s (no bombardment).
- */
-export function shouldAutoOpenNotifications(input: ControlKAutoOpenInput): boolean {
-  if (input.errors <= input.previousErrors) return false
-  if (input.context !== 'pause' || input.otherViewOpen) return false
-  return input.lastAutoOpenAt === null || input.now - input.lastAutoOpenAt >= CONTROL_K_AUTO_OPEN_INTERVAL_MS
+// ─── Notifications ──────────────────────────────────────────────────────────
+
+export interface ControlKNotificationError {
+  /** Stable identity: category + text, to know whether it has been read. */
+  key: string
+  /** Status line text: "Category: reason". */
+  label: string
+}
+
+const CATEGORIES: Array<[string, string]> = [
+  ['fuel-status--error', 'Benzina'],
+  ['quick-panel-pressure-status--error', 'Correggi pressioni'],
+  ['control-k-request__error', 'Amicizie'],
+  ['pressure-test__error', 'Stima pressioni'],
+]
+
+/** Reads one error card of the Notifiche view (the first paragraph is its reason). */
+export function notificationErrorFromElement(element: Element): ControlKNotificationError {
+  const category = CATEGORIES.find(([cls]) => element.classList.contains(cls))?.[1] ?? 'Avviso'
+  const reason = readableReason((element.querySelector('p') ?? element).textContent)
+  return { key: `${category}|${reason}`, label: `${category}: ${reason}` }
 }

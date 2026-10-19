@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { Gauge } from '@lucide/vue'
 import { usePresentationInterval } from '~/composables/usePresentationVisibility'
-import type { ControlKStatusMessage } from '~/services/overlay/controlKStatus'
+import { readableReason, type ControlKStatusMessage } from '~/services/overlay/controlKStatus'
 
 type Snapshot = {
   available?: boolean
@@ -24,7 +24,7 @@ const props = defineProps<{ api?: {
 } | null; disabled?: boolean; horizontal?: boolean; feedbackTarget?: string
   /** PIP-556: progress goes to the Control K status line; only final outcomes go to the feedback target. */
   statusLine?: boolean }>()
-const emit = defineEmits<{ status: [message: ControlKStatusMessage | null] }>()
+const emit = defineEmits<{ status: [message: ControlKStatusMessage | null]; outcome: [message: ControlKStatusMessage | null] }>()
 const state = ref<Snapshot>({})
 const requesting = ref(false)
 let generation = 0
@@ -34,7 +34,7 @@ const psi = (value: number) => value.toFixed(1).replace('.', ',')
 // An expired estimate (PIP-556) is a state of the button, never a message.
 const statusMessage = computed<ControlKStatusMessage | null>(() => {
   if (pending.value) return { tone: 'progress', text: `Stima pressioni: ${state.value.message || 'calcolo in corso…'}` }
-  if (state.value.status === 'error') return { tone: 'error', text: `Stima pressioni: ${state.value.reason || 'non riuscita.'}${state.value.partial ? ' Controlla il setup.' : ''}` }
+  if (state.value.status === 'error') return { tone: 'error', text: `Stima pressioni: ${readableReason(state.value.reason)}${state.value.partial ? ' Controlla il setup.' : ''}` }
   if (state.value.status === 'ready' && state.value.result) {
     const values = state.value.result.wheels.map(w => `${w.wheel} ${psi(w.cold)}`).join(' · ')
     return state.value.applied
@@ -58,7 +58,7 @@ async function run() {
     const result = await props.api?.trainingOverlayPressureTest?.()
     state.value = result ? { ...result, available: true } : { available: true, status: 'error', reason: 'Comando non disponibile.' }
   } catch { state.value = { available: true, status: 'error', reason: 'Stima interrotta. Controlla il setup prima di riprovare.' } }
-  finally { generation++; requesting.value = false }
+  finally { generation++; requesting.value = false; emit('outcome', statusMessage.value) }
 }
 const polling = usePresentationInterval(() => { void refresh() }, 1000)
 onMounted(() => { void refresh(); polling.start() })
@@ -73,7 +73,7 @@ onMounted(() => { void refresh(); polling.start() })
     <div class="pressure-test__feedback" aria-live="polite">
     <p v-if="pending && !statusLine" class="launcher-hint" role="status">{{ state.message || 'Calcolo in corso…' }}</p>
     <div v-else-if="!pending && state.status === 'error'" class="launcher-hint pressure-test__error" role="alert">
-      <p>{{ state.reason }}</p>
+      <p :title="state.reason">{{ statusLine ? readableReason(state.reason) : state.reason }}</p>
       <p v-if="state.partial">Applicazione incompleta: alcune pressioni potrebbero essere cambiate. Controlla il setup.</p>
       <p v-if="state.partial && state.result">Previste: {{ state.result.wheels.map(w => `${w.wheel} ${psi(w.cold)}`).join(' · ') }} PSI</p>
       <p v-if="state.observed">Ultime lette: {{ Object.entries(state.observed).map(([w, v]) => `${w} ${psi(v / 10)}`).join(' · ') }} PSI</p>

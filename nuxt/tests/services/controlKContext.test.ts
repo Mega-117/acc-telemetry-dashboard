@@ -1,45 +1,32 @@
 import { describe, expect, it } from 'vitest'
 import { resolveControlKContext, type ControlKContextInput } from '~/services/overlay/controlKContext'
 
-const base: ControlKContextInput = {
-  isLive: true, speedKmh: 0, isInPitBox: false, isInPitLane: false, isSetupMenuVisible: false,
-  isEngineRunning: true, sessionType: 0, lapsCompleted: 4,
+// Values observed on 19/10 in a multiplayer box, cockpit view, engine off: final_ff 0.0003.
+const cockpitInBox: ControlKContextInput = {
+  isLive: true, speedKmh: 0, isSetupMenuVisible: false, isEngineRunning: false, finalFf: 0.0003, hudDriving: true,
 }
 const at = (patch: Partial<ControlKContextInput>, previous: 'pause' | 'drive' | null = null) =>
-  resolveControlKContext({ ...base, ...patch }, previous)
+  resolveControlKContext({ ...cockpitInBox, ...patch }, previous)
 
-describe('Control K context (PIP-556)', () => {
-  it('expands only when stopped in the box, pit lane, setup screen or grid', () => {
-    expect(at({ isInPitBox: true, isEngineRunning: false })).toBe('pause')
-    expect(at({ isInPitLane: true })).toBe('pause')
+describe('Control K context (PIP-556): cockpit = Guida, menus = Pausa', () => {
+  it('is Guida in the cockpit, even stopped in the box with the engine off', () => {
+    expect(at({})).toBe('drive')
+    expect(at({ isEngineRunning: true, finalFf: 0 })).toBe('drive')
+    expect(at({ speedKmh: 140, finalFf: 0 })).toBe('drive')
+  })
+
+  it('is Pausa in the ESC menu (force feedback zeroed), setup screen and offline pause', () => {
+    expect(at({ finalFf: 0 })).toBe('pause')
+    expect(at({ finalFf: 0.00005 })).toBe('pause')
     expect(at({ isSetupMenuVisible: true })).toBe('pause')
-    expect(at({ sessionType: 2, lapsCompleted: 0, isEngineRunning: false })).toBe('pause')
-  })
-
-  it('stays compact when the car stops on track', () => {
-    expect(at({ speedKmh: 0 })).toBe('drive')
-    expect(at({ speedKmh: 0, isEngineRunning: false })).toBe('drive')
-    // A race already under way is not the grid, even with the engine off.
-    expect(at({ sessionType: 2, lapsCompleted: 3, isEngineRunning: false })).toBe('drive')
-    // The grid with the engine running (formation about to start) is driving.
-    expect(at({ sessionType: 2, lapsCompleted: 0, isEngineRunning: true })).toBe('drive')
-  })
-
-  it('is compact while moving, even in the pit lane', () => {
-    expect(at({ isInPitLane: true, speedKmh: 60 })).toBe('drive')
-    expect(at({ isInPitBox: true, speedKmh: 12 })).toBe('drive')
-  })
-
-  it('keeps pause for small creeping and leaves it when really moving', () => {
-    expect(at({ isInPitBox: true, speedKmh: 2 }, 'pause')).toBe('pause')
-    expect(at({ isInPitBox: true, speedKmh: 2 }, 'drive')).toBe('drive')
-    expect(at({ isInPitBox: true, speedKmh: 4 }, 'pause')).toBe('drive')
-  })
-
-  it('treats menus without live telemetry as pause and keeps the last context without speed', () => {
     expect(at({ isLive: false, speedKmh: null })).toBe('pause')
-    expect(at({ speedKmh: null }, 'drive')).toBe('drive')
-    expect(at({ speedKmh: null }, 'pause')).toBe('pause')
-    expect(at({ speedKmh: Number.NaN })).toBe('drive')
+  })
+
+  it('uses hud_driving only when force feedback is unknown, else keeps the previous context', () => {
+    expect(at({ finalFf: null, hudDriving: false })).toBe('pause')
+    expect(at({ finalFf: null, hudDriving: true })).toBe('drive')
+    expect(at({ finalFf: null, hudDriving: null }, 'drive')).toBe('drive')
+    expect(at({ finalFf: Number.NaN, hudDriving: null }, 'pause')).toBe('pause')
+    expect(at({ finalFf: null, hudDriving: null })).toBe('pause')
   })
 })

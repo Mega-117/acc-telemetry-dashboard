@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { Fuel, LoaderCircle } from '@lucide/vue'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-const props = defineProps<{ api: any; separateView?: boolean; editorOnly?: boolean; showHeading?: boolean; statusTarget?: string; previewExpanded?: boolean; bodyTarget?: string }>()
-const emit = defineEmits<{ open: []; cancel: [] }>()
+const props = defineProps<{ api: any; separateView?: boolean; editorOnly?: boolean; showHeading?: boolean; statusTarget?: string; previewExpanded?: boolean; bodyTarget?: string
+  /** PIP-556: unavailable commands stay pressable and explain why through `notice`. */
+  reportUnavailable?: boolean }>()
+const emit = defineEmits<{ open: []; cancel: []; notice: [text: string, tone: 'ok' | 'error'] }>()
 const minutes = defineModel<number>('minutes', { default: 10 })
 const open = ref(props.editorOnly === true || props.previewExpanded === true), pending = ref(false), error = ref('')
 const applicationSucceeded = ref(false)
@@ -90,6 +92,8 @@ async function applyPlan(mode: 'auto' | 'minutes', expected: any) {
   const result = await props.api.trainingOverlayApplySetupFuel({ mode, minutes: Number(minutes.value), contextKey: expected.contextKey, totalLitres: expected.totalLitres })
   applicationSucceeded.value = result?.ok === true
   error.value = result?.reason || 'Esito non disponibile.'
+  emit('notice', applicationSucceeded.value ? `Benzina impostata${expected?.totalLitres ? `: ${expected.totalLitres} L` : '.'}` : `Benzina: ${error.value}`,
+    applicationSucceeded.value ? 'ok' : 'error')
   // PIP-522: a success message leaves after 5 s; a failure stays until the next action.
   clearTimeout(successTimer)
   if (applicationSucceeded.value) successTimer = setTimeout(() => {
@@ -101,7 +105,8 @@ function finishApplication() {
   if (open.value) void refresh()
 }
 async function applySession() {
-  if (pending.value || !sessionAllowsAuto.value) return
+  if (pending.value) return
+  if (!sessionAllowsAuto.value) { emit('notice', `Benzina sessione: ${sessionHint.value.replace(/^Carburante intera sessione: /, '')}`, 'error'); return }
   await beginApplication()
   try {
     if (disposed) return
@@ -110,10 +115,11 @@ async function applySession() {
     if (disposed) return
     if (!value?.available || !value?.plan?.ok) {
       error.value = value?.conflict || value?.unavailableReason || value?.plan?.reason || 'Carburante sessione non disponibile.'
+      emit('notice', `Benzina sessione: ${error.value}`, 'error')
       return
     }
     await applyPlan('auto', value.plan)
-  } catch { error.value = 'Applicazione interrotta: controlla il carburante nel setup.' }
+  } catch { error.value = 'Applicazione interrotta: controlla il carburante nel setup.'; emit('notice', `Benzina: ${error.value}`, 'error') }
   finally { finishApplication() }
 }
 async function apply() {
@@ -124,7 +130,7 @@ async function apply() {
     if (disposed) return
     await applyPlan('minutes', expected)
   }
-  catch { error.value = 'Applicazione interrotta: controlla il carburante nel setup.' }
+  catch { error.value = 'Applicazione interrotta: controlla il carburante nel setup.'; emit('notice', `Benzina: ${error.value}`, 'error') }
   finally { finishApplication() }
 }
 onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); clearTimeout(successTimer); clearTimeout(sessionTimer); void props.api?.trainingOverlayKeyboardEditing?.(false) })
@@ -133,7 +139,7 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); clea
 <template>
   <section class="fuel-panel" :class="{ 'fuel-panel--editor': editorOnly }">
     <h2 v-if="showHeading && !editorOnly" class="quick-panel-heading">Benzina</h2>
-    <button v-if="!editorOnly" class="fuel-open" type="button" data-overlay-wheel-action="fuel-session" aria-label="Carburante intera sessione" :aria-busy="pending" :disabled="pending || !sessionAllowsAuto" :title="sessionAllowsAuto ? undefined : sessionHint" @click="applySession"><LoaderCircle v-if="pending" class="fuel-pending-spinner" :size="16" aria-hidden="true" /><Fuel v-else :size="22" aria-hidden="true" /><span>Sessione</span></button>
+    <button v-if="!editorOnly" class="fuel-open" type="button" data-overlay-wheel-action="fuel-session" aria-label="Carburante intera sessione" :aria-busy="pending" :disabled="pending || (!sessionAllowsAuto && !reportUnavailable)" :data-unavailable="!sessionAllowsAuto && reportUnavailable ? '' : undefined" :title="sessionAllowsAuto ? undefined : sessionHint" @click="applySession"><LoaderCircle v-if="pending" class="fuel-pending-spinner" :size="16" aria-hidden="true" /><Fuel v-else :size="22" aria-hidden="true" /><span>Sessione</span></button>
     <Teleport defer :to="statusTarget || 'body'" :disabled="!statusTarget">
       <div v-if="!open && (pending || error)" class="fuel-status" :class="{ 'fuel-status--error': !pending && !applicationSucceeded }" role="status" aria-live="polite"><strong>{{ pending ? 'Carburante' : applicationSucceeded ? 'Carburante impostato' : 'Problema carburante' }}</strong><p>{{ statusMessage }}</p></div>
     </Teleport>

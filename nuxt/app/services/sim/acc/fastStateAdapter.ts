@@ -242,6 +242,7 @@ export function normalizeAccFastState(state: any, common: CommonLive | null): Fa
     isInPitLane: state.is_in_pit_lane === true,
     isInPitBox: state.is_in_pit === true,
     isSetupMenuVisible: state.is_setup_menu_visible === true,
+    finalFf: toNumber(state.final_ff),
     sessionType: toNumber(state.session_type),
     normalizedCarPosition: toNumber(state.normalized_car_position),
     speedKmh: common ? commonValue(common, 'speed', 'km/h') : toNumber(state.speed_kmh),

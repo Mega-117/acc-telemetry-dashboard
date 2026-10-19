@@ -40,7 +40,9 @@ describe('Ctrl+K layout order (PIP-509)', () => {
   })
   it('keeps Pressioni visible in driving without enabling unavailable commands', () => {
     expect(source).not.toContain('showPressureButton')
-    expect(source).toContain(':disabled="isDryPressureApplying || quickPanelPressureState.state !== \'ready\'"')
+    expect(source).toContain(':disabled="isDryPressureApplying || (!usesAccLayout && quickPanelPressureState.state !== \'ready\')"')
+    // PIP-556: in ACC it stays pressable and explains why it cannot run, without applying anything.
+    expect(source).toMatch(/if \(quickPanelPressureState\.value\.state !== 'ready'\) \{\s*showVoicePointNotice\(`Correggi pressioni: \$\{dryPressurePresentation\.value\.guidance\}`, 'error'\)\s*return\s*\}/)
   })
   it('PIP-509: the horizontal Tools group reserves no column for a hidden button', () => {
     const horizontal = styles.slice(styles.indexOf('.overlay-content--horizontal'))
@@ -136,8 +138,10 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     expect(source).toContain(":class=\"{ 'quick-panel-main--behind-notifications': isNotificationsOpen }\"")
     expect(styles).toContain('.quick-panel-main--behind-notifications { display: none !important; }')
     expect(source).toMatch(/function runBackAction\(\) \{\s*if \(isNotificationsOpen\.value\) \{ closeNotifications\(\); return \}/)
-    // PIP-556: the automatic opening follows the shared policy (pause only, 30 s).
-    expect(source).toMatch(/if \(shouldAutoOpenNotifications\(\{[\s\S]{0,400}?\}\)\) \{\s*lastNotificationAutoOpenAt = now\s*openNotifications\(\)/)
+    // PIP-556: Notifiche never opens by itself; viewing it marks errors as read.
+    const count = source.slice(source.indexOf('function countNotifications()'), source.indexOf('function openNotifications()'))
+    expect(count).not.toContain('openNotifications()')
+    expect(count).toContain('if (isNotificationsOpen.value) errors.forEach(error => seenNotificationErrors.add(error.key))')
     expect(source).toContain('data-overlay-wheel-action="notifications-close" @click="closeNotifications"')
     // The lap badge remains available on the always-visible Pressioni button.
     expect(source).toContain('v-if="pressureBadge"')
@@ -176,7 +180,9 @@ describe('ACC Control K single layout (PIP-556)', () => {
   })
   it('Guida keeps Pitwall, Correggi pressioni and the alerts; Riferimenti, Target and the bell only when useful', () => {
     const drive = acc.slice(acc.indexOf('.launcher-tools.ck--drive {'))
-    expect(drive).toMatch(/:is\(\.quick-panel-logo, \.pressure-test__button, \.fuel-open, \.quick-reference, \.ck-voice-alerts, \.ck-view-close,\s*\.quick-panel-timer, \.quick-panel-dev\) \{ display: none; \}/)
+    expect(drive).toMatch(/:is\(\.pressure-test__button, \.fuel-open, \.quick-reference, \.ck-voice-alerts, \.ck-view-close,\s*\.quick-panel-timer, \.quick-panel-dev\) \{ display: none; \}/)
+    // The Racer Core mark stays while driving.
+    expect(drive).toContain('.quick-panel-logo { order: 0; width: 40px; height: 20px;')
     expect(drive).toContain("&.ck--no-track-references [data-overlay-wheel-action='references']")
     expect(drive).toContain("&.ck--no-target [data-overlay-wheel-action='target-voice']")
     expect(drive).toContain('&.ck--no-notifications .quick-panel-notifications-button')
@@ -193,7 +199,7 @@ describe('ACC Control K single layout (PIP-556)', () => {
   it('the context comes from the shared resolver and the status from one priority list', () => {
     expect(source).toContain('return resolveControlKContext({')
     expect(source).toContain('const controlKStatus = computed<ControlKStatusMessage | null>(() => pickControlKStatus([')
-    expect(source).toContain(':status-line="usesAccLayout" @status="pressureTestStatus = $event"')
+    expect(source).toContain(':status-line="usesAccLayout" @status="onPressureTestStatus" @outcome="onPressureTestOutcome"')
     // The applied or blocked correction leaves Notifiche.
     expect(source).toContain("&& !['completed', 'blocked'].includes(quickPanelPressureState.value.state)")
   })

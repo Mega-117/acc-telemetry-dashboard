@@ -2888,6 +2888,8 @@ $ck-width: 56px + 5 * $ck-cell + 5 * $ck-gap;
       span { font: inherit; letter-spacing: 0; text-transform: none; }
     }
     .quick-panel-notifications-button:disabled { opacity: .35; }
+    // Unavailable but pressable: dimmed, a press explains why in the status line.
+    [data-unavailable] { opacity: .45; }
     .quick-action-badge--error { border-color: #ff6b6b88; color: #fecaca; }
     .quick-panel-logo { width: 48px; height: 24px; align-self: center; justify-self: center; }
 
@@ -2963,7 +2965,8 @@ $ck-width: 56px + 5 * $ck-cell + 5 * $ck-gap;
   &.overlay-content--target .quick-countdown {
     display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px;
     > header { grid-column: 1 / -1; padding-bottom: 6px; }
-    .quick-countdown__presets, .quick-countdown__fields, .quick-countdown__actions, > p { margin: 0; grid-column: 1 / -1; }
+    .quick-countdown__presets, .quick-countdown__fields, .quick-countdown__actions, > p,
+    .quick-countdown__time, .quick-countdown__end { margin: 0; grid-column: 1 / -1; }
     .quick-countdown__presets button { min-height: 28px; }
     .quick-countdown__field { gap: 2px; }
     .quick-countdown__stepper input { padding: 2px 0; font-size: 20px; }
@@ -2971,19 +2974,31 @@ $ck-width: 56px + 5 * $ck-cell + 5 * $ck-gap;
     .quick-countdown__actions button { min-height: 30px; }
     .quick-countdown__time { margin-top: 0; font-size: 48px; }
   }
-  .launcher-tools.ck--voice-view {
+  // Same frame as the grid (two rows = 2 × cell + gap): a title line, the four
+  // switches and the close button on one row, centred; explicit lines only.
+  .launcher-tools.ck--pause.ck--voice-view {
+    grid-template-areas: none;
+    grid-template-rows: 16px $ck-cell ($ck-cell - 16px - $ck-gap) auto;
+    .quick-panel-logo { grid-area: 1 / 1 / 4 / 2; }
     .quick-panel-section[aria-label='Avvisi vocali'] > .quick-panel-heading {
-      display: block; grid-area: 1 / 2 / 2 / -1; align-self: end; text-align: left;
+      display: block; grid-area: 1 / 2 / 2 / -1; align-self: center; margin: 0; text-align: left;
     }
-    .quick-panel-voice-button { display: flex; grid-row: 2; }
-    .ck-view-close { display: grid; place-items: center; grid-area: 2 / -2 / 3 / -1; width: $ck-cell; height: $ck-cell; }
+    [data-overlay-wheel-action='coach'] { grid-area: 2 / 2 / 3 / 3; }
+    [data-overlay-wheel-action='references'] { grid-area: 2 / 3 / 3 / 4; }
+    [data-overlay-wheel-action='pressure-audio'] { grid-area: 2 / 4 / 3 / 5; }
+    [data-overlay-wheel-action='target-voice'] { grid-area: 2 / 5 / 3 / 6; }
+    .quick-panel-voice-button { display: flex; }
+    .ck-view-close { display: grid; place-items: center; grid-area: 2 / 6 / 3 / 7; width: $ck-cell; height: $ck-cell; }
+    .ck-status { grid-area: 4 / 1 / 5 / -1; }
   }
 
   // Guida: one compact row with only what helps while driving.
   .launcher-tools.ck--drive {
-    display: flex; flex-wrap: wrap; align-items: flex-start; gap: 5px; width: max-content;
-    :is(.quick-panel-logo, .pressure-test__button, .fuel-open, .quick-reference, .ck-voice-alerts, .ck-view-close,
+    display: flex; flex-wrap: wrap; align-items: center; gap: 5px; width: max-content;
+    :is(.pressure-test__button, .fuel-open, .quick-reference, .ck-voice-alerts, .ck-view-close,
       .quick-panel-timer, .quick-panel-dev) { display: none; }
+    // The Racer Core mark stays while driving, smaller, first in the row.
+    .quick-panel-logo { order: 0; width: 40px; height: 20px; margin-right: 3px; }
     :is(.launcher-tool-button--pressure, [data-overlay-wheel-action='pitwall'], .quick-panel-voice-button, .quick-panel-notifications-button) {
       width: $ck-drive-cell; height: $ck-drive-cell; min-height: $ck-drive-cell;
     }
@@ -2997,7 +3012,9 @@ $ck-width: 56px + 5 * $ck-cell + 5 * $ck-gap;
     &.ck--no-track-references [data-overlay-wheel-action='references'],
     &.ck--no-target [data-overlay-wheel-action='target-voice'],
     &.ck--no-notifications .quick-panel-notifications-button { display: none; }
-    .ck-status { order: 9; flex-basis: 100%; width: 0; min-width: 100%; }
+    // Two lines at most while driving: the reason must be readable at a glance.
+    .ck-status { order: 9; flex-basis: 100%; width: 0; min-width: 100%; height: auto; align-items: flex-start; white-space: normal; }
+    .ck-status span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 14px; }
     .ck-status--empty { display: none; }
     &.ck--view {
       :is(.launcher-tool-button--pressure, [data-overlay-wheel-action='pitwall'], .quick-panel-voice-button,
