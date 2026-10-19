@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { assertFails, initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing'
-import { get, ref, set, update, goOffline, goOnline, type Database } from 'firebase/database'
+import { get, ref, set, update, goOffline, goOnline, serverTimestamp, type Database } from 'firebase/database'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPitwallRealtimeTransport } from '~/services/pitwall/pitwallRealtimeTransport'
 import { createPitwallRealtimeRoomService } from '~/services/pitwall/pitwallRealtimeRoomService'
@@ -269,6 +269,73 @@ describe('social rooms with real Firebase rules', () => {
     await Promise.all([X.preAuthorise('Y', 'always'), Y.preAuthorise('X', 'always')])
     await Promise.all([X.requestLink('Y', 'always'), Y.requestLink('X', 'always')])
     await vi.waitFor(() => { expect(xFriends).toEqual(['Y']); expect(yFriends).toEqual(['X']) })
+  })
+  describe('PIP-561 friend request wait', () => {
+    const make = async (uid: string) => {
+      const database = env.authenticatedContext(uid).database() as unknown as Database
+      const io = createPitwallRealtimeTransport(database)
+      await vi.waitFor(() => expect(io.online()).toBe(true))
+      const service = createPitwallRealtimeEngineerService({ engineerUid: uid, io, db: {} as Firestore })
+      stops.push(() => { service.dispose(); io.dispose(); goOffline(database) })
+      return { service, database }
+    }
+    const age = (path: string) => env.withSecurityRulesDisabled(async context => {
+      await update(ref(context.database() as unknown as Database, path), { closedAtMs: Date.now() - 24 * 60 * 60 * 1000 - 1000 })
+    })
+    const request = (driver: string, engineer: string) => ({ schemaVersion: 1, driverUid: driver, engineerUid: engineer, status: 'pending',
+      createdBy: engineer, createdAt: '2026-10-19', updatedAt: '2026-10-19' })
+
+    it('refuses a new request for 24 h after a decline, then allows it', async () => {
+      const { service: X } = await make('X'), { service: Y } = await make('Y')
+      expect((await X.preAuthorise('Y', 'always')).ok).toBe(true)
+      expect((await X.requestLink('Y', 'always')).ok).toBe(true)
+      expect((await Y.decideRequest('X', 'revoked')).ok).toBe(true)
+      const refused = await X.requestLink('Y', 'always')
+      expect(refused).toMatchObject({ ok: false, reason: expect.stringMatching(/^Potrai inviare di nuovo la richiesta tra (23 h 59 min|24 h)\.$/) })
+      expect(await Y.readFriendView('X')).toMatchObject({ mineStatus: 'revoked' })
+      // An old or modified client writing the node directly is refused by the Rules too.
+      await assertFails(set(ref(env.authenticatedContext('X').database() as unknown as Database, `pitwallV3/grants/Y/X`), request('Y', 'X')))
+      await age(`pitwallV3/grants/Y/X`)
+      expect((await X.requestLink('Y', 'always')).ok).toBe(true)
+      await vi.waitFor(async () => expect(await Y.readFriendView('X')).toMatchObject({ state: 'received', mineStatus: 'pending' }))
+    })
+
+    it('stops the request/withdraw cycle and refuses forged close stamps', async () => {
+      const { service: X } = await make('X')
+      const xDb = env.authenticatedContext('X').database() as unknown as Database
+      const node = ref(xDb, `pitwallV3/grants/Y/X`)
+      expect((await X.requestLink('Y', 'always')).ok).toBe(true)
+      // Withdrawing without a close stamp, with no wait, or with an old stamp is refused.
+      await assertFails(update(node, { status: 'revoked' }))
+      await assertFails(update(node, { status: 'revoked', closedAtMs: serverTimestamp(), cooldown: false }))
+      await assertFails(update(node, { status: 'revoked', closedAtMs: Date.now() - 2 * 24 * 60 * 60 * 1000, cooldown: true }))
+      expect((await X.withdraw('Y')).ok).toBe(true)
+      // A second withdraw keeps the original stamp; it cannot restart or clear it.
+      expect((await X.withdraw('Y')).ok).toBe(true)
+      await assertFails(update(node, { cooldown: false, closedAtMs: 0, status: 'revoked' }))
+      expect(await X.requestLink('Y', 'always')).toMatchObject({ ok: false, retryAtMs: expect.any(Number) })
+      // A revoked "once" link whose expiry passed is still subject to the wait.
+      await env.withSecurityRulesDisabled(async context => {
+        await update(ref(context.database() as unknown as Database, `pitwallV3/grants/Y/X`), { scope: 'once', expiresAtMs: Date.now() - 1000 })
+      })
+      await assertFails(set(node, request('Y', 'X')))
+    })
+
+    it('lets the person who declined undo it at once', async () => {
+      const { service: X } = await make('X'), { service: Y } = await make('Y')
+      expect((await X.preAuthorise('Y', 'always')).ok).toBe(true)
+      expect((await X.requestLink('Y', 'always')).ok).toBe(true)
+      // Decline as Control K does: revoke my node, then leave the link X granted me.
+      expect((await Y.decideRequest('X', 'revoked')).ok).toBe(true)
+      expect((await Y.withdraw('X')).ok).toBe(true)
+      expect(await X.requestLink('Y', 'always')).toMatchObject({ ok: false })
+      // Y changes their mind: no wait for Y, and X gets a live request to accept.
+      expect((await Y.preAuthorise('X', 'always')).ok).toBe(true)
+      expect((await Y.requestLink('X', 'always')).ok).toBe(true)
+      await vi.waitFor(async () => expect(await X.readFriendView('Y')).toMatchObject({ state: 'received', mineStatus: 'pending' }))
+      expect((await X.preAuthorise('Y', 'always')).ok).toBe(true)
+      await vi.waitFor(async () => expect(await Y.readFriendView('X')).toMatchObject({ state: 'friends' }))
+    })
   })
   it('renews a short disconnection but cannot revive an expired membership', async () => {
     const A = await participant('A')

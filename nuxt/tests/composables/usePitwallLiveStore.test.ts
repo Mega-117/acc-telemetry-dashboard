@@ -522,6 +522,16 @@ describe('i Pitwall aperti e gli avvisi', () => {
     expect(store.people.value.find(person => person.id === 'pilota')?.handle).toBe('@RICO117')
   })
 
+  it('PIP-561: solo una richiesta viva sul mio nodo suona; il permesso a un verso resta in elenco senza avviso', () => {
+    // Chi e' in attesa dopo un rifiuto puo' ancora accendere e spegnere il proprio permesso.
+    trust.outgoing.value = [outgoing('insistente', 'granted')]
+    trust.incoming.value = [incoming('insistente', 'revoked')]
+    expect(store.friends.value.find(friend => friend.personId === 'insistente')?.state).toBe('received')
+    expect(store.notices.value.filter(notice => notice.kind === 'request')).toEqual([])
+    trust.incoming.value = [incoming('insistente', 'pending')]
+    expect(store.notices.value.filter(notice => notice.kind === 'request')).toEqual([{ id: 'req:insistente', kind: 'request', personId: 'insistente' }])
+  })
+
   it('una richiesta in arrivo e un avviso; accettarla fa l amicizia, rifiutarla la scioglie', async () => {
     trust.incoming.value = [incoming('popo', 'pending')]
     expect(store.notices.value).toEqual([{ id: 'req:popo', kind: 'request', personId: 'popo' }])

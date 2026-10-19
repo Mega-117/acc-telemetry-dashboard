@@ -12,7 +12,7 @@ function setup() {
   const callbacks = new Map<string, Set<(value: unknown) => void>>()
   const connections = new Set<(online: boolean) => void>()
   const values = new Map<string, unknown>()
-  const io = { serverNow: () => Date.now(), online: () => online,
+  const io = { serverNow: () => Date.now(), online: () => online, serverTimestamp: () => ({ '.sv': 'timestamp' }),
     read: vi.fn(async (path: string) => values.get(path) ?? null), write: vi.fn(async () => {}),
     watch: vi.fn((path: string, cb: (value: unknown) => void) => {
       if (!callbacks.has(path)) callbacks.set(path, new Set())
@@ -105,6 +105,29 @@ describe('RTDB engineer relationships and event-only discovery', () => {
     h.emit('grants/me', {})
     expect(trusted).toHaveBeenLastCalledWith([])
     stop(); stopIncoming(); h.service.dispose()
+  })
+  it('PIP-561 stamps every close and reports the remaining wait instead of writing', async () => {
+    const h = setup(); const sv = { '.sv': 'timestamp' }
+    h.values.set('grants/driver/me', { ...grant(), status: 'pending' })
+    expect((await h.service.withdraw('driver')).ok).toBe(true)
+    expect(h.io.write).toHaveBeenLastCalledWith('grants/driver/me', expect.objectContaining({ status: 'revoked', closedAtMs: sv, cooldown: true }))
+    h.values.set('grants/driver/me', grant())
+    await h.service.withdraw('driver')
+    expect(h.io.write).toHaveBeenLastCalledWith('grants/driver/me', expect.objectContaining({ closedAtMs: sv, cooldown: false }))
+    h.values.set('grants/driver/me', { ...grant(), status: 'revoked', closedAtMs: 1, cooldown: true })
+    await h.service.withdraw('driver')
+    expect(h.io.write.mock.lastCall![1]).not.toHaveProperty('closedAtMs')
+    await h.service.decideRequest('peer', 'revoked')
+    expect(h.io.write).toHaveBeenLastCalledWith('grants/me/peer', expect.objectContaining({ status: 'revoked', closedAtMs: sv, cooldown: true }))
+    const writes = h.io.write.mock.calls.length
+    h.values.set('grants/driver/me', { ...grant(), status: 'revoked', closedAtMs: Date.now() - 20 * 60_000, cooldown: true })
+    expect(await h.service.requestLink('driver')).toMatchObject({ ok: false, reason: 'Potrai inviare di nuovo la richiesta tra 23 h 40 min.', retryAtMs: expect.any(Number) })
+    expect(h.io.write).toHaveBeenCalledTimes(writes)
+    // A denied write that raced the close still reports the wait, not a permission error.
+    h.values.set('grants/driver/me', { ...grant(), status: 'revoked', closedAtMs: Date.now() - 25 * 60 * 60_000, cooldown: true })
+    h.io.write.mockImplementationOnce(async () => { h.values.set('grants/driver/me', { ...grant(), status: 'revoked', closedAtMs: Date.now(), cooldown: true }); throw new Error('PERMISSION_DENIED') })
+    expect(await h.service.requestLink('driver')).toMatchObject({ ok: false, reason: 'Potrai inviare di nuovo la richiesta tra 24 h.' })
+    h.service.dispose()
   })
   it('requests and updates permissions only for explicit actions, returns errors without retry', async () => {
     const h = setup()

@@ -5,6 +5,7 @@ import { derivePitwallFriends, friendUidsFromGrants } from './pitwallFriends'
 import { createPitwallEngineerService, type PitwallOutgoingLink, type PitwallIncomingRequest } from './pitwallEngineerService'
 import { activeDriver, type RealtimeConnection } from './pitwallRealtimeProtocol'
 import { buildPitwallGrantRequest, buildPitwallPreAuthorisation, isPitwallGrantUsable, PITWALL_GRANT_ONCE_DURATION_MS,
+  pitwallRequestRetryAtMs, pitwallRequestWaitMessage,
   type PitwallGrant, type PitwallGrantScope, type PitwallSession, type PitwallOrderDocument } from './pitwallLink'
 import type { PitwallRealtimeTransport } from './pitwallRealtimeTransport'
 
@@ -33,6 +34,8 @@ function buildService(db: Firestore, uid: string, io: PitwallRealtimeTransport) 
       const existing = await io.read<PitwallGrant>(path(driverUid, uid))
       if (valid(existing)) return { ok: true as const, alreadyGranted: true }
       if (existing?.status === 'pending') return { ok: true as const, alreadyGranted: false }
+      const wait = cooldownFailure(existing)
+      if (wait) return wait
       const request = buildPitwallGrantRequest(driverUid, uid, stamp(), note, requestedScope)
       if (!request) throw new Error('Pilota non valido.')
       await io.write('', { [path(driverUid, uid)]: request.data, [`outgoing/${uid}/${driverUid}`]: true })
@@ -43,17 +46,29 @@ function buildService(db: Firestore, uid: string, io: PitwallRealtimeTransport) 
       const current = await io.read<PitwallGrant>(path(driverUid, uid)).catch(() => null)
       if (valid(current)) return { ok: true as const, alreadyGranted: true }
       if (current?.status === 'pending') return { ok: true as const, alreadyGranted: false }
-      return failure(error)
+      return cooldownFailure(current) ?? failure(error)
     }
   }
+  /** PIP-561: the Rules refuse a request during the wait; say how long instead of a permission error. */
+  function cooldownFailure(grant: PitwallGrant | null) {
+    const retryAtMs = pitwallRequestRetryAtMs(grant, io.serverNow())
+    return retryAtMs == null ? null : { ok: false as const, reason: pitwallRequestWaitMessage(retryAtMs, io.serverNow()), retryAtMs }
+  }
   async function withdraw(driverUid: string) {
-    try { await io.write(path(driverUid, uid), { status: 'revoked', updatedAt: stamp() }); return { ok: true as const } }
-    catch (error) { return failure(error) }
+    try {
+      // The Rules require the close time; withdrawing an unanswered request starts the wait,
+      // leaving a granted link (unfriend) does not. An already closed node keeps its stamp.
+      const current = await io.read<PitwallGrant>(path(driverUid, uid))
+      await io.write(path(driverUid, uid), { status: 'revoked', updatedAt: stamp(),
+        ...(current?.status === 'revoked' ? {} : { closedAtMs: io.serverTimestamp(), cooldown: current?.status !== 'granted' }) })
+      return { ok: true as const }
+    } catch (error) { return failure(error) }
   }
   async function decideRequest(engineer: string, decision: 'granted' | 'revoked', scope: PitwallGrantScope = 'always', expiresAtMs: number | null = null) {
     try {
+      // A decline or removal by the driver starts the requester's wait (PIP-561).
       await io.write(path(uid, engineer), { status: decision, updatedAt: stamp(),
-        ...(decision === 'granted' ? { scope, expiresAtMs: scope === 'once' ? expiry(expiresAtMs) : null } : {}) })
+        ...(decision === 'granted' ? { scope, expiresAtMs: scope === 'once' ? expiry(expiresAtMs) : null } : { closedAtMs: io.serverTimestamp(), cooldown: true }) })
       return { ok: true as const }
     } catch (error) { return failure(error) }
   }

@@ -367,7 +367,9 @@ describe('Pitwall RTDB rules and integrated services', () => {
     await assertSucceeds(update(ref(engineer, 'pitwallV3'), { 'grants/driver/engineer': grant, 'outgoing/engineer/driver': true }))
     await assertFails(update(ref(engineer, 'pitwallV3/grants/driver/engineer'), { status: 'granted', scope: 'always' }))
     await assertSucceeds(update(ref(driver, 'pitwallV3/grants/driver/engineer'), { status: 'granted', scope: 'always' }))
-    await assertSucceeds(update(ref(engineer, 'pitwallV3/grants/driver/engineer'), { status: 'revoked' }))
+    // PIP-561: leaving a granted link needs the close stamp but starts no wait.
+    await assertFails(update(ref(engineer, 'pitwallV3/grants/driver/engineer'), { status: 'revoked' }))
+    await assertSucceeds(update(ref(engineer, 'pitwallV3/grants/driver/engineer'), { status: 'revoked', closedAtMs: serverTimestamp(), cooldown: false }))
     await assertSucceeds(set(ref(engineer, 'pitwallV3/grants/driver/engineer'), grant))
   })
   it('retires the disconnected executor and never claims its order after reconnect', async () => {

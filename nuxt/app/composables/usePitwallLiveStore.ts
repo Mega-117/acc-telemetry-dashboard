@@ -261,7 +261,9 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
   const openRaceIds = computed(() => new Set(races.value.map(race => race.id)))
   const friendIds = computed(() => new Set(friendViews.value.filter(view => view.state === 'friends').map(view => view.personId)))
   const notices = computed<PitwallConceptNotice[]>(() => [
-    ...friendViews.value.filter(view => view.state === 'received').map(view => ({
+    // PIP-561: only a live request on my node notifies. Its own one-way grant is
+    // the sender's to toggle freely; it stays in the list but never rings the bell.
+    ...friendViews.value.filter(view => view.state === 'received' && view.mineStatus === 'pending').map(view => ({
       id: `${NOTICE_PREFIX.request}${view.personId}`, kind: 'request' as const, personId: view.personId,
     })),
     ...link.rooms.value

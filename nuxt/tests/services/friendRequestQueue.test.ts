@@ -95,6 +95,22 @@ describe('Control K friendship queue', () => {
     await s.decide(false); expect(s.state().requests[0]!.personId).toBe('B')
     expect(s.state().error).toBeNull()
   })
+  it('PIP-561 keeps one stable head card under a burst of 200 senders', async () => {
+    const s = setup()
+    s.sync(['first'])
+    const head = s.state().requests[0]!.id
+    const ids = ['first', ...Array.from({ length: 199 }, (_, index) => `sender-${index}`)]
+    for (let size = 2; size <= ids.length; size += 20) s.sync(ids.slice(0, size))
+    s.sync(ids)
+    expect(s.state().requests).toHaveLength(200)
+    expect(s.state().requests[0]!.id).toBe(head)
+    expect(new Set(s.state().requests.map(row => row.personId)).size).toBe(200)
+    await s.decide(false)
+    expect(s.state().requests[0]!.personId).toBe('sender-0')
+    // The declined sender reappearing (only possible after the 24 h wait) does not jump the queue.
+    s.sync(['first', ...ids.slice(1)])
+    expect(s.state().requests[0]!.personId).toBe('sender-0')
+  })
   it('does not lose requests on thrown errors or apply late completion to another account', async () => {
     const s = setup(); s.sync(['A']); s.respond.mockRejectedValueOnce(new Error('offline')); await s.decide()
     expect(s.state().requests).toHaveLength(1); expect(s.state().busy).toBe(false)

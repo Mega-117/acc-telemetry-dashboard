@@ -10,6 +10,9 @@ import {
   buildPitwallPreAuthorisation,
   describePitwallGrantScope,
   describePitwallLinkError,
+  PITWALL_REQUEST_COOLDOWN_MS,
+  pitwallRequestRetryAtMs,
+  pitwallRequestWaitMessage,
   describePitwallOrderStatus,
   isPitwallGrantUsable,
   isPitwallOrderSettled,
@@ -332,5 +335,22 @@ describe('set montato distinto dall indice MFD', () => {
   })
   it.each([null, undefined, 0, 51, 1.5, '2', NaN])('non inventa montato da %s', fittedTyreSet => {
     expect(boundPitwallStrategy({ tyreSet: 0, fittedTyreSet }, NOW_ISO)).not.toHaveProperty('fittedTyreSet')
+  })
+})
+
+describe('PIP-561 friend request wait', () => {
+  const now = 1_000_000_000
+  it('waits only after a closed request that carries the wait', () => {
+    expect(pitwallRequestRetryAtMs(null, now)).toBeNull()
+    expect(pitwallRequestRetryAtMs({ status: 'pending', closedAtMs: now, cooldown: true }, now)).toBeNull()
+    expect(pitwallRequestRetryAtMs({ status: 'revoked', closedAtMs: now, cooldown: false }, now)).toBeNull()
+    expect(pitwallRequestRetryAtMs({ status: 'revoked', closedAtMs: null, cooldown: true }, now)).toBeNull()
+    expect(pitwallRequestRetryAtMs({ status: 'revoked', closedAtMs: now, cooldown: true }, now)).toBe(now + PITWALL_REQUEST_COOLDOWN_MS)
+    expect(pitwallRequestRetryAtMs({ status: 'revoked', closedAtMs: now - PITWALL_REQUEST_COOLDOWN_MS, cooldown: true }, now)).toBeNull()
+  })
+  it('says the remaining wait in hours and minutes', () => {
+    expect(pitwallRequestWaitMessage(now + PITWALL_REQUEST_COOLDOWN_MS, now)).toBe('Potrai inviare di nuovo la richiesta tra 24 h.')
+    expect(pitwallRequestWaitMessage(now + (23 * 60 + 40) * 60_000, now)).toBe('Potrai inviare di nuovo la richiesta tra 23 h 40 min.')
+    expect(pitwallRequestWaitMessage(now + 5_000, now)).toBe('Potrai inviare di nuovo la richiesta tra 1 min.')
   })
 })

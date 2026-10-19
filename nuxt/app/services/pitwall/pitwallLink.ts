@@ -53,6 +53,29 @@ export interface PitwallGrant {
   expiresAtMs?: number | null
   /** Cio' che l'ingegnere ha chiesto: propone, non decide. */
   requestedScope?: PitwallGrantScope | null
+  /** Tempo server della chiusura (ritiro o rifiuto); scritto con la revoca. */
+  closedAtMs?: number | null
+  /** La chiusura blocca una nuova richiesta della stessa coppia per 24 h (PIP-561). */
+  cooldown?: boolean | null
+}
+
+/** PIP-561: attesa fra un ritiro/rifiuto e una nuova richiesta. Le Rules usano lo stesso valore. */
+export const PITWALL_REQUEST_COOLDOWN_MS = 24 * 60 * 60 * 1000
+
+/** Quando la stessa coppia potra' chiedere di nuovo, o `null` se puo' gia' farlo. */
+export function pitwallRequestRetryAtMs(grant: Pick<PitwallGrant, 'status' | 'closedAtMs' | 'cooldown'> | null, nowMs: number): number | null {
+  if (grant?.status !== 'revoked' || grant.cooldown !== true || typeof grant.closedAtMs !== 'number') return null
+  const retryAt = grant.closedAtMs + PITWALL_REQUEST_COOLDOWN_MS
+  return retryAt > nowMs ? retryAt : null
+}
+
+/** "Potrai inviare di nuovo la richiesta tra 23 h 40 min." */
+export function pitwallRequestWaitMessage(retryAtMs: number, nowMs: number): string {
+  const minutes = Math.max(1, Math.ceil((retryAtMs - nowMs) / 60_000))
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  const wait = hours ? (rest ? `${hours} h ${rest} min` : `${hours} h`) : `${rest} min`
+  return `Potrai inviare di nuovo la richiesta tra ${wait}.`
 }
 
 /** Un membro dell'equipaggio della vettura, dalla EntryList reale. */
