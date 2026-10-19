@@ -36,3 +36,33 @@ export function resolveControlKContext(input: ControlKContextInput, previous: Co
   if (cockpit === null) return previous ?? 'pause'
   return cockpit ? 'drive' : 'pause'
 }
+
+/**
+ * Certain facts switch at once: no live data or the setup screen (menu),
+ * moving or engine running (cockpit). Force feedback alone is weak: standing
+ * still with the engine off it wavers around zero (seen on 19/10), so it must
+ * agree for a while before the layout changes.
+ */
+export function isCertainContext(input: ControlKContextInput): boolean {
+  return !input.isLive || input.isSetupMenuVisible === true || input.isEngineRunning
+    || (input.speedKmh !== null && Number.isFinite(input.speedKmh) && Math.abs(input.speedKmh) > CONTROL_K_MOVING_KMH)
+}
+
+export const CONTROL_K_SETTLE_MS = 1500
+
+/** Stateful wrapper: weak evidence must stay the same for CONTROL_K_SETTLE_MS. */
+export function createControlKContextTracker(initial: ControlKContext = 'pause', settleMs = CONTROL_K_SETTLE_MS) {
+  let current = initial
+  let pending: { context: ControlKContext; since: number } | null = null
+  return {
+    get current() { return current },
+    update(input: ControlKContextInput, now: number): ControlKContext {
+      const next = resolveControlKContext(input, current)
+      if (next === current) { pending = null; return current }
+      if (isCertainContext(input)) { current = next; pending = null; return current }
+      if (!pending || pending.context !== next) pending = { context: next, since: now }
+      if (now - pending.since >= settleMs) { current = next; pending = null }
+      return current
+    },
+  }
+}

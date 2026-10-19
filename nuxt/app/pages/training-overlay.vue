@@ -64,7 +64,7 @@ import {
   type QaBotSnapshot,
 } from '~/services/overlay/qaBotPresentation'
 import { pressureActionPresentation, pressureOriginLine, pressureOutcomeMessage, pressureProgressBadge } from '~/services/overlay/pressureActionPresentation'
-import { resolveControlKContext, type ControlKContext } from '~/services/overlay/controlKContext'
+import { createControlKContextTracker, type ControlKContext } from '~/services/overlay/controlKContext'
 import { notificationErrorFromElement as readNotificationError, pickControlKStatus,
   type ControlKNotificationError, type ControlKStatusMessage } from '~/services/overlay/controlKStatus'
 import { useTrackVoiceReferenceAvailability } from '~/composables/useTrackVoiceReferenceAvailability'
@@ -490,15 +490,21 @@ const targetVoiceOn = computed(() => voiceOnForSession(targetLapVoiceEnabled.val
 // ─── PIP-556: ACC single layout ─────────────────────────────────────────────
 // Guida (compact row) while the driver is in the cockpit, even stopped in the
 // box; Pausa (full grid) in the menus: ESC pause, setup screen, no live data.
+// Weak evidence (force feedback while standing still) must settle for 1,5 s: no flicker.
+const controlKContextTracker = createControlKContextTracker('pause')
 const controlKContext = ref<ControlKContext>('pause')
-watch(() => {
+function updateControlKContext() {
   const fast = fastState.value
-  return resolveControlKContext({
+  controlKContext.value = controlKContextTracker.update({
     isLive: fast.isFresh && fast.isLive, speedKmh: fast.speedKmh, isSetupMenuVisible: fast.isSetupMenuVisible,
     isEngineRunning: fast.isEngineRunning, finalFf: fast.finalFf,
     hudDriving: fast.commonLive ? commonBoolean(fast.commonLive, 'hud_driving') : null,
-  }, controlKContext.value)
-}, (next) => { controlKContext.value = next }, { immediate: true })
+  }, Date.now())
+}
+watch(fastState, updateControlKContext, { immediate: true })
+// A pending change also settles when the source is quiet between frames.
+const controlKContextSettle = usePresentationInterval(updateControlKContext, 500)
+onMounted(() => controlKContextSettle.start())
 const effectiveControlKContext = computed<ControlKContext>(() => isFullQuickPanelPreview.value ? 'pause' : controlKContext.value)
 watch(effectiveControlKContext, (next) => { if (next === 'drive') closeVoiceView() })
 const pressureTestStatus = ref<ControlKStatusMessage | null>(null)
@@ -508,7 +514,14 @@ function onPressureTestStatus(message: ControlKStatusMessage | null) {
   pressureTestStatus.value = message?.tone === 'progress' ? message : null
 }
 function onPressureTestOutcome(message: ControlKStatusMessage | null) {
-  if (message && message.tone !== 'progress') showVoicePointNotice(message.text, message.tone === 'error' ? 'error' : 'ok')
+  if (!message || message.tone === 'progress') return
+  showVoicePointNotice(message.text, message.tone === 'error' ? 'error' : 'ok')
+  // The driver just asked for it: show the result card at once (the only
+  // automatic opening of Notifiche), unless an editor is open.
+  if (usesAccLayout.value && !isTargetSetupOpen.value && !isSectorReferenceSetupOpen.value && !isFuelSetupOpen.value && !isQuickTimerOpen.value) {
+    // After the teleported card is rendered and counted.
+    setTimeout(() => { if (notificationCount.value > 0 && !isNotificationsOpen.value) openNotifications() }, 200)
+  }
 }
 // One status line of fixed height: error > in progress > outcome > hint.
 // While driving only real messages are shown, never the button hints.

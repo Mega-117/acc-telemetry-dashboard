@@ -197,7 +197,9 @@ describe('ACC Control K single layout (PIP-556)', () => {
     expect(source).toContain('data-overlay-wheel-action="voice-close" @click="closeVoiceView"')
   })
   it('the context comes from the shared resolver and the status from one priority list', () => {
-    expect(source).toContain('return resolveControlKContext({')
+    // Through the settling tracker: weak force-feedback evidence cannot flicker the layout.
+    expect(source).toContain("const controlKContextTracker = createControlKContextTracker('pause')")
+    expect(source).toContain('controlKContext.value = controlKContextTracker.update({')
     expect(source).toContain('const controlKStatus = computed<ControlKStatusMessage | null>(() => pickControlKStatus([')
     expect(source).toContain(':status-line="usesAccLayout" @status="onPressureTestStatus" @outcome="onPressureTestOutcome"')
     // The applied or blocked correction leaves Notifiche.
