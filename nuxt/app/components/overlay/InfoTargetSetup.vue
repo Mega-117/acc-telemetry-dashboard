@@ -4,9 +4,12 @@ import { formatInfoLapTime } from '~/utils/infoPresentation'
 import {
   adjustInfoTargetField,
   adjustInfoTargetTolerance,
+  normalizeInfoTargetTime,
   splitInfoTargetTime,
   type InfoTargetTimeUnit,
 } from '~/utils/infoTargetPicker'
+import { stepNumberField, type NumberFieldLimits } from '~/utils/controlKNumberField'
+import ControlKNumberField from '~/components/overlay/ControlKNumberField.vue'
 
 const props = withDefaults(defineProps<{
   targetTimeMs: number
@@ -60,8 +63,24 @@ function useLap(valueMs: number) {
 function toggleEditing(id: PickerControl['id']) {
   editingControl.value = editingControl.value === id ? null : id
 }
-// PIP-556: OK on MIN, SEC or DEC edits only that field; Up/Down change it
-// (holding repeats), OK or Back leave it. Fields never carry into each other.
+
+// PIP-556: Ctrl+K uses the shared number field (wheel, mouse scroll, typed digits).
+// MIN, SEC, DEC and the tolerance are independent: they never carry into each other.
+type QuickField = { id: PickerControl['id'], label: string, ariaLabel: string, value: number } & NumberFieldLimits
+  & { prefix?: string, suffix?: string, format?: (value: number) => string }
+const quickFields = computed<QuickField[]>(() => [
+  { id: 'minutes', label: 'MIN', ariaLabel: 'Minuti obiettivo', value: timeParts.value.minutes, min: 0, max: 9, digits: 1, wrap: false },
+  { id: 'seconds', label: 'SEC', ariaLabel: 'Secondi obiettivo', value: timeParts.value.seconds, min: 0, max: 59, digits: 2, wrap: true },
+  { id: 'tenths', label: 'DEC', ariaLabel: 'Decimi obiettivo', value: timeParts.value.tenths, min: 0, max: 9, digits: 1, wrap: true, prefix: ',' },
+  { id: 'tolerance', label: 'TOLLERANZA', ariaLabel: 'Tolleranza massima', value: Math.round(props.toleranceMs / 100), min: 1, max: 10, digits: 2, wrap: false,
+    suffix: ' s', format: tenths => (tenths / 10).toFixed(1).replace('.', ',') },
+])
+function setQuickField(id: PickerControl['id'], value: number) {
+  if (id === 'tolerance') { emit('select-tolerance', value * 100); return }
+  const parts = { ...timeParts.value, [id]: value }
+  emit('set-target-time', normalizeInfoTargetTime(parts.minutes * 60_000 + parts.seconds * 1_000 + parts.tenths * 100))
+}
+// OK on a field edits it; Up/Down change it (holding repeats), OK or Back leave it.
 function handleWheelCommand(command: string | undefined): boolean {
   if (!editingControl.value || props.appearance !== 'quick-panel') return false
   if (command === 'activate-action' || command === 'primary' || command === 'back') {
@@ -69,8 +88,8 @@ function handleWheelCommand(command: string | undefined): boolean {
     return true
   }
   if (command !== 'next-action' && command !== 'previous-action') return false
-  const control = [...timeControls.value, toleranceControl.value].find(value => value.id === editingControl.value)
-  if (control) adjustControl(control, command === 'next-action' ? 1 : -1)
+  const field = quickFields.value.find(value => value.id === editingControl.value)
+  if (field) setQuickField(field.id, stepNumberField(field.value, command === 'next-action' ? 1 : -1, field))
   return true
 }
 defineExpose({ handleWheelCommand })
@@ -104,10 +123,11 @@ function onWheel(control: PickerControl, event: WheelEvent) {
 
     <div v-if="appearance === 'quick-panel'" class="target-quick" role="group" aria-label="Tempo obiettivo">
       <div class="target-quick__fields">
-        <button v-for="control in timeControls" :key="control.id" type="button" class="target-quick__field"
-          :data-overlay-wheel-action="`target-${control.id}`" :aria-label="`${control.ariaLabel}: ${control.value}`"
-          :aria-pressed="editingControl === control.id" :class="{ 'is-editing': editingControl === control.id }"
-          @click="toggleEditing(control.id)"><small>{{ control.label }}</small><strong>{{ control.value }}</strong></button>
+        <ControlKNumberField v-for="field in quickFields" :key="field.id" :value="field.value" :label="field.label"
+          :action="`target-${field.id}`" :name="field.ariaLabel" :min="field.min" :max="field.max" :digits="field.digits"
+          :wrap="field.wrap" :prefix="field.prefix" :suffix="field.suffix" :format="field.format"
+          :editing="editingControl === field.id" :class="{ 'target-quick__tolerance': field.id === 'tolerance' }"
+          @toggle="toggleEditing(field.id)" @update:value="setQuickField(field.id, $event)" />
       </div>
       <div class="target-quick__sources">
         <button v-if="usableLap(bestLapMs)" type="button" data-overlay-wheel-action="target-use-best" @click="useLap(bestLapMs!)">Usa best {{ formatInfoLapTime(Math.round(bestLapMs! / 100) * 100) }}</button>
@@ -154,10 +174,10 @@ function onWheel(control: PickerControl, event: WheelEvent) {
       </article>
     </div>
 
-    <section class="target-tolerance" aria-labelledby="target-tolerance-title">
+    <section v-if="appearance !== 'quick-panel'" class="target-tolerance" aria-labelledby="target-tolerance-title">
       <div class="target-tolerance__copy">
         <strong id="target-tolerance-title" title="Margine concesso oltre il target. I giri più veloci restano validi.">Tolleranza</strong>
-        <p v-if="appearance !== 'quick-panel'">Margine concesso oltre il target. I giri più veloci restano validi.</p>
+        <p>Margine concesso oltre il target. I giri più veloci restano validi.</p>
       </div>
       <div
         class="target-tolerance__control"
@@ -169,17 +189,16 @@ function onWheel(control: PickerControl, event: WheelEvent) {
         <button
           type="button"
           aria-label="Diminuisci Tolleranza massima"
-          :data-overlay-wheel-action="appearance === 'quick-panel' ? undefined : 'target-tolerance-decrease'"
+          data-overlay-wheel-action="target-tolerance-decrease"
           @click="adjustControl(toleranceControl, -1)"
         >
           −
         </button>
-        <button v-if="appearance === 'quick-panel'" type="button" class="target-field-value" data-overlay-wheel-action="target-tolerance" aria-label="Tolleranza massima" :aria-pressed="editingControl === 'tolerance'" :class="{ 'is-editing': editingControl === 'tolerance' }" @click="toggleEditing('tolerance')">{{ toleranceControl.value }}</button>
-        <strong v-else>{{ toleranceControl.value }}</strong>
+        <strong>{{ toleranceControl.value }}</strong>
         <button
           type="button"
           aria-label="Aumenta Tolleranza massima"
-          :data-overlay-wheel-action="appearance === 'quick-panel' ? undefined : 'target-tolerance-increase'"
+          data-overlay-wheel-action="target-tolerance-increase"
           @click="adjustControl(toleranceControl, 1)"
         >
           +
@@ -203,8 +222,8 @@ function onWheel(control: PickerControl, event: WheelEvent) {
     </button>
 
     <p v-if="appearance === 'quick-panel'" class="target-edit-hint" role="status">{{ editingControl
-      ? 'Su/Giù cambia solo questo campo (tieni premuto per andare veloce) · OK fatto'
-      : 'OK su minuti, secondi o decimi per cambiarli · Indietro per uscire' }}</p>
+      ? 'Su/Giù o rotella cambiano solo questo campo · OK fatto'
+      : 'OK o clic su un campo, poi Su/Giù, rotella o cifre' }}</p>
     <div class="target-actions">
       <button type="button" class="target-confirm" data-overlay-wheel-action="target-confirm" @click="emit('confirm')">Conferma</button>
       <button type="button" class="target-cancel" data-overlay-wheel-action="target-cancel" @click="emit('cancel')">Annulla</button>
@@ -216,10 +235,7 @@ function onWheel(control: PickerControl, event: WheelEvent) {
 .target-field-value { border: 0; background: transparent; color: inherit; font: inherit; font-size: 22px; font-weight: 600; cursor: pointer; }
 /* PIP-556: MIN | SEC | DEC side by side, best/last on the right; fits the Ctrl+K frame. */
 .target-quick { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: stretch; }
-.target-quick__fields { display: grid; grid-template-columns: repeat(3, 58px); gap: 4px; }
-.target-quick__field { display: grid; align-content: center; justify-items: center; gap: 2px; height: 56px; padding: 0; border: 1px solid #ffffff30; border-radius: 0; background: #ffffff05; color: inherit; font: inherit; cursor: pointer; }
-.target-quick__field small { color: #aaa; font-size: 9px; font-weight: 600; letter-spacing: .08em; }
-.target-quick__field strong { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.target-quick__fields { display: grid; grid-template-columns: 48px 56px 48px 84px; gap: 4px; }
 .target-quick__sources { display: grid; grid-template-rows: 1fr 1fr; gap: 4px; }
 .target-quick__sources button { min-height: 26px; border: 1px solid #ffffff30; border-radius: 0; background: #ffffff05; color: inherit; font: inherit; font-size: 11px; cursor: pointer; }
 .target-tolerance__control .target-field-value { font-size: 14px; }
@@ -406,13 +422,13 @@ header p { margin: 4px 0 0; color: rgba(255,255,255,.62); font-size: 13px; }
   padding: 0; gap: 8px; border: 0; border-radius: 0;
   background: #0b0b0b; box-shadow: none;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas: "head head" "quick quick" "tolerance actions" "hint hint";
+  grid-template-areas: "head head" "quick quick" "hint actions";
 }
 .info-target-setup--quick > header { grid-area: head; }
 .info-target-setup--quick > .target-quick { grid-area: quick; }
 .info-target-setup--quick > .target-tolerance { grid-area: tolerance; }
 .info-target-setup--quick > .target-actions { grid-area: actions; }
-.info-target-setup--quick > .target-edit-hint { grid-area: hint; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.info-target-setup--quick > .target-edit-hint { grid-area: hint; align-self: center; min-width: 0; font-size: 10px; line-height: 1.3; }
 .info-target-setup--quick header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 6px; border-bottom: 1px solid #ffffff25; }
 .info-target-setup--quick header strong { margin: 0; font-size: 16px; font-weight: 600; }
 .info-target-setup--quick header output { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }

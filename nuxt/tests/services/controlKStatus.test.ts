@@ -1,6 +1,32 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { notificationErrorFromElement, pickControlKStatus, readableReason } from '~/services/overlay/controlKStatus'
+import { notificationErrorFromElement, notificationItemFromElement, pickControlKStatus, readableReason } from '~/services/overlay/controlKStatus'
+
+const card = (className: string, html: string) => {
+  const element = document.createElement('div')
+  element.className = className
+  element.innerHTML = html
+  return element
+}
+
+describe('notification kinds (PIP-556)', () => {
+  it('a pending decision is an action, never cleared nor announced', () => {
+    expect(notificationItemFromElement(card('pressure-plan', '<strong>Obiettivo 26,5 psi</strong>'))).toMatchObject({ kind: 'action', announce: false })
+    expect(notificationItemFromElement(card('control-k-request', '<strong>Pilota QA</strong>'))).toMatchObject({ kind: 'action', announce: false })
+  })
+
+  it('an error is announced in the status line, except friend requests', () => {
+    expect(notificationItemFromElement(card('fuel-status fuel-status--error', '<p>Carburante non disponibile.</p>'))).toMatchObject({ kind: 'error', announce: true, label: 'Benzina: Carburante non disponibile.' })
+    expect(notificationItemFromElement(card('control-k-request', '<p class="control-k-request__error">Rete assente.</p>'))).toMatchObject({ kind: 'error', announce: false })
+  })
+
+  it('an outcome is information read once; new values are new information', () => {
+    const first = notificationItemFromElement(card('pressure-test__result', '<strong>Stima</strong><dd>25,9</dd>'))
+    const second = notificationItemFromElement(card('pressure-test__result', '<strong>Stima</strong><dd>26,1</dd>'))
+    expect(first.kind).toBe('info')
+    expect(first.key).not.toBe(second.key)
+  })
+})
 
 describe('Control K status line (PIP-556)', () => {
   it('shows one message: error > progress > ok > hint', () => {

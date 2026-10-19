@@ -2887,7 +2887,23 @@ $ck-width: 56px + 5 * $ck-cell + 5 * $ck-gap;
       padding: 6px 2px; font-size: 10px; font-weight: 500; line-height: 1.1; letter-spacing: 0; text-transform: none;
       span { font: inherit; letter-spacing: 0; text-transform: none; }
     }
+    // Same anatomy for every command: 20 px icon at the same height, label in a
+    // two-line box below it, so neighbouring texts line up (Correggi used a 16 px
+    // icon and centred differently). Voice switches keep their ON/OFF line.
+    :is(.pressure-test__button, .launcher-tool-button--pressure, .fuel-open, [data-overlay-wheel-action='pitwall'],
+      .quick-reference > .launcher-tool-button, .ck-voice-alerts, .quick-panel-timer, .quick-panel-notifications-button) {
+      display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 4px;
+      padding: 10px 2px 0; font-size: 10px; font-weight: 500; line-height: 11px; text-align: center;
+      > svg:not(.quick-reference-check) { width: 20px; height: 20px; flex: none; }
+      > span { display: flex; align-items: center; justify-content: center; min-height: 22px; white-space: normal; }
+    }
+    // Stima pressioni: square corners and the same surface as its neighbours.
+    .pressure-test__button { border: 1px solid #ffffff30; border-radius: 0; background: #ffffff08; color: #eee; }
     .quick-panel-notifications-button:disabled { opacity: .35; }
+    // A new error: one short pulse of the bell, never a continuous blink.
+    .ck-bell-pulse { animation: ck-bell-pulse 700ms ease-out 1; color: #fecaca; }
+    @keyframes ck-bell-pulse { 0% { transform: scale(1); } 30% { transform: scale(1.35) rotate(-12deg); } 60% { transform: scale(1.1) rotate(8deg); } 100% { transform: none; } }
+    @media (prefers-reduced-motion: reduce) { .ck-bell-pulse { animation: none; } }
     // Unavailable but pressable: dimmed, a press explains why in the status line.
     [data-unavailable] { opacity: .45; }
     .quick-action-badge--error { border-color: #ff6b6b88; color: #fecaca; }
@@ -2938,6 +2954,13 @@ $ck-width: 56px + 5 * $ck-cell + 5 * $ck-gap;
     }
     .quick-panel-notifications__body > div { flex: 1 1 150px; }
     .quick-panel-notifications__body > .quick-panel-notification-estimate:not(:has(p, dl)) { display: none; }
+    // Cleared cards are hidden in place; a container left without visible cards takes no room.
+    .quick-panel-notifications__body [hidden] { display: none !important; }
+    .quick-panel-notifications__body > div:not(:has(:is(.fuel-status, .pressure-plan, .control-k-request, .quick-panel-pressure-status,
+      .pressure-test__result, .pressure-test__error):not([hidden]))) { display: none; }
+    .quick-panel-notifications__header { gap: 6px; }
+    .quick-panel-notifications__header .quick-panel-heading { margin-right: auto; }
+    .quick-panel-notifications__clear { min-height: 30px; height: 30px; padding: 0 10px; font-size: 11px; }
     // The estimate card reads like the pressure plan: title, four values, one line.
     .pressure-test__result { padding: 6px 8px; border-radius: 0; font-size: 10px; }
     .pressure-test__result > strong { font-size: 11px; }
@@ -2955,7 +2978,10 @@ $ck-width: 56px + 5 * $ck-cell + 5 * $ck-gap;
     .overlay-menu-back { min-height: 26px; margin: 0; border-radius: 0; font-size: 11px; }
     .fuel-body { grid-template-columns: auto minmax(0, 1fr); gap: 6px; padding: 0; border: 0; background: transparent; }
     .fuel-body > strong { grid-column: 1 / -1; font-size: 13px; }
-    .fuel-duration { grid-column: 1; gap: 4px; }
+    .fuel-duration, .fuel-minutes-field { grid-column: 1; gap: 4px; }
+    .fuel-minutes-field { width: 84px; }
+    .fuel-presets button { border-color: #ffffff30; background: #ffffff08; }
+    .fuel-presets button[aria-pressed=true] { border-color: #ffffff90; color: #fff; background: #ffffff14; box-shadow: inset 0 -2px #ff0024; }
     .fuel-presets { grid-column: 2; }
     .fuel-apply, .fuel-body > .fuel-status { grid-column: 1 / -1; }
     .fuel-apply { min-height: 30px; border: 1px solid #ff002480; color: #fff; background: #ff00241a; }
@@ -2993,7 +3019,8 @@ $ck-width: 56px + 5 * $ck-cell + 5 * $ck-gap;
   }
 
   // Guida: one compact row with only what helps while driving.
-  .launcher-tools.ck--drive {
+  // `.ck.ck--drive`: must outweigh the shared button anatomy, which sets display.
+  .launcher-tools.ck.ck--drive {
     display: flex; flex-wrap: wrap; align-items: center; gap: 5px; width: max-content;
     :is(.pressure-test__button, .fuel-open, .quick-reference, .ck-voice-alerts, .ck-view-close,
       .quick-panel-timer, .quick-panel-dev) { display: none; }
@@ -3002,6 +3029,7 @@ $ck-width: 56px + 5 * $ck-cell + 5 * $ck-gap;
     :is(.launcher-tool-button--pressure, [data-overlay-wheel-action='pitwall'], .quick-panel-voice-button, .quick-panel-notifications-button) {
       width: $ck-drive-cell; height: $ck-drive-cell; min-height: $ck-drive-cell;
     }
+    :is(.launcher-tool-button--pressure, [data-overlay-wheel-action='pitwall'], .quick-panel-notifications-button) { padding-top: 7px; }
     [data-overlay-wheel-action='pitwall'] { order: 1; }
     .launcher-tool-button--pressure { order: 2; }
     [data-overlay-wheel-action='coach'] { order: 3; }

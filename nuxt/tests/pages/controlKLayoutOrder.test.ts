@@ -113,7 +113,7 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     // PIP-532: the notifications view is closed first, then the timer.
     // PIP-556: then the voice alerts view.
     expect(source).toMatch(/function runBackAction\(\) \{\s*if \(isNotificationsOpen\.value\) \{ closeNotifications\(\); return \}\s*if \(isVoiceViewOpen\.value\) \{ closeVoiceView\(\); return \}\s*if \(isQuickTimerOpen\.value\) \{ leaveQuickTimer\(\); return \}/)
-    expect(source).toContain("function openFuelSetup() { isFuelSetupOpen.value = true; void nextTick(() => actionSelection.select('fuel-plus')) }")
+    expect(source).toContain("function openFuelSetup() { isFuelSetupOpen.value = true; void nextTick(() => actionSelection.select(usesAccLayout.value ? 'fuel-minutes' : 'fuel-plus')) }")
     expect(source).toContain("selectedWheelActionId.value = 'target-seconds'")
     expect(source).toContain('<span>Giro obiettivo</span>')
     expect(source).toContain('<span>Settori obiettivo</span>')
@@ -141,7 +141,10 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     // PIP-556: Notifiche never opens by itself; viewing it marks errors as read.
     const count = source.slice(source.indexOf('function countNotifications()'), source.indexOf('function openNotifications()'))
     expect(count).not.toContain('openNotifications()')
-    expect(count).toContain('if (isNotificationsOpen.value) errors.forEach(error => seenNotificationErrors.add(error.key))')
+    expect(count).toContain('if (isNotificationsOpen.value) visibleNotifications.forEach(item => seenNotifications.add(item.key))')
+    // Read outcomes leave on close; "Svuota" clears what does not wait for a decision.
+    expect(source).toMatch(/function closeNotifications\(\) \{[\s\S]{0,300}?clearNotifications\(\['info'\]\)/)
+    expect(source).toContain(`data-overlay-wheel-action="notifications-clear" @click="clearNotifications(['info', 'error'])"`)
     expect(source).toContain('data-overlay-wheel-action="notifications-close" @click="closeNotifications"')
     // The lap badge remains available on the always-visible Pressioni button.
     expect(source).toContain('v-if="pressureBadge"')
@@ -179,7 +182,8 @@ describe('ACC Control K single layout (PIP-556)', () => {
     expect(acc).toMatch(/\.ck-status \{[\s\S]{0,200}?height: 18px;[\s\S]{0,120}?white-space: nowrap;/)
   })
   it('Guida keeps Pitwall, Correggi pressioni and the alerts; Riferimenti, Target and the bell only when useful', () => {
-    const drive = acc.slice(acc.indexOf('.launcher-tools.ck--drive {'))
+    const drive = acc.slice(acc.indexOf('.launcher-tools.ck.ck--drive {'))
+    expect(drive.length).toBeLessThan(acc.length)
     expect(drive).toMatch(/:is\(\.pressure-test__button, \.fuel-open, \.quick-reference, \.ck-voice-alerts, \.ck-view-close,\s*\.quick-panel-timer, \.quick-panel-dev\) \{ display: none; \}/)
     // The Racer Core mark stays while driving.
     expect(drive).toContain('.quick-panel-logo { order: 0; width: 40px; height: 20px;')

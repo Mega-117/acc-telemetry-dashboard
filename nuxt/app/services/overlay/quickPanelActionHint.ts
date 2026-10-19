@@ -23,6 +23,8 @@ const hints: Record<string, string> = {
   'voice-alerts': 'Avvisi vocali: giri, riferimenti, pressioni e target.',
   'voice-close': 'Torna ai comandi.',
   notifications: 'Notifiche: messaggi ed errori da leggere.',
+  'notifications-close': 'Chiudi: le informazioni lette escono dalle notifiche.',
+  'notifications-clear': 'Svuota: toglie ciò che è solo da leggere; restano le decisioni.',
 }
 
 /** Copy follows the canonical action IDs, independently of input device. */

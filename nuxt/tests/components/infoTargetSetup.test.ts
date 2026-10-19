@@ -19,7 +19,7 @@ it.each([
   const instance = app.mount(el) as unknown as { handleWheelCommand(command: string): boolean }
   expect(instance.handleWheelCommand('next-action')).toBe(false)
   expect([...el.querySelectorAll('[data-overlay-wheel-action]')].map(e => e.getAttribute('data-overlay-wheel-action'))).toEqual([
-    'target-minutes', 'target-seconds', 'target-tenths', 'target-use-best', 'target-use-last', 'target-tolerance', 'target-confirm', 'target-cancel'])
+    'target-minutes', 'target-seconds', 'target-tenths', 'target-tolerance', 'target-use-best', 'target-use-last', 'target-confirm', 'target-cancel'])
   ;(el.querySelector(`[data-overlay-wheel-action="target-${field}"]`) as HTMLButtonElement).click()
   await nextTick(); expect(el.querySelector('.is-editing')).not.toBeNull()
   expect(instance.handleWheelCommand('next-action')).toBe(true)

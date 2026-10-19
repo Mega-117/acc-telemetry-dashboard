@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { Fuel, LoaderCircle } from '@lucide/vue'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import ControlKNumberField from '~/components/overlay/ControlKNumberField.vue'
+import { stepNumberField, type NumberFieldLimits } from '~/utils/controlKNumberField'
 const props = defineProps<{ api: any; separateView?: boolean; editorOnly?: boolean; showHeading?: boolean; statusTarget?: string; previewExpanded?: boolean; bodyTarget?: string
   /** PIP-556: unavailable commands stay pressable and explain why through `notice`. */
-  reportUnavailable?: boolean }>()
+  reportUnavailable?: boolean
+  /** PIP-556: minutes as the shared number field (wheel, mouse scroll, digits) instead of -/input/+. */
+  numberField?: boolean }>()
 const emit = defineEmits<{ open: []; cancel: []; notice: [text: string, tone: 'ok' | 'error'] }>()
 const minutes = defineModel<number>('minutes', { default: 10 })
 const open = ref(props.editorOnly === true || props.previewExpanded === true), pending = ref(false), error = ref('')
@@ -69,6 +73,18 @@ function adjust(amount: number) {
   const current = Number(minutes.value)
   minutes.value = Math.max(1, Math.min(180, (Number.isFinite(current) ? Math.round(current) : 10) + amount))
 }
+const MINUTES_LIMITS: NumberFieldLimits = { min: 1, max: 180, digits: 3, wrap: false }
+const editingMinutes = ref(false)
+function setMinutes(value: number) { if (!pending.value) minutes.value = value }
+// OK on the field edits it; Up/Down change it, OK or Back leave it.
+function handleWheelCommand(command: string | undefined): boolean {
+  if (!editingMinutes.value) return false
+  if (command === 'activate-action' || command === 'primary' || command === 'back') { editingMinutes.value = false; return true }
+  if (command !== 'next-action' && command !== 'previous-action') return false
+  setMinutes(stepNumberField(Number(minutes.value), command === 'next-action' ? 1 : -1, MINUTES_LIMITS))
+  return true
+}
+defineExpose({ handleWheelCommand })
 function wheelMinutes(event: WheelEvent) {
   if (event.ctrlKey || !event.deltaY) return
   event.preventDefault()
@@ -148,7 +164,10 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); clea
     <Teleport defer :to="bodyTarget || 'body'" :disabled="!bodyTarget">
     <div v-if="open" class="fuel-body">
       <strong>Prepara il carburante per lo stint</strong>
-      <div class="fuel-duration" :inert="pending || undefined">
+      <ControlKNumberField v-if="numberField" class="fuel-minutes-field" :value="Number(minutes)" label="MINUTI" action="fuel-minutes"
+        name="Minuti stint" v-bind="MINUTES_LIMITS" :format="String" :disabled="pending" :editing="editingMinutes"
+        @toggle="editingMinutes = !editingMinutes" @update:value="setMinutes" />
+      <div v-else class="fuel-duration" :inert="pending || undefined">
         <button type="button" data-overlay-wheel-action="fuel-minus" aria-label="Un minuto in meno" @click="adjust(-1)">−</button>
         <label><input v-model.number="minutes" type="number" min="1" max="180" step="1" aria-label="Minuti stint" :disabled="pending" @wheel="wheelMinutes" @pointerdown="keyboard" @keydown.stop @blur="api?.trainingOverlayKeyboardEditing?.(false)"> min</label>
         <button type="button" data-overlay-wheel-action="fuel-plus" aria-label="Un minuto in più" @click="adjust(1)">+</button>

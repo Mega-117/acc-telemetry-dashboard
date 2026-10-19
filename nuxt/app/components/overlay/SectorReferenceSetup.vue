@@ -4,8 +4,10 @@ import { hudSourcePolicy } from '~/services/sim/hudSourceAdapter'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import type { HudOverlaySettings } from '~/composables/useHudOverlay'
-import { adjustSectorReferenceField, adjustSectorReferenceTime, formatSectorReferenceTime, parseSectorReferenceTime,
+import { MAX_SECTOR_MS, MIN_SECTOR_MS, adjustSectorReferenceField, adjustSectorReferenceTime, formatSectorReferenceTime, parseSectorReferenceTime,
   resolveCustomSectorTimes, sectorReferenceContextKey, splitSectorReferenceTime, type SectorReferenceField } from '~/utils/customSectorReferences'
+import type { NumberFieldLimits } from '~/utils/controlKNumberField'
+import ControlKNumberField from '~/components/overlay/ControlKNumberField.vue'
 import { normalizeSectorDeltaReference, type SectorDeltaReference } from '~/utils/sectorDeltaPresentation'
 
 const props = withDefaults(defineProps<{ keyboardOverlay?: boolean }>(), { keyboardOverlay: false })
@@ -60,10 +62,20 @@ const fields: { id: SectorReferenceField, label: string }[] = [{ id: 'seconds', 
 function toggleEditing(index: number, field: SectorReferenceField) {
   editing.value = editing.value?.index === index && editing.value.field === field ? null : { index, field }
 }
-function fieldValue(index: number, field: SectorReferenceField) {
+// Shared number field (wheel, mouse scroll, typed digits): seconds 10..240, tenths 0..9.
+const FIELD_LIMITS: Record<SectorReferenceField, NumberFieldLimits> = {
+  seconds: { min: MIN_SECTOR_MS / 1000, max: MAX_SECTOR_MS / 1000, digits: 3, wrap: false },
+  tenths: { min: 0, max: 9, digits: 1, wrap: true },
+}
+function fieldNumber(index: number, field: SectorReferenceField): number | null {
   const parts = splitSectorReferenceTime(draft.value[index] ?? '')
-  if (!parts) return '—'
-  return field === 'seconds' ? String(parts.seconds) : `,${parts.tenths}`
+  return parts ? parts[field] : null
+}
+function setField(index: number, field: SectorReferenceField, value: number) {
+  const parts = splitSectorReferenceTime(draft.value[index] ?? '') ?? { seconds: MIN_SECTOR_MS / 1000, tenths: 0 }
+  const next = { ...parts, [field]: value }
+  const ms = Math.min(MAX_SECTOR_MS, Math.max(MIN_SECTOR_MS, next.seconds * 1000 + next.tenths * 100))
+  draft.value[index] = formatSectorReferenceTime(ms)
 }
 function handleWheelCommand(command: string | undefined): boolean {
   if (!props.keyboardOverlay || editing.value === null) return false
@@ -133,11 +145,11 @@ onBeforeUnmount(() => {
         <article v-for="(_, index) in draft" :key="index" class="sector-reference-drum" @wheel.prevent="!saving && boundKey && !contextChanged && $event.deltaY !== 0 && adjust(index, $event.deltaY < 0 ? 1 : -1)">
           <label :for="`sector-reference-${index}`">S{{ index + 1 }}</label>
           <div v-if="keyboardOverlay" class="sector-reference-fields">
-            <button v-for="field in fields" :key="field.id" type="button" class="sector-reference-value"
-              :class="[`sector-reference-value--${field.id}`, { 'is-editing': editing?.index === index && editing.field === field.id }]"
-              :data-overlay-wheel-action="`sector-${index}-${field.id}`" :aria-pressed="editing?.index === index && editing.field === field.id"
-              :aria-label="`S${index + 1} ${field.id === 'seconds' ? 'secondi' : 'decimi'}: ${fieldValue(index, field.id)}`"
-              :disabled="saving || !boundKey || contextChanged" @click="toggleEditing(index, field.id)">{{ fieldValue(index, field.id) }}</button>
+            <ControlKNumberField v-for="field in fields" :key="field.id" :value="fieldNumber(index, field.id)"
+              :label="field.label" :action="`sector-${index}-${field.id}`" :name="`S${index + 1} ${field.id === 'seconds' ? 'secondi' : 'decimi'}`"
+              v-bind="FIELD_LIMITS[field.id]" :prefix="field.id === 'tenths' ? ',' : ''" :format="field.id === 'seconds' ? String : undefined"
+              :editing="editing?.index === index && editing.field === field.id" :disabled="saving || !boundKey || contextChanged"
+              @toggle="toggleEditing(index, field.id)" @update:value="setField(index, field.id, $event)" />
           </div>
           <div v-if="!keyboardOverlay" class="sector-reference-arrows">
             <button v-for="step in [10, 1]" :key="step" type="button" :disabled="saving || !boundKey || contextChanged" :data-overlay-wheel-action="`sector-${index}-plus-${step}`" :aria-label="`Aumenta S${index + 1} di ${step === 10 ? 'un secondo' : 'un decimo'}`" @click="adjust(index, step)">▲<small>{{ step === 10 ? '1 s' : '0,1 s' }}</small></button>

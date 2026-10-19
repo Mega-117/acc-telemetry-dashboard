@@ -60,3 +60,32 @@ export function notificationErrorFromElement(element: Element): ControlKNotifica
   const reason = readableReason((element.querySelector('p') ?? element).textContent)
   return { key: `${category}|${reason}`, label: `${category}: ${reason}` }
 }
+
+/**
+ * PIP-556: what a Notifiche card is.
+ * - action: waits for the driver (pressure plan to apply, friend request): never cleared;
+ * - error: stays until solved or cleared, announced in the status line (not friend requests);
+ * - info: an outcome to read once (estimate result, fuel set): leaves when Notifiche closes.
+ */
+export type ControlKNotificationKind = 'action' | 'error' | 'info'
+export interface ControlKNotificationItem extends ControlKNotificationError {
+  kind: ControlKNotificationKind
+  /** Shown in the status line while unread. */
+  announce: boolean
+}
+
+export function notificationItemFromElement(element: Element): ControlKNotificationItem {
+  const classes = element.classList
+  if (classes.contains('pressure-plan') || (classes.contains('control-k-request') && !element.querySelector('.control-k-request__error'))) {
+    const text = (element.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 120)
+    return { key: `azione|${classes.contains('pressure-plan') ? 'piano' : 'amicizia'}|${text}`, label: text, kind: 'action', announce: false }
+  }
+  const errorElement = CATEGORIES.some(([cls]) => classes.contains(cls)) ? element : element.querySelector(CATEGORIES.map(([cls]) => `.${cls}`).join(', '))
+  if (errorElement) {
+    const error = notificationErrorFromElement(errorElement)
+    return { ...error, kind: 'error', announce: !error.label.startsWith('Amicizie:') }
+  }
+  // The whole card is the identity: a new estimate with other values is new information.
+  const text = (element.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 240)
+  return { key: `info|${text}`, label: text, kind: 'info', announce: false }
+}

@@ -65,8 +65,8 @@ import {
 } from '~/services/overlay/qaBotPresentation'
 import { pressureActionPresentation, pressureOriginLine, pressureOutcomeMessage, pressureProgressBadge } from '~/services/overlay/pressureActionPresentation'
 import { createControlKContextTracker, type ControlKContext } from '~/services/overlay/controlKContext'
-import { notificationErrorFromElement as readNotificationError, pickControlKStatus,
-  type ControlKNotificationError, type ControlKStatusMessage } from '~/services/overlay/controlKStatus'
+import { notificationItemFromElement as readNotificationItem, pickControlKStatus,
+  type ControlKNotificationItem, type ControlKNotificationKind, type ControlKStatusMessage } from '~/services/overlay/controlKStatus'
 import { useTrackVoiceReferenceAvailability } from '~/composables/useTrackVoiceReferenceAvailability'
 import { formatInfoLapTime } from '~/utils/infoPresentation'
 import { commonBoolean } from '~/services/telemetry/commonLive'
@@ -222,18 +222,43 @@ const NOTIFICATION_ERRORS = '.fuel-status--error, .quick-panel-pressure-status--
 // PIP-556: Notifiche never opens by itself. A new error is announced at once in
 // the status line with its category and turns the bell red; opening the view
 // marks the errors as read. Cards leave by themselves when the problem is gone.
-const unreadNotificationErrors = ref<ControlKNotificationError[]>([])
+// The bell counts only what is new; read outcomes leave when Notifiche closes,
+// "Svuota" clears everything that does not wait for a decision.
+const unreadNotificationErrors = ref<ControlKNotificationItem[]>([])
+const notificationUnread = ref(0)
 const notificationErrors = computed(() => unreadNotificationErrors.value.length)
-const seenNotificationErrors = new Set<string>()
+const seenNotifications = new Set<string>()
+const clearedNotifications = new Set<string>()
+let visibleNotifications: ControlKNotificationItem[] = []
+// One short pulse of the bell for a new error, never a continuous blink.
+const notificationPulse = ref(false)
+let notificationPulseTimer: ReturnType<typeof setTimeout> | null = null
 function countNotifications() {
   const body = notificationsBody.value
-  const count = body ? body.querySelectorAll(NOTIFICATION_ITEMS).length : 0
-  const errors = body ? [...body.querySelectorAll<HTMLElement>(NOTIFICATION_ERRORS)].map(readNotificationError) : []
-  notificationCount.value = count
-  if (isNotificationsOpen.value) errors.forEach(error => seenNotificationErrors.add(error.key))
-  unreadNotificationErrors.value = errors.filter(error => !seenNotificationErrors.has(error.key))
-  notificationErrorCount = errors.length
-  if (!count && isNotificationsOpen.value) closeNotifications()
+  const items = body ? [...body.querySelectorAll<HTMLElement>(NOTIFICATION_ITEMS)]
+    .filter(element => !element.parentElement?.closest(NOTIFICATION_ITEMS))
+    .map(element => ({ element, item: readNotificationItem(element) })) : []
+  for (const { element, item } of items) element.hidden = clearedNotifications.has(item.key)
+  visibleNotifications = items.filter(({ item }) => !clearedNotifications.has(item.key)).map(({ item }) => item)
+  notificationCount.value = visibleNotifications.length
+  if (isNotificationsOpen.value) visibleNotifications.forEach(item => seenNotifications.add(item.key))
+  const unread = visibleNotifications.filter(item => !seenNotifications.has(item.key))
+  notificationUnread.value = unread.length
+  const unreadErrors = unread.filter(item => item.kind === 'error' && item.announce)
+  if (unreadErrors.length > unreadNotificationErrors.value.length && usesAccLayout.value) pulseNotifications()
+  unreadNotificationErrors.value = unreadErrors
+  notificationErrorCount = unreadErrors.length
+  if (!visibleNotifications.length && isNotificationsOpen.value) closeNotifications()
+}
+function pulseNotifications() {
+  if (notificationPulseTimer) clearTimeout(notificationPulseTimer)
+  notificationPulse.value = true
+  notificationPulseTimer = setTimeout(() => { notificationPulse.value = false; notificationPulseTimer = null }, 700)
+}
+onBeforeUnmount(() => { if (notificationPulseTimer) clearTimeout(notificationPulseTimer) })
+function clearNotifications(kinds: ControlKNotificationKind[]) {
+  visibleNotifications.filter(item => kinds.includes(item.kind)).forEach(item => clearedNotifications.add(item.key))
+  countNotifications()
 }
 function openNotifications() {
   isVoiceViewOpen.value = false
@@ -242,7 +267,10 @@ function openNotifications() {
   void nextTick(() => actionSelection.select('notifications-close'))
 }
 function closeNotifications() {
+  if (!isNotificationsOpen.value) return
   isNotificationsOpen.value = false
+  // Outcomes already read leave; errors stay until solved or cleared; decisions stay.
+  if (usesAccLayout.value) clearNotifications(['info'])
   void nextTick(() => actionSelection.select(usesAccLayout.value ? 'notifications' : 'pitwall'))
 }
 // PIP-556: in Pausa the four voice alerts live behind one "Avvisi" button.
@@ -269,7 +297,7 @@ onBeforeUnmount(() => notificationObserver?.disconnect())
 const fuelStintMinutes = ref(10)
 function closeFuelSetup() { isFuelSetupOpen.value = false; void nextTick(() => actionSelection.select('fuel')) }
 // PIP-526: the minutes editor opens on "+", never on "Torna al pannello".
-function openFuelSetup() { isFuelSetupOpen.value = true; void nextTick(() => actionSelection.select('fuel-plus')) }
+function openFuelSetup() { isFuelSetupOpen.value = true; void nextTick(() => actionSelection.select(usesAccLayout.value ? 'fuel-minutes' : 'fuel-plus')) }
 const isTargetSetupOpen = ref(false)
 const targetSetup = ref<InstanceType<typeof InfoTargetSetup> | null>(null)
 const isSectorReferenceSetupOpen = ref(false)
@@ -302,6 +330,9 @@ async function disableReference(kind: 'target' | 'sectors') {
   finally { referenceBusy.value = false }
 }
 const sectorReferenceSetup = ref<InstanceType<typeof SectorReferenceSetup> | null>(null)
+// PIP-556: editors with number fields take the wheel commands while a field is being edited.
+const quickCountdownView = ref<InstanceType<typeof QuickCountdown> | null>(null)
+const fuelEditor = ref<InstanceType<typeof SetupFuelPanel> | null>(null)
 function closeSectorReferenceSetup() {
   if (!isSectorReferenceSetupOpen.value) return
   isSectorReferenceSetupOpen.value = false
@@ -1181,6 +1212,8 @@ function handleOverlayCommand(payload: OverlayCommand | { command?: OverlayComma
   // PIP-526: a value being edited takes Next/Previous/OK/Back first.
   if (isTargetSetupOpen.value && targetSetup.value?.handleWheelCommand(command)) return
   if (isSectorReferenceSetupOpen.value && sectorReferenceSetup.value?.handleWheelCommand?.(command)) return
+  if (isQuickTimerOpen.value && quickCountdownView.value?.handleWheelCommand?.(command)) return
+  if (isFuelSetupOpen.value && fuelEditor.value?.handleWheelCommand?.(command)) return
   if (command === 'primary') executePrimaryAction()
   if (command === 'next-action') selectNextWheelAction()
   if (command === 'previous-action') actionSelection.previous()
@@ -1462,8 +1495,10 @@ onBeforeUnmount(() => {
                     <button v-if="(usesAccLayout || notificationCount > 0) && !isNotificationsOpen" type="button" class="launcher-tool-button quick-panel-notifications-button"
                       :title="`Notifiche (${notificationCount})`" :aria-label="`Apri notifiche (${notificationCount})`" :disabled="notificationCount === 0"
                       data-overlay-wheel-action="notifications" :data-overlay-wheel-last="usesAccLayout ? undefined : ''" @click="openNotifications">
-                      <Bell :size="18" aria-hidden="true" /><span v-if="usesAccLayout">Notifiche</span>
-                      <small v-if="notificationCount > 0" class="quick-action-badge" :class="{ 'quick-action-badge--error': notificationErrors > 0 }" aria-hidden="true">{{ notificationCount }}</small>
+                      <Bell :size="18" aria-hidden="true" :class="{ 'ck-bell-pulse': notificationPulse }" /><span v-if="usesAccLayout">Notifiche</span>
+                      <!-- PIP-556: the badge counts only what is new (ACC); elsewhere every card. -->
+                      <small v-if="usesAccLayout ? notificationUnread > 0 : notificationCount > 0" class="quick-action-badge"
+                        :class="{ 'quick-action-badge--error': notificationErrors > 0 }" aria-hidden="true">{{ usesAccLayout ? notificationUnread : notificationCount }}</small>
                     </button>
                     <button
                       v-if="!hideStintWhileDriving"
@@ -1620,6 +1655,9 @@ onBeforeUnmount(() => {
                       :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
                       <header class="quick-panel-notifications__header">
                         <h2 class="quick-panel-heading">Notifiche</h2>
+                        <!-- PIP-556: clears what is only to read; decisions (plan, friend requests) stay. -->
+                        <button v-if="usesAccLayout" type="button" class="launcher-tool-button quick-panel-notifications__clear" title="Svuota le notifiche da leggere"
+                          data-overlay-wheel-action="notifications-clear" @click="clearNotifications(['info', 'error'])">Svuota</button>
                         <button type="button" class="launcher-tool-button quick-panel-notifications__close" title="Chiudi notifiche" aria-label="Chiudi notifiche"
                           data-overlay-wheel-action="notifications-close" @click="closeNotifications">
                           <X :size="16" aria-hidden="true" />
@@ -1673,7 +1711,7 @@ onBeforeUnmount(() => {
                     <Info v-if="controlKStatus" :size="12" aria-hidden="true" /><span>{{ controlKStatus?.text }}</span>
                   </p>
                 </div>
-                <QuickCountdown v-else-if="isQuickTimerOpen" :status="quickTimer.status.value" :display="quickTimer.display.value" @start="startQuickTimer" @cancel="closeQuickTimer" />
+                <QuickCountdown v-else-if="isQuickTimerOpen" ref="quickCountdownView" :status="quickTimer.status.value" :display="quickTimer.display.value" @start="startQuickTimer" @cancel="closeQuickTimer" />
                 <InfoTargetSetup
                   v-else-if="isTargetSetupOpen"
                   ref="targetSetup"
@@ -1689,7 +1727,8 @@ onBeforeUnmount(() => {
                   @confirm="confirmInfoTarget"
                   @cancel="cancelInfoTargetSetup"
                 />
-                <SetupFuelPanel v-else-if="isFuelSetupOpen && support.quickAutomations" v-model:minutes="fuelStintMinutes" :api="getOverlayApi()" editor-only @cancel="closeFuelSetup"
+                <SetupFuelPanel v-else-if="isFuelSetupOpen && support.quickAutomations" ref="fuelEditor" v-model:minutes="fuelStintMinutes" :api="getOverlayApi()" editor-only @cancel="closeFuelSetup"
+                  :number-field="usesAccLayout"
                   @notice="(text, tone) => usesAccLayout && showVoicePointNotice(text, tone)" />
                 <SectorReferenceSetup v-else-if="isSectorReferenceSetupOpen && support.quickSectorReferences" ref="sectorReferenceSetup" keyboard-overlay @cancel="closeSectorReferenceSetup" @saved="saveSectorReferenceSetup" />
               </template>

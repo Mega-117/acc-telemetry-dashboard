@@ -45,6 +45,8 @@ export default defineConfig({
         'app/services/overlay/controlKStatus.ts',
         'app/composables/useTrackVoiceReferenceAvailability.ts',
         'app/utils/infoTargetPicker.ts',
+        'app/utils/controlKNumberField.ts',
+        'app/components/overlay/ControlKNumberField.vue',
         'app/services/auth/dashboardEntryRecovery.ts',
         'app/components/overlay/PressureTestPanel.vue',
         'app/services/spotter/pitStrategyVoice.ts',
