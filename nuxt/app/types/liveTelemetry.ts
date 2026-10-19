@@ -190,6 +190,11 @@ export interface FastOverlayState {
   isEngineRunning: boolean
   pitLimiterOn: boolean
   isInPitLane: boolean
+  // PIP-556: ACC pit box and setup screen, used by the Control K context.
+  isInPitBox?: boolean
+  isSetupMenuVisible?: boolean
+  /** ACC force feedback: zero in the ESC menu, also online (PIP-177); null when unknown. */
+  finalFf?: number | null
   sessionType: number | null
   normalizedCarPosition: number | null
   speedKmh: number | null

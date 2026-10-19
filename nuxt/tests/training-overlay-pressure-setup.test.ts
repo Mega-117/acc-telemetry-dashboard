@@ -18,7 +18,8 @@ describe('training overlay Setup pressure contract', () => {
     expect(source).toContain(':pressure="isFullQuickPanelPreview || pressureVoiceOn"')
     expect(source).toContain('@toggle-pressure="togglePressureAudio"')
     expect(source).toMatch(/function togglePressureAudio\(\) \{\s*if \(!canUseSpotterControls.value\) return\s*toggleVoiceForSession\(pressureVoiceOn.value, pressureWarningsEnabled.value, setPressureWarningsEnabled,/)
-    expect(source).toContain(':disabled="isDryPressureApplying || quickPanelPressureState.state !== \'ready\'"')
+    // PIP-556: ACC keeps it pressable to explain why; other games keep it disabled.
+    expect(source).toContain(':disabled="isDryPressureApplying || (!usesAccLayout && quickPanelPressureState.state !== \'ready\')"')
   })
   it('presents the neutral product action without the retired popup', () => {
     expect(source).toContain('Regola pressioni')
@@ -43,7 +44,8 @@ describe('training overlay Setup pressure contract', () => {
     expect(styles).not.toContain("[data-overlay-wheel-action='pressure']:disabled:not(.is-awaiting-pit) { display: none; }")
     expect(source).toContain('<p id="pressure-action-status"')
     expect(source).toContain("'is-ready': quickPanelPressureState.state === 'ready'")
-    expect(source).toContain(":disabled=\"isDryPressureApplying || quickPanelPressureState.state !== 'ready'\"")
+    expect(source).toContain(":disabled=\"isDryPressureApplying || (!usesAccLayout && quickPanelPressureState.state !== 'ready')\"")
+    expect(source).toContain(":data-unavailable=\"usesAccLayout && quickPanelPressureState.state !== 'ready' ? '' : undefined\"")
     expect(source).toContain('launcher-tool-button--pressure')
     expect(source).toContain('dryPressurePresentation.guidance')
     expect(styles).toContain('pressure-action-ready-pulse 2.4s ease-in-out infinite')

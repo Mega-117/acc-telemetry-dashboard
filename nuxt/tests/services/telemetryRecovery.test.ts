@@ -48,3 +48,29 @@ describe('bounded telemetry pull', () => {
     await nextTick(); expect(appliedTelemetry()?.valid).toBe(false)
   })
 })
+
+describe('menu frames confirm presentation, never driving availability', () => {
+  const idle = () => ({ hud_transport: { version: 1, bootId: 'menu', sequence: 20 },
+    live: { schema: 'racercore.live', version: 1, game_id: 'acc', session_id: null,
+      observed_at_ms: Date.now(), ttl_ms: 5000, connected: false, lifecycle: 'off', fields: {}, capabilities: {} } })
+  it('acknowledges a fresh authoritative off/menu frame after Vue flush', async () => {
+    const raw = idle()
+    telemetryApplied(raw, false); await nextTick()
+    expect(appliedTelemetry()?.valid).toBe(true)
+    expect(raw.live.connected).toBe(false)
+  })
+  it('does not certify stale, malformed, unknown or invalid live data', async () => {
+    for (const mutate of [
+      (r: any) => { r.live.observed_at_ms -= 6000 },
+      (r: any) => { r.live.observed_at_ms += 6000 },
+      (r: any) => { r.live.lifecycle = 'live' },
+      (r: any) => { r.live.lifecycle = undefined },
+      (r: any) => { r.live.fields = null },
+      (r: any) => { r.live.connected = true },
+    ]) {
+      const raw = idle(); mutate(raw)
+      telemetryApplied(raw, false); await nextTick()
+      expect(appliedTelemetry()?.valid).toBe(false)
+    }
+  })
+})

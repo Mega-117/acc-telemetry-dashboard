@@ -2,11 +2,15 @@
 import { computed, ref } from 'vue'
 import { formatInfoLapTime } from '~/utils/infoPresentation'
 import {
-  adjustInfoTargetTime,
+  adjustInfoTargetField,
   adjustInfoTargetTolerance,
+  normalizeInfoTargetTime,
   splitInfoTargetTime,
   type InfoTargetTimeUnit,
 } from '~/utils/infoTargetPicker'
+import { stepNumberField, type NumberFieldLimits } from '~/utils/controlKNumberField'
+import ControlKNumberField from '~/components/overlay/ControlKNumberField.vue'
+import ControlKViewHeader from '~/components/overlay/ControlKViewHeader.vue'
 
 const props = withDefaults(defineProps<{
   targetTimeMs: number
@@ -52,11 +56,32 @@ const toleranceControl = computed<PickerControl>(() => ({
   ariaLabel: 'Tolleranza massima',
 }))
 
-const editingControl = ref<PickerControl['id'] | 'time' | null>(null)
+const editingControl = ref<PickerControl['id'] | null>(null)
 const usableLap = (value: number | null | undefined) => typeof value === 'number' && value >= 1_000 ? value : null
 function useLap(valueMs: number) {
   emit('set-target-time', Math.round(valueMs / 100) * 100)
 }
+function toggleEditing(id: PickerControl['id']) {
+  editingControl.value = editingControl.value === id ? null : id
+}
+
+// PIP-556: Ctrl+K uses the shared number field (wheel, mouse scroll, typed digits).
+// MIN, SEC, DEC and the tolerance are independent: they never carry into each other.
+type QuickField = { id: PickerControl['id'], label: string, ariaLabel: string, value: number } & NumberFieldLimits
+  & { prefix?: string, suffix?: string, format?: (value: number) => string }
+const quickFields = computed<QuickField[]>(() => [
+  { id: 'minutes', label: 'MIN', ariaLabel: 'Minuti obiettivo', value: timeParts.value.minutes, min: 0, max: 9, digits: 1, wrap: false },
+  { id: 'seconds', label: 'SEC', ariaLabel: 'Secondi obiettivo', value: timeParts.value.seconds, min: 0, max: 59, digits: 2, wrap: true },
+  { id: 'tenths', label: 'DEC', ariaLabel: 'Decimi obiettivo', value: timeParts.value.tenths, min: 0, max: 9, digits: 1, wrap: true, prefix: ',' },
+  { id: 'tolerance', label: 'TOLLERANZA', ariaLabel: 'Tolleranza massima', value: Math.round(props.toleranceMs / 100), min: 1, max: 10, digits: 2, wrap: false,
+    suffix: ' s', format: tenths => (tenths / 10).toFixed(1).replace('.', ',') },
+])
+function setQuickField(id: PickerControl['id'], value: number) {
+  if (id === 'tolerance') { emit('select-tolerance', value * 100); return }
+  const parts = { ...timeParts.value, [id]: value }
+  emit('set-target-time', normalizeInfoTargetTime(parts.minutes * 60_000 + parts.seconds * 1_000 + parts.tenths * 100))
+}
+// OK on a field edits it; Up/Down change it (holding repeats), OK or Back leave it.
 function handleWheelCommand(command: string | undefined): boolean {
   if (!editingControl.value || props.appearance !== 'quick-panel') return false
   if (command === 'activate-action' || command === 'primary' || command === 'back') {
@@ -64,14 +89,8 @@ function handleWheelCommand(command: string | undefined): boolean {
     return true
   }
   if (command !== 'next-action' && command !== 'previous-action') return false
-  const direction = command === 'next-action' ? 1 : -1
-  if (editingControl.value === 'time') {
-    // One value, one step (0,1 s); holding the button repeats it (PIP-526).
-    emit('set-target-time', adjustInfoTargetTime(props.targetTimeMs, 'tenths', direction))
-    return true
-  }
-  const control = [...timeControls.value, toleranceControl.value].find(value => value.id === editingControl.value)
-  if (control) adjustControl(control, direction)
+  const field = quickFields.value.find(value => value.id === editingControl.value)
+  if (field) setQuickField(field.id, stepNumberField(field.value, command === 'next-action' ? 1 : -1, field))
   return true
 }
 defineExpose({ handleWheelCommand })
@@ -81,7 +100,7 @@ function adjustControl(control: PickerControl, direction: number) {
     emit('select-tolerance', adjustInfoTargetTolerance(props.toleranceMs, direction))
     return
   }
-  emit('set-target-time', adjustInfoTargetTime(props.targetTimeMs, control.id, direction))
+  emit('set-target-time', adjustInfoTargetField(props.targetTimeMs, control.id, direction))
 }
 
 function onWheel(control: PickerControl, event: WheelEvent) {
@@ -97,21 +116,33 @@ function onWheel(control: PickerControl, event: WheelEvent) {
     data-overlay-interactive
     aria-label="Configura Target giro"
   >
-    <header>
-      <span v-if="appearance !== 'quick-panel'">{{ contextLabel }}</span>
-      <strong>{{ appearance === 'quick-panel' ? 'Giro obiettivo' : 'Target giro' }}</strong>
-      <p v-if="appearance !== 'quick-panel'">Imposta il riferimento del giro completo.</p>
+    <!-- PIP-556: Control K editors share one structure: ← header, fields, shortcuts, hint, one primary action. -->
+    <ControlKViewHeader v-if="appearance === 'quick-panel'" title="Giro obiettivo" subtitle="Valido per questa sessione" action="target-cancel" @back="emit('cancel')" />
+    <header v-else>
+      <span>{{ contextLabel }}</span>
+      <strong>Target giro</strong>
+      <p>Imposta il riferimento del giro completo.</p>
     </header>
 
-    <div v-if="appearance === 'quick-panel'" class="target-quick" role="group" aria-label="Tempo obiettivo">
-      <button type="button" class="target-field-value target-quick__time" data-overlay-wheel-action="target-time"
-        aria-label="Tempo obiettivo" :aria-pressed="editingControl === 'time'" :class="{ 'is-editing': editingControl === 'time' }"
-        @click="editingControl = editingControl === 'time' ? null : 'time'">{{ formatInfoLapTime(targetTimeMs) }}</button>
-      <div class="target-quick__sources">
+    <template v-if="appearance === 'quick-panel'">
+      <div class="ck-editor__fields" role="group" aria-label="Tempo obiettivo">
+        <ControlKNumberField v-for="field in quickFields" :key="field.id" :value="field.value" :label="field.label"
+          :action="`target-${field.id}`" :name="field.ariaLabel" :min="field.min" :max="field.max" :digits="field.digits"
+          :wrap="field.wrap" :prefix="field.prefix" :suffix="field.suffix" :format="field.format"
+          :editing="editingControl === field.id" :class="`ck-field--${field.id}`"
+          @toggle="toggleEditing(field.id)" @update:value="setQuickField(field.id, $event)" />
+      </div>
+      <div v-if="usableLap(bestLapMs) || usableLap(lastLapMs)" class="ck-editor__shortcuts">
         <button v-if="usableLap(bestLapMs)" type="button" data-overlay-wheel-action="target-use-best" @click="useLap(bestLapMs!)">Usa best {{ formatInfoLapTime(Math.round(bestLapMs! / 100) * 100) }}</button>
         <button v-if="usableLap(lastLapMs)" type="button" data-overlay-wheel-action="target-use-last" @click="useLap(lastLapMs!)">Usa ultimo {{ formatInfoLapTime(Math.round(lastLapMs! / 100) * 100) }}</button>
       </div>
-    </div>
+      <p class="ck-editor__hint" role="status">{{ editingControl
+        ? 'Su/Giù o rotella cambiano solo questo campo · OK fatto'
+        : 'OK o clic su un campo, poi Su/Giù, rotella o cifre' }}</p>
+      <div class="ck-editor__actions">
+        <button type="button" class="ck-editor__primary" data-overlay-wheel-action="target-confirm" @click="emit('confirm')">Conferma</button>
+      </div>
+    </template>
 
     <div v-if="appearance !== 'quick-panel'" class="target-preview" aria-live="polite">
       <span>Tempo target</span>
@@ -152,10 +183,10 @@ function onWheel(control: PickerControl, event: WheelEvent) {
       </article>
     </div>
 
-    <section class="target-tolerance" aria-labelledby="target-tolerance-title">
+    <section v-if="appearance !== 'quick-panel'" class="target-tolerance" aria-labelledby="target-tolerance-title">
       <div class="target-tolerance__copy">
         <strong id="target-tolerance-title" title="Margine concesso oltre il target. I giri più veloci restano validi.">Tolleranza</strong>
-        <p v-if="appearance !== 'quick-panel'">Margine concesso oltre il target. I giri più veloci restano validi.</p>
+        <p>Margine concesso oltre il target. I giri più veloci restano validi.</p>
       </div>
       <div
         class="target-tolerance__control"
@@ -167,17 +198,16 @@ function onWheel(control: PickerControl, event: WheelEvent) {
         <button
           type="button"
           aria-label="Diminuisci Tolleranza massima"
-          :data-overlay-wheel-action="appearance === 'quick-panel' ? undefined : 'target-tolerance-decrease'"
+          data-overlay-wheel-action="target-tolerance-decrease"
           @click="adjustControl(toleranceControl, -1)"
         >
           −
         </button>
-        <button v-if="appearance === 'quick-panel'" type="button" class="target-field-value" data-overlay-wheel-action="target-tolerance" aria-label="Tolleranza massima" :aria-pressed="editingControl === 'tolerance'" @click="editingControl = editingControl === 'tolerance' ? null : 'tolerance'">{{ toleranceControl.value }}</button>
-        <strong v-else>{{ toleranceControl.value }}</strong>
+        <strong>{{ toleranceControl.value }}</strong>
         <button
           type="button"
           aria-label="Aumenta Tolleranza massima"
-          :data-overlay-wheel-action="appearance === 'quick-panel' ? undefined : 'target-tolerance-increase'"
+          data-overlay-wheel-action="target-tolerance-increase"
           @click="adjustControl(toleranceControl, 1)"
         >
           +
@@ -200,10 +230,7 @@ function onWheel(control: PickerControl, event: WheelEvent) {
       <span>Mantieni tra sessioni dello stesso server</span>
     </button>
 
-    <p v-if="appearance === 'quick-panel'" class="target-edit-hint" role="status">{{ editingControl
-      ? 'Su/Giù cambia il valore (tieni premuto per andare veloce) · OK conferma'
-      : 'OK sul tempo per modificarlo · Indietro per uscire' }}</p>
-    <div class="target-actions">
+    <div v-if="appearance !== 'quick-panel'" class="target-actions">
       <button type="button" class="target-confirm" data-overlay-wheel-action="target-confirm" @click="emit('confirm')">Conferma</button>
       <button type="button" class="target-cancel" data-overlay-wheel-action="target-cancel" @click="emit('cancel')">Annulla</button>
     </div>
@@ -212,13 +239,7 @@ function onWheel(control: PickerControl, event: WheelEvent) {
 
 <style scoped>
 .target-field-value { border: 0; background: transparent; color: inherit; font: inherit; font-size: 22px; font-weight: 600; cursor: pointer; }
-.target-quick { display: grid; gap: 8px; }
-.target-quick__time { width: 100%; padding: 10px 0; border: 1px solid #ffffff30; font-size: 30px; font-variant-numeric: tabular-nums; }
-.target-quick__sources { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.target-quick__sources button { min-height: 32px; border: 1px solid #ffffff30; border-radius: 0; background: #ffffff05; color: inherit; font: inherit; font-size: 11px; cursor: pointer; }
 .target-tolerance__control .target-field-value { font-size: 14px; }
-.info-target-setup--quick .is-editing { outline: 2px solid #00e5ff; outline-offset: 2px; background: #00e5ff18; }
-.target-edit-hint { margin: 0; font-size: 11px; color: #00e5ff; }
 .info-target-setup {
   display: grid;
   gap: 9px;
@@ -395,38 +416,8 @@ header p { margin: 4px 0 0; color: rgba(255,255,255,.62); font-size: 13px; }
 }
 
 
-/* Ctrl+K uses the same neutral, compact chrome as its main menu. */
-.info-target-setup--quick {
-  padding: 0; gap: 12px; border: 0; border-radius: 0;
-  background: #0b0b0b; box-shadow: none;
-}
-.info-target-setup--quick header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid #ffffff25; }
-.info-target-setup--quick header strong { margin: 0; font-size: 16px; font-weight: 600; }
-.info-target-setup--quick header output { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.info-target-setup--quick .target-picker { gap: 8px; }
-.info-target-setup--quick .target-drum { grid-template-rows: 20px 24px 28px 24px; border-radius: 0; background: #ffffff04; overflow: visible; }
-.info-target-setup--quick .target-drum > span { padding: 0; color: #aaa; font-weight: 600; }
-.info-target-setup--quick .target-drum > strong { font-size: 22px; font-weight: 600; }
-.info-target-setup--quick .target-drum:hover,
-.info-target-setup--quick .target-tolerance__control:hover { border-color: #ffffff50; box-shadow: none; }
-.info-target-setup--quick .target-drum:focus-within,
-.info-target-setup--quick .target-drum:focus,
-.info-target-setup--quick .target-tolerance__control:focus-within { border-color: #ffffff80; box-shadow: none; }
-.info-target-setup--quick button { border-radius: 0; }
-.info-target-setup--quick button:hover { color: #fff; background: #ffffff12; }
-.info-target-setup--quick button:focus-visible { outline: 1px solid white; outline-offset: -2px; }
-.info-target-setup--quick .target-tolerance { padding: 0; border: 0; border-radius: 0; background: transparent; }
-.info-target-setup--quick .target-tolerance__copy strong { font-weight: 500; letter-spacing: 0; }
-.info-target-setup--quick .target-tolerance__control { min-height: 32px; border-radius: 0; background: #ffffff04; }
-.info-target-setup--quick .target-tolerance__control strong { font-size: 14px; font-weight: 600; }
-.info-target-setup--quick .target-keep { padding: 4px 0; gap: 8px; grid-template-columns: 18px 1fr; border: 0; background: transparent; }
-.info-target-setup--quick .target-keep i { width: 16px; height: 16px; border-radius: 0; font-size: 12px; }
-.info-target-setup--quick .target-keep span { font-size: 12px; font-weight: 500; }
-.info-target-setup--quick .target-keep.is-active i { color: #21ff83; border-color: #21ff83; background: #21ff831a; }
-.info-target-setup--quick .target-actions { grid-template-columns: 1fr 1fr; padding-top: 12px; border-top: 1px solid #ffffff25; }
-.info-target-setup--quick .target-actions button { min-height: 34px; font-size: 12px; font-weight: 600; }
-.info-target-setup--quick .target-confirm { color: #fff; border: 1px solid #ff002480; background: #ff00241a; }
-.info-target-setup--quick .target-confirm:hover { background: #ff002430; }
+/* PIP-556: Ctrl+K uses the shared editor structure (.ck-editor__* in _training-overlay.scss). */
+.info-target-setup--quick { padding: 0; gap: 10px; border: 0; border-radius: 0; background: #0b0b0b; box-shadow: none; }
 
 @media (prefers-reduced-motion: reduce) {
   .info-target-setup *,

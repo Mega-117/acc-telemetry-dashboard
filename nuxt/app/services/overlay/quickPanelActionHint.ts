@@ -18,6 +18,13 @@ const hints: Record<string, string> = {
   'fuel-minus': 'Durata: togli un minuto allo stint.',
   'fuel-plus': 'Durata: aggiungi un minuto allo stint.',
   'fuel-apply': 'Carburante: applica i litri al setup.',
+  // PIP-556: ACC single layout.
+  'pressure-test': 'Stima pressioni (BETA): legge il setup e applica le pressioni iniziali.',
+  'voice-alerts': 'Avvisi vocali: giri, riferimenti, pressioni e target.',
+  'voice-close': 'Torna ai comandi.',
+  notifications: 'Notifiche: messaggi ed errori da leggere.',
+  'notifications-close': 'Chiudi: le informazioni lette escono dalle notifiche.',
+  'notifications-clear': 'Svuota: toglie ciò che è solo da leggere; restano le decisioni.',
 }
 
 /** Copy follows the canonical action IDs, independently of input device. */

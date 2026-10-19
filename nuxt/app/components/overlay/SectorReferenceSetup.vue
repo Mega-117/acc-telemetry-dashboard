@@ -4,8 +4,11 @@ import { hudSourcePolicy } from '~/services/sim/hudSourceAdapter'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import type { HudOverlaySettings } from '~/composables/useHudOverlay'
-import { adjustSectorReferenceTime, parseSectorReferenceTime, resolveCustomSectorTimes,
-  sectorReferenceContextKey } from '~/utils/customSectorReferences'
+import { MAX_SECTOR_MS, MIN_SECTOR_MS, adjustSectorReferenceField, adjustSectorReferenceTime, formatSectorReferenceTime, parseSectorReferenceTime,
+  resolveCustomSectorTimes, sectorReferenceContextKey, splitSectorReferenceTime, type SectorReferenceField } from '~/utils/customSectorReferences'
+import type { NumberFieldLimits } from '~/utils/controlKNumberField'
+import ControlKNumberField from '~/components/overlay/ControlKNumberField.vue'
+import ControlKViewHeader from '~/components/overlay/ControlKViewHeader.vue'
 import { normalizeSectorDeltaReference, type SectorDeltaReference } from '~/utils/sectorDeltaPresentation'
 
 const props = withDefaults(defineProps<{ keyboardOverlay?: boolean }>(), { keyboardOverlay: false })
@@ -44,7 +47,10 @@ function bindContext() {
   // PIP-526: nothing saved yet -> start from the best sectors, so a few presses do.
   draft.value = times ? times.map(formatSectorTime) : bestSectorDraft() ?? Array(boundContext.value.sectorCount ?? 3).fill('')
 }
-const formatSectorTime = (ms: number) => (Math.round(ms / 100) / 10).toFixed(1).replace('.', ',')
+const formatSectorTime = formatSectorReferenceTime
+const contextLine = computed(() => boundContext.value
+  ? `${boundContext.value.track} · ${boundContext.value.car}${boundContext.value.variant ? ` · ${boundContext.value.variant}` : ''}`
+  : 'Avvia il gioco e seleziona pista e vettura.')
 function bestSectorDraft(): string[] | null {
   const sectors = fastState.value.sectorHud?.sectors ?? []
   const count = boundContext.value?.sectorCount ?? 3
@@ -53,13 +59,34 @@ function bestSectorDraft(): string[] | null {
 }
 const bestAvailable = computed(() => !!bestSectorDraft())
 function useBestSectors() { const best = bestSectorDraft(); if (best) draft.value = best }
-// Wheel editing: OK on a sector edits it, Up/Down change 0,1 s, OK/Back leave.
-const editingSector = ref<number | null>(null)
+// PIP-556: wheel editing per field. OK on the seconds or the tenths of a
+// sector edits only that field; Up/Down change it (holding repeats), OK/Back leave.
+const editing = ref<{ index: number, field: SectorReferenceField } | null>(null)
+const fields: { id: SectorReferenceField, label: string }[] = [{ id: 'seconds', label: 'SEC' }, { id: 'tenths', label: 'DEC' }]
+function toggleEditing(index: number, field: SectorReferenceField) {
+  editing.value = editing.value?.index === index && editing.value.field === field ? null : { index, field }
+}
+// Shared number field (wheel, mouse scroll, typed digits): seconds 10..240, tenths 0..9.
+const FIELD_LIMITS: Record<SectorReferenceField, NumberFieldLimits> = {
+  seconds: { min: MIN_SECTOR_MS / 1000, max: MAX_SECTOR_MS / 1000, digits: 3, wrap: false },
+  tenths: { min: 0, max: 9, digits: 1, wrap: true },
+}
+function fieldNumber(index: number, field: SectorReferenceField): number | null {
+  const parts = splitSectorReferenceTime(draft.value[index] ?? '')
+  return parts ? parts[field] : null
+}
+function setField(index: number, field: SectorReferenceField, value: number) {
+  const parts = splitSectorReferenceTime(draft.value[index] ?? '') ?? { seconds: MIN_SECTOR_MS / 1000, tenths: 0 }
+  const next = { ...parts, [field]: value }
+  const ms = Math.min(MAX_SECTOR_MS, Math.max(MIN_SECTOR_MS, next.seconds * 1000 + next.tenths * 100))
+  draft.value[index] = formatSectorReferenceTime(ms)
+}
 function handleWheelCommand(command: string | undefined): boolean {
-  if (!props.keyboardOverlay || editingSector.value === null) return false
-  if (command === 'activate-action' || command === 'primary' || command === 'back') { editingSector.value = null; return true }
+  if (!props.keyboardOverlay || editing.value === null) return false
+  if (command === 'activate-action' || command === 'primary' || command === 'back') { editing.value = null; return true }
   if (command !== 'next-action' && command !== 'previous-action') return false
-  adjust(editingSector.value, command === 'next-action' ? 1 : -1)
+  const { index, field } = editing.value
+  draft.value[index] = adjustSectorReferenceField(draft.value[index]!, field, command === 'next-action' ? 1 : -1)
   return true
 }
 watch([contextKey, loaded], bindContext)
@@ -112,36 +139,63 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="sector-reference-setup" :class="{ 'sector-reference-setup--quick': keyboardOverlay }" data-overlay-interactive aria-label="Riferimenti settori" @keydown="onKey">
-    <header><span v-if="!keyboardOverlay">SETTORI</span><h2>Riferimenti settori</h2><p>{{ boundContext ? `${boundContext.track} · ${boundContext.car}${boundContext.variant ? ` · ${boundContext.variant}` : ''}` : 'Avvia il gioco e seleziona pista e vettura.' }}</p></header>
+    <!-- PIP-556: Control K editor structure: ← header, choices, fields, hint, one primary action. -->
+    <template v-if="keyboardOverlay">
+      <ControlKViewHeader title="Settori obiettivo" :subtitle="contextLine" action="sector-cancel" @back="!saving && emit('cancel')" />
+      <div class="ck-editor__shortcuts" role="group" aria-label="Confronta con">
+        <button v-for="item in modes" :key="item.id" type="button" :data-overlay-wheel-action="`sector-mode-${item.id}`" :aria-pressed="mode === item.id" :disabled="saving" @click="mode = item.id">{{ item.label }}</button>
+        <button v-if="mode === 'custom' && bestAvailable" type="button" data-overlay-wheel-action="sector-use-best" :disabled="saving || !boundKey || contextChanged" @click="useBestSectors">Usa i migliori</button>
+      </div>
+      <template v-if="mode === 'custom'">
+        <div class="ck-editor__fields ck-sector-fields">
+          <div v-for="(_, index) in draft" :key="index" class="ck-sector">
+            <span>S{{ index + 1 }}</span>
+            <div class="ck-sector__pair">
+              <ControlKNumberField v-for="field in fields" :key="field.id" :value="fieldNumber(index, field.id)"
+                :label="field.label" :action="`sector-${index}-${field.id}`" :name="`S${index + 1} ${field.id === 'seconds' ? 'secondi' : 'decimi'}`"
+                v-bind="FIELD_LIMITS[field.id]" :prefix="field.id === 'tenths' ? ',' : ''" :format="field.id === 'seconds' ? String : undefined"
+                :editing="editing?.index === index && editing.field === field.id" :disabled="saving || !boundKey || contextChanged"
+                @toggle="toggleEditing(index, field.id)" @update:value="setField(index, field.id, $event)" />
+            </div>
+          </div>
+        </div>
+        <p class="ck-editor__hint">Totale {{ total }} s · {{ editing ? 'Su/Giù o rotella cambiano solo questo campo · OK fatto' : 'OK o clic su un campo, poi Su/Giù, rotella o cifre' }}</p>
+        <p v-if="contextChanged" class="ck-editor__alert" role="alert">Gioco, pista, variante o vettura cambiati. Torna indietro e riapri.</p>
+        <p v-else-if="draft.some(value => value !== '') && !valid" class="ck-editor__alert" role="status">Inserisci tutti i tempi, da 10,0 secondi a 4:00,0.</p>
+      </template>
+      <p v-else class="ck-editor__hint">Ogni settore è confrontato con il tuo miglior settore.</p>
+      <p v-if="error" class="ck-editor__alert" role="alert">{{ error }}</p>
+      <div class="ck-editor__actions">
+        <button type="button" class="ck-editor__primary" data-overlay-wheel-action="sector-save" :disabled="!loaded || !valid || saving" @click="submit">{{ saving ? 'Salvataggio…' : 'Salva e usa' }}</button>
+      </div>
+    </template>
+    <template v-else>
+    <header><span>SETTORI</span><h2>Riferimenti settori</h2><p>{{ boundContext ? `${boundContext.track} · ${boundContext.car}${boundContext.variant ? ` · ${boundContext.variant}` : ''}` : 'Avvia il gioco e seleziona pista e vettura.' }}</p></header>
     <div class="sector-reference-modes" role="group" aria-label="Confronta con">
       <button v-for="item in modes" :key="item.id" type="button" :data-overlay-wheel-action="`sector-mode-${item.id}`" :aria-pressed="mode === item.id" :disabled="saving" @click="mode = item.id">{{ item.label }}</button>
     </div>
     <template v-if="mode === 'custom'">
-      <p class="sector-reference-help">{{ keyboardOverlay
-        ? (editingSector === null ? 'OK su un settore per modificarlo · da 10,0 a 70,0 s' : 'Su/Giù cambia di 0,1 s (tieni premuto per andare veloce) · OK conferma')
-        : 'Da 10,0 a 70,0 secondi per settore.' }}</p>
-      <button v-if="keyboardOverlay && bestAvailable" type="button" class="sector-reference-best" data-overlay-wheel-action="sector-use-best" :disabled="saving || !boundKey || contextChanged" @click="useBestSectors">Usa i miei migliori settori</button>
+      <p v-if="!keyboardOverlay" class="sector-reference-help">Da 10,0 secondi a 4:00,0 per settore.</p>
       <div class="sector-reference-drums" :style="{ gridTemplateColumns: `repeat(${Math.min(draft.length, 4)},minmax(0,1fr))` }">
         <article v-for="(_, index) in draft" :key="index" class="sector-reference-drum" @wheel.prevent="!saving && boundKey && !contextChanged && $event.deltaY !== 0 && adjust(index, $event.deltaY < 0 ? 1 : -1)">
           <label :for="`sector-reference-${index}`">S{{ index + 1 }}</label>
-          <button v-if="keyboardOverlay" type="button" class="sector-reference-value" :class="{ 'is-editing': editingSector === index }"
-            :data-overlay-wheel-action="`sector-${index}`" :aria-pressed="editingSector === index" :aria-label="`Tempo S${index + 1}`"
-            :disabled="saving || !boundKey || contextChanged" @click="editingSector = editingSector === index ? null : index">{{ draft[index] || '—' }}</button>
-          <div v-if="!keyboardOverlay" class="sector-reference-arrows">
+          <div class="sector-reference-arrows">
             <button v-for="step in [10, 1]" :key="step" type="button" :disabled="saving || !boundKey || contextChanged" :data-overlay-wheel-action="`sector-${index}-plus-${step}`" :aria-label="`Aumenta S${index + 1} di ${step === 10 ? 'un secondo' : 'un decimo'}`" @click="adjust(index, step)">▲<small>{{ step === 10 ? '1 s' : '0,1 s' }}</small></button>
           </div>
-          <input v-if="!keyboardOverlay" :id="`sector-reference-${index}`" v-model="draft[index]" type="text" inputmode="decimal" maxlength="4" placeholder="—" :disabled="saving || !boundKey || contextChanged" :aria-invalid="draft[index] !== '' && parsed[index] === null" :aria-label="`Tempo S${index + 1} in secondi`" @pointerdown="requestKeyboard" />
+          <input v-if="!keyboardOverlay" :id="`sector-reference-${index}`" v-model="draft[index]" type="text" inputmode="decimal" maxlength="5" placeholder="—" :disabled="saving || !boundKey || contextChanged" :aria-invalid="draft[index] !== '' && parsed[index] === null" :aria-label="`Tempo S${index + 1} in secondi`" @pointerdown="requestKeyboard" />
           <div v-if="!keyboardOverlay" class="sector-reference-arrows">
             <button v-for="step in [10, 1]" :key="step" type="button" :disabled="saving || !boundKey || contextChanged" :data-overlay-wheel-action="`sector-${index}-minus-${step}`" :aria-label="`Riduci S${index + 1} di ${step === 10 ? 'un secondo' : 'un decimo'}`" @click="adjust(index, -step)">▼<small>{{ step === 10 ? '1 s' : '0,1 s' }}</small></button>
           </div>
         </article>
       </div>
-      <p class="sector-reference-help">Totale: <strong>{{ total }} s</strong><span v-if="!keyboardOverlay"> · Il target giro resta indipendente.</span></p>
+      <p class="sector-reference-help">Totale: <strong>{{ total }} s</strong><span v-if="!keyboardOverlay"> · Il target giro resta indipendente.</span>
+        <span v-else> · {{ editing ? 'Su/Giù cambia solo questo campo · OK fatto' : 'OK su secondi o decimi per cambiarli' }}</span></p>
       <p v-if="contextChanged" role="alert">Gioco, pista, variante o vettura cambiati. Chiudi e riapri il pannello.</p>
       <p v-else-if="draft.some(value => value !== '') && !valid" role="status">Inserisci tutti i tempi, con al massimo un decimale.</p>
     </template>
     <p v-if="error" role="alert">{{ error }}</p>
     <footer><button type="button" class="sector-reference-save" data-overlay-wheel-action="sector-save" :disabled="!loaded || !valid || saving" @click="submit">{{ saving ? 'Salvataggio…' : 'Salva e usa' }}</button><button type="button" data-overlay-wheel-action="sector-cancel" :disabled="saving" @click="emit('cancel')">Annulla</button></footer>
+    </template>
   </section>
 </template>
 
@@ -153,28 +207,12 @@ button,input{font:inherit;box-sizing:border-box}button{cursor:pointer;color:inhe
 .sector-reference-drums{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.sector-reference-drum{border:1px solid #ffffff20;border-radius:14px;background:#ffffff03;padding:10px 7px;text-align:center}.sector-reference-drum label{font-size:12px;color:#aeb4bd;font-weight:900}.sector-reference-drum input{display:block;width:100%;min-width:0;border:0;border-radius:4px;color:#fff;background:transparent;text-align:center;font-size:29px;font-weight:900;font-variant-numeric:tabular-nums;padding:7px 0}.sector-reference-drum input[aria-invalid=true]{outline:2px solid #f97316}.sector-reference-arrows{display:flex;gap:5px;margin:6px 0}.sector-reference-arrows button{flex:1;padding:4px 0;font-size:11px}.sector-reference-arrows small{display:block;font-size:9px;color:#aeb4bd}
 footer{display:flex;gap:8px}footer button{padding:12px 10px;font-size:12px}.sector-reference-save{flex:1;background:#ff9136;color:#101010;border-color:#ff9136}[role=alert]{color:#ffb46b}
 
-.sector-reference-setup--quick { padding:0;gap:12px;border:0;border-radius:0;background:#0b0b0b; }
-.sector-reference-setup--quick h2 { font-size:16px;font-weight:600;margin:0 0 6px; }
-.sector-reference-setup--quick header p { font-size:11px;line-height:1.4; }
+/* PIP-556: Ctrl+K uses the shared editor structure (.ck-editor__* in _training-overlay.scss);
+   only the reset of this component's own button look stays here. */
+.sector-reference-setup--quick { padding:0;gap:10px;border:0;border-radius:0;background:#0b0b0b; }
 .sector-reference-setup--quick button { border-radius:0;font-weight:500; }
-.sector-reference-setup--quick button:hover:not(:disabled) { outline:none;background:#ffffff12; }
+.sector-reference-setup--quick button:hover:not(:disabled) { outline:none; }
 .sector-reference-setup--quick button[data-overlay-selected],
-.sector-reference-setup--quick button:focus-visible,
-.sector-reference-setup--quick input:focus { outline:1px solid #fff;outline-offset:-2px; }
-.sector-reference-setup--quick .sector-reference-modes button { padding:7px 4px;min-height:34px;font-size:11px; }
-.sector-reference-setup--quick .sector-reference-modes button[aria-pressed=true] { color:#fff;border-color:#ffffff70;background:#ffffff12;box-shadow:inset 0 -2px #ff0024; }
-.sector-reference-setup--quick .sector-reference-help { font-size:11px; }
-.sector-reference-setup--quick .sector-reference-value { display:block;width:100%;margin-top:4px;padding:6px 0;border:1px solid #ffffff30;background:transparent;font-size:22px;font-weight:600;font-variant-numeric:tabular-nums; }
-.sector-reference-setup--quick .sector-reference-value.is-editing { outline:2px solid #00e5ff;outline-offset:2px;background:#00e5ff18; }
-.sector-reference-setup--quick .sector-reference-best { min-height:32px;font-size:11px; }
-.sector-reference-setup--quick .sector-reference-drum { border-radius:0;padding:6px 4px; }
-.sector-reference-setup--quick .sector-reference-drum label { font-size:10px;font-weight:600; }
-.sector-reference-setup--quick .sector-reference-drum input { border-radius:0;font-size:22px;font-weight:600;padding:4px 0; }
-.sector-reference-setup--quick .sector-reference-arrows { gap:4px;margin:4px 0; }
-.sector-reference-setup--quick .sector-reference-arrows button { padding:3px 0; }
-.sector-reference-setup--quick footer { display:grid;grid-template-columns:1fr 1fr;padding-top:12px;border-top:1px solid #ffffff25; }
-.sector-reference-setup--quick footer button { padding:8px;min-height:34px; }
-.sector-reference-setup--quick .sector-reference-save { color:#fff;border:1px solid #ff002480;background:#ff00241a; }
-.sector-reference-setup--quick .sector-reference-save:hover:not(:disabled) { background:#ff002430; }
+.sector-reference-setup--quick button:focus-visible { outline:2px solid #ffff00;outline-offset:1px; }
 
 </style>

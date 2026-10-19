@@ -20,10 +20,29 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     expect(styles).toMatch(/\.quick-panel-section\[aria-label='Riferimenti numerici'\] \{\s*display: grid;\s*grid-row: 1;/)
     expect(styles).not.toContain("border-bottom: 1px solid #ffffff1a; }\n    .quick-panel-automations")
   })
-  it('hides a disabled Pressioni button while driving, keeps it when usable or in the box', () => {
-    expect(source).toContain('v-if="showPressureButton"')
-    // PIP-532: ...or while the lap measurement runs (its badge must be seen while driving).
-    expect(source).toMatch(/const showPressureButton = computed\(\(\) => isFullQuickPanelPreview\.value \|\| !hideStintWhileDriving\.value\s*\|\| isDryPressureApplying\.value \|\| quickPanelPressureState\.value\.state === 'ready' \|\| !!pressureBadge\.value\)/)
+  // PIP-556: ACC has its own single layout (Guida/Pausa), never the old vertical
+  // or horizontal ones, whatever preference was saved; no layout switch.
+  it('gives ACC its own single layout regardless of old preferences', () => {
+    expect(source).toContain("const isAccQuickPanel = computed(() => simulatorPresence.gameId.value === 'acc')")
+    expect(source).toContain('const usesAccLayout = computed(() => isAccQuickPanel.value || isFullQuickPanelPreview.value)')
+    expect(source).toMatch(/const isHorizontalQuickPanel = computed\(\(\) => phase\.value === 'launcher' && !usesAccLayout\.value[\s\S]{0,200}?quickPanelLayout\.value === 'horizontal'\)/)
+    expect(source).toContain('<QuickPanelLayoutToggle v-if="!usesAccLayout"')
+    expect(source).toContain("'overlay-content--acc': usesAccLayout && phase === 'launcher'")
+    // The old vertical rules never reach the ACC grid.
+    expect(styles).toContain('.overlay-content--launcher:has(.quick-panel-automations):not(.overlay-content--horizontal, .overlay-content--acc) {')
+  })
+  it('pairs the initial estimate before measured correction', () => {
+    const pair = source.slice(source.indexOf('class="quick-panel-pressure-pair"'), source.indexOf('id="control-k-fuel-preview"'))
+    expect(pair.indexOf('<PressureTestPanel')).toBeLessThan(pair.indexOf('data-overlay-wheel-action="pressure"'))
+    expect(pair).toContain('<span>Correggi<br>pressioni</span>')
+    expect(source.match(/<PressureTestPanel/g)).toHaveLength(1)
+    expect(source).toContain('id="quick-panel-pressure-test-feedback"')
+  })
+  it('keeps Pressioni visible in driving without enabling unavailable commands', () => {
+    expect(source).not.toContain('showPressureButton')
+    expect(source).toContain(':disabled="isDryPressureApplying || (!usesAccLayout && quickPanelPressureState.state !== \'ready\')"')
+    // PIP-556: in ACC it stays pressable and explains why it cannot run, without applying anything.
+    expect(source).toMatch(/if \(quickPanelPressureState\.value\.state !== 'ready'\) \{\s*showVoicePointNotice\(`Correggi pressioni: \$\{dryPressurePresentation\.value\.guidance\}`, 'error'\)\s*return\s*\}/)
   })
   it('PIP-509: the horizontal Tools group reserves no column for a hidden button', () => {
     const horizontal = styles.slice(styles.indexOf('.overlay-content--horizontal'))
@@ -66,7 +85,7 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     // PIP-532: inside the panel (at -12 px the icons were clipped and not clickable).
     expect(block).toContain('.quick-panel-layout { position: absolute; top: 0; right: 0;')
     expect(block).toContain('.quick-panel-layout button { width: 22px; height: 14px; min-height: 0; }')
-    expect(source).toContain('<QuickPanelLayoutToggle v-show="!isNotificationsOpen"')
+    expect(source).toContain('<QuickPanelLayoutToggle v-if="!usesAccLayout" v-show="!isNotificationsOpen"')
     expect(block).not.toMatch(/quick-panel-layout \{ position: absolute; top: -/)
     // The logo stays: the switch no longer covers it (PIP-527).
     expect(styles).not.toContain('.quick-panel-logo { opacity: 0; }')
@@ -84,16 +103,18 @@ describe('Ctrl+K layout order (PIP-509)', () => {
   })
   it('PIP-526: wheel Back everywhere, timer last in the cycle, first open on Pitwall', () => {
     const selection = readFileSync(fileURLToPath(new URL('../../app/composables/useOverlayActionSelection.ts', import.meta.url)), 'utf8')
-    expect(source).toContain('data-overlay-wheel-action="timer" data-overlay-wheel-last @click="openQuickTimer"')
+    // Outside ACC the timer closes the cycle; the ACC grid is read in visual order (PIP-556).
+    expect(source).toContain('data-overlay-wheel-action="timer" :data-overlay-wheel-last="usesAccLayout ? undefined : \'\'" @click="openQuickTimer"')
     expect(selection).toContain("button.hasAttribute('data-overlay-wheel-last')")
     expect(selection).toContain('return [...ordered, ...last]')
     expect(source).toContain("actionSelection.select('pitwall'); actionSelection.refresh()")
     // A value being edited consumes the wheel first; Back leaves the timer for the panel.
     expect(source).toContain('sectorReferenceSetup.value?.handleWheelCommand?.(command)')
     // PIP-532: the notifications view is closed first, then the timer.
-    expect(source).toMatch(/function runBackAction\(\) \{\s*if \(isNotificationsOpen\.value\) \{ closeNotifications\(\); return \}\s*if \(isQuickTimerOpen\.value\) \{ leaveQuickTimer\(\); return \}/)
-    expect(source).toContain("function openFuelSetup() { isFuelSetupOpen.value = true; void nextTick(() => actionSelection.select('fuel-plus')) }")
-    expect(source).toContain("selectedWheelActionId.value = 'target-time'")
+    // PIP-556: then the voice alerts view.
+    expect(source).toMatch(/function runBackAction\(\) \{\s*if \(isNotificationsOpen\.value\) \{ closeNotifications\(\); return \}\s*if \(isVoiceViewOpen\.value\) \{ closeVoiceView\(\); return \}\s*if \(isQuickTimerOpen\.value\) \{ leaveQuickTimer\(\); return \}/)
+    expect(source).toContain("function openFuelSetup() { isFuelSetupOpen.value = true; void nextTick(() => actionSelection.select(usesAccLayout.value ? 'fuel-minutes' : 'fuel-plus')) }")
+    expect(source).toContain("selectedWheelActionId.value = 'target-seconds'")
     expect(source).toContain('<span>Giro obiettivo</span>')
     expect(source).toContain('<span>Settori obiettivo</span>')
   })
@@ -106,19 +127,27 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     expect(source).toContain('<Teleport defer to="#quick-panel-notification-pressure">')
     expect(source).toContain('<Teleport defer to="#quick-panel-notification-requests">')
     expect(source).not.toContain('quick-panel-horizontal-fuel-status')
-    // The bell sits next to the timer and only exists while there is something to read.
+    // The bell sits next to the timer and, outside ACC, only exists while there is
+    // something to read; the ACC grid keeps its place, disabled when empty (PIP-556).
     const timer = source.indexOf('data-overlay-wheel-action="timer"')
     const bell = source.indexOf('data-overlay-wheel-action="notifications"')
     expect(bell).toBeGreaterThan(timer)
-    expect(source).toContain('v-if="notificationCount > 0 && !isNotificationsOpen"')
+    expect(source).toContain('v-if="(usesAccLayout || notificationCount > 0) && !isNotificationsOpen"')
+    expect(source).toContain(':disabled="notificationCount === 0"')
     // Open view hides the buttons; X / wheel Back closes it; a new error opens it.
     expect(source).toContain(":class=\"{ 'quick-panel-main--behind-notifications': isNotificationsOpen }\"")
     expect(styles).toContain('.quick-panel-main--behind-notifications { display: none !important; }')
     expect(source).toMatch(/function runBackAction\(\) \{\s*if \(isNotificationsOpen\.value\) \{ closeNotifications\(\); return \}/)
-    expect(source).toContain('if (errors > notificationErrorCount) openNotifications()')
+    // PIP-556: Notifiche never opens by itself; viewing it marks errors as read.
+    const count = source.slice(source.indexOf('function countNotifications()'), source.indexOf('function openNotifications()'))
+    expect(count).not.toContain('openNotifications()')
+    expect(count).toContain('if (isNotificationsOpen.value) visibleNotifications.forEach(item => seenNotifications.add(item.key))')
+    // Read outcomes leave on close; "Svuota" clears what does not wait for a decision.
+    expect(source).toMatch(/function closeNotifications\(\) \{[\s\S]{0,300}?clearNotifications\(\['info'\]\)/)
+    expect(source).toContain(`data-overlay-wheel-action="notifications-clear" @click="clearNotifications(['info', 'error'])"`)
     expect(source).toContain('data-overlay-wheel-action="notifications-close" @click="closeNotifications"')
-    // The lap badge keeps the Pressioni button visible while the measurement runs.
-    expect(source).toMatch(/quickPanelPressureState\.value\.state === 'ready' \|\| !!pressureBadge\.value\)/)
+    // The lap badge remains available on the always-visible Pressioni button.
+    expect(source).toContain('v-if="pressureBadge"')
   })
   it('PIP-533: voice buttons show and change the alert for the session being driven', () => {
     expect(source).toContain(':coach="isFullQuickPanelPreview || coachVoiceOn"')
@@ -140,5 +169,47 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     // PIP-510: the layout follows the game from the menus on, through useSimulatorPresence.
     expect(source).toContain('const support = computed(() => gameUiSupport(simulatorPresence.gameId.value))')
     expect(styles).toContain('.training-overlay--launcher .quick-panel-waiting {')
+  })
+})
+
+// PIP-556: ACC single layout contract (Pausa grid, Guida row, views, status line).
+describe('ACC Control K single layout (PIP-556)', () => {
+  const acc = styles.slice(styles.indexOf('// ─── PIP-556: ACC Control K'))
+  it('Pausa is a fixed two-row grid with every command in a fixed place, plus one status line', () => {
+    expect(acc).toContain("'logo est cor fmin fses pit'")
+    expect(acc).toContain("'logo tgt sec voice timer bell'")
+    expect(acc).toContain("'status status status status status status'")
+    expect(acc).toMatch(/\.ck-status \{[\s\S]{0,200}?height: 20px;[\s\S]{0,120}?white-space: nowrap;/)
+    // Notifications: one whole card at a time, the height follows the card.
+    expect(acc).toContain('.quick-panel-notifications__body :is([hidden], [data-ck-offpage]) { display: none !important; }')
+    expect(source).toContain("element.toggleAttribute('data-ck-offpage', usesAccLayout.value && index !== notificationPage.value)")
+  })
+  it('Guida keeps Pitwall, Correggi pressioni and the alerts; Riferimenti, Target and the bell only when useful', () => {
+    const drive = acc.slice(acc.indexOf('.launcher-tools.ck.ck--drive {'))
+    expect(drive.length).toBeLessThan(acc.length)
+    expect(drive).toMatch(/:is\(\.pressure-test__button, \.fuel-open, \.quick-reference, \.ck-voice-alerts, \.ck-view-close,\s*\.quick-panel-timer, \.quick-panel-dev\) \{ display: none; \}/)
+    // The Racer Core mark stays while driving.
+    expect(drive).toContain('.quick-panel-logo { order: 0; width: 40px; height: 20px;')
+    expect(drive).toContain("&.ck--no-track-references [data-overlay-wheel-action='references']")
+    expect(drive).toContain("&.ck--no-target [data-overlay-wheel-action='target-voice']")
+    expect(drive).toContain('&.ck--no-notifications .quick-panel-notifications-button')
+    expect(drive).toContain('.ck-status--empty { display: none; }')
+    expect(source).toContain("'ck--no-target': !isFullQuickPanelPreview.value && !infoTargetActive.value")
+    expect(source).toContain("'ck--no-track-references': !isFullQuickPanelPreview.value && trackVoiceReferences.available.value === false")
+  })
+  it('views replace the commands inside the same two rows instead of stretching the frame', () => {
+    expect(acc).toMatch(/\.quick-panel-notifications \{\s*grid-area: 1 \/ 2 \/ 3 \/ -1;[\s\S]{0,80}?height: 2 \* \$ck-cell \+ \$ck-gap;/)
+    expect(acc).toContain('&.overlay-content--target { width: $ck-width; }')
+    expect(source).toContain('data-overlay-wheel-action="voice-alerts" @click="openVoiceView"')
+    expect(source).toContain('data-overlay-wheel-action="voice-close" @click="closeVoiceView"')
+  })
+  it('the context comes from the shared resolver and the status from one priority list', () => {
+    // Through the settling tracker: weak force-feedback evidence cannot flicker the layout.
+    expect(source).toContain("const controlKContextTracker = createControlKContextTracker('pause')")
+    expect(source).toContain('controlKContext.value = controlKContextTracker.update({')
+    expect(source).toContain('const controlKStatus = computed<ControlKStatusMessage | null>(() => pickControlKStatus([')
+    expect(source).toContain(':status-line="usesAccLayout" @status="onPressureTestStatus" @outcome="onPressureTestOutcome"')
+    // The applied or blocked correction leaves Notifiche.
+    expect(source).toContain("&& !['completed', 'blocked'].includes(quickPanelPressureState.value.state)")
   })
 })

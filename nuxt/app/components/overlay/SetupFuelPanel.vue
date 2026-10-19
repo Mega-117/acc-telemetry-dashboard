@@ -1,8 +1,15 @@
 <script setup lang="ts">
 import { Fuel, LoaderCircle } from '@lucide/vue'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-const props = defineProps<{ api: any; separateView?: boolean; editorOnly?: boolean; showHeading?: boolean; statusTarget?: string; previewExpanded?: boolean; bodyTarget?: string }>()
-const emit = defineEmits<{ open: []; cancel: [] }>()
+import ControlKNumberField from '~/components/overlay/ControlKNumberField.vue'
+import ControlKViewHeader from '~/components/overlay/ControlKViewHeader.vue'
+import { stepNumberField, type NumberFieldLimits } from '~/utils/controlKNumberField'
+const props = defineProps<{ api: any; separateView?: boolean; editorOnly?: boolean; showHeading?: boolean; statusTarget?: string; previewExpanded?: boolean; bodyTarget?: string
+  /** PIP-556: unavailable commands stay pressable and explain why through `notice`. */
+  reportUnavailable?: boolean
+  /** PIP-556: minutes as the shared number field (wheel, mouse scroll, digits) instead of -/input/+. */
+  numberField?: boolean }>()
+const emit = defineEmits<{ open: []; cancel: []; notice: [text: string, tone: 'ok' | 'error'] }>()
 const minutes = defineModel<number>('minutes', { default: 10 })
 const open = ref(props.editorOnly === true || props.previewExpanded === true), pending = ref(false), error = ref('')
 const applicationSucceeded = ref(false)
@@ -67,6 +74,18 @@ function adjust(amount: number) {
   const current = Number(minutes.value)
   minutes.value = Math.max(1, Math.min(180, (Number.isFinite(current) ? Math.round(current) : 10) + amount))
 }
+const MINUTES_LIMITS: NumberFieldLimits = { min: 1, max: 180, digits: 3, wrap: false }
+const editingMinutes = ref(false)
+function setMinutes(value: number) { if (!pending.value) minutes.value = value }
+// OK on the field edits it; Up/Down change it, OK or Back leave it.
+function handleWheelCommand(command: string | undefined): boolean {
+  if (!editingMinutes.value) return false
+  if (command === 'activate-action' || command === 'primary' || command === 'back') { editingMinutes.value = false; return true }
+  if (command !== 'next-action' && command !== 'previous-action') return false
+  setMinutes(stepNumberField(Number(minutes.value), command === 'next-action' ? 1 : -1, MINUTES_LIMITS))
+  return true
+}
+defineExpose({ handleWheelCommand })
 function wheelMinutes(event: WheelEvent) {
   if (event.ctrlKey || !event.deltaY) return
   event.preventDefault()
@@ -90,6 +109,8 @@ async function applyPlan(mode: 'auto' | 'minutes', expected: any) {
   const result = await props.api.trainingOverlayApplySetupFuel({ mode, minutes: Number(minutes.value), contextKey: expected.contextKey, totalLitres: expected.totalLitres })
   applicationSucceeded.value = result?.ok === true
   error.value = result?.reason || 'Esito non disponibile.'
+  emit('notice', applicationSucceeded.value ? `Benzina impostata${expected?.totalLitres ? `: ${expected.totalLitres} L` : '.'}` : `Benzina: ${error.value}`,
+    applicationSucceeded.value ? 'ok' : 'error')
   // PIP-522: a success message leaves after 5 s; a failure stays until the next action.
   clearTimeout(successTimer)
   if (applicationSucceeded.value) successTimer = setTimeout(() => {
@@ -101,7 +122,8 @@ function finishApplication() {
   if (open.value) void refresh()
 }
 async function applySession() {
-  if (pending.value || !sessionAllowsAuto.value) return
+  if (pending.value) return
+  if (!sessionAllowsAuto.value) { emit('notice', `Benzina sessione: ${sessionHint.value.replace(/^Carburante intera sessione: /, '')}`, 'error'); return }
   await beginApplication()
   try {
     if (disposed) return
@@ -110,10 +132,11 @@ async function applySession() {
     if (disposed) return
     if (!value?.available || !value?.plan?.ok) {
       error.value = value?.conflict || value?.unavailableReason || value?.plan?.reason || 'Carburante sessione non disponibile.'
+      emit('notice', `Benzina sessione: ${error.value}`, 'error')
       return
     }
     await applyPlan('auto', value.plan)
-  } catch { error.value = 'Applicazione interrotta: controlla il carburante nel setup.' }
+  } catch { error.value = 'Applicazione interrotta: controlla il carburante nel setup.'; emit('notice', `Benzina: ${error.value}`, 'error') }
   finally { finishApplication() }
 }
 async function apply() {
@@ -124,7 +147,7 @@ async function apply() {
     if (disposed) return
     await applyPlan('minutes', expected)
   }
-  catch { error.value = 'Applicazione interrotta: controlla il carburante nel setup.' }
+  catch { error.value = 'Applicazione interrotta: controlla il carburante nel setup.'; emit('notice', `Benzina: ${error.value}`, 'error') }
   finally { finishApplication() }
 }
 onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); clearTimeout(successTimer); clearTimeout(sessionTimer); void props.api?.trainingOverlayKeyboardEditing?.(false) })
@@ -133,16 +156,21 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); clea
 <template>
   <section class="fuel-panel" :class="{ 'fuel-panel--editor': editorOnly }">
     <h2 v-if="showHeading && !editorOnly" class="quick-panel-heading">Benzina</h2>
-    <button v-if="!editorOnly" class="fuel-open" type="button" data-overlay-wheel-action="fuel-session" aria-label="Carburante intera sessione" :aria-busy="pending" :disabled="pending || !sessionAllowsAuto" :title="sessionAllowsAuto ? undefined : sessionHint" @click="applySession"><LoaderCircle v-if="pending" class="fuel-pending-spinner" :size="16" aria-hidden="true" /><Fuel v-else :size="22" aria-hidden="true" /><span>Sessione</span></button>
+    <button v-if="!editorOnly" class="fuel-open" type="button" data-overlay-wheel-action="fuel-session" aria-label="Carburante intera sessione" :aria-busy="pending" :disabled="pending || (!sessionAllowsAuto && !reportUnavailable)" :data-unavailable="!sessionAllowsAuto && reportUnavailable ? '' : undefined" :title="sessionAllowsAuto ? undefined : sessionHint" @click="applySession"><LoaderCircle v-if="pending" class="fuel-pending-spinner" :size="16" aria-hidden="true" /><Fuel v-else :size="22" aria-hidden="true" /><span>Sessione</span></button>
     <Teleport defer :to="statusTarget || 'body'" :disabled="!statusTarget">
       <div v-if="!open && (pending || error)" class="fuel-status" :class="{ 'fuel-status--error': !pending && !applicationSucceeded }" role="status" aria-live="polite"><strong>{{ pending ? 'Carburante' : applicationSucceeded ? 'Carburante impostato' : 'Problema carburante' }}</strong><p>{{ statusMessage }}</p></div>
     </Teleport>
     <button v-if="!editorOnly" class="fuel-open" type="button" data-overlay-wheel-action="fuel" aria-label="Carburante durata stint" :aria-expanded="open" :disabled="pending" @click="separateView ? emit('open') : open = !open"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8 3 5l3-2 2 3h10a2 2 0 0 1 2 2v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V10a2 2 0 0 1 1-2Z" /><path d="M10 6V3h7v3M8 11l8 6m0-6-8 6" /></svg><span>A minuti</span></button>
-    <button v-if="editorOnly" type="button" class="utility-action overlay-menu-back" data-overlay-wheel-action="fuel-back" :disabled="pending" @click="emit('cancel')">← Torna al pannello</button>
+    <!-- PIP-556: in Control K ACC the editor has the shared ← header. -->
+    <ControlKViewHeader v-if="editorOnly && numberField" title="Benzina a minuti" subtitle="Carburante per la durata dello stint" action="fuel-back" @back="!pending && emit('cancel')" />
+    <button v-else-if="editorOnly" type="button" class="utility-action overlay-menu-back" data-overlay-wheel-action="fuel-back" :disabled="pending" @click="emit('cancel')">← Torna al pannello</button>
     <Teleport defer :to="bodyTarget || 'body'" :disabled="!bodyTarget">
     <div v-if="open" class="fuel-body">
-      <strong>Prepara il carburante per lo stint</strong>
-      <div class="fuel-duration" :inert="pending || undefined">
+      <strong v-if="!numberField">Prepara il carburante per lo stint</strong>
+      <ControlKNumberField v-if="numberField" class="fuel-minutes-field" :value="Number(minutes)" label="MINUTI" action="fuel-minutes"
+        name="Minuti stint" v-bind="MINUTES_LIMITS" :format="String" :disabled="pending" :editing="editingMinutes"
+        @toggle="editingMinutes = !editingMinutes" @update:value="setMinutes" />
+      <div v-else class="fuel-duration" :inert="pending || undefined">
         <button type="button" data-overlay-wheel-action="fuel-minus" aria-label="Un minuto in meno" @click="adjust(-1)">−</button>
         <label><input v-model.number="minutes" type="number" min="1" max="180" step="1" aria-label="Minuti stint" :disabled="pending" @wheel="wheelMinutes" @pointerdown="keyboard" @keydown.stop @blur="api?.trainingOverlayKeyboardEditing?.(false)"> min</label>
         <button type="button" data-overlay-wheel-action="fuel-plus" aria-label="Un minuto in più" @click="adjust(1)">+</button>
@@ -152,6 +180,7 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); clea
         <button v-for="value in [10, 20, 30, 45]" :key="value" type="button" :data-overlay-wheel-action="`fuel-preset-${value}`"
           :aria-pressed="Number(minutes) === value" :disabled="pending" @click="minutes = value">{{ value }} min</button>
       </div>
+      <p v-if="numberField" class="ck-editor__hint">{{ editingMinutes ? 'Su/Giù o rotella cambiano i minuti · OK fatto' : 'OK o clic sul campo, poi Su/Giù, rotella o cifre' }}</p>
       <button class="fuel-apply" type="button" data-overlay-wheel-action="fuel-apply" :aria-busy="pending" :aria-label="pending ? 'Applicazione in corso' : undefined" :disabled="!state?.available || pending || previewPending" @click="apply"><template v-if="pending">Applicazione<span class="fuel-pending-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></template><template v-else>{{ `Applica carburante${plan?.ok ? ` · ${plan.totalLitres} L` : ''}` }}</template></button>
       <div v-if="minutesProblem" class="fuel-status" role="status" aria-live="polite"><strong>Problema carburante</strong><p>{{ minutesProblem }}</p></div>
     </div>

@@ -37,6 +37,7 @@ watch(presentationVisible, visible => {
 import { prepareOverviewEntry, decodeOverviewImage, overviewEntryKey, type OverviewEntry } from '~/services/auth/overviewEntryPreparation'
 import { responsiveImage, OVERVIEW_CAR_SIZES } from '~/utils/responsiveImage'
 import { getOverviewCarImage } from '~/utils/overviewCarImage'
+import { createDashboardEntryRecovery, EMPTY_ENTRY_STATE } from '~/services/auth/dashboardEntryRecovery'
 import { createAuthRevisionLeaseCoordinator } from '~/services/auth/authRevisionLease'
 import { loadRaceCalendarEvents } from '~/repositories/raceCalendarRepository'
 
@@ -251,15 +252,32 @@ type AuthState = 'login' | 'register' | 'reset' | 'register-success'
 const appState = ref<AppState>('initializing')
 const authState = ref<AuthState>('login')
 const preparingDashboard = ref(false)
+const dashboardEntryState = shallowRef({ ...EMPTY_ENTRY_STATE })
+const dashboardEntryRecovery = createDashboardEntryRecovery({ onChange: state => {
+  dashboardEntryState.value = state
+  const api = typeof window === 'undefined' ? null : (window as Window & {
+    electronAPI?: { reportRuntimeHealth?: (payload: unknown) => void }
+  }).electronAPI
+  api?.reportRuntimeHealth?.({ dashboardEntry: state })
+} })
+const loadingMessage = computed(() => dashboardEntryState.value.status === 'failed'
+  ? 'Non riesco ad aprire la dashboard. Puoi riprovare senza uscire dal tuo account.'
+  : dashboardEntryState.value.attempt === 2 && dashboardEntryState.value.status !== 'ready'
+    ? 'Apertura della dashboard non riuscita. Riprovo...'
+    : authRecovery.value.message)
+const canRetryLoading = computed(() => dashboardEntryState.value.status === 'failed' || authRecovery.value.canRetry)
+const retryLoading = () => dashboardEntryState.value.status === 'failed'
+  ? enterDashboard() : retryRecoverableAuthSession()
 const overviewEntry = shallowRef<OverviewEntry | null>(null)
 provide(overviewEntryKey, overviewEntry)
 const entryLeases = createAuthRevisionLeaseCoordinator()
 watch([() => profileUser.value?.uid, canEnterApp], () => {
+  dashboardEntryRecovery.cancel()
   entryLeases.observe(profileUser.value?.uid || null)
   preparingDashboard.value = false
   overviewEntry.value = null
 }, { immediate: true, flush: 'sync' })
-onBeforeUnmount(() => { entryLeases.invalidate() })
+onBeforeUnmount(() => { dashboardEntryRecovery.cancel(); entryLeases.invalidate() })
 const userEmail = ref('')
 const hasInitialized = ref(false)
 const showBrowserMaintenanceNotification = ref(false)
@@ -404,28 +422,29 @@ const enterDashboard = async () => {
   const destination = pendingSpaRedirectPath.value || (isDashboardRoute(normalizedRoutePath.value) ? route.fullPath : '/panoramica')
   const isCurrent = () => entryLeases.isLeaseCurrent(lease, profileUser.value?.uid) && canEnterApp.value
   preparingDashboard.value = true
+  appState.value = 'loading'
   try {
-    // Hydrate local projections before the overview preparation starts cloud reads.
-    await ownerCacheLifecycle.prepare(uid)
-    if (!isCurrent()) return
-    if (destination.split(/[?#]/)[0] === '/panoramica') {
-      const entry = prepareOverviewEntry(uid, {
-        projection: () => telemetryGateway.getOverviewProjection(uid),
-        events: () => cloudSessionReady.value ? loadRaceCalendarEvents(uid, 25) : Promise.resolve([]),
-        image: projection => decodeOverviewImage(responsiveImage(getOverviewCarImage(projection?.lastCar.rawName), appBaseURL, OVERVIEW_CAR_SIZES)),
-        code: warmDashboardCode,
+    await dashboardEntryRecovery.run(async attempt => {
+      await attempt.step('cache', () => ownerCacheLifecycle.prepare(uid))
+      if (destination.split(/[?#]/)[0] === '/panoramica') {
+        const entry = prepareOverviewEntry(uid, {
+          projection: () => telemetryGateway.getOverviewProjection(uid),
+          events: () => cloudSessionReady.value ? loadRaceCalendarEvents(uid, 25) : Promise.resolve([]),
+          image: projection => decodeOverviewImage(responsiveImage(getOverviewCarImage(projection?.lastCar.rawName), appBaseURL, OVERVIEW_CAR_SIZES)),
+          code: warmDashboardCode,
+        })
+        overviewEntry.value = entry
+        await attempt.step('overview', () => entry.ready)
+      }
+      await attempt.step('route', async () => {
+        const failure = await router.replace(destination)
+        // Duplicated navigation is already at the destination; aborted/redirected is not.
+        if (failure && router.currentRoute.value.fullPath !== destination) throw new Error('navigation-failed')
       })
-      overviewEntry.value = entry
-      await entry.ready
-    }
-    if (!isCurrent()) return
-    await router.replace(destination)
-    if (!isCurrent()) return
-    pendingSpaRedirectPath.value = ''
-    appState.value = 'dashboard'
-  } catch {
-    // Route failures retain the existing recoverable loading surface.
-    if (isCurrent()) appState.value = 'loading'
+      if (!attempt.isCurrent()) return
+      pendingSpaRedirectPath.value = ''
+      appState.value = 'dashboard'
+    }, isCurrent)
   } finally {
     if (isCurrent()) preparingDashboard.value = false
   }
@@ -644,13 +663,13 @@ provide('goToSettings', handleGoToSettings)
         <!-- Loading Screen -->
         <div v-else-if="appState === 'loading'" key="loading" class="loading-screen">
           <div class="loading-content">
-            <div v-if="!authRecovery.canRetry" class="loading-spinner"></div>
-            <p class="loading-text">{{ authRecovery.message }}</p>
+            <div v-if="!canRetryLoading" class="loading-spinner"></div>
+            <p class="loading-text">{{ loadingMessage }}</p>
             <button
-              v-if="authRecovery.canRetry"
+              v-if="canRetryLoading"
               type="button"
               class="loading-retry"
-              @click="retryRecoverableAuthSession()"
+              @click="retryLoading()"
             >
               Riprova
             </button>

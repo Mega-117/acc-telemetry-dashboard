@@ -2469,7 +2469,7 @@ button.is-active {
 }
 
 .control-k-fuel-status:empty { display: none; }
-.overlay-content--launcher:not(.overlay-content--horizontal) .control-k-fuel-status {
+.overlay-content--launcher:not(.overlay-content--horizontal, .overlay-content--acc) .control-k-fuel-status {
   grid-column: 1 / -1;
   order: 99;
   min-width: 0;
@@ -2591,16 +2591,17 @@ button.is-active {
   .quick-panel-horizontal-pressure,
   .quick-panel-horizontal-requests,
   .quick-panel-horizontal-side > .control-k-fuel-status { width: 240px; }
-  .quick-panel-dev { order: 7; }
+  // Full-row feedback must not contribute its intrinsic width to the button row.
+  .quick-panel-dev { order: 7; width: 0; min-width: 100%; }
 }
 
 // PIP-527: vertical layout while driving: Pitwall and the four voice alerts on one row.
-.training-overlay--launcher .overlay-content--launcher:not(.overlay-content--horizontal)
+.training-overlay--launcher .overlay-content--launcher:not(.overlay-content--horizontal, .overlay-content--acc)
   .quick-panel-main:has(.quick-panel-automations.quick-panel-driving:not(.quick-panel-show-all)) {
   // Five buttons must fit the fixed vertical width: 56 px each, 5 px apart.
   // The main box is normally transparent in the 4-column grid: span it all.
   grid-column: 1 / -1;
-  display: flex; flex-direction: row; align-items: flex-end; gap: 5px; min-width: 0;
+  display: flex; flex-direction: row; flex-wrap: wrap; align-items: flex-end; gap: 5px; min-width: 0;
   .quick-panel-secondary {
     display: flex; flex-direction: column; align-items: center; flex: none; width: 56px; padding: 12px 0 0; gap: 8px;
   }
@@ -2610,7 +2611,7 @@ button.is-active {
   .quick-panel-secondary > .launcher-tool-button { width: 56px; min-width: 56px; flex: none; }
 }
 // PIP-527: vertical header: logo on the left, timer, then the switch in the corner.
-.training-overlay--launcher .overlay-content--launcher:not(.overlay-content--horizontal) .launcher-tools__header {
+.training-overlay--launcher .overlay-content--launcher:not(.overlay-content--horizontal, .overlay-content--acc) .launcher-tools__header {
   // The timer keeps the corner; the switch appears just left of it on hover.
   grid-template-columns: 56px minmax(0, 1fr) auto auto;
   .quick-panel-layout { grid-column: 3; grid-row: 1; justify-self: end; }
@@ -2652,7 +2653,7 @@ button.is-active {
 }
 
 // Vertical quick panel: three categories sharing the existing actions.
-.training-overlay--launcher .overlay-content--launcher:has(.quick-panel-automations):not(.overlay-content--horizontal) {
+.training-overlay--launcher .overlay-content--launcher:has(.quick-panel-automations):not(.overlay-content--horizontal, .overlay-content--acc) {
   .launcher-tools__actions {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px 10px;
@@ -2818,4 +2819,250 @@ button.is-active {
   display: flex; align-items: center; justify-content: center;
   min-width: 220px; min-height: 56px; margin: 0; padding: 12px 18px;
   border: 1px dashed #ffffff35; color: #d8dde5; font-size: 13px; letter-spacing: .02em;
+}
+
+
+// The initial estimate and measured correction are adjacent, separate actions.
+.training-overlay--launcher .quick-panel-pressure-pair {
+  display: flex; align-items: start; gap: 6px; grid-column: 1 / -1;
+  > .pressure-test { order: 0; flex: 0 0 64px; }
+  > .launcher-tool-button { width: 64px; height: 64px; min-height: 64px; padding: 8px 2px 3px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 1px; font-size: 10px; line-height: 11px; }
+}
+.training-overlay--launcher .quick-panel-pressure-test-feedback {
+  grid-column: 1 / -1; order: 99; min-width: 0;
+  &:not(:has(p, dl)) { display: none; }
+}
+.training-overlay--launcher .overlay-content--horizontal {
+  .quick-panel-pressure-test-feedback { flex-basis: 100%; width: 0; min-width: 100%; }
+}
+
+.training-overlay--launcher .overlay-content--horizontal:has(.quick-panel-automations)
+  .quick-panel-automations > .quick-panel-pressure-pair {
+  order: 1; flex-basis: auto; padding-top: 20px;
+}
+
+// ─── PIP-556: ACC Control K, one layout with two contexts ───────────────────
+// The shared components keep their DOM; every wrapper is flattened
+// (display: contents) so each command is placed directly in one grid.
+// Pausa: logo + two fixed rows of five commands + one status line.
+// Guida: one compact row. Views (notifiche, avvisi) replace the buttons in the
+// same frame instead of stretching it. The wheel follows the visual order.
+$ck-cell: 64px;
+$ck-drive-cell: 56px;
+$ck-gap: 6px;
+// Logo column + five cells: the frame width shared by grid and editors.
+$ck-width: 56px + 5 * $ck-cell + 5 * $ck-gap;
+
+.training-overlay--acc .voice-point-notice { display: none; }
+
+.training-overlay--launcher .overlay-content--launcher.overlay-content--acc {
+  --overlay-preferred-content-width: 0px;
+  width: max-content;
+  &.overlay-content--target { width: $ck-width; }
+
+  .launcher-tools.ck {
+    gap: $ck-gap;
+    :is(.launcher-tools__header, .quick-panel-header-actions, .launcher-tools__actions, .quick-panel-main,
+      .quick-panel-categories, .quick-panel-section, .quick-panel-pair, .quick-panel-automations, .fuel-panel,
+      .quick-panel-secondary, .quick-panel-pressure-pair, .pressure-test, .quick-panel-voice-grid) {
+      display: contents;
+    }
+    :is(.quick-panel-heading:not(.quick-panel-notifications .quick-panel-heading), .quick-panel-training,
+      .control-k-pressure-info, .quick-panel-pressure-test-feedback,
+      .quick-panel-horizontal-side, .control-k-fuel-preview) {
+      display: none;
+    }
+    .quick-panel-waiting, .quick-panel-dev, .quick-panel-notifications { grid-column: 1 / -1; }
+    .quick-panel-dev { padding-top: 0; border-top: 0; font-size: 10px; }
+
+    // One square language for every command.
+    :is(.pressure-test__button, .launcher-tool-button--pressure, .fuel-open, [data-overlay-wheel-action='pitwall'],
+      .quick-reference, .ck-voice-alerts, .quick-panel-timer, .quick-panel-notifications-button, .quick-panel-voice-button) {
+      position: relative; box-sizing: border-box; width: $ck-cell; height: $ck-cell; min-height: $ck-cell; margin: 0;
+    }
+    :is(.ck-voice-alerts, .quick-panel-timer, .quick-panel-notifications-button) {
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+      padding: 6px 2px; font-size: 10px; font-weight: 500; line-height: 1.1; letter-spacing: 0; text-transform: none;
+      span { font: inherit; letter-spacing: 0; text-transform: none; }
+    }
+    // Same anatomy for every command: 20 px icon at the same height, label in a
+    // two-line box below it, so neighbouring texts line up (Correggi used a 16 px
+    // icon and centred differently). Voice switches keep their ON/OFF line.
+    :is(.pressure-test__button, .launcher-tool-button--pressure, .fuel-open, [data-overlay-wheel-action='pitwall'],
+      .quick-reference > .launcher-tool-button, .ck-voice-alerts, .quick-panel-timer, .quick-panel-notifications-button) {
+      display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 4px;
+      padding: 8px 2px 0; font-size: 11px; font-weight: 500; line-height: 12px; text-align: center;
+      > svg:not(.quick-reference-check) { width: 20px; height: 20px; flex: none; }
+      > span { display: flex; align-items: center; justify-content: center; min-height: 24px; white-space: normal; }
+    }
+    // Stima pressioni: square corners and the same surface as its neighbours.
+    .pressure-test__button { border: 1px solid #ffffff30; border-radius: 0; background: #ffffff08; color: #eee; }
+    .quick-panel-notifications-button:disabled { opacity: .35; }
+    // A new error: one short pulse of the bell, never a continuous blink.
+    .ck-bell-pulse { animation: ck-bell-pulse 700ms ease-out 1; color: #fecaca; }
+    @keyframes ck-bell-pulse { 0% { transform: scale(1); } 30% { transform: scale(1.35) rotate(-12deg); } 60% { transform: scale(1.1) rotate(8deg); } 100% { transform: none; } }
+    @media (prefers-reduced-motion: reduce) { .ck-bell-pulse { animation: none; } }
+    // Unavailable but pressable: dimmed, a press explains why in the status line.
+    [data-unavailable] { opacity: .45; }
+    .quick-action-badge--error { border-color: #ff6b6b88; color: #fecaca; }
+    .quick-panel-logo { width: 48px; height: 24px; align-self: center; justify-self: center; }
+
+    .ck-status {
+      display: flex; align-items: center; gap: 6px; grid-column: 1 / -1; min-width: 0; height: 20px; margin: 0;
+      color: #aaa; font-size: 11px; line-height: 20px; white-space: nowrap;
+      span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+      svg { flex-shrink: 0; }
+    }
+    .ck-status--ok { color: #86efac; }
+    .ck-status--progress { color: #ffe08a; }
+    .ck-status--error { color: #fecaca; }
+  }
+
+  // Pausa: fixed grid, every command always in the same place.
+  .launcher-tools.ck--pause {
+    display: grid;
+    grid-template-columns: 56px repeat(5, $ck-cell);
+    grid-template-rows: minmax($ck-cell, auto) minmax($ck-cell, auto) auto;
+    grid-template-areas:
+      'logo est cor fmin fses pit'
+      'logo tgt sec voice timer bell'
+      'status status status status status status';
+    .quick-panel-logo { grid-area: logo; }
+    .pressure-test__button { grid-area: est; }
+    .launcher-tool-button--pressure { grid-area: cor; }
+    [data-overlay-wheel-action='fuel'] { grid-area: fmin; }
+    [data-overlay-wheel-action='fuel-session'] { grid-area: fses; }
+    [data-overlay-wheel-action='pitwall'] { grid-area: pit; }
+    .quick-reference:has([data-overlay-wheel-action='target']) { grid-area: tgt; }
+    .quick-reference:has([data-overlay-wheel-action='sector-references']) { grid-area: sec; }
+    .ck-voice-alerts { grid-area: voice; }
+    .quick-panel-timer { grid-area: timer; }
+    .quick-panel-notifications-button { grid-area: bell; }
+    .ck-status { grid-area: status; }
+    .quick-panel-voice-button, .ck-view-close { display: none; }
+  }
+
+  // Views replace the ten commands inside the same two rows.
+  .launcher-tools.ck--pause.ck--view {
+    :is(.pressure-test__button, .launcher-tool-button--pressure, .fuel-open, [data-overlay-wheel-action='pitwall'],
+      .quick-reference, .ck-voice-alerts, .quick-panel-timer, .quick-panel-notifications-button) { display: none; }
+    .quick-panel-notifications {
+      grid-area: 1 / 2 / 3 / -1; align-content: start; gap: 10px; min-height: 2 * $ck-cell + $ck-gap; min-width: 0;
+    }
+    .quick-panel-notifications__body { display: grid; gap: 0; }
+    .quick-panel-notifications__body > div { min-width: 0; }
+    // Cleared cards and cards of other pages are hidden in place; an empty container takes no room.
+    .quick-panel-notifications__body :is([hidden], [data-ck-offpage]) { display: none !important; }
+    .quick-panel-notifications__body > div:not(:has(:is(.fuel-status, .pressure-plan, .control-k-request, .quick-panel-pressure-status,
+      .pressure-test__result, .pressure-test__error):not([hidden], [data-ck-offpage]))) { display: none; }
+    .quick-panel-notifications__page { display: grid; place-items: center; width: 32px; height: 32px; min-height: 32px; padding: 0; }
+    .quick-panel-notifications__clear { min-height: 32px; height: 32px; padding: 0 12px; font-size: 12px; }
+    // Cards read comfortably at full width.
+    .pressure-test__result, .pressure-plan, .control-k-request, .fuel-status, .pressure-test__error { padding: 10px 12px; border-radius: 0; font-size: 12px; }
+    .pressure-test__result > strong { font-size: 13px; }
+    .pressure-test__result dl { grid-template-columns: 1fr 1fr; gap: 4px 16px; margin: 8px 0; }
+    .pressure-test__result dl > div { gap: 8px; }
+    .pressure-test__result dt { white-space: nowrap; color: #aaa; }
+    .pressure-test__result dd { font-size: 16px; }
+  }
+
+  // Editors live in the same frame width, with the same square language.
+  &.overlay-content--target .fuel-panel--editor {
+    gap: 10px;
+    .fuel-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 0; border: 0; background: transparent; }
+    .fuel-minutes-field { order: 1; width: 96px; }
+    .fuel-presets { order: 2; display: flex; flex-wrap: wrap; gap: 8px; }
+    .fuel-presets button { min-height: 32px; padding: 0 12px; border-color: #ffffff30; background: #ffffff08; font-size: 12px; }
+    .fuel-presets button[aria-pressed=true] { border-color: #ffffff90; color: #fff; background: #ffffff14; box-shadow: inset 0 -2px #ff0024; }
+    .ck-editor__hint { order: 3; }
+    .fuel-body > .fuel-status { order: 4; padding: 10px 12px; font-size: 12px; }
+    // Same place and look as every primary action: bottom right, above a separator.
+    .fuel-apply { order: 6; justify-self: end; width: auto; min-width: 140px; min-height: 36px; padding: 0 16px; border: 1px solid #ff002480; color: #fff; background: #ff00241a; font-size: 13px; }
+    .fuel-body::after { content: ''; order: 5; height: 1px; background: #ffffff25; }
+    :is(button, input, .fuel-status) { border-radius: 0; }
+  }
+  // Voice alerts: ← and title on the first row (as every view), the four switches below.
+  .launcher-tools.ck--pause.ck--voice-view {
+    grid-template-areas: none;
+    grid-template-rows: 32px $ck-cell auto;
+    .quick-panel-logo { grid-area: 1 / 1 / 3 / 2; }
+    .ck-view-close { display: grid; place-items: center; grid-area: 1 / 2 / 2 / 3; width: 32px; height: 32px; min-height: 32px; padding: 0; }
+    .quick-panel-section[aria-label='Avvisi vocali'] > .quick-panel-heading {
+      display: block; grid-area: 1 / 3 / 2 / -1; align-self: center; margin: 0; text-align: left;
+      // Same title look as every other view header.
+      color: #fff; font-size: 14px; font-weight: 600; letter-spacing: 0; text-transform: none;
+    }
+    [data-overlay-wheel-action='coach'] { grid-area: 2 / 2 / 3 / 3; }
+    [data-overlay-wheel-action='references'] { grid-area: 2 / 3 / 3 / 4; }
+    [data-overlay-wheel-action='pressure-audio'] { grid-area: 2 / 4 / 3 / 5; }
+    [data-overlay-wheel-action='target-voice'] { grid-area: 2 / 5 / 3 / 6; }
+    .quick-panel-voice-button { display: flex; }
+    .ck-status { grid-area: 3 / 1 / 4 / -1; }
+  }
+
+  // Guida: one compact row with only what helps while driving.
+  // `.ck.ck--drive`: must outweigh the shared button anatomy, which sets display.
+  .launcher-tools.ck.ck--drive {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 5px; width: max-content;
+    :is(.pressure-test__button, .fuel-open, .quick-reference, .ck-voice-alerts, .ck-view-close,
+      .quick-panel-timer, .quick-panel-dev) { display: none; }
+    // The Racer Core mark stays while driving, smaller, first in the row.
+    .quick-panel-logo { order: 0; width: 40px; height: 20px; margin-right: 3px; }
+    :is(.launcher-tool-button--pressure, [data-overlay-wheel-action='pitwall'], .quick-panel-voice-button, .quick-panel-notifications-button) {
+      width: $ck-drive-cell; height: $ck-drive-cell; min-height: $ck-drive-cell;
+    }
+    :is(.launcher-tool-button--pressure, [data-overlay-wheel-action='pitwall'], .quick-panel-notifications-button) { padding-top: 7px; }
+    [data-overlay-wheel-action='pitwall'] { order: 1; }
+    .launcher-tool-button--pressure { order: 2; }
+    [data-overlay-wheel-action='coach'] { order: 3; }
+    [data-overlay-wheel-action='pressure-audio'] { order: 4; }
+    [data-overlay-wheel-action='references'] { order: 5; }
+    [data-overlay-wheel-action='target-voice'] { order: 6; }
+    .quick-panel-notifications-button { order: 7; }
+    &.ck--no-track-references [data-overlay-wheel-action='references'],
+    &.ck--no-target [data-overlay-wheel-action='target-voice'],
+    &.ck--no-notifications .quick-panel-notifications-button { display: none; }
+    // Two lines at most while driving: the reason must be readable at a glance.
+    .ck-status { order: 9; flex-basis: 100%; width: 0; min-width: 100%; height: auto; align-items: flex-start; white-space: normal; }
+    .ck-status span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 14px; }
+    .ck-status--empty { display: none; }
+    &.ck--view {
+      :is(.launcher-tool-button--pressure, [data-overlay-wheel-action='pitwall'], .quick-panel-voice-button,
+        .quick-panel-notifications-button) { display: none; }
+      .quick-panel-notifications { order: 0; flex: 0 0 360px; max-height: 180px; overflow: hidden auto; }
+    }
+  }
+}
+
+// PIP-556: one structure for every Control K editor (giro, settori, timer, benzina):
+// ← header, fields row, shortcuts row, hint line, one primary action bottom right.
+.training-overlay {
+  .ck-editor__fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+  .ck-editor__fields .ck-field { width: 64px; }
+  .ck-editor__fields .ck-field--tolerance { width: 96px; }
+  .ck-editor__shortcuts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .ck-editor__shortcuts > button {
+    min-height: 32px; padding: 0 12px; border: 1px solid #ffffff30; border-radius: 0; background: #ffffff08;
+    color: #eee; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer;
+  }
+  .ck-editor__shortcuts > button[aria-pressed=true] { border-color: #ffffff90; color: #fff; background: #ffffff14; box-shadow: inset 0 -2px #ff0024; }
+  .ck-editor__shortcuts > button:disabled { opacity: .4; cursor: default; }
+  .ck-editor__hint { margin: 0; color: #9fb3c8; font-size: 11px; line-height: 1.4; }
+  .ck-editor__alert { margin: 0; color: #fecaca; font-size: 12px; line-height: 1.4; }
+  .ck-editor__actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 10px; border-top: 1px solid #ffffff25; }
+  .ck-editor__primary {
+    min-width: 140px; min-height: 36px; padding: 0 16px; border: 1px solid #ff002480; border-radius: 0; background: #ff00241a;
+    color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .ck-editor__primary:hover:not(:disabled) { background: #ff002430; }
+  .ck-editor__primary:disabled { opacity: .4; cursor: default; }
+  // Settori: S1 S2 S3, each with its SEC and DEC fields.
+  .ck-sector-fields { gap: 12px; }
+  .ck-sector { display: grid; gap: 4px; }
+  .ck-sector > span { color: #aaa; font-size: 11px; font-weight: 600; }
+  .ck-sector__pair { display: flex; gap: 4px; }
+  .ck-sector__pair .ck-field { width: 60px; }
+  .ck-sector__pair .ck-field:last-child { width: 44px; }
 }
