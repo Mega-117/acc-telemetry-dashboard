@@ -40,6 +40,11 @@ export default defineConfig({
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
+        'app/utils/usageMetrics.ts',
+        'app/repositories/usageRepository.ts',
+        'app/services/usage/usageClient.ts',
+        'app/components/admin/AdminUsageView.vue',
+        'app/components/UsagePreference.vue',
         'app/services/spotter/pitStrategyVoice.ts',
         'app/components/electron/LocalProfileStatus.vue',
         'app/services/runtime/desktopUiCompatibility.ts',

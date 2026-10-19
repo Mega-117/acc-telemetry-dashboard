@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { recordUsage } from '~/services/usage/usageClient'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 import { pitStrategyAppliedCue, setupAutomationCompletedCue } from '~/services/spotter/pitStrategyVoice'
 import { audioContextKey, audioFeatureAvailable, bindAudioCue } from '~/services/spotter/audioSourceContext'
@@ -85,11 +86,18 @@ let removeTrackVoiceReferenceChangeListener = () => {}
 let removePitStrategyListener: (() => void) | undefined
 let removeSetupCompletionListener: (() => void) | undefined
 let cueSequence = 0
+const usageVoiceRun = crypto.randomUUID()
 
 const voiceRuntimeDiagnostics = createVoiceRuntimeDiagnostics()
 const voiceQueue = createVoicePlaybackQueue({
   createAudio: path => new Audio(getPublicPath(path)),
-  onEvent: event => voiceRuntimeDiagnostics.record({
+  onEvent: event => {
+    const feature = ({ 'lap-time': 'voice.laps', 'target-lap': 'voice.target', 'pressure-warning': 'voice.pressure',
+      'track-reference': 'voice.coach', coach: 'voice.coach', 'pit-strategy': 'voice.coach', 'setup-automation': 'voice.coach' } as const)[event.cue.source]
+    const phase = event.kind === 'playback_started' ? 'played' : event.kind === 'playback_ended' ? 'completed'
+      : ['playback_error', 'playback_timeout'].includes(event.kind) ? 'failed' : null
+    if (phase) recordUsage({ feature, event: phase, id: `${usageVoiceRun}:${event.cue.id}` })
+    voiceRuntimeDiagnostics.record({
     kind: event.kind,
     cueId: event.cue.id,
     correlationId: event.cue.correlationId,
@@ -97,7 +105,8 @@ const voiceQueue = createVoicePlaybackQueue({
     source: event.cue.source,
     outcome: event.kind.startsWith('playback_') ? event.kind.slice('playback_'.length) : undefined,
     reason: event.reason,
-  }),
+    })
+  },
 })
 
 const pressureVoiceRuntime = createPressureRecommendationVoiceRuntime({
@@ -165,6 +174,16 @@ const lapTimesAllowedForSession = computed(() => audioFeatureAvailable(fastState
   lapTimeSessionModes.value,
   audioSessionType.value,
 ))
+
+const usagePressureAllowed = computed(() => audioFeatureAvailable(fastState.value, 'pressureRecommendation') && isSpotterFeatureAllowed(pressureWarningsEnabled.value, pressureWarningSessionModes.value, audioSessionType.value))
+const usageTargetAllowed = computed(() => isSpotterFeatureAllowed(targetLapVoiceEnabled.value, targetLapSessionModes.value, audioSessionType.value))
+watch([canRunSpotterAudio, coachAllowedForSession, referencesAllowedForSession, lapTimesAllowedForSession, usagePressureAllowed, usageTargetAllowed],
+  ([allowed, coach, references, laps, pressure, target]) => {
+    for (const [feature, active] of [['voice.coach', coach || references], ['voice.laps', laps], ['voice.pressure', pressure], ['voice.target', target]] as const) {
+      recordUsage({ feature, active: allowed && active })
+    }
+  }, { immediate: true })
+onBeforeUnmount(() => { for (const feature of ['voice.coach', 'voice.laps', 'voice.pressure', 'voice.target']) recordUsage({ feature, active: false }) })
 
 function enqueueAudioPath(path: string, metadata: {
   source?: VoiceCueSource

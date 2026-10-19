@@ -37,6 +37,8 @@ export interface PlayAudioOptions {
   marginS?: number
   fallbackS?: number
   warn?: (message: string) => void
+  /** Observability only: a failing observer must never alter playback. */
+  onStarted?: () => void
 }
 
 /**
@@ -85,6 +87,8 @@ export function playAudioWithWatchdog(
     el.onerror = () => settle('error')
     el.ondurationchange = () => armWatchdog()
     armWatchdog()
-    void el.play().catch(() => settle('error'))
+    void el.play().then(() => {
+      if (!settled) { try { options.onStarted?.() } catch { /* observer only */ } }
+    }).catch(() => settle('error'))
   })
 }

@@ -3,6 +3,7 @@ import type { RealtimeConnection } from './pitwallRealtimeProtocol'
 import { stablePitwallValue } from './pitwallChangePublisher'
 import { PITWALL_SOCIAL_ROOT } from './pitwallSocialRoom'
 import { emitPitwallDiagnostic } from './pitwallDiagnostics'
+import { recordUsage } from '../usage/usageClient'
 
 /** Canonical device presence; room presence is only an index to this connection. */
 export function createPitwallRealtimeSession(io: PitwallRealtimeTransport, uid: string) {
@@ -55,6 +56,7 @@ export function createPitwallRealtimeSession(io: PitwallRealtimeTransport, uid: 
     }
     // Re-registering updates the same server disconnect operation; never cancel the old handle here.
     currentRoom = captured.roomId
+    recordUsage({ feature: `pitwall.${captured.kind}`, active: !!currentRoom })
     signature = nextSignature
     for (const listener of connectionListeners) listener()
   }
@@ -65,6 +67,7 @@ export function createPitwallRealtimeSession(io: PitwallRealtimeTransport, uid: 
     return publication
   }
   const stopConnection = io.onConnection(online => {
+    if (!online && wanted) recordUsage({ feature: `pitwall.${wanted.kind}`, active: false })
     emitPitwallDiagnostic('connection_changed', { uid, connectionId: connectionId || undefined, roomId: currentRoom ?? undefined, reason: online ? 'connected' : 'reconnecting' })
     generation++
     signature = ''
@@ -79,10 +82,14 @@ export function createPitwallRealtimeSession(io: PitwallRealtimeTransport, uid: 
     roomId: () => currentRoom,
     isReady: (roomId: string) => io.online() && !!connectionId && currentRoom === roomId
       && !!wanted && signature === stablePitwallValue(wanted),
-    update(value: NonNullable<typeof wanted>) { wanted = value; return enqueue() },
+    update(value: NonNullable<typeof wanted>) {
+      if (wanted && wanted.kind !== value.kind) recordUsage({ feature: `pitwall.${wanted.kind}`, active: false })
+      wanted = value; return enqueue()
+    },
     onReady(callback: () => void) { connectionListeners.add(callback); return () => { connectionListeners.delete(callback) } },
     onError(callback: (error: unknown) => void) { errors.add(callback); return () => { errors.delete(callback) } },
     async stop() {
+      if (wanted) recordUsage({ feature: `pitwall.${wanted.kind}`, active: false })
       wanted = null; generation++; stopConnection()
       await busy
       connectionId = ''; signature = ''; currentRoom = null

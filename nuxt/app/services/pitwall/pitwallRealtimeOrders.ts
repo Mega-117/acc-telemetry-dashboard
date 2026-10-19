@@ -103,6 +103,7 @@ export function createPitwallRealtimeOrders(options: {
         throw error
       }
       diagnostic('send_confirmed', orderId, undefined, { roomId, targetUid: target.uid, targetConnectionId: target.connectionId, connectionId: senderConnectionId })
+      recordUsage({ feature: 'pitwall.engineer', event: 'order', id: orderId })
       return { ok: true, value: orderId }
     } catch (error) { const result = fail(error); diagnostic('send_failed', orderId, result.reason); return result }
   }
@@ -272,3 +273,4 @@ export function createPitwallRealtimeOrders(options: {
   async function releaseClaim(_roomId: string): Promise<void> {}
   return { sendReadiness, sendOrder, watchOrder, readOrder, watchPendingOrders, watchRoomOrdersInFlight, claimOrder, acknowledgedOrder, publishOutcome, rejectOrder, releaseClaim }
 }
+import { recordUsage } from '~/services/usage/usageClient'

@@ -29,6 +29,16 @@ class FakeAudio implements PlayableAudio {
 }
 
 describe('playAudioWithWatchdog (PIP-254)', () => {
+  it('notifies actual start and ignores an observer failure', async () => {
+    const el = new FakeAudio()
+    const onStarted = vi.fn(() => { throw Error('analytics unavailable') })
+    const done = playAudioWithWatchdog(el, { onStarted })
+    await Promise.resolve()
+    expect(onStarted).toHaveBeenCalledOnce()
+    el.onended?.()
+    await expect(done).resolves.toBe('ended')
+  })
+
   beforeEach(() => {
     vi.useFakeTimers()
   })

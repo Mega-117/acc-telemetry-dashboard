@@ -1,4 +1,5 @@
-import { ref } from 'vue'
+import { ref, watch, onScopeDispose } from 'vue'
+import { recordUsage } from '~/services/usage/usageClient'
 import {
   getRandomQualifyingVoicePhrase,
   getQualifyingVoiceAudioPath,
@@ -31,6 +32,18 @@ export function useQualifyingVoice(
   let generation = 0
   let stepAudioContext: AudioContext | null = null
   const soundEnabled = ref(isSoundEnabled())
+  const usageRun = crypto.randomUUID()
+  let usageSequence = 0
+  watch(soundEnabled, active => recordUsage({ feature: 'voice.spotter', active }), { immediate: true })
+  onScopeDispose(() => recordUsage({ feature: 'voice.spotter', active: false }))
+  function playObserved(el: HTMLAudioElement, label: string) {
+    const id = `${usageRun}:${++usageSequence}`
+    return playAudioWithWatchdog(el, { label, onStarted: () => recordUsage({ feature: 'voice.spotter', event: 'played', id }) })
+      .then(outcome => {
+        recordUsage({ feature: 'voice.spotter', event: outcome === 'ended' ? 'completed' : 'failed', id })
+        return outcome
+      })
+  }
 
   function getStepAudioContext(): AudioContext | null {
     if (typeof window === 'undefined') return null
@@ -103,7 +116,7 @@ export function useQualifyingVoice(
     const el = new Audio(getPublicPath(getQualifyingVoiceAudioPath(phrase.scenario, voice)))
     audio = el
     // Watchdog PIP-254: una traccia in stallo viene saltata, la coda prosegue.
-    return playAudioWithWatchdog(el, { label: phrase.scenario }).then(() => {
+    return playObserved(el, phrase.scenario).then(() => {
       if (audio === el) audio = null
     })
   }
@@ -133,7 +146,7 @@ export function useQualifyingVoice(
       if (!soundEnabled.value || gen !== generation) return
       const el = new Audio(path)
       audio = el
-      return playAudioWithWatchdog(el, { label: path }).then(() => {
+      return playObserved(el, path).then(() => {
         if (audio === el) audio = null
       })
     })
@@ -143,7 +156,7 @@ export function useQualifyingVoice(
     if (!soundEnabled.value || gen !== generation) return Promise.resolve(false)
     const el = new Audio(path)
     audio = el
-    return playAudioWithWatchdog(el, { label: path }).then((outcome) => {
+    return playObserved(el, path).then((outcome) => {
       if (audio === el) audio = null
       return outcome === 'ended'
     })
