@@ -11,7 +11,7 @@ import { markHudRoutePhase, startHudRouteTiming } from '~/utils/hudRoutePerforma
 
 defineProps<{
   backLabel?: string
-  activeTab?: 'panoramica' | 'sessioni' | 'piste' | 'pitwall' | 'spotter' | 'area-pilota' | 'hud'
+  activeTab?: 'panoramica' | 'sessioni' | 'piste' | 'pitwall' | 'spotter' | 'area-pilota' | 'hud' | 'dati'
 }>()
 
 const emit = defineEmits<{ back: [] }>()
@@ -32,8 +32,7 @@ const baseTabs = [
 ]
 
 const tabs = computed(() => {
-  if (!canAccessHud.value) return baseTabs
-  return [...baseTabs, { id: 'hud', label: 'HUD', to: '/hud' }]
+  return [...baseTabs, ...(canAccessHud.value ? [{ id: 'hud', label: 'HUD', to: '/hud' }] : []), { id: 'dati', label: 'DATI', to: '/dati' }]
 })
 
 // Check if tab is active based on current route

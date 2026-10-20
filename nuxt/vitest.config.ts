@@ -40,6 +40,7 @@ export default defineConfig({
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
+        'app/services/session-detail/sessionDataPresentation.ts',
         'app/utils/usageMetrics.ts',
         'app/repositories/usageRepository.ts',
         'app/services/usage/usageClient.ts',

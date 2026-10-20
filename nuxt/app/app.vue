@@ -318,6 +318,7 @@ const dashboardRoutePrefixes = [
   '/dev-voice-lab',
   '/area-pilota',
   '/hud',
+  '/dati',
   '/test-hud',
   '/profilo',
   '/impostazioni',

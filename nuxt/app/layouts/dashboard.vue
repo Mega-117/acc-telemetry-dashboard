@@ -25,6 +25,7 @@ const activeTab = computed(() => {
   const path = route.path
   if (path === '/profilo' || path === '/impostazioni') return undefined
   if (path.startsWith('/sessioni')) return 'sessioni'
+  if (path.startsWith('/dati')) return 'dati'
   if (path.startsWith('/piste')) return 'piste'
   if (path.startsWith('/pitwall')) return 'pitwall'
   if (path.startsWith('/spotter') || path.startsWith('/dev-voice-lab')) return 'spotter'
