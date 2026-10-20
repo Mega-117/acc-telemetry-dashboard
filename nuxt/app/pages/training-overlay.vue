@@ -752,6 +752,31 @@ async function logAccMenuState() {
   }
   scheduleOverlaySizeSync()
 }
+// PIP-567: diagnostica forzata (pacchetti, anomalia, blocco, invio, coda) per provare il
+// percorso app → coda → Worker → admin senza aspettare un guasto vero. Solo in sviluppo.
+const DIAGNOSTICS_DEV_ACTIONS = [
+  { action: 'anomaly', label: 'Diagnostica: forza anomalia' },
+  { action: 'daily', label: 'Diagnostica: forza giornaliero' },
+  { action: 'uncaught', label: 'Diagnostica: eccezione simulata' },
+  { action: 'stall', label: 'Diagnostica: blocca main 3 s' },
+  { action: 'upload-now', label: 'Diagnostica: invia ora' },
+  { action: 'queue-state', label: 'Diagnostica: stato coda' },
+] as const
+const diagnosticsDevMessage = ref('')
+const diagnosticsDevBusy = ref('')
+async function runDiagnosticsDev(action: string) {
+  if (diagnosticsDevBusy.value) return
+  diagnosticsDevBusy.value = action
+  try {
+    const response = await getOverlayApi()?.trainingOverlayDiagnosticsDev?.(action)
+    diagnosticsDevMessage.value = response?.reason || 'Comando disponibile nel programma desktop.'
+  } catch (_) {
+    diagnosticsDevMessage.value = 'Comando diagnostica non disponibile.'
+  } finally {
+    diagnosticsDevBusy.value = ''
+    scheduleOverlaySizeSync()
+  }
+}
 let layoutBeforePreview: 'vertical' | 'horizontal' = 'vertical'
 const quickPanelPreview = shallowRef<ReturnType<typeof import('~/services/overlay/quickPanelPreview').createQuickPanelPreview> | null>(null)
 const quickPanelPressureState = computed(() => isFullQuickPanelPreview.value ? quickPanelPreview.value!.pressure : dryPressureState.value)
@@ -1724,6 +1749,9 @@ onBeforeUnmount(() => {
                       <button type="button" class="launcher-tool-button" :disabled="isCheckingPauseMenu" :aria-busy="isCheckingPauseMenu" @click="checkPauseMenu">{{ isCheckingPauseMenu ? 'Verifica in corso…' : 'Verifica menu Pausa' }}</button>
                       <button type="button" class="launcher-tool-button" @click="logAccMenuState">Scrivi stati menu ACC nel log</button>
                       <p v-if="accMenuStateLogMessage" class="launcher-hint" role="status">{{ accMenuStateLogMessage }}</p>
+                      <button v-for="item in DIAGNOSTICS_DEV_ACTIONS" :key="item.action" type="button" class="launcher-tool-button" :data-diagnostics-dev="item.action"
+                        :disabled="!!diagnosticsDevBusy" :aria-busy="diagnosticsDevBusy === item.action" @click="runDiagnosticsDev(item.action)">{{ item.label }}</button>
+                      <p v-if="diagnosticsDevMessage" class="launcher-hint" role="status" data-diagnostics-dev-message>{{ diagnosticsDevMessage }}</p>
 
                       <button type="button" class="launcher-tool-button" :aria-pressed="isTestMode" @click="toggleTestMode">Test timer</button>
                       <button v-if="canUseVoicePointRecorder" type="button" class="launcher-tool-button" :aria-pressed="voicePointRecorderEnabled" @click="toggleVoicePointRecorder">Registra riferimenti</button>

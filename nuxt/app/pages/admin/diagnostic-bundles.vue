@@ -5,6 +5,7 @@ import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import {
   formatBundleSize,
   listDiagnosticBundles,
+  resolveDiagnosticsOrigin,
   saveDiagnosticBundle,
   type DiagnosticBundleItem
 } from '~/repositories/diagnosticBundlesRepository'
@@ -26,13 +27,16 @@ const dateFilter = ref('')
 const downloading = ref('')
 
 const getToken = async () => (await currentUser.value?.getIdToken()) ?? null
+// PIP-567: durante i collaudi il pannello puo' puntare a un Worker locale (NUXT_PUBLIC_DIAGNOSTICS_INGEST_URL).
+const origin = resolveDiagnosticsOrigin(useRuntimeConfig().public.diagnosticsIngestUrl)
+const deps = { getToken, origin }
 const totalBytes = computed(() => items.value.reduce((sum, item) => sum + item.size, 0))
 
 async function load(append = false) {
   loading.value = true
   errorMessage.value = ''
   try {
-    const page = await listDiagnosticBundles({ getToken }, {
+    const page = await listDiagnosticBundles(deps, {
       installationId: installationFilter.value,
       date: dateFilter.value,
       cursor: append ? cursor.value : null
@@ -50,7 +54,7 @@ async function download(item: DiagnosticBundleItem) {
   downloading.value = item.key
   errorMessage.value = ''
   try {
-    await saveDiagnosticBundle({ getToken }, item)
+    await saveDiagnosticBundle(deps, item)
   } catch (error: any) {
     errorMessage.value = error?.message || 'Scarico non riuscito.'
   } finally {
@@ -118,6 +122,8 @@ onMounted(() => load())
             <th>Tipo</th>
             <th>Installazione</th>
             <th>Giorno</th>
+            <th>Versione</th>
+            <th>Motivo</th>
             <th class="num">Dimensione</th>
             <th><span class="sr-only">Azioni</span></th>
           </tr>
@@ -132,6 +138,8 @@ onMounted(() => load())
               </button>
             </td>
             <td class="mono">{{ item.date }}</td>
+            <td class="mono" :title="item.channel || ''">{{ item.version || '—' }}<span v-if="item.channel" class="channel"> · {{ item.channel }}</span></td>
+            <td class="mono muted" :title="item.os || ''">{{ item.trigger || '—' }}</td>
             <td class="num mono">{{ formatBundleSize(item.size) }}</td>
             <td class="actions">
               <button type="button" class="action-button" :disabled="downloading === item.key" @click="download(item)">
@@ -259,6 +267,7 @@ tr:last-child td { border-bottom: 0; }
 .num { text-align: right; }
 .actions { text-align: right; }
 .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-variant-numeric: tabular-nums; }
+.muted, .channel { color: $text-muted; font-size: $font-size-xs; }
 
 .kind { padding: 2px 8px; font-size: 11px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); }
 .kind--anomaly,

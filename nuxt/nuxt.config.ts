@@ -53,7 +53,9 @@ async function patchWindowsNitroPrerenderImports(dir: string) {
 
 export default defineNuxtConfig({
   ssr: false,
-  runtimeConfig: { public: { desktopUiContract: desktopBundle ? 1 : 0 } },
+  // diagnosticsIngestUrl (PIP-567): vuoto = Worker di produzione; durante i collaudi
+  // NUXT_PUBLIC_DIAGNOSTICS_INGEST_URL=http://127.0.0.1:8787 punta il pannello admin a `wrangler dev`.
+  runtimeConfig: { public: { desktopUiContract: desktopBundle ? 1 : 0, diagnosticsIngestUrl: '' } },
   ignore: ignoredRuntimePaths,
   plugins: isDev ? ['~/plugins/firebase-emulators.client'] : [],
   ...(standingsSmokeBuildDir ? { buildDir: standingsSmokeBuildDir } : {}),
@@ -100,7 +102,7 @@ export default defineNuxtConfig({
             // acc-voice: e' il protocollo Electron che serve i WAV locali dei
             // riferimenti nella release desktop (PIP-211).
             "media-src 'self' data: blob: acc-voice: http://127.0.0.1:5112 http://localhost:5112",
-            `connect-src 'self' http://127.0.0.1:5112 http://localhost:5112${isDev ? ' http://127.0.0.1:8080 http://localhost:8080 http://127.0.0.1:9099 http://localhost:9099 http://127.0.0.1:9000 http://localhost:9000 ws://127.0.0.1:9000 ws://localhost:9000' : ''}${qaEmulatorSources} https://*.googleapis.com https://racercore-diagnostics-ingest.enricosaian.workers.dev https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app`,
+            `connect-src 'self' http://127.0.0.1:5112 http://localhost:5112${isDev ? ' http://127.0.0.1:8080 http://localhost:8080 http://127.0.0.1:9099 http://localhost:9099 http://127.0.0.1:9000 http://localhost:9000 ws://127.0.0.1:9000 ws://localhost:9000 http://127.0.0.1:8787 http://localhost:8787' : ''}${qaEmulatorSources} https://*.googleapis.com https://racercore-diagnostics-ingest.enricosaian.workers.dev https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app`,
 
             "frame-ancestors 'none'",
           ].join('; ')

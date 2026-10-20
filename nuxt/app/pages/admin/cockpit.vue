@@ -18,7 +18,7 @@ import {
 import { getClientHeartbeatStatus } from '~/services/monitoring/clientHeartbeatService'
 import { normalizePilotDirectoryText } from '~/utils/pilotDirectoryFields'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { listRecentDiagnosticBundles } from '~/repositories/diagnosticBundlesRepository'
+import { listRecentDiagnosticBundles, resolveDiagnosticsOrigin } from '~/repositories/diagnosticBundlesRepository'
 import { osFamily } from '~/utils/adminStatusSummary'
 
 definePageMeta({
@@ -129,7 +129,8 @@ const filtersActive = computed(() => (
 async function loadOs() {
   try {
     const { items } = await listRecentDiagnosticBundles(
-      { getToken: async () => (await currentUser.value?.getIdToken()) ?? null },
+      { getToken: async () => (await currentUser.value?.getIdToken()) ?? null,
+        origin: resolveDiagnosticsOrigin(useRuntimeConfig().public.diagnosticsIngestUrl) },
       { days: 30, nowMs: now.value },
     )
     const map: Record<string, string> = {}

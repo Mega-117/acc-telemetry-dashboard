@@ -92,15 +92,15 @@ describe('useClientDiagnostics', () => {
   })
 
   it('PIP-539: risponde al main con il token ID solo a utente dentro e lease corrente', async () => {
-    let handler!: (requestId: string) => void
+    let handler!: (requestId: string, options?: { forceRefresh?: boolean }) => void
     const reply = vi.fn().mockResolvedValue(true)
-    const getIdToken = vi.fn().mockResolvedValue('a.b.c')
+    const getIdToken = vi.fn(async (force?: boolean) => (force ? 'fresh.b.c' : 'a.b.c'))
     mocks.auth.currentUser.value = { uid: 'pilot-a', getIdToken }
     vi.stubGlobal('window', {
       electronAPI: {
         listDiagnostics: vi.fn().mockResolvedValue([]),
         acknowledgeDiagnostics: vi.fn(),
-        onDiagnosticsIdTokenRequest: (cb: (id: string) => void) => { handler = cb; return () => {} },
+        onDiagnosticsIdTokenRequest: (cb: typeof handler) => { handler = cb; return () => {} },
         replyDiagnosticsIdToken: reply
       },
       setInterval: vi.fn(() => 1),
@@ -112,6 +112,11 @@ describe('useClientDiagnostics', () => {
     handler('r1')
     await settle()
     expect(reply).toHaveBeenLastCalledWith('r1', 'a.b.c')
+    // PIP-567: il main chiede un token nuovo dopo un 401 del Worker.
+    handler('r1b', { forceRefresh: true })
+    await settle()
+    expect(reply).toHaveBeenLastCalledWith('r1b', 'fresh.b.c')
+    expect(getIdToken).toHaveBeenLastCalledWith(true)
 
     current = false
     handler('r2')

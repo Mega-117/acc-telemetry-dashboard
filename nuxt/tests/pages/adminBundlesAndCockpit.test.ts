@@ -30,6 +30,7 @@ import CockpitPage from '~/pages/admin/cockpit.vue'
 beforeEach(() => {
   vi.stubGlobal('definePageMeta', vi.fn())
   vi.stubGlobal('useHead', vi.fn())
+  vi.stubGlobal('useRuntimeConfig', () => ({ public: { diagnosticsIngestUrl: '' } }))
   vi.clearAllMocks()
   mocks.recent.mockResolvedValue({ items: [], complete: true })
 })

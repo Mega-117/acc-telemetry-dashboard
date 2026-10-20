@@ -52,6 +52,7 @@ const bundle = (over: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   vi.stubGlobal('definePageMeta', vi.fn())
   vi.stubGlobal('useHead', vi.fn())
+  vi.stubGlobal('useRuntimeConfig', () => ({ public: { diagnosticsIngestUrl: '' } }))
   vi.clearAllMocks()
   mocks.snapshot.mockResolvedValue(snapshotWith(installation('pilot-a', 'inst-a'), installation('pilot-b', 'inst-b')))
   mocks.recent.mockResolvedValue({ items: [], complete: true })

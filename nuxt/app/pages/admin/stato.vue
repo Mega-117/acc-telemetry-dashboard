@@ -5,6 +5,7 @@ import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { loadAdminCockpitSnapshot, type AdminCockpitSnapshot } from '~/repositories/adminCockpitRepository'
 import {
   listRecentDiagnosticBundles,
+  resolveDiagnosticsOrigin,
   saveDiagnosticBundle,
   type DiagnosticBundleItem,
 } from '~/repositories/diagnosticBundlesRepository'
@@ -22,6 +23,8 @@ useHead({ title: `Stato · ${PRODUCT.displayName}` })
 
 const { currentUser } = useFirebaseAuth()
 const getToken = async () => (await currentUser.value?.getIdToken()) ?? null
+// PIP-567: durante i collaudi il pannello puo' puntare a un Worker locale (NUXT_PUBLIC_DIAGNOSTICS_INGEST_URL).
+const bundleDeps = { getToken, origin: resolveDiagnosticsOrigin(useRuntimeConfig().public.diagnosticsIngestUrl) }
 
 const loading = ref(true)
 const nowMs = ref(Date.now())
@@ -75,7 +78,7 @@ async function load() {
   const day = 86_400_000
   const [cockpit, recent, diagnostics] = await Promise.allSettled([
     loadAdminCockpitSnapshot(),
-    listRecentDiagnosticBundles({ getToken }, { days: ACTIVE_WINDOW_DAYS, nowMs: nowMs.value }),
+    listRecentDiagnosticBundles(bundleDeps, { days: ACTIVE_WINDOW_DAYS, nowMs: nowMs.value }),
     loadClientDiagnosticsPage({
       filters: {
         startIso: new Date(nowMs.value - ACTIVE_WINDOW_DAYS * day).toISOString(),
@@ -102,7 +105,7 @@ async function download(issue: StatusIssue) {
   downloading.value = issue.id
   downloadError.value = ''
   try {
-    await saveDiagnosticBundle({ getToken }, issue.bundle)
+    await saveDiagnosticBundle(bundleDeps, issue.bundle)
   } catch (error: any) {
     downloadError.value = error?.message || 'Scarico non riuscito.'
   } finally {

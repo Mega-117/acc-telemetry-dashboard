@@ -2,20 +2,23 @@
 // un pacchetto diagnostico su R2 chiede qui l'ID token dell'utente; se l'utente non e' dentro
 // (o il lease non e' piu' corrente) si risponde `null` e il pacchetto resta in coda.
 // Nessuna scrittura Firestore: il token si legge dalla sessione gia' presente.
+// PIP-567: con `forceRefresh` il main dice che il Worker ha rifiutato il token in cache come
+// scaduto: si chiede a Firebase un token nuovo (`getIdToken(true)`), una volta per richiesta.
 
-export type DiagnosticsTokenUser = { uid: string, getIdToken: () => Promise<string> }
+export type DiagnosticsTokenUser = { uid: string, getIdToken: (forceRefresh?: boolean) => Promise<string> }
+export type DiagnosticsTokenRequestOptions = { forceRefresh?: boolean }
 
 export function createDiagnosticsTokenResponder(options: {
   getUser: () => DiagnosticsTokenUser | null | undefined
   isAllowed: (uid: string) => boolean
   reply: (requestId: string, token: string | null) => Promise<unknown> | unknown
 }) {
-  return async function respond(requestId: string): Promise<void> {
+  return async function respond(requestId: string, request: DiagnosticsTokenRequestOptions = {}): Promise<void> {
     let token: string | null = null
     try {
       const user = options.getUser()
       if (user?.uid && options.isAllowed(user.uid)) {
-        const value = await user.getIdToken()
+        const value = request?.forceRefresh === true ? await user.getIdToken(true) : await user.getIdToken()
         token = typeof value === 'string' && value ? value : null
       }
     } catch {

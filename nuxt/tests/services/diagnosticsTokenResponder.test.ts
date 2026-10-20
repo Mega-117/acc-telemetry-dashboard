@@ -25,6 +25,17 @@ describe('diagnosticsTokenResponder', () => {
     expect(reply.mock.calls).toEqual([['r1', null], ['r2', null], ['r3', null]])
   })
 
+  it('PIP-567: con forceRefresh chiede a Firebase un token nuovo, altrimenti quello in cache', async () => {
+    const reply = vi.fn()
+    const getIdToken = vi.fn(async (force?: boolean) => (force ? 'fresh.b.c' : 'cached.b.c'))
+    const respond = createDiagnosticsTokenResponder({ getUser: () => ({ uid: 'u1', getIdToken }), isAllowed: () => true, reply })
+    await respond('r1')
+    await respond('r2', { forceRefresh: true })
+    await respond('r3', {})
+    expect(getIdToken.mock.calls).toEqual([[], [true], []])
+    expect(reply.mock.calls).toEqual([['r1', 'cached.b.c'], ['r2', 'fresh.b.c'], ['r3', 'cached.b.c']])
+  })
+
   it('non propaga errori di getIdToken o di reply', async () => {
     const reply = vi.fn().mockRejectedValue(new Error('ipc'))
     const respond = createDiagnosticsTokenResponder({

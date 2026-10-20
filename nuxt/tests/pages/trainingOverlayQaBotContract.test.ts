@@ -15,4 +15,13 @@ describe('training overlay qa bot boundary', () => {
     expect(source).toContain('qaBotView.stateLabel')
     expect(source).not.toMatch(/(?:spawn|child_process|ipcRenderer|writeFile).*qaBot/i)
   })
+
+  it('PIP-567: the diagnostics dev buttons live inside the dev-only block and use the bounded preload call', () => {
+    const devBlock = source.slice(source.indexOf('v-if="showQuickPanelDevTools" class="quick-panel-dev"'), source.indexOf('</details>'))
+    expect(devBlock).toContain('v-for="item in DIAGNOSTICS_DEV_ACTIONS"')
+    expect(devBlock).toContain(':data-diagnostics-dev="item.action"')
+    expect(devBlock).toContain('data-diagnostics-dev-message')
+    expect(source).toContain("getOverlayApi()?.trainingOverlayDiagnosticsDev?.(action)")
+    for (const action of ['anomaly', 'daily', 'uncaught', 'stall', 'upload-now', 'queue-state']) expect(source).toContain(`action: '${action}'`)
+  })
 })

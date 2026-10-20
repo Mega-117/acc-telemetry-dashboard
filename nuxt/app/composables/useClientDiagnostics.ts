@@ -24,7 +24,7 @@ type ElectronDiagnosticsApi = {
   reserveDiagnostic?: (eventId: string) => Promise<LocalClientDiagnostic | null>
   failDiagnostic?: (eventId: string, quota: boolean) => Promise<unknown>
   getSuiteVersion?: () => Promise<DiagnosticSuiteContext | null>
-  onDiagnosticsIdTokenRequest?: (callback: (requestId: string) => void) => () => void
+  onDiagnosticsIdTokenRequest?: (callback: (requestId: string, options?: { forceRefresh?: boolean }) => void) => () => void
   replyDiagnosticsIdToken?: (requestId: string, token: string | null) => Promise<unknown>
 }
 
@@ -207,7 +207,7 @@ export function useClientDiagnostics(options: {
       isAllowed: (uid) => canFlush() && (!options.isLeaseCurrent || options.isLeaseCurrent(uid)),
       reply: (requestId, token) => tokenApi.replyDiagnosticsIdToken!(requestId, token)
     })
-    stopTokenRequests = tokenApi.onDiagnosticsIdTokenRequest((requestId) => void respond(requestId))
+    stopTokenRequests = tokenApi.onDiagnosticsIdTokenRequest((requestId, options) => void respond(requestId, options))
   }
 
   const stopWatch = watch(

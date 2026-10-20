@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  DIAGNOSTICS_INGEST_ORIGIN,
   buildBundlePrefix,
   downloadDiagnosticBundle,
   formatBundleSize,
   listDiagnosticBundles,
   listRecentDiagnosticBundles,
   parseBundleKey,
+  resolveDiagnosticsOrigin,
   saveDiagnosticBundle
 } from '~/repositories/diagnosticBundlesRepository'
 
@@ -71,24 +73,67 @@ describe('diagnosticBundlesRepository', () => {
     }))
     const page = await listDiagnosticBundles({ getToken: async () => 'tok', fetchImpl })
     expect(page.items.map((i) => [i.trigger, i.os])).toEqual([[null, null], ['app.unclean-exit', 'Windows 10 (19045)']])
+    expect(page.items.map((i) => [i.version, i.channel])).toEqual([[null, null], [null, null]])
   })
 
-  it('ultimi giorni: scorre le pagine, tiene solo le date recenti e dice se e\' incompleto', async () => {
+  it('ultimi giorni (PIP-567): un elenco per giorno dal piu\' recente, con versione e canale, senza duplicati', async () => {
+    const nowMs = Date.parse('2026-10-16T12:00:00Z')
+    const byDay: Record<string, unknown[]> = {
+      '2026-10-16': [{ key: KEY.replace('2026-10-15', '2026-10-16'), size: 3, uploaded: '2026-10-16T09:00:00Z', version: '0.5.0-dev.2', channel: 'develop' }],
+      '2026-10-14': [{ key: KEY.replace('2026-10-15', '2026-10-14'), size: 2, uploaded: '2026-10-14T10:00:00Z' }],
+    }
+    const fetchImpl = vi.fn(async (url: string) => {
+      const day = new URL(url).searchParams.get('day')!
+      return ok({ objects: byDay[day] || [], cursor: null })
+    })
+    const all = await listRecentDiagnosticBundles({ getToken: async () => 'tok', fetchImpl }, { days: 7, nowMs })
+    expect(all.complete).toBe(true)
+    expect(all.items.map((i) => [i.date, i.version, i.channel])).toEqual([['2026-10-16', '0.5.0-dev.2', 'develop'], ['2026-10-14', null, null]])
+    // Domani (orologi avanti), oggi e i 7 giorni precedenti: 9 elenchi, nessuno scorrimento di `diag/`.
+    const days = fetchImpl.mock.calls.map(([url]) => new URL(url).searchParams.get('day'))
+    expect(days).toEqual(['2026-10-17', '2026-10-16', '2026-10-15', '2026-10-14', '2026-10-13', '2026-10-12', '2026-10-11', '2026-10-10', '2026-10-09'])
+    expect(fetchImpl.mock.calls.every(([url]) => !new URL(url).searchParams.has('prefix'))).toBe(true)
+
+    // Un giorno con piu' pagine viene scorso con il cursore.
+    const paged = vi.fn()
+      .mockResolvedValueOnce(ok({ objects: [{ key: KEY, size: 1, uploaded: '2026-10-15T10:00:00Z' }], cursor: 'c1' }))
+      .mockResolvedValueOnce(ok({ objects: [{ key: KEY.replace('095554-028d6d83', '100000-aaaaaaaa'), size: 1, uploaded: '2026-10-15T11:00:00Z' }], cursor: null }))
+      .mockResolvedValue(ok({ objects: [], cursor: null }))
+    const twoPages = await listRecentDiagnosticBundles({ getToken: async () => 'tok', fetchImpl: paged }, { days: 1, nowMs })
+    expect(twoPages.items).toHaveLength(2)
+    expect(paged.mock.calls[1]![0]).toContain('cursor=c1')
+  })
+
+  it('ultimi giorni: con un Worker che non conosce ?day= (400) scorre diag/ come prima e dice se e\' incompleto', async () => {
     const recent = KEY.replace('2026-10-15', '2026-10-14')
     const old = KEY.replace('2026-10-15', '2026-09-01')
-    const fetchImpl = vi.fn()
-      .mockResolvedValueOnce(ok({ objects: [{ key: old, size: 1, uploaded: '2026-09-01T10:00:00Z' }], cursor: 'c1' }))
-      .mockResolvedValueOnce(ok({ objects: [{ key: recent, size: 2, uploaded: '2026-10-14T10:00:00Z' }], cursor: null }))
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (new URL(url).searchParams.has('day')) return status(400)
+      return new URL(url).searchParams.get('cursor') === 'c1'
+        ? ok({ objects: [{ key: recent, size: 2, uploaded: '2026-10-14T10:00:00Z' }], cursor: null })
+        : ok({ objects: [{ key: old, size: 1, uploaded: '2026-09-01T10:00:00Z' }], cursor: 'c1' })
+    })
     const nowMs = Date.parse('2026-10-16T12:00:00Z')
     const all = await listRecentDiagnosticBundles({ getToken: async () => 'tok', fetchImpl }, { days: 7, nowMs })
     expect(all.items.map((i) => i.date)).toEqual(['2026-10-14'])
     expect(all.complete).toBe(true)
-    expect(fetchImpl.mock.calls[1]![0]).toContain('cursor=c1')
 
-    const endless = vi.fn().mockResolvedValue(ok({ objects: [], cursor: 'again' }))
+    const endless = vi.fn(async (url: string) => (new URL(url).searchParams.has('day') ? status(400) : ok({ objects: [], cursor: 'again' })))
     const partial = await listRecentDiagnosticBundles({ getToken: async () => 'tok', fetchImpl: endless }, { nowMs, maxPages: 2 })
-    expect(endless).toHaveBeenCalledTimes(2)
+    expect(endless).toHaveBeenCalledTimes(3) // 1 tentativo per giorno + 2 pagine
     expect(partial.complete).toBe(false)
+    // Altri errori non si mascherano.
+    const broken = vi.fn(async () => status(500))
+    await expect(listRecentDiagnosticBundles({ getToken: async () => 'tok', fetchImpl: broken }, { nowMs })).rejects.toThrow('500')
+  })
+
+  it('origine del Worker: configurazione valida (https o loopback) oppure produzione (PIP-567)', () => {
+    expect(resolveDiagnosticsOrigin(undefined)).toBe(DIAGNOSTICS_INGEST_ORIGIN)
+    expect(resolveDiagnosticsOrigin('')).toBe(DIAGNOSTICS_INGEST_ORIGIN)
+    expect(resolveDiagnosticsOrigin('http://127.0.0.1:8787/')).toBe('http://127.0.0.1:8787')
+    expect(resolveDiagnosticsOrigin('https://x.workers.dev')).toBe('https://x.workers.dev')
+    expect(resolveDiagnosticsOrigin('http://evil.example')).toBe(DIAGNOSTICS_INGEST_ORIGIN)
+    expect(resolveDiagnosticsOrigin('https://x.workers.dev/path')).toBe(DIAGNOSTICS_INGEST_ORIGIN)
   })
 
   it('salva il pacchetto con un nome riconoscibile', async () => {
