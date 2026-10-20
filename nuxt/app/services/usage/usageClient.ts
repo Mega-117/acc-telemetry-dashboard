@@ -9,19 +9,24 @@ let user: User | null = null
 let stopProducer = () => {}
 let deliver: ((event: UsageSignal) => void) | null = null
 let preferenceGeneration = 0
+let bindingGeneration = 0
 const bridge = () => typeof window === 'undefined' ? null : (window as Window & { electronAPI?: Bridge }).electronAPI
 
-export async function usageRequest(route: string, body?: unknown): Promise<any> {
-  const captured = user
+export async function usageRequest(route: string, body?: unknown, isCurrent: () => boolean = () => true): Promise<any> {
+  const captured = user, generation = bindingGeneration
   if (!captured) throw Error('Accedi per gestire le statistiche di utilizzo.')
+  const check = () => {
+    if (user?.uid !== captured.uid || generation !== bindingGeneration || !isCurrent()) throw Error('Account cambiato o raccolta interrotta.')
+  }
+  check()
   const token = await captured.getIdToken()
-  if (user?.uid !== captured.uid) throw Error('Account cambiato.')
+  check()
   const response = await fetch(`${DIAGNOSTICS_INGEST_ORIGIN}${route}`, { method: body === undefined ? 'GET' : 'PUT',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(10000) })
   if (!response.ok) throw Error(`Statistiche di utilizzo non disponibili (${response.status}).`)
   const value = await response.json()
-  if (user?.uid !== captured.uid) throw Error('Account cambiato.')
+  check()
   return value
 }
 export async function usagePreference(enabled?: boolean): Promise<UsagePreference> {
@@ -49,6 +54,7 @@ export function recordUsage(event: UsageSignal) {
 
 export function bindUsageUser(next: User | null) {
   if (user?.uid === next?.uid) { user = next; return }
+  bindingGeneration++
   stopProducer(); user = next; deliver = null
   if (!next || bridge() || !navigator.locks || typeof BroadcastChannel === 'undefined') return
   const owner = next.uid, tab = crypto.randomUUID(), storageKey = `rc-usage:${owner}`
@@ -102,18 +108,22 @@ export function bindUsageUser(next: User | null) {
     try {
       await refresh()
       if (preference?.enabled !== true || !collector) return
+      const generation = preferenceGeneration, revision = preference.revision
+      const isCurrent = () => !ended && user?.uid === owner && generation === preferenceGeneration
+        && preference?.enabled === true && preference.revision === revision && !localStorage.getItem(disabledKey)
       persist()
       for (const row of collector.exportState().rows.filter((r: { owner: string; preferenceRevision: number }) => r.owner === owner && r.preferenceRevision === preference?.revision)) {
-        if (ended || user?.uid !== owner || localStorage.getItem(disabledKey)) break
+        if (!isCurrent()) break
         const bytes = new TextEncoder().encode(row.localKey)
         const hash = await crypto.subtle.digest('SHA-256', bytes)
+        if (!isCurrent()) break
         const id = [...new Uint8Array(hash)].map(n => n.toString(16).padStart(2, '0')).join('').slice(0, 24)
         const key = `${row.producer}:${id}`
         if (acks.get(key) === row.revision) continue
         const body = { ...row }
         delete body.localKey
         delete body.owner
-        await usageRequest(`/v1/usage/summaries/${row.producer}/${id}`, body)
+        await usageRequest(`/v1/usage/summaries/${row.producer}/${id}`, body, isCurrent)
         acks.set(key, row.revision)
       }
     } catch { /* durable snapshots retry on next tick */ }

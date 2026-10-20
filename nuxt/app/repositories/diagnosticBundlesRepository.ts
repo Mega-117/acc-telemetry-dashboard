@@ -1,8 +1,8 @@
 // PIP-540: elenco e scarico dei pacchetti diagnostici su R2, tramite il Worker (PIP-539).
 // Nessuna lettura o scrittura Firestore: il Worker accetta solo l'ID token di un admin.
 // PIP-567: gli "ultimi giorni" si leggono per data (`?day=`, un elenco per giorno) invece di
-// scorrere tutto `diag/` in ordine alfabetico; un Worker precedente risponde 400 e si torna al
-// vecchio scorrimento. Versione e canale dell'app arrivano dai metadati, senza scaricare.
+// scorrere i payload. Un confronto limitato dei metadati include anche i pacchetti precedenti
+// all'indice; un Worker precedente si riconosce dalla risposta senza indexVersion.
 
 export const DIAGNOSTICS_INGEST_ORIGIN = 'https://racercore-diagnostics-ingest.enricosaian.workers.dev'
 export const DIAGNOSTIC_BUNDLES_PAGE_SIZE = 100
@@ -111,7 +111,8 @@ export async function listDiagnosticBundlesOfDay(
     const params = new URLSearchParams({ day, limit: '500' })
     if (cursor) params.set('cursor', cursor)
     const response = await authorizedFetch(`/v1/admin/list?${params}`, deps)
-    const body = await response.json() as { objects?: ListedObject[], cursor?: string | null }
+    const body = await response.json() as { objects?: ListedObject[], cursor?: string | null, indexVersion?: number }
+    if (body.indexVersion !== 1) throw new DiagnosticBundlesError('Indice per giorno non disponibile.', 400)
     items.push(...toItems(body.objects))
     cursor = body.cursor ?? null
     if (!cursor) return { items, complete: true }
@@ -143,15 +144,17 @@ export async function listRecentDiagnosticBundles(
   } catch (error) {
     if (!(error instanceof DiagnosticBundlesError) || error.status !== 400) throw error
     items = []
-    let cursor: string | null = null
-    for (let page = 0; page < maxPages; page += 1) {
-      const result = await listDiagnosticBundles(deps, { cursor, limit: 500 })
-      items.push(...result.items)
-      cursor = result.cursor
-      if (!cursor) break
-    }
-    complete = !cursor
   }
+  // Always reconcile with a bounded metadata listing. Pre-upgrade bundles may have
+  // no marker, and a successful indexed response cannot prove their absence.
+  let cursor: string | null = null
+  for (let page = 0; page < Math.max(1, maxPages); page += 1) {
+    const result = await listDiagnosticBundles(deps, { cursor, limit: 500 })
+    items.push(...result.items)
+    cursor = result.cursor
+    if (!cursor) break
+  }
+  complete = !cursor
   const unique = new Map(items.filter((item) => item.date >= fromDay).map((item) => [item.key, item]))
   const sorted = [...unique.values()]
   sorted.sort((a, b) => Date.parse(b.uploadedAt) - Date.parse(a.uploadedAt))

@@ -70,3 +70,40 @@ describe('browser usage ownership and preference', () => {
     expect(localStorage.getItem('rc-usage-disabled:pilot')).toBe('1')
   })
 })
+
+
+describe('suspended usage uploads', () => {
+  it.each(['switch', 'logout-login', 'offline-disable'])('cancels a hash prepared before %s', async mode => {
+    let release!: (value: ArrayBuffer) => void
+    const digest = vi.fn(() => new Promise<ArrayBuffer>(resolve => { release = resolve }))
+    vi.stubGlobal('crypto', { randomUUID: () => 'browser-producer', subtle: { digest } })
+    bindUsageUser(account('A')); await settle()
+    recordUsage({ feature: 'pitwall.engineer', event: 'order', id: 'old-order' })
+    await vi.advanceTimersByTimeAsync(300000)
+    expect(digest).toHaveBeenCalled()
+    if (mode === 'switch') bindUsageUser(account('B'))
+    if (mode === 'logout-login') { bindUsageUser(null); bindUsageUser(account('A')) }
+    if (mode === 'offline-disable') {
+      vi.mocked(fetch).mockRejectedValueOnce(Error('offline'))
+      await expect(usagePreference(false)).rejects.toThrow('offline')
+    }
+    await settle()
+    release(new ArrayBuffer(32)); await settle()
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/summaries/'))).toHaveLength(0)
+  })
+
+  it('checks opt-out again after the ID token await', async () => {
+    let releaseHash!: (value: ArrayBuffer) => void, releaseToken!: (value: string) => void
+    let holdToken = false
+    const u = { uid: 'A', getIdToken: () => holdToken ? new Promise<string>(r => { releaseToken = r }) : Promise.resolve('token-A') }
+    vi.stubGlobal('crypto', { randomUUID: () => 'browser-producer', subtle: { digest: () => new Promise<ArrayBuffer>(r => { releaseHash = r }) } })
+    bindUsageUser(u); await settle()
+    recordUsage({ feature: 'pitwall.engineer', event: 'order', id: 'old-order' })
+    await vi.advanceTimersByTimeAsync(300000)
+    holdToken = true; releaseHash(new ArrayBuffer(32)); await settle()
+    expect(releaseToken).toBeTypeOf('function')
+    holdToken = false; await usagePreference(false)
+    releaseToken('token-A'); await settle()
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/summaries/'))).toHaveLength(0)
+  })
+})

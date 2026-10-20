@@ -84,21 +84,21 @@ describe('diagnosticBundlesRepository', () => {
     }
     const fetchImpl = vi.fn(async (url: string) => {
       const day = new URL(url).searchParams.get('day')!
-      return ok({ objects: byDay[day] || [], cursor: null })
+      return ok({ indexVersion: 1, objects: byDay[day] || [], cursor: null })
     })
     const all = await listRecentDiagnosticBundles({ getToken: async () => 'tok', fetchImpl }, { days: 7, nowMs })
     expect(all.complete).toBe(true)
     expect(all.items.map((i) => [i.date, i.version, i.channel])).toEqual([['2026-10-16', '0.5.0-dev.2', 'develop'], ['2026-10-14', null, null]])
     // Domani (orologi avanti), oggi e i 7 giorni precedenti: 9 elenchi, nessuno scorrimento di `diag/`.
     const days = fetchImpl.mock.calls.map(([url]) => new URL(url).searchParams.get('day'))
-    expect(days).toEqual(['2026-10-17', '2026-10-16', '2026-10-15', '2026-10-14', '2026-10-13', '2026-10-12', '2026-10-11', '2026-10-10', '2026-10-09'])
-    expect(fetchImpl.mock.calls.every(([url]) => !new URL(url).searchParams.has('prefix'))).toBe(true)
+    expect(days.filter(Boolean)).toEqual(['2026-10-17', '2026-10-16', '2026-10-15', '2026-10-14', '2026-10-13', '2026-10-12', '2026-10-11', '2026-10-10', '2026-10-09'])
+    expect(fetchImpl.mock.calls.filter(([url]) => new URL(url).searchParams.has('prefix'))).toHaveLength(1)
 
     // Un giorno con piu' pagine viene scorso con il cursore.
     const paged = vi.fn()
-      .mockResolvedValueOnce(ok({ objects: [{ key: KEY, size: 1, uploaded: '2026-10-15T10:00:00Z' }], cursor: 'c1' }))
-      .mockResolvedValueOnce(ok({ objects: [{ key: KEY.replace('095554-028d6d83', '100000-aaaaaaaa'), size: 1, uploaded: '2026-10-15T11:00:00Z' }], cursor: null }))
-      .mockResolvedValue(ok({ objects: [], cursor: null }))
+      .mockResolvedValueOnce(ok({ indexVersion: 1, objects: [{ key: KEY, size: 1, uploaded: '2026-10-15T10:00:00Z' }], cursor: 'c1' }))
+      .mockResolvedValueOnce(ok({ indexVersion: 1, objects: [{ key: KEY.replace('095554-028d6d83', '100000-aaaaaaaa'), size: 1, uploaded: '2026-10-15T11:00:00Z' }], cursor: null }))
+      .mockResolvedValue(ok({ indexVersion: 1, objects: [], cursor: null }))
     const twoPages = await listRecentDiagnosticBundles({ getToken: async () => 'tok', fetchImpl: paged }, { days: 1, nowMs })
     expect(twoPages.items).toHaveLength(2)
     expect(paged.mock.calls[1]![0]).toContain('cursor=c1')
@@ -153,3 +153,27 @@ describe('diagnosticBundlesRepository', () => {
       .toEqual(['56 B', '2.0 KB', '3.0 MB', '—'])
   })
 })
+
+
+describe('diagnostic index reconciliation',()=>{
+ it('includes pre-index bundles even when every day listing is empty',async()=>{
+  const fetchImpl=vi.fn(async(url:string)=>new URL(url).searchParams.has('day')
+   ?ok({indexVersion:1,objects:[],cursor:null})
+   :ok({objects:[{key:KEY,size:4,uploaded:'2026-10-15T12:00:00Z'}],cursor:null}));
+  const result=await listRecentDiagnosticBundles({getToken:async()=> 'tok',fetchImpl},{nowMs:Date.parse('2026-10-16T12:00:00Z')});
+  expect(result.items.map(i=>i.key)).toEqual([KEY]);expect(result.complete).toBe(true);
+ });
+ it('a legacy Worker that ignores day= is scanned once with bounded pagination',async()=>{
+  const fetchImpl=vi.fn(async()=>ok({objects:[{key:KEY,size:4,uploaded:'2026-10-15T12:00:00Z'}],cursor:null}));
+  const result=await listRecentDiagnosticBundles({getToken:async()=> 'tok',fetchImpl},{nowMs:Date.parse('2026-10-16T12:00:00Z')});
+  expect(result.items).toHaveLength(1);expect(result.complete).toBe(true);
+  expect(fetchImpl).toHaveBeenCalledTimes(2);
+  expect(new URL(fetchImpl.mock.calls[1]![0] as string).searchParams.get('prefix')).toBe('diag/');
+ });
+ it('does not call a partial metadata reconciliation complete',async()=>{
+  const fetchImpl=vi.fn(async(url:string)=>new URL(url).searchParams.has('day')
+   ?ok({indexVersion:1,objects:[],cursor:null}):ok({objects:[],cursor:'more'}));
+  const result=await listRecentDiagnosticBundles({getToken:async()=> 'tok',fetchImpl},{maxPages:1});
+  expect(result.complete).toBe(false);
+ });
+});

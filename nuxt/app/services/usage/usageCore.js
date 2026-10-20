@@ -36,7 +36,7 @@ function createUsageCollector({ producer, source = 'desktop', now = Date.now, mo
     const active = new Set(), operations = new Map(), seen = new Set(Array.isArray(initial?.seen) ? initial.seen.slice(-10000) : []);
     const launchSeen = new Set();
     // A restart never invents the time between the last checkpoint and this launch.
-    for (const row of rows) row.partial = true;
+    for (const row of rows) if (row.partial !== true) { row.partial = true; row.revision = (row.revision || 0) + 1; }
     for (const pending of (Array.isArray(initial?.pendingOperations) ? initial.pendingOperations.slice(0, 100) : [])) {
         const row = rows.find(r => r.localKey === pending.localKey);
         if (row && AUTOMATIONS.has(pending.kind)) { add(row.counters, `auto.${pending.kind}.unknown`); row.revision++; }
