@@ -74,6 +74,21 @@ describe('admin status summary (PIP-540)', () => {
     ])
   })
 
+  it('PIP-567: an anomaly with a reason the panel does not know yet stays visible, with that reason', () => {
+    const summary = run({
+      bundles: [
+        bundle('inst-a', { trigger: 'dev.forced' }),
+        bundle('inst-b', { trigger: 'incident.brand-new-trigger', uploadedAt: hoursAgo(1) }),
+        bundle('inst-c', { kind: 'capture', trigger: 'capture.something-new' }),
+      ] as any,
+    })
+    expect(summary.level).toBe('warn')
+    expect(summary.issues.map((issue) => [issue.title, issue.detail])).toEqual([
+      ['Anomalia registrata', 'Motivo: incident.brand-new-trigger.'],
+      ['Anomalia registrata', 'Motivo: dev.forced.'],
+    ])
+  })
+
   it('installation reports: data move stuck is red, failed or pending update and degraded start are yellow', () => {
     const summary = run({
       installations: [

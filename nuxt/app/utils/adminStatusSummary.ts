@@ -89,6 +89,14 @@ const UNKNOWN_ANOMALY: Rule = {
   level: 'warn', title: 'Anomalia registrata',
   detail: 'Pacchetto di una versione precedente: il motivo è scritto dentro il pacchetto.',
 }
+// PIP-567: un motivo che il pannello non conosce ancora (nuovo innesco, pacchetto forzato dagli
+// strumenti sviluppo) non deve sparire dal semaforo: si mostra col suo nome.
+function anomalyRule(bundle: Pick<DiagnosticBundleItem, 'kind' | 'trigger'>): Rule | undefined {
+  if (bundle.trigger && BUNDLE_RULES[bundle.trigger]) return BUNDLE_RULES[bundle.trigger]
+  if (bundle.kind !== 'anomaly') return undefined // es. una cattura chiusa normalmente: nessun problema
+  if (!bundle.trigger) return UNKNOWN_ANOMALY
+  return { level: 'warn', title: 'Anomalia registrata', detail: `Motivo: ${bundle.trigger}.` }
+}
 
 function installationRule(installation: AdminCockpitInstallation): Rule | null {
   const health = installation.health.status.toLowerCase()
@@ -171,8 +179,8 @@ export function buildStatusSummary(input: {
   for (const bundle of input.bundles) {
     if (Date.parse(bundle.uploadedAt) < fromMs) continue
     if (bundle.kind !== 'anomaly' && bundle.kind !== 'capture') continue
-    const rule = bundle.trigger ? BUNDLE_RULES[bundle.trigger] : (bundle.kind === 'anomaly' ? UNKNOWN_ANOMALY : undefined)
-    if (!rule) continue // es. una cattura chiusa normalmente: nessun problema
+    const rule = anomalyRule(bundle)
+    if (!rule) continue
     const ownerUid = bundle.uploaderUid || ownerByInstallation.get(bundle.installationId) || null
     add(rule, bundle.installationId, bundle.uploadedAt, {
       ownerUid, installationId: bundle.installationId,
