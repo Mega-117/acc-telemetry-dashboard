@@ -30,16 +30,30 @@ const keys = computed(() => {
 <template>
   <svg class="dev" :class="`dev--${kind}`" viewBox="0 0 160 90" aria-hidden="true">
     <template v-if="kind === 'wheel'">
+      <!-- GT wheel: two grips, rev lights, display, buttons and two rotary knobs. -->
       <g class="dev__wheel">
-        <path class="dev__line" d="M16 31 Q16 19 28 19 H72 Q84 19 84 31 V52 Q84 62 74 66 L63 72 H37 L26 66 Q16 62 16 52 Z" />
-        <rect class="dev__accent" x="38" y="26" width="24" height="10" />
-        <rect class="dev__line" x="42" y="47" width="16" height="15" />
-        <circle class="dev__btn" cx="28" cy="39" r="3" /><circle class="dev__btn" cx="28" cy="49" r="3" />
-        <circle class="dev__btn" cx="72" cy="39" r="3" /><circle class="dev__btn" cx="72" cy="49" r="3" />
+        <path class="dev__paddle" d="M14 30 L6 34 L8 44 L15 42 M86 30 L94 34 L92 44 L85 42" />
+        <path class="dev__line dev__rim" d="M25 18 H75 Q86 18 88 30 L91 52 Q92 67 80 71 L68 72 L64 68 H36 L32 72 L20 71 Q8 67 9 52 L12 30 Q14 18 25 18 Z" />
+        <path class="dev__line dev__grip" d="M21 28 Q16 46 21 63 M79 28 Q84 46 79 63" />
+        <rect class="dev__top" x="47.5" y="15.5" width="5" height="5" />
+        <circle v-for="(x, i) in [38, 44, 50, 56, 62]" :key="`rev${i}`" class="dev__rev" :class="`dev__rev--${i < 2 ? 'g' : i < 4 ? 'y' : 'r'}`" :style="{ animationDelay: `${i * 0.12}s` }" :cx="x" cy="23.5" r="1.9" />
+        <rect class="dev__screen" x="37" y="28" width="26" height="12" />
+        <path class="dev__screen-bar" d="M40 36 H52" />
+        <circle class="dev__btn dev__btn--a" cx="31" cy="34" r="2.8" /><circle class="dev__btn dev__btn--b" cx="31" cy="43" r="2.8" />
+        <circle class="dev__btn dev__btn--c" cx="69" cy="34" r="2.8" /><circle class="dev__btn dev__btn--d" cx="69" cy="43" r="2.8" />
+        <g class="dev__knob" style="transform-origin: 41px 52px"><circle class="dev__line" cx="41" cy="52" r="4.2" /><path class="dev__tick" d="M41 52 V48.4" /></g>
+        <g class="dev__knob dev__knob--b" style="transform-origin: 59px 52px"><circle class="dev__line" cx="59" cy="52" r="4.2" /><path class="dev__tick" d="M59 52 V48.4" /></g>
       </g>
+      <!-- Button box: three toggle switches, two lit buttons, a rotary. -->
       <g class="dev__box">
-        <rect class="dev__line" x="98" y="25" width="46" height="42" />
-        <circle v-for="(c, i) in [[109, 37], [121, 37], [133, 37], [109, 55], [121, 55], [133, 55]]" :key="i" class="dev__led" :style="{ animationDelay: `${i * 0.18}s` }" :cx="c[0]" :cy="c[1]" r="4.2" />
+        <path class="dev__line" d="M104 22 H148 V68 H112 L104 60 Z" />
+        <g v-for="(x, i) in [114, 126, 138]" :key="`sw${i}`">
+          <rect class="dev__sw-base" :x="x - 4" y="30" width="8" height="12" />
+          <path class="dev__lever" :style="{ transformOrigin: `${x}px 36px`, animationDelay: `${i * 0.2}s` }" :d="`M${x} 36 V29`" />
+        </g>
+        <circle class="dev__led" cx="118" cy="56" r="4.4" style="animation-delay: .1s" />
+        <circle class="dev__led" cx="130" cy="56" r="4.4" style="animation-delay: .45s" />
+        <g class="dev__knob dev__knob--b" style="transform-origin: 141px 56px"><circle class="dev__line" cx="141" cy="56" r="4.4" /><path class="dev__tick" d="M141 56 V52.2" /></g>
       </g>
     </template>
     <template v-else>
@@ -76,6 +90,29 @@ $ease: cubic-bezier(.45, 0, .55, 1);
 .dev__label { fill: #fff; font: 800 5.5px/1 'Inter', sans-serif; pointer-events: none; }
 .dev__click { fill: transparent; }
 .dev__wheel { transform-box: view-box; transform-origin: 50px 45px; }
+// Race wheel details: thick rim with grips, top marker, coloured rev lights, display, paddles.
+.dev__rim { fill: #ffffff0a; stroke-width: 2.6; }
+.dev__grip { stroke-width: 4.5; stroke-linecap: round; stroke: #8a8a90; }
+.dev__top { fill: #ffd400; }
+.dev__paddle { fill: none; stroke: #8a8a90; stroke-width: 2.4; stroke-linejoin: round; }
+.dev__rev { opacity: .7; &--g { fill: #21ff83; } &--y { fill: #ffd400; } &--r { fill: $red; } }
+.dev__screen { fill: #050507; stroke: $red; stroke-width: 1.8; }
+.dev__screen-bar { stroke: #21ff83; stroke-width: 2.4; }
+.dev__btn--a { fill: $red; } .dev__btn--b { fill: #ffd400; } .dev__btn--c { fill: #2f7bff; } .dev__btn--d { fill: #21ff83; }
+.dev__btn { opacity: .8; }
+.dev__tick { stroke: $red; stroke-width: 1.8; stroke-linecap: round; }
+.dev__knob { transform-box: view-box; }
+.dev__sw-base { fill: #ffffff14; stroke: #8a8a90; stroke-width: 1.2; }
+.dev__lever { stroke: #fff; stroke-width: 2.4; stroke-linecap: round; transform-box: view-box; transform: rotate(-25deg); }
+:global(.cmd__choice:hover) .dev__rev, :global(.cmd__choice:focus-visible) .dev__rev { animation: dev-rev .9s steps(1) infinite; }
+:global(.cmd__choice:hover) .dev__knob, :global(.cmd__choice:focus-visible) .dev__knob { animation: dev-knob 1.8s $ease infinite; }
+:global(.cmd__choice:hover) .dev__knob--b, :global(.cmd__choice:focus-visible) .dev__knob--b { animation-delay: .5s; }
+:global(.cmd__choice:hover) .dev__lever, :global(.cmd__choice:focus-visible) .dev__lever { animation: dev-lever 1.8s $ease infinite; }
+:global(.cmd__choice:hover) .dev__screen-bar, :global(.cmd__choice:focus-visible) .dev__screen-bar { animation: dev-bar .9s ease-in-out infinite alternate; }
+@keyframes dev-rev { 0% { opacity: .25 } 30% { opacity: 1 } 100% { opacity: 1 } }
+@keyframes dev-knob { 0%, 100% { transform: rotate(0) } 40% { transform: rotate(90deg) } 70% { transform: rotate(45deg) } }
+@keyframes dev-lever { 0%, 100% { transform: rotate(-25deg) } 45%, 70% { transform: rotate(25deg) } }
+@keyframes dev-bar { from { stroke-dasharray: 4 20 } to { stroke-dasharray: 20 20 } }
 
 // Alive on hover/focus of the whole choice button.
 :global(.cmd__choice:hover) .dev__line, :global(.cmd__choice:focus-visible) .dev__line { stroke: #fff; }
@@ -90,6 +127,7 @@ $ease: cubic-bezier(.45, 0, .55, 1);
 @keyframes dev-click { 0%, 30%, 100% { fill: transparent } 8%, 20% { fill: $red } }
 @media (prefers-reduced-motion: reduce) {
   :global(.cmd__choice:hover) .dev__wheel, :global(.cmd__choice:hover) .dev__led, :global(.cmd__choice:hover) .dev__key--ctrl,
-  :global(.cmd__choice:hover) .dev__key--k, :global(.cmd__choice:hover) .dev__click { animation: none; }
+  :global(.cmd__choice:hover) .dev__key--k, :global(.cmd__choice:hover) .dev__click, :global(.cmd__choice:hover) .dev__rev,
+  :global(.cmd__choice:hover) .dev__knob, :global(.cmd__choice:hover) .dev__lever, :global(.cmd__choice:hover) .dev__screen-bar { animation: none; }
 }
 </style>
