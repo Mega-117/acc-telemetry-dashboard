@@ -36,6 +36,14 @@ describe('Cloudflare static package', () => {
     expect(headers).not.toContain('.json')
     expect(existsSync(join(output, '.env'))).toBe(false)
   })
+  it('PIP-571: publishes the onboarding clips (webm) and their posters', () => {
+    const { docs, output } = fixture()
+    mkdirSync(join(docs, 'onboarding'))
+    writeFileSync(join(docs, 'onboarding', '01-benvenuto.webm'), 'clip')
+    writeFileSync(join(docs, 'onboarding', '01-benvenuto.jpg'), 'poster')
+    expect(packageCloudflare(docs, output)).toMatchObject({ files: 5 })
+    expect(readFileSync(join(output, APP_PATH, 'onboarding', '01-benvenuto.webm'), 'utf8')).toBe('clip')
+  })
   it('refuses to overwrite previous output', () => {
     const { docs, output } = fixture()
     mkdirSync(output)

@@ -3,7 +3,7 @@ import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node
 import { fileURLToPath } from 'node:url'
 
 export const APP_PATH = '/acc-telemetry-dashboard/docs/'
-const extensions = new Set(['.html', '.css', '.js', '.json', '.ico', '.png', '.svg', '.ttf', '.woff', '.woff2', '.txt', '.wav', '.mp3', '.webp', '.jpg', '.jpeg', '.gif', '.avif', '.ogg'])
+const extensions = new Set(['.html', '.css', '.js', '.json', '.ico', '.png', '.svg', '.ttf', '.woff', '.woff2', '.txt', '.wav', '.mp3', '.webp', '.jpg', '.jpeg', '.gif', '.avif', '.ogg', '.webm'])
 
 // Validate everything before creating output; never overwrite or delete an existing directory.
 export function packageCloudflare(source, destination) {
