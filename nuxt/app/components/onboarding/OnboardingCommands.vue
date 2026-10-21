@@ -28,14 +28,14 @@ const props = defineProps<{ wheelAvailable: boolean }>()
 const emit = defineEmits<{ done: []; later: [] }>()
 
 type Screen = 'choose' | 'assign' | 'practice' | 'ready' | 'keyboard'
-// The screen asks "Premi il pulsante per <verb>". Indietro is optional: without it the first
-// button still closes the panel.
-const REQUIRED: Array<{ id: WheelControlAction; title: string; verb: string; optional?: true }> = [
-  { id: 'togglePalette', title: 'Apri e chiudi il pannello rapido', verb: 'aprire il pannello' },
-  { id: 'nextAction', title: 'Voce successiva', verb: 'andare alla voce dopo' },
-  { id: 'previousAction', title: 'Voce precedente', verb: 'tornare alla voce prima' },
-  { id: 'activateAction', title: 'Conferma', verb: 'confermare' },
-  { id: 'mainMenu', title: 'Indietro', verb: 'uscire da una voce', optional: true },
+// The screen asks which button the pilot wants for each command (a choice, not an order), with
+// what the command does. Indietro is optional: without it the first button still closes the panel.
+const REQUIRED: Array<{ id: WheelControlAction; title: string; name: string; does: string; optional?: true }> = [
+  { id: 'togglePalette', title: 'Apri e chiudi il pannello rapido', name: 'aprire il pannello', does: 'Apre e chiude il pannello rapido mentre guidi. È quello che userai di più.' },
+  { id: 'nextAction', title: 'Voce successiva', name: 'la voce successiva', does: 'Nel pannello sposta la selezione alla voce dopo.' },
+  { id: 'previousAction', title: 'Voce precedente', name: 'la voce precedente', does: 'Nel pannello sposta la selezione alla voce prima.' },
+  { id: 'activateAction', title: 'Conferma', name: 'confermare', does: 'Nel pannello attiva la voce selezionata.' },
+  { id: 'mainMenu', title: 'Indietro', name: 'tornare indietro', does: 'Esce dalla voce aperta. Se non ti serve, saltalo.', optional: true },
 ]
 const STEP_SAVED_MS = 900
 const PRACTICE_DONE_MS = 900
@@ -236,13 +236,14 @@ onBeforeUnmount(() => { void release() })
       </div>
       <Transition name="cmd-next" mode="out-in">
       <div :key="current.id" class="cmd__wizard" :class="{ 'is-saved': saved }" data-cmd-target>
-        <p class="cmd__wizard-n">Pulsante {{ assignIndex + 1 }} di {{ REQUIRED.length }}<template v-if="current.optional"> · facoltativo</template></p>
+        <p class="cmd__wizard-n">Imposta i pulsanti · {{ assignIndex + 1 }} di {{ REQUIRED.length }}<template v-if="current.optional"> · facoltativo</template></p>
         <OnboardingDeviceIcon kind="wheel" :live="waiting" class="cmd__wizard-icon" />
-        <h2 class="cmd__title cmd__wizard-ask">Premi il pulsante per <em>{{ current.verb }}</em></h2>
+        <h2 class="cmd__title cmd__wizard-ask">Quale pulsante usi per <em>{{ current.name }}</em>?</h2>
+        <p class="cmd__wizard-does">{{ current.does }}</p>
         <p v-if="saved" class="cmd__ok"><span class="cmd__check" aria-hidden="true">✓</span> {{ formatWheelBinding(currentBinding) }}</p>
         <p v-else-if="waiting" class="cmd__wizard-hint" :class="{ 'is-quiet': quiet }" data-cmd-ask>
           <template v-if="quiet">Non ricevo niente. Il volante è collegato? Prova un altro pulsante.</template>
-          <template v-else>{{ keyHint || 'Premi un pulsante sul volante o sulla button box.' }}</template>
+          <template v-else>{{ keyHint || 'Premi adesso il pulsante che vuoi: del volante o della button box, scegli tu.' }}</template>
         </p>
         <template v-else-if="error">
           <p class="cmd__wizard-hint is-quiet" role="alert">{{ error }}</p>
@@ -256,6 +257,7 @@ onBeforeUnmount(() => { void release() })
           </div>
         </template>
         <p v-else class="cmd__wizard-hint">{{ readerStatus || 'Un attimo…' }}</p>
+        <p v-if="controllers.length && !saved" class="cmd__devices" data-cmd-devices>Collegati: {{ controllers.join(', ') }}</p>
         <button v-if="current.optional && !currentBinding && !saved" type="button" class="cmd__link" data-cmd-skip @click="skip">Salta, non mi serve</button>
       </div>
       </Transition>
@@ -397,6 +399,7 @@ $ease: cubic-bezier(.22, .61, .36, 1);
   &.now { background: $sel; } &.done { background: $ok; } &.skip { background: transparent; box-shadow: inset 0 0 0 1px #8a8a90; } }
 .cmd__wizard { display: flex; flex-direction: column; align-items: center; gap: 18px; text-align: center; }
 .cmd__wizard-n { margin: 0; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: #b3b3b8; }
+.cmd__wizard-does { margin: -6px 0 0; max-width: 620px; font-size: 17px; color: #c9c9ce; }
 .cmd__wizard-icon { width: 280px; height: 158px; }
 .cmd__wizard-ask { font-size: 40px; max-width: 760px; }
 .cmd__wizard-hint { margin: 0; min-height: 1.5em; font-size: 18px; color: $sel; &.is-quiet { color: #ff8a8a; } b { color: #fff; } }

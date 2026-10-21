@@ -61,8 +61,8 @@ describe('OnboardingCommands (PIP-571)', () => {
     await wrapper.get('button[data-cmd-wheel]').trigger('click'); await flushPromises()
     for (const [i, action] of ORDER.entries()) {
       expect(mock.bridge.beginCapture).toHaveBeenLastCalledWith(action)
-      expect(wrapper.text()).toContain(`Pulsante ${i + 1} di 5`)
-      expect(wrapper.get('[data-cmd-target] .cmd__title').text()).toMatch(/^Premi il pulsante per /); expect(wrapper.get('[data-cmd-ask]').text()).toContain('Premi un pulsante sul volante')
+      expect(wrapper.text()).toContain(`Imposta i pulsanti · ${i + 1} di 5`)
+      expect(wrapper.get('[data-cmd-target] .cmd__title').text()).toMatch(/^Quale pulsante usi per /); expect(wrapper.get('[data-cmd-ask]').text()).toContain('Premi adesso il pulsante che vuoi')
       expect(wrapper.find(`[data-slot="${action}"]`).classes()).toContain('now')
       // Only Indietro can be skipped.
       expect(wrapper.find('[data-cmd-skip]').exists()).toBe(action === 'mainMenu')
@@ -99,7 +99,7 @@ describe('OnboardingCommands (PIP-571)', () => {
     const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } })
     await wrapper.get('button[data-cmd-wheel]').trigger('click'); await flushPromises()
     for (const [i, action] of ORDER.slice(0, 4).entries()) await pressAndSave(action, i + 1)
-    expect(wrapper.text()).toContain('Pulsante 5 di 5 · facoltativo')
+    expect(wrapper.text()).toContain('Imposta i pulsanti · 5 di 5 · facoltativo')
     await wrapper.get('[data-cmd-skip]').trigger('click'); await flushPromises()
     expect(mock.bridge.cancelCapture).toHaveBeenCalled()
     expect(mock.bridge.state.value.bindings.mainMenu).toBeNull()
@@ -143,11 +143,11 @@ describe('OnboardingCommands (PIP-571)', () => {
     expect(mock.bridge.beginCapture).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('Usi già Wheel · Pulsante 8')
     await wrapper.get('[data-cmd-keep]').trigger('click'); await flushPromises()
-    expect(wrapper.text()).toContain('Pulsante 2 di 5')
+    expect(wrapper.text()).toContain('Imposta i pulsanti · 2 di 5')
     expect(mock.bridge.beginCapture).toHaveBeenLastCalledWith('nextAction')
     await wrapper.get('[data-cmd-back]').trigger('click'); await flushPromises()
     expect(mock.bridge.cancelCapture).toHaveBeenCalled()
-    expect(wrapper.text()).toContain('Pulsante 1 di 5')
+    expect(wrapper.text()).toContain('Imposta i pulsanti · 1 di 5')
     wrapper.unmount()
   })
 
