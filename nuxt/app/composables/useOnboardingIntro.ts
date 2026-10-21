@@ -69,13 +69,18 @@ export function useOnboardingIntro() {
     visible.value = true
   }
 
-  /** Closes and remembers how it ended for this user on this installation. */
-  const close = (result: OnboardingResult) => {
-    visible.value = false
+  /** Remembers how it ended for this user on this installation (the window may stay open). */
+  const save = (result: OnboardingResult) => {
     if (owner.value) {
       writeOnboardingStatus(storage(), owner.value.uid, owner.value.installationId, result === 'done' ? 'done' : 'commands-pending')
     }
   }
 
-  return { visible, startPhase, showIfFirstTime, open, close }
+  /** Closes and remembers how it ended. */
+  const close = (result: OnboardingResult) => {
+    visible.value = false
+    save(result)
+  }
+
+  return { visible, startPhase, showIfFirstTime, open, save, close }
 }

@@ -7,6 +7,9 @@ export const PRACTICE_TILES = [
   'Stima pressioni', 'Correggi pressioni', 'A minuti', 'Sessione', 'Pitwall',
   'Giro obiettivo', 'Settori obiettivo', 'Avvisi', 'Timer', 'Notifiche',
 ] as const
+/** "Avvisi" opens the four voice alerts, as in the real ACC panel (QuickPanelVoiceControls). */
+export const VOICE_TILE = PRACTICE_TILES.indexOf('Avvisi')
+export const VOICE_ALERTS = ['Giri', 'Riferimenti', 'Pressioni', 'Target'] as const
 
 export interface PracticeTask {
   id: 'open' | 'next' | 'previous' | 'confirm' | 'close'

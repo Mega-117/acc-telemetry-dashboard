@@ -71,6 +71,17 @@ describe('useOnboardingIntro (PIP-571)', () => {
     setItem.mockRestore()
   })
 
+  it('save remembers the end while the window stays open (last screen)', async () => {
+    electron(); mock.currentUser.value = { uid: 'u1' }
+    const intro = useOnboardingIntro()
+    await intro.showIfFirstTime()
+    intro.save('later')
+    expect(intro.visible.value).toBe(true)
+    expect(window.localStorage.getItem(onboardingSeenKey('u1', 'inst-a'))).toBe('commands-pending')
+    intro.save('done')
+    expect(window.localStorage.getItem(onboardingSeenKey('u1', 'inst-a'))).toBe('1')
+  })
+
   it('tells users apart on the same installation', async () => {
     electron(); mock.currentUser.value = { uid: 'u1' }
     const first = useOnboardingIntro()

@@ -11,12 +11,13 @@ const mock = await vi.hoisted(async () => {
     startPhase: ref<'tour' | 'commands'>('tour'),
     showIfFirstTime: vi.fn(async () => false),
     open: vi.fn(),
+    save: vi.fn(),
     close: vi.fn(),
     currentUser: ref<{ uid: string } | null>({ uid: 'u1' }),
   }
 })
 vi.mock('~/composables/useOnboardingIntro', () => ({
-  useOnboardingIntro: () => ({ visible: mock.visible, startPhase: mock.startPhase, showIfFirstTime: mock.showIfFirstTime, open: mock.open, close: mock.close }),
+  useOnboardingIntro: () => ({ visible: mock.visible, startPhase: mock.startPhase, showIfFirstTime: mock.showIfFirstTime, open: mock.open, save: mock.save, close: mock.close }),
 }))
 vi.mock('~/composables/useFirebaseAuth', () => ({ useFirebaseAuth: () => ({ currentUser: mock.currentUser }) }))
 vi.mock('~/composables/usePublicPath', () => ({ usePublicPath: () => ({ getPublicPath: (p: string) => `/base${p}` }) }))
@@ -55,8 +56,13 @@ describe('OnboardingIntro (PIP-571)', () => {
     expect(document.body.querySelectorAll('[data-rail-step]').length).toBe(ONBOARDING_STEPS.length + 1)
     expect(q('[aria-current="step"]')!.textContent).toContain(ONBOARDING_STEPS[0]!.label)
     for (const step of ONBOARDING_STEPS) {
-      expect(q('video')!.getAttribute('src')).toBe(`/base${step.video}`)
-      expect(q('video')!.getAttribute('poster')).toBe(`/base${step.poster}`)
+      if (step.scene === 'panel') {
+        expect(q('[data-onboarding-showcase]')).not.toBeNull()
+        expect(q('video')).toBeNull()
+      } else {
+        expect(q('video')!.getAttribute('src')).toBe(`/base${step.video}`)
+        expect(q('video')!.getAttribute('poster')).toBe(`/base${step.poster}`)
+      }
       expect(q('[data-onboarding-intro]')!.textContent).toContain(step.accent)
       await click('[data-onboarding-next]')
     }
@@ -85,12 +91,23 @@ describe('OnboardingIntro (PIP-571)', () => {
     wrapper.unmount()
   })
 
-  it('closes only through the command setup, telling done from later', async () => {
+  it('ends on a last screen: saved at once, closed by Inizia, telling done from later', async () => {
     const wrapper = mountIntro(); await open()
     await click('[data-onboarding-skip]')
     await click('[data-done]')
+    expect(mock.save).toHaveBeenLastCalledWith('done')
+    expect(mock.close).not.toHaveBeenCalled()
+    expect(q('[data-onboarding-finish]')!.textContent).toContain('a guidare')
+    expect(document.body.querySelectorAll('.onboarding__rail-item.is-done').length).toBe(ONBOARDING_STEPS.length + 1)
+    expect((q('[data-rail-step]') as HTMLButtonElement).disabled).toBe(true)
+    await click('[data-onboarding-start]')
     expect(mock.close).toHaveBeenLastCalledWith('done')
+    mock.visible.value = false; await flushPromises(); await open()
+    await click('[data-onboarding-skip]')
     await click('[data-later]')
+    expect(mock.save).toHaveBeenLastCalledWith('later')
+    expect(q('[data-onboarding-finish]')!.textContent).toContain('completato')
+    q('[data-onboarding-intro]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await flushPromises()
     expect(mock.close).toHaveBeenLastCalledWith('later')
     wrapper.unmount()
   })

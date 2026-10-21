@@ -4,6 +4,7 @@
 // (test mode: the game receives nothing). Keyboard: press the real Ctrl+K twice; the copy
 // mirrors the real panel opening. "Lo faccio dopo" postpones and the next launch asks again.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import OnboardingDeviceIcon from '~/components/onboarding/OnboardingDeviceIcon.vue'
 import OnboardingPanelReplica from '~/components/onboarding/OnboardingPanelReplica.vue'
 import { useKeyboardCapture } from '~/composables/useKeyboardCapture'
 import { useWheelInputBridge } from '~/composables/useWheelInputBridge'
@@ -52,7 +53,8 @@ const later = (fn: () => void, ms: number) => { const t = setTimeout(() => { tim
 const current = computed(() => REQUIRED[assignIndex.value]!)
 const currentBinding = computed(() => state.value.bindings[current.value.id])
 const waiting = computed(() => state.value.capture?.action === current.value.id)
-const controllers = computed(() => state.value.devices.filter(d => d.kind !== 'keyboard').map(d => d.deviceLabel))
+// One name per device model: two readers of the same wheel are one wheel for the pilot.
+const controllers = computed(() => [...new Set(state.value.devices.filter(d => d.kind !== 'keyboard').map(d => d.deviceLabel))])
 const readerStatus = computed(() => {
   if (!state.value.available) return 'Collegamento ai comandi in avvio…'
   if (state.value.inputStatus === 'starting') return 'Cerco volante e button box…'
@@ -182,11 +184,13 @@ onBeforeUnmount(() => { void release() })
       <p class="cmd__lead">In guida le mani restano sul volante. Usa i suoi pulsanti.</p>
       <div class="cmd__choices">
         <button type="button" class="cmd__choice cmd__choice--main" data-cmd-wheel @click="chooseWheel">
-          <strong>Ho un volante o una button box</strong>
+          <OnboardingDeviceIcon kind="wheel" />
+          <strong>Volante o button box</strong>
           <span>Assegniamo 4 pulsanti. Due minuti.</span>
         </button>
         <button type="button" class="cmd__choice" data-cmd-keyboard @click="chooseKeyboard">
-          <strong>Uso solo tastiera e mouse</strong>
+          <OnboardingDeviceIcon kind="keyboard" />
+          <strong>Solo tastiera e mouse</strong>
           <span>Proviamo Ctrl+K insieme.</span>
         </button>
       </div>
@@ -280,7 +284,7 @@ onBeforeUnmount(() => { void release() })
         <li v-for="item in REQUIRED" :key="item.id"><span>{{ item.title }}</span><b>{{ formatWheelBinding(state.bindings[item.id]) }}</b></li>
       </ul>
       <p class="cmd__lead">Li cambi quando vuoi in Impostazioni → Comandi.</p>
-      <button type="button" class="cmd__primary cmd__primary--big" data-cmd-finish @click="finish">Inizia a guidare</button>
+      <button type="button" class="cmd__primary cmd__primary--big" data-cmd-finish @click="finish">Avanti</button>
     </div>
 
     <!-- Solo tastiera e mouse -->
@@ -369,12 +373,13 @@ $ease: cubic-bezier(.22, .61, .36, 1);
 .cmd__screen { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 20px; }
 .cmd__title { margin: 0; font: 700 34px/1.05 'Racer Display', 'Inter', sans-serif; text-transform: uppercase; em { font-style: inherit; color: $red; } }
 .cmd__lead { margin: 0; max-width: 700px; font-size: 17px; line-height: 1.6; color: #c9c9ce; }
-.cmd__choices { display: grid; grid-template-columns: 1.4fr 1fr; gap: 20px; width: min(760px, 100%); margin-top: 12px; }
-.cmd__choice { display: flex; flex-direction: column; gap: 6px; padding: 26px 26px 26px 30px; border: 0; background: #ffffff0d; box-shadow: inset 4px 0 #ffffff40; color: #fff; text-align: left; cursor: pointer; clip-path: $chamfer; transition: background .4s ease, transform .4s $ease;
-  strong { font-size: 19px; } span { font-size: 14px; color: #b3b3b8; }
-  &:hover { background: #ffffff18; transform: translateY(-2px); }
+// Two equal choices: icon on top, name, one line. The wheel one keeps the red tint (recommended).
+.cmd__choices { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: min(720px, 100%); margin-top: 12px; }
+.cmd__choice { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 22px 24px 26px; border: 0; background: #ffffff0d; box-shadow: inset 0 -3px #ffffff40; color: #fff; text-align: center; cursor: pointer; clip-path: $chamfer; transition: background .4s ease, transform .4s $ease, box-shadow .4s ease;
+  strong { margin-top: 6px; font-size: 20px; } span { font-size: 14px; color: #b3b3b8; }
+  &:hover { background: #ffffff18; transform: translateY(-3px); box-shadow: inset 0 -3px #fff; }
   &:focus-visible { outline: 2px solid #fff; outline-offset: -4px; } }
-.cmd__choice--main { background: rgba($red,.2); box-shadow: inset 4px 0 $red; strong { font-size: 22px; } &:hover { background: rgba($red,.32); } }
+.cmd__choice--main { background: rgba($red,.16); box-shadow: inset 0 -3px $red; &:hover { background: rgba($red,.28); box-shadow: inset 0 -3px $red; } }
 .cmd__devices { margin: 4px 0 0; max-width: 700px; font-size: 14px; color: #8a8a90; }
 .cmd__screen--assign { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); grid-template-rows: auto 1fr; grid-template-areas: 'head head' 'slots target'; align-content: center; align-items: stretch; text-align: left; gap: 24px 32px; }
 .cmd__assign-head { grid-area: head; }
@@ -461,7 +466,8 @@ $ease: cubic-bezier(.22, .61, .36, 1);
   .cmd__target { padding: 20px 24px; gap: 10px; }
   .cmd__target-name { font-size: 28px; }
   .cmd__ask, .cmd__ok { font-size: 18px; }
-  .cmd__choice { padding: 20px 22px 20px 26px; }
+  .cmd__choice { padding: 14px 20px 18px; gap: 4px; }
+  .cmd__choice :deep(.dev) { width: 160px; height: 90px; }
   .cmd__tasks { gap: 12px; }
   .cmd__tasklist li { padding: 9px 14px; font-size: 16px; }
 }

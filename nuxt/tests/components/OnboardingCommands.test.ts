@@ -53,6 +53,11 @@ describe('OnboardingCommands (PIP-571)', () => {
     expect(mock.bridge.start).toHaveBeenCalledTimes(1)
     expect(wrapper.find('[data-cmd-screen="choose"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Collegati: Wheel')
+    // Two readers of the same wheel are listed once.
+    mock.bridge.state.value = { ...mock.bridge.state.value, devices: [...mock.bridge.state.value.devices, { deviceId: 'Wheel-2', deviceLabel: 'Wheel', buttons: [] }] }
+    await flushPromises()
+    expect(wrapper.text()).toContain('Collegati: Wheel')
+    expect(wrapper.text()).not.toContain('Wheel, Wheel')
     await wrapper.get('button[data-cmd-wheel]').trigger('click'); await flushPromises()
     for (const [i, action] of ORDER.entries()) {
       expect(mock.bridge.beginCapture).toHaveBeenLastCalledWith(action)

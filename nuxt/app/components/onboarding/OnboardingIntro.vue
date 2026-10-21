@@ -1,11 +1,12 @@
 <script setup lang="ts">
 // PIP-571: the introduction window. A step rail always on top (Racer Core, Ctrl+K, Automazioni,
-// HUD, Comandi), four short video cards, then the command setup, which is the only way out:
-// "done" when the pilot finishes it, "later" when they postpone. Each step slides in, so the
-// change of step is visible.
+// HUD, Comandi), four short cards, then the command setup, which is the only way out: "done"
+// when the pilot finishes it, "later" when they postpone. Either way a last screen confirms the
+// end before the window closes. Each step slides in, so the change of step is visible.
 import { computed, onMounted, ref, watch } from 'vue'
+import OnboardingPanelShowcase from '~/components/onboarding/OnboardingPanelShowcase.vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { useOnboardingIntro, type OnboardingPhase } from '~/composables/useOnboardingIntro'
+import { useOnboardingIntro, type OnboardingPhase, type OnboardingResult } from '~/composables/useOnboardingIntro'
 import { usePublicPath } from '~/composables/usePublicPath'
 import { ONBOARDING_STEPS } from '~/services/onboarding/onboardingSteps'
 
@@ -13,15 +14,22 @@ const intro = useOnboardingIntro()
 const { currentUser } = useFirebaseAuth()
 const { getPublicPath } = usePublicPath()
 
+const FINISH: Record<OnboardingResult, { title: string; accent: string; text: string }> = {
+  done: { title: 'Sei pronto', accent: 'a guidare', text: 'Il pannello rapido lo apri con Ctrl+K o dal volante.' },
+  later: { title: 'Tour', accent: 'completato', text: 'I pulsanti li assegni quando vuoi in Impostazioni → Comandi.' },
+}
+
 const steps = ONBOARDING_STEPS
 const railLabels = [...steps.map(s => s.label), 'Comandi']
 const index = ref(0)
-const phase = ref<OnboardingPhase>('tour')
+const phase = ref<OnboardingPhase | 'finish'>('tour')
+const result = ref<OnboardingResult>('done')
 const direction = ref<'next' | 'prev'>('next')
 const root = ref<HTMLElement | null>(null)
 const step = computed(() => steps[index.value]!)
-const current = computed(() => phase.value === 'tour' ? index.value : steps.length)
-const progress = computed(() => `${(current.value / (railLabels.length - 1)) * 100}%`)
+const finish = computed(() => FINISH[result.value])
+const current = computed(() => ({ tour: index.value, commands: steps.length, finish: railLabels.length })[phase.value])
+const progress = computed(() => `${Math.min(1, current.value / (railLabels.length - 1)) * 100}%`)
 
 const wheelAvailable = computed(() => {
   if (typeof window === 'undefined') return false
@@ -40,7 +48,17 @@ const goTo = (target: number) => {
 const next = () => goTo(current.value + 1)
 const previous = () => goTo(current.value - 1)
 const toCommands = () => goTo(steps.length)
-const onEscape = () => { if (phase.value === 'tour') toCommands() }
+// The status is saved as soon as the setup ends, so closing the app on the last screen keeps it.
+const toFinish = (how: OnboardingResult) => {
+  intro.save(how)
+  result.value = how
+  direction.value = 'next'
+  phase.value = 'finish'
+}
+const onEscape = () => {
+  if (phase.value === 'tour') toCommands()
+  else if (phase.value === 'finish') intro.close(result.value)
+}
 
 watch(intro.visible, (open) => {
   if (!open) return
@@ -56,6 +74,7 @@ onMounted(() => { void intro.showIfFirstTime() })
 
 <template>
   <Teleport to="body">
+    <Transition name="onb-exit">
     <div
       v-if="intro.visible.value"
       ref="root"
@@ -76,7 +95,7 @@ onMounted(() => { void intro.showIfFirstTime() })
               class="onboarding__rail-item"
               :class="{ 'is-done': i < current, 'is-now': i === current }"
             >
-              <button type="button" data-rail-step :aria-current="i === current ? 'step' : undefined" @click="goTo(i)">
+              <button type="button" data-rail-step :disabled="phase === 'finish'" :aria-current="i === current ? 'step' : undefined" @click="goTo(i)">
                 <span class="onboarding__rail-n">{{ i < current ? '✓' : i + 1 }}</span>
                 <span class="onboarding__rail-label">{{ label }}</span>
               </button>
@@ -91,10 +110,12 @@ onMounted(() => { void intro.showIfFirstTime() })
         <Transition :name="`onb-${direction}`" mode="out-in">
           <div v-if="phase === 'tour'" :key="step.id" class="onboarding__stage" data-onboarding-stage>
             <div class="onboarding__media">
+              <OnboardingPanelShowcase v-if="step.scene === 'panel'" />
               <video
+                v-else
                 class="onboarding__video"
-                :src="getPublicPath(step.video)"
-                :poster="getPublicPath(step.poster)"
+                :src="getPublicPath(step.video ?? '')"
+                :poster="step.poster ? getPublicPath(step.poster) : undefined"
                 autoplay
                 muted
                 loop
@@ -115,18 +136,29 @@ onMounted(() => { void intro.showIfFirstTime() })
             </div>
           </div>
 
+          <div v-else-if="phase === 'finish'" key="finish" class="onboarding__stage onboarding__finish" data-onboarding-finish>
+            <svg class="onboarding__seal" viewBox="0 0 120 120" aria-hidden="true">
+              <path class="onboarding__seal-frame" d="M3 3 H117 V97 L97 117 H3 Z" pathLength="1" />
+              <path class="onboarding__seal-tick" d="M34 61 L52 79 L87 42" pathLength="1" />
+            </svg>
+            <h2 class="onboarding__title onboarding__finish-title">{{ finish.title }} <em>{{ finish.accent }}</em></h2>
+            <p class="onboarding__copy onboarding__finish-copy">{{ finish.text }}</p>
+            <button type="button" class="onboarding__next onboarding__finish-go" data-onboarding-start @click="intro.close(result)">Inizia</button>
+          </div>
+
           <OnboardingCommands
             v-else
             key="commands"
             class="onboarding__stage"
             :wheel-available="wheelAvailable"
             data-onboarding-commands
-            @done="intro.close('done')"
-            @later="intro.close('later')"
+            @done="toFinish('done')"
+            @later="toFinish('later')"
           />
         </Transition>
       </div>
     </div>
+    </Transition>
   </Teleport>
 </template>
 
@@ -210,6 +242,25 @@ $ease: cubic-bezier(.22, .61, .36, 1);
   &:hover { background: #f21a33; }
   &:focus-visible { outline: 2px solid #fff; outline-offset: -4px; } }
 
+// Last screen: the cut-corner frame draws itself, then the tick, then the words rise.
+.onboarding__finish { align-items: center; justify-content: center; gap: 22px; text-align: center; }
+.onboarding__seal { width: 132px; height: 132px; fill: none; stroke-linecap: square;
+  path { stroke-dasharray: 1; stroke-dashoffset: 1; }
+  .onboarding__seal-frame { stroke: $line; stroke-width: 2; animation: onb-draw 1.1s $ease .2s forwards; }
+  .onboarding__seal-tick { stroke: $ok; stroke-width: 9; animation: onb-draw .8s $ease 1.1s forwards; } }
+@keyframes onb-draw { to { stroke-dashoffset: 0 } }
+.onboarding__finish-title { font-size: 44px; opacity: 0; animation: onb-up .8s $ease 1.6s forwards; }
+.onboarding__finish-copy { margin: 0; opacity: 0; animation: onb-up .8s $ease 1.9s forwards; }
+.onboarding__finish-go { margin-top: 10px; opacity: 0; animation: onb-up .8s $ease 2.2s forwards; }
+@keyframes onb-up { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: none } }
+.onboarding__rail-item button:disabled { cursor: default; &:hover { color: inherit; } }
+
+// Closing: the window settles back and fades while the dark veil lifts onto the dashboard.
+.onb-exit-leave-active { transition: opacity .9s ease .15s, backdrop-filter .9s ease .15s;
+  .onboarding__modal { transition: transform .8s $ease, opacity .7s ease; } }
+.onb-exit-leave-to { opacity: 0; backdrop-filter: blur(0);
+  .onboarding__modal { transform: scale(.96) translateY(12px); opacity: 0; } }
+
 // Step change: slide in the direction of travel
 // Soft and unhurried: the old step fades away gently, the new one glides in.
 .onb-next-enter-active, .onb-prev-enter-active { transition: transform .6s $ease, opacity .6s ease; }
@@ -221,6 +272,10 @@ $ease: cubic-bezier(.22, .61, .36, 1);
 
 @media (prefers-reduced-motion: reduce) {
   .onboarding, .onboarding__modal, .onboarding__rail-n { animation: none !important; }
+  .onboarding__seal path { animation: none !important; stroke-dashoffset: 0; }
+  .onb-exit-leave-active { transition: opacity .4s ease; .onboarding__modal { transition: none; } }
+  .onb-exit-leave-to .onboarding__modal { transform: none; }
+  .onboarding__finish-title, .onboarding__finish-copy, .onboarding__finish-go { animation: none !important; opacity: 1; }
   .onb-next-enter-active, .onb-next-leave-active, .onb-prev-enter-active, .onb-prev-leave-active { transition: opacity .3s; }
   .onb-next-enter-from, .onb-next-leave-to, .onb-prev-enter-from, .onb-prev-leave-to { transform: none; }
 }
