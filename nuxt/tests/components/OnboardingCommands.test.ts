@@ -11,7 +11,7 @@ const mock = await vi.hoisted(async () => {
 vi.mock('~/composables/useWheelInputBridge', () => ({ useWheelInputBridge: () => mock.bridge }))
 vi.mock('~/composables/usePublicPath', () => ({ usePublicPath: () => ({ getPublicPath: (p: string) => p }) }))
 
-const ORDER: WheelControlAction[] = ['togglePalette', 'nextAction', 'previousAction', 'activateAction']
+const ORDER: WheelControlAction[] = ['togglePalette', 'nextAction', 'previousAction', 'activateAction', 'mainMenu']
 const binding = (button: number) => ({ deviceId: 'Wheel', deviceLabel: 'Wheel', button })
 
 beforeEach(() => {
@@ -47,7 +47,7 @@ async function tap(action: WheelControlAction) {
 }
 
 describe('OnboardingCommands (PIP-571)', () => {
-  it('wheel path: assigns the four commands one at a time, practises the panel and finishes', async () => {
+  it('wheel path: assigns the five commands one at a time, practises the panel and finishes', async () => {
     const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } })
     await flushPromises()
     expect(mock.bridge.start).toHaveBeenCalledTimes(1)
@@ -62,7 +62,7 @@ describe('OnboardingCommands (PIP-571)', () => {
     for (const [i, action] of ORDER.entries()) {
       expect(mock.bridge.beginCapture).toHaveBeenLastCalledWith(action)
       expect(wrapper.text()).toContain('Assegna i pulsanti del volante')
-      expect(wrapper.text()).toContain(`Comando ${i + 1} di 4`)
+      expect(wrapper.text()).toContain(`Comando ${i + 1} di 5`)
       expect(wrapper.text()).toContain('Premi il pulsante sul volante')
       expect(wrapper.find(`[data-slot="${action}"]`).classes()).toContain('now')
       expect(wrapper.find(`[data-slot="${action}"]`).text()).toContain('da assegnare')
@@ -81,6 +81,9 @@ describe('OnboardingCommands (PIP-571)', () => {
     await wrapper.get('[data-replica-tile="0"]').trigger('mouseenter')
     await tap('nextAction'); await tap('nextAction'); await tap('previousAction'); await tap('activateAction')
     expect(wrapper.get('[data-cmd-mock]').text()).toContain('Hai confermato: Correggi pressioni')
+    await tap('mainMenu')
+    expect(wrapper.find('[data-task="back"]').classes()).toContain('done')
+    expect(wrapper.find('.replica__tile.is-confirmed').exists()).toBe(false)
     await tap('togglePalette')
     expect(mock.bridge.setTestMode).toHaveBeenLastCalledWith(false)
     vi.advanceTimersByTime(1000); await flushPromises()
@@ -111,11 +114,11 @@ describe('OnboardingCommands (PIP-571)', () => {
     expect(mock.bridge.beginCapture).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('Già assegnato: Wheel · Pulsante 8')
     await wrapper.get('[data-cmd-keep]').trigger('click'); await flushPromises()
-    expect(wrapper.text()).toContain('Comando 2 di 4')
+    expect(wrapper.text()).toContain('Comando 2 di 5')
     expect(mock.bridge.beginCapture).toHaveBeenLastCalledWith('nextAction')
     await wrapper.get('[data-cmd-back]').trigger('click'); await flushPromises()
     expect(mock.bridge.cancelCapture).toHaveBeenCalled()
-    expect(wrapper.text()).toContain('Comando 1 di 4')
+    expect(wrapper.text()).toContain('Comando 1 di 5')
     wrapper.unmount()
   })
 

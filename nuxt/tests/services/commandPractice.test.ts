@@ -28,11 +28,26 @@ describe('commandPractice (PIP-571)', () => {
     expect(s).toMatchObject({ selected: 1, task: 3 })
     s = applyPracticePress(s, 'activateAction')
     expect(s).toMatchObject({ confirmed: 1, task: 4 })
+    s = applyPracticePress(s, 'mainMenu')
+    expect(s).toMatchObject({ confirmed: null, open: true, task: 5 })
     expect(practiceDone(s)).toBe(false)
     s = applyPracticePress(s, 'togglePalette')
     expect(s.open).toBe(false)
     expect(practiceDone(s)).toBe(true)
     expect(s.task).toBe(PRACTICE_TASKS.length)
+  })
+
+  it('Indietro works like the real Back: leaves the voice, then closes the panel (also the last exercise)', () => {
+    let s = press(['togglePalette', 'nextAction', 'nextAction', 'previousAction'])
+    expect(s.task).toBe(3)
+    s = applyPracticePress(s, 'activateAction')
+    expect(s.task).toBe(4)
+    expect(practiceHint({ ...s, confirmed: null })).toMatch(/Prima conferma/)
+    s = applyPracticePress(s, 'mainMenu')
+    expect(s).toMatchObject({ confirmed: null, open: true, task: 5 })
+    s = applyPracticePress(s, 'mainMenu')
+    expect(s.open).toBe(false)
+    expect(practiceDone(s)).toBe(true)
   })
 
   it('a closed panel ignores moves and confirm, and the hint says to reopen it', () => {

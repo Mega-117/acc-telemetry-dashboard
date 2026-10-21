@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // PIP-571: the last step of the introduction, all about the "pannello rapido" (Ctrl+K).
-// Wheel: choose, assign four buttons one at a time, practise on a faithful copy of the panel
+// Wheel: choose, assign five buttons one at a time, practise on a faithful copy of the panel
 // (test mode: the game receives nothing). Keyboard: press the real Ctrl+K twice; the copy
 // mirrors the real panel opening. "Lo faccio dopo" postpones and the next launch asks again.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -32,6 +32,7 @@ const REQUIRED: Array<{ id: WheelControlAction; title: string; detail: string }>
   { id: 'nextAction', title: 'Voce successiva', detail: 'Passa alla voce dopo.' },
   { id: 'previousAction', title: 'Voce precedente', detail: 'Torna alla voce prima.' },
   { id: 'activateAction', title: 'Conferma', detail: 'Attiva la voce scelta.' },
+  { id: 'mainMenu', title: 'Indietro', detail: 'Esce dalla voce, poi chiude il pannello.' },
 ]
 const STEP_SAVED_MS = 900
 const PRACTICE_DONE_MS = 900
@@ -186,7 +187,7 @@ onBeforeUnmount(() => { void release() })
         <button type="button" class="cmd__choice cmd__choice--main" data-cmd-wheel @click="chooseWheel">
           <OnboardingDeviceIcon kind="wheel" />
           <strong>Volante o button box</strong>
-          <span>Assegniamo 4 pulsanti. Due minuti.</span>
+          <span>Assegniamo 5 pulsanti. Due minuti.</span>
         </button>
         <button type="button" class="cmd__choice" data-cmd-keyboard @click="chooseKeyboard">
           <OnboardingDeviceIcon kind="keyboard" />
@@ -205,7 +206,7 @@ onBeforeUnmount(() => { void release() })
     <div v-else-if="screen === 'assign'" class="cmd__screen cmd__screen--assign" data-cmd-screen="assign">
       <div class="cmd__assign-head">
         <h2 class="cmd__title">Assegna i pulsanti <em>del volante</em></h2>
-        <p class="cmd__lead">Quattro comandi, uno alla volta.</p>
+        <p class="cmd__lead">Cinque comandi, uno alla volta.</p>
       </div>
       <ol class="cmd__slots" aria-label="Comandi da assegnare">
         <li
@@ -389,7 +390,7 @@ $ease: cubic-bezier(.22, .61, .36, 1);
   &.now { background: rgba($sel,.1); color: #fff; box-shadow: inset 4px 0 $sel; }
   &.set { color: #fff; .cmd__slot-n { background: $ok; color: #04150a; } .cmd__slot-value { color: $ok; } } }
 .cmd__slot-n { grid-row: 1 / 3; align-self: center; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #ffffff1a; font-weight: 800; }
-.cmd__slot-name { font-size: 16px; font-weight: 650; }
+.cmd__slot-name { font-size: 16px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cmd__slot-value { font-size: 13px; color: #8a8a90; }
 .cmd__target { grid-area: target; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 14px; padding: 32px; border: 1px solid $line; background: #ffffff08; font-size: 18px; font-weight: 600;
   small { font-size: 14px; font-weight: 400; color: #b3b3b8; }
@@ -461,8 +462,10 @@ $ease: cubic-bezier(.22, .61, .36, 1);
   .cmd { gap: 16px; padding: 18px 32px 12px; }
   .cmd__screen { gap: 14px; }
   .cmd__title { font-size: 28px; }
-  .cmd__screen--assign { gap: 16px 24px; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); }
-  .cmd__slot { padding: 9px 16px; }
+  .cmd__screen--assign { gap: 14px 24px; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); }
+  .cmd__slot { padding: 6px 14px; row-gap: 2px; }
+  .cmd__slot-name { font-size: 15px; }
+  .cmd__slot-n { width: 28px; height: 28px; }
   .cmd__target { padding: 20px 24px; gap: 10px; }
   .cmd__target-name { font-size: 28px; }
   .cmd__ask, .cmd__ok { font-size: 18px; }

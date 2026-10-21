@@ -1,6 +1,6 @@
 // PIP-571: mini-tutorial of the Ctrl+K panel driven by the pilot's own buttons. In one sentence:
 // every press moves a pretend panel exactly like the real one would (open/close, next, previous,
-// confirm) and the current exercise ticks off when the pilot does what it asks.
+// confirm, back) and the current exercise ticks off when the pilot does what it asks.
 import type { WheelControlAction } from '~/services/controls/wheelBindingModel'
 
 export const PRACTICE_TILES = [
@@ -12,7 +12,7 @@ export const VOICE_TILE = PRACTICE_TILES.indexOf('Avvisi')
 export const VOICE_ALERTS = ['Giri', 'Riferimenti', 'Pressioni', 'Target'] as const
 
 export interface PracticeTask {
-  id: 'open' | 'next' | 'previous' | 'confirm' | 'close'
+  id: 'open' | 'next' | 'previous' | 'confirm' | 'back' | 'close'
   action: WheelControlAction
   times: number
   text: string
@@ -23,6 +23,7 @@ export const PRACTICE_TASKS: readonly PracticeTask[] = [
   { id: 'next', action: 'nextAction', times: 2, text: 'Vai avanti di due voci' },
   { id: 'previous', action: 'previousAction', times: 1, text: 'Torna indietro di una voce' },
   { id: 'confirm', action: 'activateAction', times: 1, text: 'Conferma la voce selezionata' },
+  { id: 'back', action: 'mainMenu', times: 1, text: 'Esci dalla voce con Indietro' },
   { id: 'close', action: 'togglePalette', times: 1, text: 'Chiudi il pannello' },
 ]
 
@@ -64,6 +65,10 @@ export function applyPracticePress(state: PracticeState, action: WheelControlAct
   } else if (state.open && action === 'activateAction') {
     next.confirmed = state.selected
     effect = 'confirm'
+  } else if (state.open && action === 'mainMenu') {
+    // Like the real Back: first leave the confirmed voice, then close the panel.
+    if (state.confirmed !== null) { next.confirmed = null; effect = 'back' }
+    else { next.open = false; effect = 'close' }
   }
   const task = PRACTICE_TASKS[state.task]
   if (task && effect === task.id) {
@@ -103,5 +108,6 @@ export function practiceHint(state: PracticeState): string {
   const task = PRACTICE_TASKS[state.task]
   if (!task) return ''
   if (!state.open && task.id !== 'open' && task.id !== 'close') return 'Il pannello è chiuso. Riaprilo.'
+  if (task.id === 'back' && state.confirmed === null) return 'Prima conferma una voce, poi premi Indietro.'
   return ''
 }
