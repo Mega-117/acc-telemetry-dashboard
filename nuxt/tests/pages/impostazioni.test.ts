@@ -44,6 +44,20 @@ describe('Impostazioni navigation', () => {
     expect(mock.start).toHaveBeenCalledTimes(1)
     wrapper.unmount()
   })
+  it('PIP-571: offers Introduzione as a third section that reopens the intro', async () => {
+    const open = vi.fn()
+    const wrapper = mount(Impostazioni, { global: {
+      stubs: { SettingsCommandBindingsPanel: { template: '<div>Bindings</div>' }, SettingsStartupPanel: { template: '<div>Startup</div>' },
+        SettingsIntroPanel: { template: '<button data-intro @click="open()">Rivedi</button>', setup: () => ({ open }) } } } })
+    await flushPromises()
+    const tabs = wrapper.findAll('aside button')
+    expect(tabs.map(t => t.text())).toEqual(['Comandi', 'Avvio', 'Introduzione'])
+    await tabs[2]!.trigger('click'); await flushPromises()
+    expect(tabs[2]!.attributes('aria-pressed')).toBe('true')
+    await wrapper.get('[data-intro]').trigger('click')
+    expect(open).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
   it('preserves primary-desktop access restriction', async () => {
     Object.assign(window, { electronAPI: { localIdentityRole: 'consumer' } })
     const wrapper = mount(Impostazioni); await flushPromises()

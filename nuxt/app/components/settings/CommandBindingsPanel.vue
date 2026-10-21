@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useKeyboardCapture } from '~/composables/useKeyboardCapture'
 import { useWheelInputBridge } from '~/composables/useWheelInputBridge'
+import { captureSourceReady, commandErrorText } from '~/services/controls/commandCapture'
 import {
   formatWheelBinding,
-  keyboardButton,
   type WheelControlAction,
 } from '~/services/controls/wheelBindingModel'
 
@@ -15,6 +16,7 @@ const actions: Array<{ id: WheelControlAction; title: string; description: strin
   { id: 'mainMenu', title: 'Indietro', description: 'Esce dal valore che stai modificando, poi dal pannello aperto, poi chiude Ctrl+K.' },
 ]
 
+const bridge = useWheelInputBridge()
 const {
   state,
   testMode,
@@ -24,47 +26,19 @@ const {
   clearBinding,
   setTestMode,
   finishConfiguration,
-  captureKey,
   retrySource,
-} = useWheelInputBridge()
+} = bridge
 
 const selectedDevice = ref('')
-const keyHint = ref('')
-let pendingKey: number | null = null
+const { keyHint, reset: resetKeyCapture } = useKeyboardCapture(bridge)
 const devices = computed(() => state.value.devices.map((device, index) => ({
   id: device.deviceId,
   label: `${device.deviceLabel}${device.buttonCount ? ` · ${device.buttonCount} pulsanti` : ''}${state.value.devices.filter(d => d.deviceLabel === device.deviceLabel && d.buttonCount === device.buttonCount).length > 1 ? ` · ${index + 1}` : ''}`,
 })))
-watch(selectedDevice, () => { pendingKey = null; keyHint.value = ''; if (state.value.capture) void cancelCapture() })
-const onKeyDown = (event: KeyboardEvent) => {
-  if (!state.value.capture) return
-  if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); void cancelCapture(); pendingKey = null; return }
-  if (state.value.capture.deviceId && state.value.capture.deviceId !== 'keyboard:system') return
-  event.preventDefault()
-  event.stopImmediatePropagation()
-  if (event.repeat) return
-  pendingKey = keyboardButton(event)
-  keyHint.value = pendingKey === null ? 'Usa un solo tasto: una lettera, un numero, F1–F24 o una freccia.' : 'Rilascia il tasto per salvarlo.'
-}
-const onKeyUp = (event: KeyboardEvent) => {
-  if (pendingKey === null || !state.value.capture) return
-  event.preventDefault()
-  event.stopImmediatePropagation()
-  if (keyboardButton(event) === pendingKey) { void captureKey(pendingKey); pendingKey = null; keyHint.value = '' }
-}
-const onBlur = () => { pendingKey = null }
+watch(selectedDevice, () => { resetKeyCapture(); if (state.value.capture) void cancelCapture() })
 const selectedSource = computed(() => selectedDevice.value === 'keyboard:system' ? 'keyboard' : selectedDevice.value ? 'controller' : null)
-const sourceReady = computed(() => {
-  if (!state.value.sources) return state.value.inputStatus !== 'unavailable' && state.value.inputStatus !== 'starting'
-  const source = selectedSource.value
-  return source ? state.value.sources[source].status === 'ready' : Object.values(state.value.sources).some(s => s.status === 'ready')
-})
+const sourceReady = computed(() => captureSourceReady(state.value, selectedSource.value))
 const failedSources = computed(() => (['keyboard', 'controller'] as const).filter(source => state.value.sources?.[source].status === 'unavailable'))
-onMounted(() => {
-  window.addEventListener('keydown', onKeyDown, true)
-  window.addEventListener('keyup', onKeyUp, true)
-  window.addEventListener('blur', onBlur)
-})
 
 const statusText = computed(() => {
   if (!state.value.available) return 'Runtime comandi non disponibile'
@@ -78,27 +52,9 @@ const statusText = computed(() => {
   if (!state.value.devices.length) return 'Nessun controller collegato. Puoi usare la tastiera.'
   return `${state.value.devices.length} periferiche rilevate. Scegli un comando e premi Assegna.`
 })
-const errorText = computed(() => {
-  const reason = state.value.operation?.reason || state.value.lastError
-  if (!reason) return ''
-  return ({
-    binding_conflict: 'Questo pulsante è già assegnato a un altro comando.',
-    settings_corrupt: 'Le impostazioni locali non erano valide: sono stati caricati binding vuoti.',
-    settings_write_failed: 'Il comando non è stato salvato su disco. Riprova.',
-    capture_ambiguous: 'Sono arrivati più pulsanti o ingressi insieme. Scegli il dispositivo nella tendina e premi nuovamente Assegna.',
-    controls_unavailable: 'Collegamento ai comandi non disponibile. Riprova.',
-    source_unavailable: 'Il lettore del dispositivo scelto non è disponibile.',
-    key_unavailable: 'Questo tasto non è disponibile. Scegline un altro: il comando precedente è stato conservato.',
-    device_disconnected: 'La periferica è stata scollegata. Ricollegala e premi Assegna.',
-  } as Record<string, string>)[reason] || 'Comando non salvato. Riprova.'
-})
+const errorText = computed(() => commandErrorText(state.value.operation?.reason || state.value.lastError))
 
-onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onKeyDown, true)
-  window.removeEventListener('keyup', onKeyUp, true)
-  window.removeEventListener('blur', onBlur)
-  void finishConfiguration()
-})
+onBeforeUnmount(() => { void finishConfiguration() })
 </script>
 
 <template>

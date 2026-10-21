@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { Keyboard, Power } from '@lucide/vue'
+import { Keyboard, Play, Power } from '@lucide/vue'
 import { onMounted, ref } from 'vue'
 import { useWheelInputBridge } from '~/composables/useWheelInputBridge'
 definePageMeta({ layout: 'dashboard' })
 
 const router = useRouter()
 const ready = ref(false)
-const section = ref<'commands' | 'startup'>('commands')
+const section = ref<'commands' | 'startup' | 'intro'>('commands')
 const bridge = useWheelInputBridge()
 
 onBeforeRouteLeave(async () => { await bridge.finishConfiguration() })
@@ -41,10 +41,15 @@ onMounted(async () => {
             <Power :size="22" aria-hidden="true" />
             Avvio
           </button>
+          <button type="button" :class="{ 'is-active': section === 'intro' }" :aria-pressed="section === 'intro'" @click="section = 'intro'">
+            <Play :size="22" aria-hidden="true" />
+            Introduzione
+          </button>
         </aside>
         <main>
           <SettingsCommandBindingsPanel v-show="section === 'commands'" />
           <SettingsStartupPanel v-if="section === 'startup'" />
+          <SettingsIntroPanel v-if="section === 'intro'" />
         </main>
       </div>
     </div>

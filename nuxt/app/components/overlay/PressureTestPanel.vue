@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Gauge } from '@lucide/vue'
+import { Gauge, LoaderCircle } from '@lucide/vue'
 import { usePresentationInterval } from '~/composables/usePresentationVisibility'
 import { readableReason, type ControlKStatusMessage } from '~/services/overlay/controlKStatus'
 
@@ -68,7 +68,7 @@ onMounted(() => { void refresh(); polling.start() })
   <section v-if="state.available" class="pressure-test" :class="{ 'pressure-test--horizontal': horizontal }" aria-label="Stima pressioni">
     <button type="button" class="pressure-test__button" data-overlay-wheel-action="pressure-test"
       title="Legge il setup e applica le pressioni iniziali stimate" aria-label="Stima pressioni BETA"
-      :disabled="pending || disabled" :aria-busy="pending" @click="run"><Gauge :size="20" aria-hidden="true" /><span>Stima<br>pressioni</span><small class="quick-action-badge">BETA</small></button>
+      :disabled="pending || disabled" :aria-busy="pending" @click="run"><LoaderCircle v-if="pending" class="pressure-test__spinner" :size="20" aria-hidden="true" /><Gauge v-else :size="20" aria-hidden="true" /><span>Stima<br>pressioni</span><small class="quick-action-badge">BETA</small></button>
     <Teleport defer :to="feedbackTarget || '#quick-panel-horizontal-feedback'" :disabled="!feedbackTarget && !horizontal">
     <div class="pressure-test__feedback" aria-live="polite">
     <p v-if="pending && !statusLine" class="launcher-hint" role="status">{{ state.message || 'Calcolo in corso…' }}</p>
@@ -102,6 +102,10 @@ onMounted(() => { void refresh(); polling.start() })
 .pressure-test__button .quick-action-badge { position: absolute; top: 3px; right: 3px; padding: 0 3px; border: 1px solid #ffffff30; color: #ffe27a; background: #0b0b0b; font-size: 9px; font-weight: 700; line-height: 12px; }
 .pressure-test__feedback:empty { display: none; }
 .pressure-test__button:disabled { opacity: .5; cursor: default; }
+.pressure-test__button[aria-busy="true"] { opacity: 1; cursor: progress; }
+.pressure-test__spinner { animation: pressure-test-spin .8s linear infinite; }
+@keyframes pressure-test-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .pressure-test__spinner { animation: none; } }
 .pressure-test__button:focus-visible, .pressure-test__button[data-overlay-selected] { outline: 2px solid #ffe27a; outline-offset: 1px; }
 .pressure-test__result { padding: 10px; border: 1px solid #ffffff26; border-radius: 8px; font-size: 12px; }
 .pressure-test__result dl { display: grid; gap: 4px; margin: 8px 0; }

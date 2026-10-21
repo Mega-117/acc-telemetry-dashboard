@@ -73,6 +73,8 @@ const handleGoToSettings = () => {
     </div>
 
     <ElectronLocalProfileStatus />
+    <!-- PIP-571: introduzione al primo avvio, una volta per utente e installazione -->
+    <OnboardingIntro />
     <!-- Page Content with transitions -->
     <main class="dashboard-viewport">
       <slot></slot>
