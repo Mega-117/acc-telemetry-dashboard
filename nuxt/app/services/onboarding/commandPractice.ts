@@ -27,8 +27,13 @@ export const PRACTICE_TASKS: readonly PracticeTask[] = [
   { id: 'close', action: 'togglePalette', times: 1, text: 'Chiudi il pannello' },
 ]
 
+/** Indietro is optional: without its button the "back" exercise is left out. */
+export function practiceTasks(withBack: boolean): readonly PracticeTask[] {
+  return withBack ? PRACTICE_TASKS : PRACTICE_TASKS.filter(task => task.id !== 'back')
+}
+
 export interface PracticeState {
-  /** Index of the current exercise; equals PRACTICE_TASKS.length when finished. */
+  /** Index of the current exercise; equals the number of exercises when finished. */
   task: number
   /** Presses already counted for the current exercise. */
   count: number
@@ -41,12 +46,12 @@ export function initialPractice(): PracticeState {
   return { task: 0, count: 0, open: false, selected: 0, confirmed: null }
 }
 
-export function practiceDone(state: PracticeState): boolean {
-  return state.task >= PRACTICE_TASKS.length
+export function practiceDone(state: PracticeState, tasks: readonly PracticeTask[] = PRACTICE_TASKS): boolean {
+  return state.task >= tasks.length
 }
 
 /** The pretend panel reacts like the real one; the exercise advances only on the asked effect. */
-export function applyPracticePress(state: PracticeState, action: WheelControlAction): PracticeState {
+export function applyPracticePress(state: PracticeState, action: WheelControlAction, tasks: readonly PracticeTask[] = PRACTICE_TASKS): PracticeState {
   const tiles = PRACTICE_TILES.length
   const next = { ...state }
   let effect: PracticeTask['id'] | null = null
@@ -70,7 +75,7 @@ export function applyPracticePress(state: PracticeState, action: WheelControlAct
     if (state.confirmed !== null) { next.confirmed = null; effect = 'back' }
     else { next.open = false; effect = 'close' }
   }
-  const task = PRACTICE_TASKS[state.task]
+  const task = tasks[state.task]
   if (task && effect === task.id) {
     next.count = state.count + 1
     if (next.count >= task.times) { next.task = state.task + 1; next.count = 0 }
@@ -104,8 +109,8 @@ export function keyboardPracticeDone(state: KeyboardPracticeState): boolean {
 }
 
 /** A gentle hint when the panel state blocks the current exercise. */
-export function practiceHint(state: PracticeState): string {
-  const task = PRACTICE_TASKS[state.task]
+export function practiceHint(state: PracticeState, tasks: readonly PracticeTask[] = PRACTICE_TASKS): string {
+  const task = tasks[state.task]
   if (!task) return ''
   if (!state.open && task.id !== 'open' && task.id !== 'close') return 'Il pannello è chiuso. Riaprilo.'
   if (task.id === 'back' && state.confirmed === null) return 'Prima conferma una voce, poi premi Indietro.'

@@ -14,6 +14,11 @@ describe('OnboardingDeviceIcon (PIP-571)', () => {
     expect(wrapper.find('.dev__key').exists()).toBe(false)
   })
 
+  it('live wheel blinks without hover (used while waiting for a button)', () => {
+    expect(mount(OnboardingDeviceIcon, { props: { kind: 'wheel', live: true } }).classes()).toContain('dev--live')
+    expect(mount(OnboardingDeviceIcon, { props: { kind: 'wheel' } }).classes()).not.toContain('dev--live')
+  })
+
   it('draws the keyboard with Ctrl and K marked, inside the frame, plus the mouse', () => {
     const wrapper = mount(OnboardingDeviceIcon, { props: { kind: 'keyboard' } })
     expect(wrapper.findAll('.dev__key--ctrl')).toHaveLength(1)

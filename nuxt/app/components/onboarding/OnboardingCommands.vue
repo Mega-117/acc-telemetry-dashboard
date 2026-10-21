@@ -17,22 +17,23 @@ import {
   initialKeyboardPractice,
   initialPractice,
   keyboardPracticeDone,
-  PRACTICE_TASKS,
   PRACTICE_TILES,
   practiceDone,
   practiceHint,
+  practiceTasks,
 } from '~/services/onboarding/commandPractice'
 
 const props = defineProps<{ wheelAvailable: boolean }>()
 const emit = defineEmits<{ done: []; later: [] }>()
 
 type Screen = 'choose' | 'assign' | 'practice' | 'ready' | 'keyboard'
-const REQUIRED: Array<{ id: WheelControlAction; title: string; detail: string }> = [
-  { id: 'togglePalette', title: 'Apri e chiudi il pannello rapido', detail: 'Il pulsante che userai di più.' },
-  { id: 'nextAction', title: 'Voce successiva', detail: 'Passa alla voce dopo.' },
-  { id: 'previousAction', title: 'Voce precedente', detail: 'Torna alla voce prima.' },
-  { id: 'activateAction', title: 'Conferma', detail: 'Attiva la voce scelta.' },
-  { id: 'mainMenu', title: 'Indietro', detail: 'Esce dalla voce, poi chiude il pannello.' },
+// Indietro is optional: without it the first button still closes the panel.
+const REQUIRED: Array<{ id: WheelControlAction; title: string; detail: string; optional?: true }> = [
+  { id: 'togglePalette', title: 'Apri e chiudi il pannello rapido', detail: 'Apre il pannello mentre guidi. Lo userai più di tutti.' },
+  { id: 'nextAction', title: 'Voce successiva', detail: 'Scorre alla voce dopo.' },
+  { id: 'previousAction', title: 'Voce precedente', detail: 'Scorre alla voce prima.' },
+  { id: 'activateAction', title: 'Conferma', detail: 'Attiva la voce selezionata.' },
+  { id: 'mainMenu', title: 'Indietro', detail: 'Esce dalla voce aperta. Non ti serve? Saltalo.', optional: true },
 ]
 const STEP_SAVED_MS = 900
 const PRACTICE_DONE_MS = 900
@@ -48,6 +49,7 @@ const autoArmed = ref(false)
 const saved = ref(false)
 const error = ref('')
 const practice = ref(initialPractice())
+const skipped = ref<WheelControlAction[]>([])
 const timers = new Set<ReturnType<typeof setTimeout>>()
 const later = (fn: () => void, ms: number) => { const t = setTimeout(() => { timers.delete(t); fn() }, ms); timers.add(t) }
 
@@ -110,6 +112,18 @@ function armCapture() {
 function retry() { error.value = ''; autoArmed.value = true; armCapture() }
 function change() { error.value = ''; autoArmed.value = true; armCapture() }
 function keep() { goNextAction() }
+function skip() {
+  if (state.value.capture) void bridge.cancelCapture()
+  if (!skipped.value.includes(current.value.id)) skipped.value = [...skipped.value, current.value.id]
+  goNextAction()
+}
+function slotValue(item: (typeof REQUIRED)[number], index: number) {
+  const binding = state.value.bindings[item.id]
+  if (binding) return formatWheelBinding(binding)
+  if (index === assignIndex.value && waiting.value) return 'premi un pulsante…'
+  if (skipped.value.includes(item.id)) return 'saltato'
+  return item.optional ? 'facoltativo' : 'da assegnare'
+}
 function goNextAction() {
   if (assignIndex.value < REQUIRED.length - 1) enterAction(assignIndex.value + 1)
   else startPractice()
@@ -136,6 +150,8 @@ watch(() => state.value.capture, (now, before) => {
   }
 })
 
+// Practise only what was assigned: no Indietro button, no Indietro exercise.
+const tasks = computed(() => practiceTasks(!!state.value.bindings.mainMenu))
 function startPractice() {
   screen.value = 'practice'
   practice.value = initialPractice()
@@ -146,15 +162,14 @@ watch(() => [...testedActions.value], (now, before) => {
   if (screen.value !== 'practice') return
   for (const action of now) {
     if (before?.includes(action)) continue
-    practice.value = applyPracticePress(practice.value, action)
+    practice.value = applyPracticePress(practice.value, action, tasks.value)
   }
-  if (practiceDone(practice.value)) {
+  if (practiceDone(practice.value, tasks.value)) {
     bridge.setTestMode(false)
     later(() => { screen.value = 'ready' }, PRACTICE_DONE_MS)
   }
 })
-const practiceTask = computed(() => PRACTICE_TASKS[practice.value.task])
-const hint = computed(() => practiceHint(practice.value))
+const hint = computed(() => practiceHint(practice.value, tasks.value))
 
 function askLater() { confirmLater.value = true }
 function postpone() { confirmLater.value = false; void release(); emit('later') }
@@ -182,12 +197,12 @@ onBeforeUnmount(() => { void release() })
     <!-- 1. Scegli -->
     <div v-if="screen === 'choose'" class="cmd__screen" data-cmd-screen="choose">
       <h2 class="cmd__title">Il pannello rapido <em>dal volante</em></h2>
-      <p class="cmd__lead">In guida le mani restano sul volante. Usa i suoi pulsanti.</p>
+      <p class="cmd__lead">In guida le mani restano sul volante: il pannello lo comandi con i suoi pulsanti.</p>
       <div class="cmd__choices">
         <button type="button" class="cmd__choice cmd__choice--main" data-cmd-wheel @click="chooseWheel">
           <OnboardingDeviceIcon kind="wheel" />
           <strong>Volante o button box</strong>
-          <span>Assegniamo 5 pulsanti. Due minuti.</span>
+          <span>Scegli tu i pulsanti. Due minuti.</span>
         </button>
         <button type="button" class="cmd__choice" data-cmd-keyboard @click="chooseKeyboard">
           <OnboardingDeviceIcon kind="keyboard" />
@@ -206,7 +221,7 @@ onBeforeUnmount(() => { void release() })
     <div v-else-if="screen === 'assign'" class="cmd__screen cmd__screen--assign" data-cmd-screen="assign">
       <div class="cmd__assign-head">
         <h2 class="cmd__title">Assegna i pulsanti <em>del volante</em></h2>
-        <p class="cmd__lead">Cinque comandi, uno alla volta.</p>
+        <p class="cmd__lead">Senza questi pulsanti il pannello rapido in guida non si usa. Uno alla volta: premi quello che vuoi usare.</p>
       </div>
       <ol class="cmd__slots" aria-label="Comandi da assegnare">
         <li
@@ -218,21 +233,26 @@ onBeforeUnmount(() => { void release() })
         >
           <span class="cmd__slot-n">{{ i + 1 }}</span>
           <span class="cmd__slot-name">{{ item.title }}</span>
-          <span class="cmd__slot-value">{{ state.bindings[item.id] ? formatWheelBinding(state.bindings[item.id]) : 'da assegnare' }}</span>
+          <span class="cmd__slot-value">{{ slotValue(item, i) }}</span>
         </li>
       </ol>
 
       <Transition name="cmd-next" mode="out-in">
       <div :key="current.id" class="cmd__target" :class="{ 'is-waiting': waiting, 'is-saved': saved, 'is-error': !!error }" data-cmd-target>
-        <p class="cmd__target-label">Comando {{ assignIndex + 1 }} di {{ REQUIRED.length }}</p>
+        <p class="cmd__target-label">Comando {{ assignIndex + 1 }} di {{ REQUIRED.length }}<template v-if="current.optional"> · facoltativo</template></p>
         <p class="cmd__target-name">{{ current.title }}</p>
         <p class="cmd__target-detail">{{ current.detail }}</p>
         <template v-if="saved">
           <span class="cmd__ok"><span class="cmd__check" aria-hidden="true">✓</span> Assegnato a {{ formatWheelBinding(currentBinding) }}</span>
         </template>
         <template v-else-if="waiting">
-          <span class="cmd__ask"><span class="cmd__pulse" aria-hidden="true" /> Premi il pulsante sul volante</span>
-          <small>{{ keyHint || 'Scegline uno comodo. Esc per annullare.' }}</small>
+          <div class="cmd__ask-box" data-cmd-ask>
+            <OnboardingDeviceIcon kind="wheel" live />
+            <div>
+              <span class="cmd__ask"><span class="cmd__pulse" aria-hidden="true" /> Premi ora un pulsante del volante</span>
+              <small>{{ keyHint || `Quello che premi diventa «${current.title}». Esc per annullare.` }}</small>
+            </div>
+          </div>
         </template>
         <template v-else-if="error">
           <span role="alert">{{ error }}</span>
@@ -248,6 +268,7 @@ onBeforeUnmount(() => { void release() })
         <template v-else>
           <span>{{ readerStatus || 'Un attimo…' }}</span>
         </template>
+        <button v-if="current.optional && !currentBinding && !saved" type="button" class="cmd__ghost" data-cmd-skip @click="skip">Salta, non mi serve</button>
       </div>
       </Transition>
     </div>
@@ -258,7 +279,7 @@ onBeforeUnmount(() => { void release() })
         <h2 class="cmd__title">Prova il <em>pannello rapido</em></h2>
         <p class="cmd__lead">Usa i tuoi pulsanti. Il gioco non riceve niente.</p>
         <ol class="cmd__tasklist">
-          <li v-for="(task, i) in PRACTICE_TASKS" :key="task.id" :class="{ done: i < practice.task, now: i === practice.task }" :data-task="task.id">
+          <li v-for="(task, i) in tasks" :key="task.id" :class="{ done: i < practice.task, now: i === practice.task }" :data-task="task.id">
             <span class="cmd__tick" aria-hidden="true">{{ i < practice.task ? '✓' : i + 1 }}</span>
             {{ task.text }}<template v-if="task.times > 1 && i === practice.task"> ({{ practice.count }}/{{ task.times }})</template>
           </li>
@@ -282,7 +303,7 @@ onBeforeUnmount(() => { void release() })
     <div v-else-if="screen === 'ready'" class="cmd__screen" data-cmd-screen="ready">
       <h2 class="cmd__title"><span class="cmd__check" aria-hidden="true">✓</span> Comandi <em>pronti</em></h2>
       <ul class="cmd__summary">
-        <li v-for="item in REQUIRED" :key="item.id"><span>{{ item.title }}</span><b>{{ formatWheelBinding(state.bindings[item.id]) }}</b></li>
+        <li v-for="item in REQUIRED" :key="item.id"><span>{{ item.title }}</span><b :class="{ off: !state.bindings[item.id] }">{{ formatWheelBinding(state.bindings[item.id]) }}</b></li>
       </ul>
       <p class="cmd__lead">Li cambi quando vuoi in Impostazioni → Comandi.</p>
       <button type="button" class="cmd__primary cmd__primary--big" data-cmd-finish @click="finish">Avanti</button>
@@ -391,7 +412,7 @@ $ease: cubic-bezier(.22, .61, .36, 1);
   &.set { color: #fff; .cmd__slot-n { background: $ok; color: #04150a; } .cmd__slot-value { color: $ok; } } }
 .cmd__slot-n { grid-row: 1 / 3; align-self: center; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: #ffffff1a; font-weight: 800; }
 .cmd__slot-name { font-size: 16px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cmd__slot-value { font-size: 13px; color: #8a8a90; }
+.cmd__slot-value { font-size: 13px; color: #8a8a90; .now & { color: $sel; } }
 .cmd__target { grid-area: target; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 14px; padding: 32px; border: 1px solid $line; background: #ffffff08; font-size: 18px; font-weight: 600;
   small { font-size: 14px; font-weight: 400; color: #b3b3b8; }
   &.is-waiting { border: 2px solid $sel; }
@@ -402,6 +423,10 @@ $ease: cubic-bezier(.22, .61, .36, 1);
 .cmd__target-detail { margin: 0 0 10px; font-size: 16px; font-weight: 400; color: #c9c9ce; }
 .cmd__ask, .cmd__ok { display: inline-flex; align-items: center; gap: 14px; font-size: 20px; }
 .cmd__ask { color: $sel; }
+// The thing to do now, impossible to miss: a yellow band with the wheel lighting up.
+.cmd__ask-box { display: flex; align-items: center; gap: 22px; align-self: stretch; padding: 16px 20px; background: rgba($sel,.1); box-shadow: inset 4px 0 $sel;
+  > div { display: flex; flex-direction: column; gap: 8px; } .cmd__ask { font-size: 22px; } small { font-size: 14px; font-weight: 400; color: #c9c9ce; }
+  :deep(.dev) { flex: none; width: 150px; height: 84px; } }
 .cmd__ok { color: $ok; }
 .cmd__pulse { width: 22px; height: 22px; background: $sel; animation: cmd-pulse 1.6s ease-in-out infinite; }
 @keyframes cmd-pulse { 0%,100% { opacity: .25 } 50% { opacity: 1 } }
@@ -440,7 +465,7 @@ $ease: cubic-bezier(.22, .61, .36, 1);
 .cmd__mock { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; border: 1px solid $line; background: #050507; min-height: 300px; }
 .cmd__closed { padding: 18px 26px; border: 1px dashed $line; color: #8a8a90; font-size: 16px; }
 .cmd__summary { display: grid; gap: 0; width: min(580px, 100%); margin: 0; padding: 0; list-style: none; border: 1px solid $line;
-  li { display: flex; justify-content: space-between; gap: 20px; padding: 14px 18px; font-size: 16px; } li + li { border-top: 1px solid $line; } b { color: $ok; } }
+  li { display: flex; justify-content: space-between; gap: 20px; padding: 14px 18px; font-size: 16px; } li + li { border-top: 1px solid $line; } b { color: $ok; } b.off { color: #8a8a90; font-weight: 500; } }
 .cmd__bullets { display: grid; gap: 0; max-width: 660px; margin: 4px 0 12px; padding: 0; list-style: none; font-size: 17px; text-align: left; border: 1px solid $line;
   li { padding: 14px 18px; } li + li { border-top: 1px solid $line; }
   kbd { padding: 2px 8px; background: #fff; color: #111; font-weight: 800; } }
@@ -469,6 +494,7 @@ $ease: cubic-bezier(.22, .61, .36, 1);
   .cmd__target { padding: 20px 24px; gap: 10px; }
   .cmd__target-name { font-size: 28px; }
   .cmd__ask, .cmd__ok { font-size: 18px; }
+  .cmd__ask-box { padding: 12px 16px; gap: 16px; .cmd__ask { font-size: 19px; } :deep(.dev) { width: 120px; height: 68px; } }
   .cmd__choice { padding: 14px 20px 18px; gap: 4px; }
   .cmd__choice :deep(.dev) { width: 160px; height: 90px; }
   .cmd__tasks { gap: 12px; }

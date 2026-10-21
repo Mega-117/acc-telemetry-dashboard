@@ -10,10 +10,11 @@ import {
   PRACTICE_TILES,
   practiceDone,
   practiceHint,
+  practiceTasks,
 } from '~/services/onboarding/commandPractice'
 import type { WheelControlAction } from '~/services/controls/wheelBindingModel'
 
-const press = (actions: WheelControlAction[]) => actions.reduce(applyPracticePress, initialPractice())
+const press = (actions: WheelControlAction[]) => actions.reduce((s, a) => applyPracticePress(s, a), initialPractice())
 
 describe('commandPractice (PIP-571)', () => {
   it('the asked sequence opens, moves, confirms and closes the pretend panel and finishes', () => {
@@ -48,6 +49,16 @@ describe('commandPractice (PIP-571)', () => {
     s = applyPracticePress(s, 'mainMenu')
     expect(s.open).toBe(false)
     expect(practiceDone(s)).toBe(true)
+  })
+
+  it('without the Indietro button the back exercise is left out', () => {
+    const tasks = practiceTasks(false)
+    expect(tasks.map(t => t.id)).toEqual(['open', 'next', 'previous', 'confirm', 'close'])
+    expect(practiceTasks(true)).toBe(PRACTICE_TASKS)
+    let s = initialPractice()
+    for (const a of ['togglePalette', 'nextAction', 'nextAction', 'previousAction', 'activateAction', 'togglePalette'] as WheelControlAction[]) s = applyPracticePress(s, a, tasks)
+    expect(practiceDone(s, tasks)).toBe(true)
+    expect(practiceHint(s, tasks)).toBe('')
   })
 
   it('a closed panel ignores moves and confirm, and the hint says to reopen it', () => {

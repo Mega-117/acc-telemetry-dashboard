@@ -4,7 +4,8 @@
 // focused (.cmd__choice:hover): the wheel steers, the box buttons light up, Ctrl+K is pressed.
 import { computed } from 'vue'
 
-const props = defineProps<{ kind: 'wheel' | 'keyboard' }>()
+// live: always animated, the wheel buttons blink ("press one now" while assigning a command).
+const props = defineProps<{ kind: 'wheel' | 'keyboard'; live?: boolean }>()
 
 // Keyboard: three rows of keys; Ctrl (bottom left) and K (middle row) are the ones that move.
 const KEY = 9
@@ -28,7 +29,7 @@ const keys = computed(() => {
 </script>
 
 <template>
-  <svg class="dev" :class="`dev--${kind}`" viewBox="0 0 160 90" aria-hidden="true">
+  <svg class="dev" :class="[`dev--${kind}`, { 'dev--live': live }]" viewBox="0 0 160 90" aria-hidden="true">
     <template v-if="kind === 'wheel'">
       <!-- Formula 1 wheel (Mercedes/eSports style): wide curved top, horn grips dropping and
            turning in, finger holes open at the bottom, big display with rev lights, coloured
@@ -126,7 +127,15 @@ $ease: cubic-bezier(.45, 0, .55, 1);
 @keyframes dev-led { 0%, 100% { fill: #ffffff26 } 40% { fill: $red } }
 @keyframes dev-press { 0%, 55%, 100% { fill: #ffffff0d; transform: none } 15%, 40% { fill: $red; transform: translateY(1.4px) } }
 @keyframes dev-click { 0%, 30%, 100% { fill: transparent } 8%, 20% { fill: $red } }
+.dev--live .dev__line { stroke: #fff; }
+.dev--live .dev__btn, .dev--live .dev__led { animation: dev-blink 1.4s ease-in-out infinite; }
+.dev--live .dev__btn--b, .dev--live .dev__led + .dev__led { animation-delay: .35s; }
+.dev--live .dev__btn--c { animation-delay: .7s; }
+.dev--live .dev__btn--d { animation-delay: 1.05s; }
+.dev--live .dev__rev { animation: dev-rev 1.4s steps(1) infinite; }
+@keyframes dev-blink { 0%, 100% { opacity: .35 } 30% { opacity: 1 } }
 @media (prefers-reduced-motion: reduce) {
+  .dev--live .dev__btn, .dev--live .dev__led, .dev--live .dev__rev { animation: none; }
   :global(.cmd__choice:hover) .dev__wheel, :global(.cmd__choice:hover) .dev__led, :global(.cmd__choice:hover) .dev__key--ctrl,
   :global(.cmd__choice:hover) .dev__key--k, :global(.cmd__choice:hover) .dev__click, :global(.cmd__choice:hover) .dev__rev,
   :global(.cmd__choice:hover) .dev__knob, :global(.cmd__choice:hover) .dev__lever, :global(.cmd__choice:hover) .dev__screen-bar { animation: none; }
