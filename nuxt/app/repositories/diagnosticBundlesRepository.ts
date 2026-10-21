@@ -148,14 +148,18 @@ export async function listRecentDiagnosticBundles(
   // Always reconcile with a bounded metadata listing. Pre-upgrade bundles may have
   // no marker, and a successful indexed response cannot prove their absence.
   let cursor: string | null = null
+  const payloadItems: DiagnosticBundleItem[] = []
   for (let page = 0; page < Math.max(1, maxPages); page += 1) {
     const result = await listDiagnosticBundles(deps, { cursor, limit: 500 })
-    items.push(...result.items)
+    payloadItems.push(...result.items)
     cursor = result.cursor
     if (!cursor) break
   }
   complete = !cursor
-  const unique = new Map(items.filter((item) => item.date >= fromDay).map((item) => [item.key, item]))
+  // A complete payload scan is authoritative. A partial scan cannot prove that
+  // an indexed key is gone, so keep unseen indexed entries until a complete scan.
+  const reconciled = complete ? payloadItems : [...items, ...payloadItems]
+  const unique = new Map(reconciled.filter((item) => item.date >= fromDay).map((item) => [item.key, item]))
   const sorted = [...unique.values()]
   sorted.sort((a, b) => Date.parse(b.uploadedAt) - Date.parse(a.uploadedAt))
   return { items: sorted, complete }

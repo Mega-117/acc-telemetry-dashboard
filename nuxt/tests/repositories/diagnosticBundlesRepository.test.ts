@@ -83,22 +83,29 @@ describe('diagnosticBundlesRepository', () => {
       '2026-10-14': [{ key: KEY.replace('2026-10-15', '2026-10-14'), size: 2, uploaded: '2026-10-14T10:00:00Z' }],
     }
     const fetchImpl = vi.fn(async (url: string) => {
-      const day = new URL(url).searchParams.get('day')!
-      return ok({ indexVersion: 1, objects: byDay[day] || [], cursor: null })
+      const day = new URL(url).searchParams.get('day')
+      return ok({ indexVersion: 1, objects: day ? byDay[day] || [] : Object.values(byDay).flat(), cursor: null })
     })
     const all = await listRecentDiagnosticBundles({ getToken: async () => 'tok', fetchImpl }, { days: 7, nowMs })
     expect(all.complete).toBe(true)
     expect(all.items.map((i) => [i.date, i.version, i.channel])).toEqual([['2026-10-16', '0.5.0-dev.2', 'develop'], ['2026-10-14', null, null]])
-    // Domani (orologi avanti), oggi e i 7 giorni precedenti: 9 elenchi, nessuno scorrimento di `diag/`.
+    // Domani, oggi e i 7 giorni precedenti: 9 elenchi piu' riconciliazione diag/.
     const days = fetchImpl.mock.calls.map(([url]) => new URL(url).searchParams.get('day'))
     expect(days.filter(Boolean)).toEqual(['2026-10-17', '2026-10-16', '2026-10-15', '2026-10-14', '2026-10-13', '2026-10-12', '2026-10-11', '2026-10-10', '2026-10-09'])
     expect(fetchImpl.mock.calls.filter(([url]) => new URL(url).searchParams.has('prefix'))).toHaveLength(1)
 
     // Un giorno con piu' pagine viene scorso con il cursore.
-    const paged = vi.fn()
-      .mockResolvedValueOnce(ok({ indexVersion: 1, objects: [{ key: KEY, size: 1, uploaded: '2026-10-15T10:00:00Z' }], cursor: 'c1' }))
-      .mockResolvedValueOnce(ok({ indexVersion: 1, objects: [{ key: KEY.replace('095554-028d6d83', '100000-aaaaaaaa'), size: 1, uploaded: '2026-10-15T11:00:00Z' }], cursor: null }))
-      .mockResolvedValue(ok({ indexVersion: 1, objects: [], cursor: null }))
+    const payloads = [
+      { key: KEY, size: 1, uploaded: '2026-10-15T10:00:00Z' },
+      { key: KEY.replace('095554-028d6d83', '100000-aaaaaaaa'), size: 1, uploaded: '2026-10-15T11:00:00Z' }
+    ]
+    let dayCalls = 0
+    const paged = vi.fn(async (url: string) => {
+      const query = new URL(url).searchParams
+      if (!query.has('day')) return ok({ objects: payloads, cursor: null })
+      dayCalls += 1
+      return ok({ indexVersion: 1, objects: dayCalls <= 2 ? [payloads[dayCalls - 1]] : [], cursor: dayCalls === 1 ? 'c1' : null })
+    })
     const twoPages = await listRecentDiagnosticBundles({ getToken: async () => 'tok', fetchImpl: paged }, { days: 1, nowMs })
     expect(twoPages.items).toHaveLength(2)
     expect(paged.mock.calls[1]![0]).toContain('cursor=c1')
@@ -177,3 +184,46 @@ describe('diagnostic index reconciliation',()=>{
   expect(result.complete).toBe(false);
  });
 });
+
+describe('orphan diagnostic markers', () => {
+  const nowMs = Date.parse('2026-10-16T12:00:00Z')
+  const item = (key: string) => ({ key, size: 4, uploaded: '2026-10-15T12:00:00Z' })
+
+  it('removes an indexed payload absent from a complete authoritative scan', async () => {
+    const fetchImpl = vi.fn(async (url: string) => new URL(url).searchParams.get('day') === '2026-10-15'
+      ? ok({ indexVersion: 1, objects: [item(KEY)], cursor: null })
+      : ok({ indexVersion: 1, objects: [], cursor: null }))
+    const result = await listRecentDiagnosticBundles({ getToken: async () => 'tok', fetchImpl }, { nowMs })
+    expect(result).toEqual({ items: [], complete: true })
+    expect(fetchImpl.mock.calls.filter(([url]) => new URL(url).searchParams.has('prefix'))).toHaveLength(1)
+    expect(fetchImpl.mock.calls.every(([url]) => new URL(url).pathname === '/v1/admin/list')).toBe(true)
+  })
+
+  it('keeps unseen indexed keys when the authoritative scan is truncated', async () => {
+    const legacyKey = KEY.replace('028d6d83', 'bbbbbbbb')
+    const fetchImpl = vi.fn(async (url: string) => {
+      const query = new URL(url).searchParams
+      if (query.has('day')) return ok({ indexVersion: 1, objects: query.get('day') === '2026-10-15' ? [item(KEY)] : [], cursor: null })
+      return ok({ objects: [item(legacyKey)], cursor: 'more' })
+    })
+    const result = await listRecentDiagnosticBundles({ getToken: async () => 'tok', fetchImpl }, { nowMs, maxPages: 1 })
+    expect(new Set(result.items.map(row => row.key))).toEqual(new Set([KEY, legacyKey]))
+    expect(result.complete).toBe(false)
+  })
+
+  it('uses all authoritative pages to remove only missing keys and preserves legacy payloads', async () => {
+    const orphan = KEY.replace('028d6d83', 'bbbbbbbb')
+    const legacy = KEY.replace('028d6d83', 'cccccccc')
+    const fetchImpl = vi.fn(async (url: string) => {
+      const query = new URL(url).searchParams
+      if (query.has('day')) return ok({ indexVersion: 1, objects: query.get('day') === '2026-10-15' ? [item(KEY), item(orphan)] : [], cursor: null })
+      return query.has('cursor')
+        ? ok({ objects: [item(legacy)], cursor: null })
+        : ok({ objects: [{ ...item(KEY), size: 99 }], cursor: 'next' })
+    })
+    const result = await listRecentDiagnosticBundles({ getToken: async () => 'tok', fetchImpl }, { nowMs, maxPages: 2 })
+    expect(new Set(result.items.map(row => row.key))).toEqual(new Set([KEY, legacy]))
+    expect(result.items.find(row => row.key === KEY)?.size).toBe(99)
+    expect(result.complete).toBe(true)
+  })
+})

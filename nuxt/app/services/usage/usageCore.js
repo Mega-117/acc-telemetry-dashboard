@@ -25,6 +25,9 @@ function cleanContext(input = {}) {
         version: token(input.version), channel: token(input.channel) };
 }
 function add(map, key, value = 1) { map[key] = (map[key] || 0) + value; }
+function markPartial(row) {
+    if (row.partial !== true) { row.partial = true; row.revision = (row.revision || 0) + 1; }
+}
 
 /** @param {{producer?: string, source?: string, now?: () => number, monotonic?: () => number, initial?: any}} options */
 function createUsageCollector({ producer, source = 'desktop', now = Date.now, monotonic = () => performance.now(), initial = null } = {}) {
@@ -36,7 +39,7 @@ function createUsageCollector({ producer, source = 'desktop', now = Date.now, mo
     const active = new Set(), operations = new Map(), seen = new Set(Array.isArray(initial?.seen) ? initial.seen.slice(-10000) : []);
     const launchSeen = new Set();
     // A restart never invents the time between the last checkpoint and this launch.
-    for (const row of rows) if (row.partial !== true) { row.partial = true; row.revision = (row.revision || 0) + 1; }
+    for (const row of rows) markPartial(row);
     for (const pending of (Array.isArray(initial?.pendingOperations) ? initial.pendingOperations.slice(0, 100) : [])) {
         const row = rows.find(r => r.localKey === pending.localKey);
         if (row && AUTOMATIONS.has(pending.kind)) { add(row.counters, `auto.${pending.kind}.unknown`); row.revision++; }
@@ -53,7 +56,7 @@ function createUsageCollector({ producer, source = 'desktop', now = Date.now, mo
         }
         row.lastAt = Math.max(row.lastAt, at); row.preferenceRevision = preferenceRevision;
         if (source === 'desktop' && sessionId && !row.sessions.includes(sessionId)) {
-            if (row.sessions.length < 200) row.sessions.push(sessionId); else row.partial = true;
+            if (row.sessions.length < 200) row.sessions.push(sessionId); else markPartial(row);
         }
         row.revision += 1;
         return row;
@@ -62,12 +65,12 @@ function createUsageCollector({ producer, source = 'desktop', now = Date.now, mo
         const cutoff = new Date(Date.parse(`${usageDay(now())}T12:00:00Z`) - 29 * DAY_MS).toISOString().slice(0, 10);
         rows = rows.filter(r => r.day >= cutoff);
         // Bounded independently of diagnostic storage. Missing history is explicit.
-        if (rows.length > 2000) { rows = rows.slice(-2000); for (const r of rows) r.partial = true; }
+        if (rows.length > 2000) { rows = rows.slice(-2000); for (const r of rows) markPartial(r); }
     }
     function checkpoint() {
         const wall = now(), mono = monotonic(), delta = mono - lastMono;
         if (owner && enabled && active.size > 0 && delta > 0) {
-            if (delta > 90000 || Math.abs((wall - lastWall) - delta) > 5000) rowAt(wall).partial = true;
+            if (delta > 90000 || Math.abs((wall - lastWall) - delta) > 5000) markPartial(rowAt(wall));
             else {
                 let start = lastWall;
                 while (start < wall) {
@@ -112,7 +115,7 @@ function createUsageCollector({ producer, source = 'desktop', now = Date.now, mo
         if (owner && enabled && sessionId && source === 'desktop') {
             const row = rowAt(now());
             if (!row.sessions.includes(sessionId)) {
-                if (row.sessions.length < 200) row.sessions.push(sessionId); else row.partial = true;
+                if (row.sessions.length < 200) row.sessions.push(sessionId); else markPartial(row);
             }
         }
     }
@@ -131,7 +134,7 @@ function createUsageCollector({ producer, source = 'desktop', now = Date.now, mo
         if (!owner || !enabled || !FEATURES.has(feature) || !['enabled', 'disabled', 'played', 'completed', 'failed', 'order', 'crash', 'unclean-exit'].includes(event)) return false;
         if (id && seen.has(`${owner}:${feature}:${event}:${id}`)) return false;
         if (id) seen.add(`${owner}:${feature}:${event}:${id}`);
-        if (seen.size > 10000) { seen.clear(); rowAt(now()).partial = true; }
+        if (seen.size > 10000) { seen.clear(); markPartial(rowAt(now())); }
         add(rowAt(now()).counters, `${feature}.${event}`); return true;
     }
     function start(id, kind) {
@@ -141,7 +144,7 @@ function createUsageCollector({ producer, source = 'desktop', now = Date.now, mo
         seen.add(`${owner}:op:${id}`);
         if (seen.size > 10000) {
             seen.delete(seen.values().next().value);
-            rowAt(now()).partial = true;
+            markPartial(rowAt(now()));
         }
         add(rowAt(now()).counters, `auto.${kind}.started`); return true;
     }
