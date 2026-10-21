@@ -1,9 +1,9 @@
 <script setup lang="ts">
 // PIP-571: the last step of the introduction, all about the "pannello rapido" (Ctrl+K).
-// Wheel: choose, then one command at a time: press the button you want, then press it again and
-// watch a faithful copy of the panel react (test mode: the game receives nothing); finally close
-// the panel. Keyboard: press the real Ctrl+K twice; the copy mirrors the real panel opening.
-// "Lo faccio dopo" postpones and the next launch asks again.
+// Wheel: choose, assign five buttons one at a time (one big question per screen, like the Steam
+// controller setup: press the button and it moves on by itself), practise on a faithful copy of the panel
+// (test mode: the game receives nothing). Keyboard: press the real Ctrl+K twice; the copy
+// mirrors the real panel opening. "Lo faccio dopo" postpones and the next launch asks again.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import OnboardingDeviceIcon from '~/components/onboarding/OnboardingDeviceIcon.vue'
 import OnboardingPanelReplica from '~/components/onboarding/OnboardingPanelReplica.vue'
@@ -15,36 +15,31 @@ import {
   applyKeyboardClick,
   applyKeyboardVisibility,
   applyPracticePress,
-  CLOSE_TASK,
   initialKeyboardPractice,
   initialPractice,
   keyboardPracticeDone,
   PRACTICE_TILES,
   practiceDone,
   practiceHint,
-  TRY_TASKS,
+  practiceTasks,
 } from '~/services/onboarding/commandPractice'
 
 const props = defineProps<{ wheelAvailable: boolean }>()
 const emit = defineEmits<{ done: []; later: [] }>()
 
-type Screen = 'choose' | 'assign' | 'ready' | 'keyboard'
-/** press = waiting for the button to assign; try = press it again and see; tried = it worked. */
-type Phase = 'press' | 'try' | 'tried'
-// The title is the action: "Premi il pulsante per <verb>". Indietro is optional: without it the
-// first button still closes the panel.
+type Screen = 'choose' | 'assign' | 'practice' | 'ready' | 'keyboard'
+// The screen asks "Premi il pulsante per <verb>". Indietro is optional: without it the first
+// button still closes the panel.
 const REQUIRED: Array<{ id: WheelControlAction; title: string; verb: string; optional?: true }> = [
   { id: 'togglePalette', title: 'Apri e chiudi il pannello rapido', verb: 'aprire il pannello' },
   { id: 'nextAction', title: 'Voce successiva', verb: 'andare alla voce dopo' },
   { id: 'previousAction', title: 'Voce precedente', verb: 'tornare alla voce prima' },
-  { id: 'activateAction', title: 'Conferma', verb: 'confermare una voce' },
+  { id: 'activateAction', title: 'Conferma', verb: 'confermare' },
   { id: 'mainMenu', title: 'Indietro', verb: 'uscire da una voce', optional: true },
 ]
 const STEP_SAVED_MS = 900
-const TRIED_MS = 1100
-// Ignore a press still held from the assignment when the try starts.
-const TRY_GRACE_MS = 400
-// Nothing heard for this long: say what to check instead of leaving the pilot in silence.
+const PRACTICE_DONE_MS = 900
+// Nothing heard for this long while waiting: say what to check instead of leaving silence.
 const QUIET_MS = 8000
 
 const bridge = useWheelInputBridge()
@@ -54,12 +49,9 @@ const { keyHint, reset: resetKeyCapture } = useKeyboardCapture(bridge)
 const screen = ref<Screen>(props.wheelAvailable ? 'choose' : 'keyboard')
 const confirmLater = ref(false)
 const assignIndex = ref(0)
-const phase = ref<Phase>('press')
-const closing = ref(false)
 const autoArmed = ref(false)
 const saved = ref(false)
 const error = ref('')
-const quiet = ref(false)
 const practice = ref(initialPractice())
 const skipped = ref<WheelControlAction[]>([])
 const timers = new Set<ReturnType<typeof setTimeout>>()
@@ -68,7 +60,6 @@ const later = (fn: () => void, ms: number) => { const t = setTimeout(() => { tim
 const current = computed(() => REQUIRED[assignIndex.value]!)
 const currentBinding = computed(() => state.value.bindings[current.value.id])
 const waiting = computed(() => state.value.capture?.action === current.value.id)
-const tryTasks = computed(() => [closing.value ? CLOSE_TASK : TRY_TASKS[current.value.id]])
 // One name per device model: two readers of the same wheel are one wheel for the pilot.
 const controllers = computed(() => [...new Set(state.value.devices.filter(d => d.kind !== 'keyboard').map(d => d.deviceLabel))])
 const readerStatus = computed(() => {
@@ -77,8 +68,8 @@ const readerStatus = computed(() => {
   if (state.value.inputStatus === 'unavailable') return 'Lettura dei comandi non disponibile: riavvia Racer Core e riprova.'
   return ''
 })
-const stepNumber = computed(() => ({ choose: 1, keyboard: 2, assign: 2, ready: 3 } as const)[screen.value])
-const steps = computed(() => screen.value === 'keyboard' ? ['Scegli', 'Prova'] : ['Scegli', 'Pulsanti', 'Fatto'])
+const stepNumber = computed(() => ({ choose: 1, keyboard: 2, assign: 2, practice: 3, ready: 3 } as const)[screen.value])
+const steps = computed(() => screen.value === 'keyboard' ? ['Scegli', 'Prova'] : ['Scegli', 'Assegna', 'Prova'])
 
 // Keyboard path: practise on the REAL panel. The page only hears that it was shown/hidden.
 type VisibilityApi = { onTrainingOverlayVisibility?: (cb: (p: { visible?: boolean }) => void) => () => void }
@@ -104,12 +95,9 @@ function chooseKeyboard() {
   }
 }
 
-function chooseWheel() { screen.value = 'assign'; practice.value = initialPractice(); enterAction(0) }
+function chooseWheel() { screen.value = 'assign'; enterAction(0) }
 function enterAction(index: number) {
-  if (bridge.testMode.value) bridge.setTestMode(false)
   assignIndex.value = index
-  closing.value = false
-  phase.value = 'press'
   error.value = ''
   saved.value = false
   resetKeyCapture()
@@ -119,23 +107,15 @@ function enterAction(index: number) {
 let bindingBefore = ''
 const bindingKey = (action: WheelControlAction) => JSON.stringify(state.value.bindings[action] ?? null)
 function armCapture() {
-  if (screen.value !== 'assign' || phase.value !== 'press' || !autoArmed.value || saved.value || waiting.value) return
+  if (screen.value !== 'assign' || !autoArmed.value || saved.value || waiting.value) return
   if (!canBeginAutoCapture(state.value, bridge.testMode.value)) return
   autoArmed.value = false
   bindingBefore = bindingKey(current.value.id)
   void bridge.beginCapture(current.value.id)
 }
 function retry() { error.value = ''; autoArmed.value = true; armCapture() }
-/** Choose another button for the current command (also from the try). */
-function change() {
-  if (bridge.testMode.value) bridge.setTestMode(false)
-  phase.value = 'press'
-  error.value = ''
-  saved.value = false
-  autoArmed.value = true
-  armCapture()
-}
-function keep() { startTry() }
+function change() { error.value = ''; autoArmed.value = true; armCapture() }
+function keep() { goNextAction() }
 function skip() {
   if (state.value.capture) void bridge.cancelCapture()
   if (!skipped.value.includes(current.value.id)) skipped.value = [...skipped.value, current.value.id]
@@ -143,69 +123,58 @@ function skip() {
 }
 function goNextAction() {
   if (assignIndex.value < REQUIRED.length - 1) enterAction(assignIndex.value + 1)
-  else startTry(true)
+  else startPractice()
 }
 function previousAction() {
   if (state.value.capture) void bridge.cancelCapture()
-  if (closing.value) enterAction(REQUIRED.length - 1)
-  else if (assignIndex.value > 0) enterAction(assignIndex.value - 1)
-  else { if (bridge.testMode.value) bridge.setTestMode(false); screen.value = 'choose' }
+  if (assignIndex.value > 0) enterAction(assignIndex.value - 1)
+  else screen.value = 'choose'
 }
+
+const quiet = ref(false)
+let quietTimer: ReturnType<typeof setTimeout> | null = null
+watch(waiting, (now) => {
+  if (quietTimer) clearTimeout(quietTimer)
+  quiet.value = false
+  quietTimer = now ? setTimeout(() => { quiet.value = true }, QUIET_MS) : null
+})
 
 // Readers come up a moment after the bridge starts: arm as soon as capture is possible.
 watch(() => [state.value.available, state.value.inputStatus, state.value.devices.length, state.value.capture], () => armCapture())
 
-// End of a capture for the current command: saved -> tick, then try it; otherwise explain.
+// End of a capture for the current command: saved -> tick and move on, otherwise explain.
 watch(() => state.value.capture, (now, before) => {
-  if (screen.value !== 'assign' || phase.value !== 'press' || now || before?.action !== current.value.id) return
+  if (screen.value !== 'assign' || now || before?.action !== current.value.id) return
   const action = current.value.id
   const changed = bindingKey(action) !== bindingBefore || state.value.operation?.saved === true
   if (state.value.bindings[action] && !state.value.operation?.reason && changed) {
     saved.value = true
-    later(() => { saved.value = false; startTry() }, STEP_SAVED_MS)
+    later(() => { saved.value = false; goNextAction() }, STEP_SAVED_MS)
   } else {
     error.value = commandErrorText(state.value.operation?.reason || state.value.lastError) || 'Nessun pulsante ricevuto. Premi Riprova.'
   }
 })
 
-// Try: the pilot presses the button just assigned and sees the copy of the panel react.
-let tryStartedAt = 0
-function startTry(close = false) {
-  closing.value = close
-  phase.value = 'try'
-  // "Apri" always starts from a closed panel, so the press visibly opens it.
-  practice.value = { ...practice.value, task: 0, count: 0, ...(current.value.id === 'togglePalette' && !close ? { open: false, confirmed: null } : {}) }
-  tryStartedAt = Date.now()
+// Practise only what was assigned: no Indietro button, no Indietro exercise.
+const tasks = computed(() => practiceTasks(!!state.value.bindings.mainMenu))
+function startPractice() {
+  screen.value = 'practice'
+  practice.value = initialPractice()
   bridge.setTestMode(true)
 }
+function restartAssign() { bridge.setTestMode(false); screen.value = 'assign'; enterAction(0) }
 watch(() => [...testedActions.value], (now, before) => {
-  if (screen.value !== 'assign' || phase.value !== 'try') return
-  restartQuiet()
-  if (Date.now() - tryStartedAt < TRY_GRACE_MS) return
+  if (screen.value !== 'practice') return
   for (const action of now) {
     if (before?.includes(action)) continue
-    practice.value = applyPracticePress(practice.value, action, tryTasks.value)
+    practice.value = applyPracticePress(practice.value, action, tasks.value)
   }
-  if (!practiceDone(practice.value, tryTasks.value)) return
-  phase.value = 'tried'
-  later(() => {
-    if (!closing.value) return goNextAction()
+  if (practiceDone(practice.value, tasks.value)) {
     bridge.setTestMode(false)
-    screen.value = 'ready'
-  }, TRIED_MS)
+    later(() => { screen.value = 'ready' }, PRACTICE_DONE_MS)
+  }
 })
-const hint = computed(() => phase.value === 'try' ? practiceHint(practice.value, tryTasks.value) : '')
-
-// Silence watchdog: while waiting for a button (or for the try), say what to check.
-let quietTimer: ReturnType<typeof setTimeout> | null = null
-function restartQuiet() {
-  if (quietTimer) clearTimeout(quietTimer)
-  quiet.value = false
-  quietTimer = screen.value === 'assign' && (phase.value === 'try' || waiting.value)
-    ? setTimeout(() => { quiet.value = true }, QUIET_MS)
-    : null
-}
-watch(() => [screen.value, phase.value, assignIndex.value, closing.value, waiting.value], restartQuiet)
+const hint = computed(() => practiceHint(practice.value, tasks.value))
 
 function askLater() { confirmLater.value = true }
 function postpone() { confirmLater.value = false; void release(); emit('later') }
@@ -233,18 +202,18 @@ onBeforeUnmount(() => { void release() })
     <Transition name="cmd-swap" mode="out-in">
     <!-- 1. Scegli -->
     <div v-if="screen === 'choose'" class="cmd__screen" data-cmd-screen="choose">
-      <h2 class="cmd__title">Il pannello rapido <em>dal volante</em></h2>
-      <p class="cmd__lead">In guida le mani restano sul volante: il pannello lo comandi con i suoi pulsanti.</p>
+      <h2 class="cmd__title">Come usi <em>il pannello rapido?</em></h2>
+      <p class="cmd__lead">Scegli come comandarlo in guida. Ci vogliono due minuti.</p>
       <div class="cmd__choices">
         <button type="button" class="cmd__choice cmd__choice--main" data-cmd-wheel @click="chooseWheel">
           <OnboardingDeviceIcon kind="wheel" />
           <strong>Volante o button box</strong>
-          <span>Scegli tu i pulsanti. Due minuti.</span>
+          <span>Imposti i pulsanti e provi il pannello.</span>
         </button>
         <button type="button" class="cmd__choice" data-cmd-keyboard @click="chooseKeyboard">
           <OnboardingDeviceIcon kind="keyboard" />
           <strong>Solo tastiera e mouse</strong>
-          <span>Proviamo Ctrl+K insieme.</span>
+          <span>Ti mostro come funziona con Ctrl+K.</span>
         </button>
       </div>
       <p class="cmd__devices" role="status">
@@ -254,71 +223,56 @@ onBeforeUnmount(() => { void release() })
       </p>
     </div>
 
-    <!-- 2. Pulsanti: un comando alla volta, premi e poi prova -->
-    <div v-else-if="screen === 'assign'" class="cmd__screen cmd__screen--practice" data-cmd-screen="assign">
+    <!-- 2. Assegna: una domanda alla volta, al centro; premi e va avanti da solo -->
+    <div v-else-if="screen === 'assign'" class="cmd__screen" data-cmd-screen="assign">
+      <div class="cmd__progress" aria-hidden="true">
+        <span
+          v-for="(item, i) in REQUIRED"
+          :key="item.id"
+          class="cmd__seg"
+          :class="{ done: i < assignIndex || i === assignIndex && saved, now: i === assignIndex && !saved, skip: skipped.includes(item.id) && !state.bindings[item.id] }"
+          :data-slot="item.id"
+        />
+      </div>
+      <Transition name="cmd-next" mode="out-in">
+      <div :key="current.id" class="cmd__wizard" :class="{ 'is-saved': saved }" data-cmd-target>
+        <p class="cmd__wizard-n">Pulsante {{ assignIndex + 1 }} di {{ REQUIRED.length }}<template v-if="current.optional"> · facoltativo</template></p>
+        <OnboardingDeviceIcon kind="wheel" :live="waiting" class="cmd__wizard-icon" />
+        <h2 class="cmd__title cmd__wizard-ask">Premi il pulsante per <em>{{ current.verb }}</em></h2>
+        <p v-if="saved" class="cmd__ok"><span class="cmd__check" aria-hidden="true">✓</span> {{ formatWheelBinding(currentBinding) }}</p>
+        <p v-else-if="waiting" class="cmd__wizard-hint" :class="{ 'is-quiet': quiet }" data-cmd-ask>
+          <template v-if="quiet">Non ricevo niente. Il volante è collegato? Prova un altro pulsante.</template>
+          <template v-else>{{ keyHint || 'Premi un pulsante sul volante o sulla button box.' }}</template>
+        </p>
+        <template v-else-if="error">
+          <p class="cmd__wizard-hint is-quiet" role="alert">{{ error }}</p>
+          <button type="button" class="cmd__primary" data-cmd-retry @click="retry">Riprova</button>
+        </template>
+        <template v-else-if="currentBinding">
+          <p class="cmd__wizard-hint">Usi già <b>{{ formatWheelBinding(currentBinding) }}</b></p>
+          <div class="cmd__row">
+            <button type="button" class="cmd__primary" data-cmd-keep @click="keep">Va bene così</button>
+            <button type="button" class="cmd__ghost" data-cmd-change @click="change">Cambia</button>
+          </div>
+        </template>
+        <p v-else class="cmd__wizard-hint">{{ readerStatus || 'Un attimo…' }}</p>
+        <button v-if="current.optional && !currentBinding && !saved" type="button" class="cmd__link" data-cmd-skip @click="skip">Salta, non mi serve</button>
+      </div>
+      </Transition>
+    </div>
+
+    <!-- 3. Prova il pannello -->
+    <div v-else-if="screen === 'practice'" class="cmd__screen cmd__screen--practice" data-cmd-screen="practice">
       <div class="cmd__tasks">
-        <div class="cmd__progress" data-cmd-progress>
-          <span
-            v-for="(item, i) in REQUIRED"
-            :key="item.id"
-            class="cmd__seg"
-            :class="{ done: closing || i < assignIndex || i === assignIndex && phase !== 'press', now: !closing && i === assignIndex && phase === 'press', skip: skipped.includes(item.id) && !state.bindings[item.id] }"
-            :data-slot="item.id"
-          />
-          <small>{{ closing ? 'Ultimo passo' : `Pulsante ${assignIndex + 1} di ${REQUIRED.length}` }}<template v-if="!closing && current.optional"> · facoltativo</template></small>
-        </div>
-
-        <Transition name="cmd-next" mode="out-in">
-        <div :key="`${assignIndex}-${phase === 'press' ? 'press' : 'try'}-${closing}`" class="cmd__setup" data-cmd-target>
-          <!-- Premi il pulsante da assegnare -->
-          <template v-if="phase === 'press'">
-            <h2 class="cmd__title">
-              <template v-if="currentBinding && !waiting && !saved && !error">Per {{ current.verb }} usi <em>{{ formatWheelBinding(currentBinding) }}</em></template>
-              <template v-else>Premi il pulsante per <em>{{ current.verb }}</em></template>
-            </h2>
-            <p class="cmd__lead">In guida il pannello rapido si usa solo dal volante.</p>
-            <span v-if="saved" class="cmd__ok"><span class="cmd__check" aria-hidden="true">✓</span> Assegnato a {{ formatWheelBinding(currentBinding) }}</span>
-            <div v-else-if="waiting" class="cmd__ask-box" data-cmd-ask>
-              <OnboardingDeviceIcon kind="wheel" live />
-              <div>
-                <span class="cmd__ask"><span class="cmd__pulse" aria-hidden="true" /> Aspetto il pulsante…</span>
-                <small v-if="quiet" data-cmd-quiet>Non ricevo niente. Il volante è collegato? Prova un altro pulsante.</small>
-                <small v-else>{{ keyHint || 'Esc per annullare.' }}</small>
-              </div>
-            </div>
-            <template v-else-if="error">
-              <span role="alert">{{ error }}</span>
-              <button type="button" class="cmd__primary" data-cmd-retry @click="retry">Riprova</button>
-            </template>
-            <div v-else-if="currentBinding" class="cmd__row cmd__row--start">
-              <button type="button" class="cmd__primary" data-cmd-keep @click="keep">Va bene così</button>
-              <button type="button" class="cmd__ghost" data-cmd-change @click="change">Cambia</button>
-            </div>
-            <span v-else>{{ readerStatus || 'Un attimo…' }}</span>
-            <button v-if="current.optional && !currentBinding && !saved" type="button" class="cmd__link" data-cmd-skip @click="skip">Salta, non mi serve</button>
-          </template>
-
-          <!-- Provalo subito -->
-          <template v-else>
-            <h2 class="cmd__title">
-              <template v-if="closing">Ora <em>chiudi il pannello</em></template>
-              <template v-else>Ora premilo: <em>{{ tryTasks[0]!.text }}</em></template>
-            </h2>
-            <p class="cmd__lead">{{ closing ? 'Con lo stesso pulsante che lo apre. Poi hai finito.' : 'Guarda il pannello qui accanto.' }}</p>
-            <span v-if="phase === 'tried'" class="cmd__ok" data-cmd-tried><span class="cmd__check" aria-hidden="true">✓</span> Funziona</span>
-            <div v-else class="cmd__ask-box" data-cmd-ask>
-              <OnboardingDeviceIcon kind="wheel" live />
-              <div>
-                <span class="cmd__ask"><span class="cmd__pulse" aria-hidden="true" /> Premilo adesso</span>
-                <small v-if="hint" role="status">{{ hint }}</small>
-                <small v-else-if="quiet" role="status" data-cmd-quiet>Non succede niente? {{ closing ? 'Premi il pulsante che apre il pannello.' : 'Prova a cambiare pulsante.' }}</small>
-                <small v-else>{{ formatWheelBinding(state.bindings[closing ? 'togglePalette' : current.id]) }}</small>
-              </div>
-            </div>
-            <button v-if="phase === 'try' && !closing" type="button" class="cmd__link" data-cmd-change @click="change">Cambia pulsante</button>
-          </template>
-        </div>
-        </Transition>
+        <h2 class="cmd__title">Prova il <em>pannello rapido</em></h2>
+        <p class="cmd__lead">Usa i tuoi pulsanti. Il gioco non riceve niente.</p>
+        <ol class="cmd__tasklist">
+          <li v-for="(task, i) in tasks" :key="task.id" :class="{ done: i < practice.task, now: i === practice.task }" :data-task="task.id">
+            <span class="cmd__tick" aria-hidden="true">{{ i < practice.task ? '✓' : i + 1 }}</span>
+            {{ task.text }}<template v-if="task.times > 1 && i === practice.task"> ({{ practice.count }}/{{ task.times }})</template>
+          </li>
+        </ol>
+        <p v-if="hint" class="cmd__hint" role="status">{{ hint }}</p>
       </div>
       <div class="cmd__mock" :class="{ 'is-open': practice.open }" data-cmd-mock>
         <OnboardingPanelReplica
@@ -401,6 +355,7 @@ onBeforeUnmount(() => { void release() })
       <template v-else>
         <button v-if="screen === 'assign'" type="button" class="cmd__back" data-cmd-back @click="previousAction">Indietro</button>
         <button v-else-if="screen === 'keyboard'" type="button" class="cmd__back" data-cmd-back @click="screen = 'choose'">Indietro</button>
+        <button v-else-if="screen === 'practice'" type="button" class="cmd__back" data-cmd-reassign @click="restartAssign">Non funziona? Riassegna</button>
         <span v-else />
         <button type="button" class="cmd__later" data-cmd-later @click="askLater">Lo faccio dopo</button>
       </template>
@@ -436,27 +391,21 @@ $ease: cubic-bezier(.22, .61, .36, 1);
   &:focus-visible { outline: 2px solid #fff; outline-offset: -4px; } }
 .cmd__choice--main { background: rgba($red,.16); box-shadow: inset 0 -3px $red; &:hover { background: rgba($red,.28); box-shadow: inset 0 -3px $red; } }
 .cmd__devices { margin: 4px 0 0; max-width: 700px; font-size: 14px; color: #8a8a90; }
-// Progress: five thin segments, the current one yellow, done green, skipped dashed.
-.cmd__progress { display: flex; align-items: center; gap: 6px;
-  small { margin-left: 10px; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: #b3b3b8; } }
-.cmd__seg { width: 34px; height: 6px; background: #ffffff1f; transition: background .6s ease;
+// Assign wizard: progress, then one centred question with the wheel; nothing else competes.
+.cmd__progress { display: flex; gap: 6px; }
+.cmd__seg { width: 40px; height: 6px; background: #ffffff1f; transition: background .6s ease;
   &.now { background: $sel; } &.done { background: $ok; } &.skip { background: transparent; box-shadow: inset 0 0 0 1px #8a8a90; } }
-.cmd__setup { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; font-size: 18px; font-weight: 600; .cmd__lead { font-weight: 400; } }
+.cmd__wizard { display: flex; flex-direction: column; align-items: center; gap: 18px; text-align: center; }
+.cmd__wizard-n { margin: 0; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: #b3b3b8; }
+.cmd__wizard-icon { width: 280px; height: 158px; }
+.cmd__wizard-ask { font-size: 40px; max-width: 760px; }
+.cmd__wizard-hint { margin: 0; min-height: 1.5em; font-size: 18px; color: $sel; &.is-quiet { color: #ff8a8a; } b { color: #fff; } }
+.cmd__wizard .cmd__ok { margin: 0; }
 .cmd__link { padding: 4px 0; border: 0; background: none; color: #b3b3b8; font: 500 15px/1.4 'Inter', sans-serif; text-decoration: underline; cursor: pointer;
   &:hover { color: #fff; } &:focus-visible { outline: 2px solid #fff; outline-offset: 2px; } }
-.cmd__ask, .cmd__ok { display: inline-flex; align-items: center; gap: 14px; font-size: 20px; }
-.cmd__ask { color: $sel; }
-// The thing to do now, impossible to miss: a yellow band with the wheel lighting up.
-.cmd__ask-box { display: flex; align-items: center; gap: 22px; align-self: stretch; padding: 16px 20px; background: rgba($sel,.1); box-shadow: inset 4px 0 $sel;
-  > div { display: flex; flex-direction: column; gap: 8px; min-width: 0; } .cmd__ask { font-size: 22px; white-space: nowrap; } small { font-size: 14px; font-weight: 400; color: #c9c9ce; }
-  .cmd__pulse { display: none; } // the blinking wheel already says "now"
-  :deep(.dev) { flex: none; width: 128px; height: 72px; } }
-.cmd__ok { color: $ok; }
-.cmd__pulse { width: 22px; height: 22px; background: $sel; animation: cmd-pulse 1.6s ease-in-out infinite; }
-@keyframes cmd-pulse { 0%,100% { opacity: .25 } 50% { opacity: 1 } }
+.cmd__ok { display: inline-flex; align-items: center; gap: 14px; font-size: 20px; color: $ok; }
 .cmd__check { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; background: $ok; color: #04150a; font-size: 24px; font-weight: 900; vertical-align: middle; }
 .cmd__row { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
-
 .cmd__primary { padding: 14px 36px 14px 28px; border: 0; border-radius: 0; background: $red; color: #fff; font: 700 15px/1 'Inter', sans-serif; text-transform: uppercase; letter-spacing: .04em; cursor: pointer; clip-path: $chamfer;
   &:hover { background: #f21a33; } &:focus-visible { outline: 2px solid #fff; outline-offset: -4px; } }
 .cmd__primary--big { padding: 16px 48px 16px 36px; font: 700 20px/1 'Racer Display', 'Inter', sans-serif; }
@@ -477,7 +426,7 @@ $ease: cubic-bezier(.22, .61, .36, 1);
 }
 .cmd__back, .cmd__later { border: 0; padding: 6px 0; background: none; color: #b3b3b8; font-size: 14px; cursor: pointer; &:hover { color: #fff; text-decoration: underline; } &:focus-visible { outline: 2px solid #fff; outline-offset: 2px; } }
 .cmd__screen--practice { flex-direction: row; align-items: stretch; justify-content: flex-start; text-align: left; gap: 40px; }
-.cmd__tasks { flex: 0 0 clamp(400px, 46%, 460px); display: flex; flex-direction: column; gap: 18px; justify-content: flex-start; .cmd__lead { font-size: 16px; } }
+.cmd__tasks { flex: 0 0 380px; display: flex; flex-direction: column; gap: 18px; justify-content: flex-start; .cmd__lead { font-size: 16px; } }
 .cmd__tasklist { display: grid; gap: 0; margin: 6px 0 0; padding: 0; list-style: none; border: 1px solid $line;
   li { display: flex; align-items: center; gap: 14px; padding: 12px 16px; font-size: 17px; color: #8a8a90; }
   li + li { border-top: 1px solid $line; }
@@ -509,9 +458,10 @@ $ease: cubic-bezier(.22, .61, .36, 1);
   .cmd { gap: 16px; padding: 18px 32px 12px; }
   .cmd__screen { gap: 14px; }
   .cmd__title { font-size: 28px; }
-  .cmd__setup { gap: 12px; }
-  .cmd__ask, .cmd__ok { font-size: 18px; }
-  .cmd__ask-box { padding: 12px 16px; gap: 16px; .cmd__ask { font-size: 19px; } :deep(.dev) { width: 120px; height: 68px; } }
+  .cmd__wizard { gap: 12px; }
+  .cmd__wizard-icon { width: 220px; height: 124px; }
+  .cmd__wizard-ask { font-size: 32px; }
+  .cmd__ok { font-size: 18px; }
   .cmd__choice { padding: 14px 20px 18px; gap: 4px; }
   .cmd__choice :deep(.dev) { width: 160px; height: 90px; }
   .cmd__tasks { gap: 12px; }
@@ -524,5 +474,6 @@ $ease: cubic-bezier(.22, .61, .36, 1);
   .cmd__screen--practice { flex-direction: column; }
   .cmd__tasks { flex: none; }
 
+  .cmd__wizard-ask { font-size: 28px; }
 }
 </style>
