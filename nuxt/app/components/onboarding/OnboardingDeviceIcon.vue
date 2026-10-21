@@ -30,19 +30,20 @@ const keys = computed(() => {
 <template>
   <svg class="dev" :class="`dev--${kind}`" viewBox="0 0 160 90" aria-hidden="true">
     <template v-if="kind === 'wheel'">
-      <!-- GT wheel: two grips, rev lights, display, buttons and two rotary knobs. -->
+      <!-- Formula 1 wheel: wide flat body, two vertical grips dropping at the sides, rev lights
+           across the top, big central display, coloured buttons, three rotaries, shift paddles. -->
       <g class="dev__wheel">
-        <path class="dev__paddle" d="M14 30 L6 34 L8 44 L15 42 M86 30 L94 34 L92 44 L85 42" />
-        <path class="dev__line dev__rim" d="M25 18 H75 Q86 18 88 30 L91 52 Q92 67 80 71 L68 72 L64 68 H36 L32 72 L20 71 Q8 67 9 52 L12 30 Q14 18 25 18 Z" />
-        <path class="dev__line dev__grip" d="M21 28 Q16 46 21 63 M79 28 Q84 46 79 63" />
-        <rect class="dev__top" x="47.5" y="15.5" width="5" height="5" />
-        <circle v-for="(x, i) in [38, 44, 50, 56, 62]" :key="`rev${i}`" class="dev__rev" :class="`dev__rev--${i < 2 ? 'g' : i < 4 ? 'y' : 'r'}`" :style="{ animationDelay: `${i * 0.12}s` }" :cx="x" cy="23.5" r="1.9" />
-        <rect class="dev__screen" x="37" y="28" width="26" height="12" />
-        <path class="dev__screen-bar" d="M40 36 H52" />
-        <circle class="dev__btn dev__btn--a" cx="31" cy="34" r="2.8" /><circle class="dev__btn dev__btn--b" cx="31" cy="43" r="2.8" />
-        <circle class="dev__btn dev__btn--c" cx="69" cy="34" r="2.8" /><circle class="dev__btn dev__btn--d" cx="69" cy="43" r="2.8" />
-        <g class="dev__knob" style="transform-origin: 41px 52px"><circle class="dev__line" cx="41" cy="52" r="4.2" /><path class="dev__tick" d="M41 52 V48.4" /></g>
-        <g class="dev__knob dev__knob--b" style="transform-origin: 59px 52px"><circle class="dev__line" cx="59" cy="52" r="4.2" /><path class="dev__tick" d="M59 52 V48.4" /></g>
+        <path class="dev__paddle" d="M6 31 H2.5 V47 L6 48.5 M94 31 H97.5 V47 L94 48.5" />
+        <path class="dev__line dev__rim" d="M26 20 H74 L80 26 H86 Q94 26 94 35 V66 Q94 75 86 75 Q79 75 79 67 V60 L71 64 H29 L21 60 V67 Q21 75 14 75 Q6 75 6 66 V35 Q6 26 14 26 H20 Z" />
+        <path class="dev__line dev__grip" d="M12.5 36 V65 M87.5 36 V65" />
+        <circle v-for="(x, i) in [32, 38, 44, 50, 56, 62, 68]" :key="`rev${i}`" class="dev__rev" :class="`dev__rev--${i < 2 ? 'g' : i < 4 ? 'y' : i < 6 ? 'r' : 'b'}`" :style="{ animationDelay: `${i * 0.09}s` }" :cx="x" cy="24" r="1.8" />
+        <rect class="dev__screen" x="35" y="29" width="30" height="16" />
+        <path class="dev__screen-bar" d="M38 40 H54" />
+        <circle class="dev__btn dev__btn--a" cx="27" cy="33" r="2.7" /><circle class="dev__btn dev__btn--b" cx="27" cy="42" r="2.7" />
+        <circle class="dev__btn dev__btn--c" cx="73" cy="33" r="2.7" /><circle class="dev__btn dev__btn--d" cx="73" cy="42" r="2.7" />
+        <g class="dev__knob" style="transform-origin: 37px 54px"><circle class="dev__line" cx="37" cy="54" r="4" /><path class="dev__tick" d="M37 54 V50.6" /></g>
+        <g class="dev__knob dev__knob--b" style="transform-origin: 50px 54px"><circle class="dev__line" cx="50" cy="54" r="4" /><path class="dev__tick" d="M50 54 V50.6" /></g>
+        <g class="dev__knob" style="transform-origin: 63px 54px"><circle class="dev__line" cx="63" cy="54" r="4" /><path class="dev__tick" d="M63 54 V50.6" /></g>
       </g>
       <!-- Button box: three toggle switches, two lit buttons, a rotary. -->
       <g class="dev__box">
@@ -93,9 +94,8 @@ $ease: cubic-bezier(.45, 0, .55, 1);
 // Race wheel details: thick rim with grips, top marker, coloured rev lights, display, paddles.
 .dev__rim { fill: #ffffff0a; stroke-width: 2.6; }
 .dev__grip { stroke-width: 4.5; stroke-linecap: round; stroke: #8a8a90; }
-.dev__top { fill: #ffd400; }
 .dev__paddle { fill: none; stroke: #8a8a90; stroke-width: 2.4; stroke-linejoin: round; }
-.dev__rev { opacity: .7; &--g { fill: #21ff83; } &--y { fill: #ffd400; } &--r { fill: $red; } }
+.dev__rev { opacity: .7; &--g { fill: #21ff83; } &--y { fill: #ffd400; } &--r { fill: $red; } &--b { fill: #2f7bff; } }
 .dev__screen { fill: #050507; stroke: $red; stroke-width: 1.8; }
 .dev__screen-bar { stroke: #21ff83; stroke-width: 2.4; }
 .dev__btn--a { fill: $red; } .dev__btn--b { fill: #ffd400; } .dev__btn--c { fill: #2f7bff; } .dev__btn--d { fill: #21ff83; }

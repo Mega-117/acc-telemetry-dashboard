@@ -4,11 +4,11 @@ import { mount } from '@vue/test-utils'
 import OnboardingDeviceIcon from '~/components/onboarding/OnboardingDeviceIcon.vue'
 
 describe('OnboardingDeviceIcon (PIP-571)', () => {
-  it('draws a race wheel (rev lights, knobs) and a button box with toggle switches', () => {
+  it('draws a Formula 1 wheel (rev lights, three rotaries) and a button box with toggle switches', () => {
     const wrapper = mount(OnboardingDeviceIcon, { props: { kind: 'wheel' } })
     expect(wrapper.find('.dev__wheel').exists()).toBe(true)
-    expect(wrapper.findAll('.dev__rev')).toHaveLength(5)
-    expect(wrapper.findAll('.dev__knob')).toHaveLength(3)
+    expect(wrapper.findAll('.dev__rev')).toHaveLength(7)
+    expect(wrapper.findAll('.dev__knob')).toHaveLength(4)
     expect(wrapper.findAll('.dev__lever')).toHaveLength(3)
     expect(wrapper.findAll('.dev__led')).toHaveLength(2)
     expect(wrapper.find('.dev__key').exists()).toBe(false)
