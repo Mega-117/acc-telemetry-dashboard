@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyKeyboardClick,
   applyKeyboardVisibility,
   initialKeyboardPractice,
   keyboardPracticeDone,
@@ -44,12 +45,17 @@ describe('commandPractice (PIP-571)', () => {
     expect(practiceHint(s)).toBe('')
   })
 
-  it('keyboard practice: a close before any open does not count; open then close finishes', () => {
+  it('keyboard practice: open, click a voice, close; early or out-of-order steps do not count', () => {
     let s = initialKeyboardPractice()
     s = applyKeyboardVisibility(s, false)
-    expect(s).toEqual({ opened: false, closed: false, open: false })
+    expect(s).toEqual({ opened: false, clicked: false, closed: false, open: false })
+    s = applyKeyboardClick(s)
+    expect(s.clicked).toBe(false) // nothing to click while closed
     s = applyKeyboardVisibility(s, true)
-    expect(s).toMatchObject({ opened: true, open: true, closed: false })
+    s = applyKeyboardVisibility(s, false)
+    expect(s).toMatchObject({ opened: true, clicked: false, closed: false })
+    s = applyKeyboardVisibility(s, true)
+    s = applyKeyboardClick(s)
     expect(keyboardPracticeDone(s)).toBe(false)
     s = applyKeyboardVisibility(s, false)
     expect(keyboardPracticeDone(s)).toBe(true)

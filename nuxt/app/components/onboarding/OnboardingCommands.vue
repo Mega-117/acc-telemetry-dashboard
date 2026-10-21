@@ -10,6 +10,7 @@ import { useWheelInputBridge } from '~/composables/useWheelInputBridge'
 import { canBeginAutoCapture, commandErrorText } from '~/services/controls/commandCapture'
 import { formatWheelBinding, type WheelControlAction } from '~/services/controls/wheelBindingModel'
 import {
+  applyKeyboardClick,
   applyKeyboardVisibility,
   applyPracticePress,
   initialKeyboardPractice,
@@ -65,6 +66,13 @@ const steps = computed(() => screen.value === 'keyboard' ? ['Scegli', 'Prova'] :
 type VisibilityApi = { onTrainingOverlayVisibility?: (cb: (p: { visible?: boolean }) => void) => () => void }
 const visibilityApi = (): VisibilityApi | undefined => (typeof window === 'undefined' ? undefined : (window as Window & { electronAPI?: VisibilityApi }).electronAPI)
 const keyboardPractice = ref(initialKeyboardPractice())
+const kbSelected = ref<number | null>(0)
+const kbConfirmed = ref<number | null>(null)
+function onKeyboardConfirm(index: number) {
+  kbSelected.value = index
+  kbConfirmed.value = index
+  keyboardPractice.value = applyKeyboardClick(keyboardPractice.value)
+}
 const keyboardPracticeSupported = computed(() => props.wheelAvailable && !!visibilityApi()?.onTrainingOverlayVisibility)
 const keyboardDone = computed(() => !keyboardPracticeSupported.value || keyboardPracticeDone(keyboardPractice.value))
 let stopVisibility: (() => void) | null = null
@@ -258,6 +266,8 @@ onBeforeUnmount(() => { void release() })
           :selected="practice.selected"
           :confirmed="practice.confirmed"
           :status="practice.confirmed !== null ? `Hai confermato: ${PRACTICE_TILES[practice.confirmed]} (prova)` : undefined"
+          @select="practice = { ...practice, selected: $event }"
+          @confirm="practice = { ...practice, selected: $event, confirmed: $event }"
         />
         <div v-else class="cmd__closed">Pannello rapido chiuso</div>
       </div>
@@ -283,24 +293,37 @@ onBeforeUnmount(() => { void release() })
             <span class="cmd__tick" aria-hidden="true">{{ keyboardPractice.opened ? '✓' : 1 }}</span>
             Apri il pannello con Ctrl+K
           </li>
-          <li :class="{ done: keyboardPractice.closed, now: keyboardPractice.opened && !keyboardPractice.closed }" data-task="kb-close">
-            <span class="cmd__tick" aria-hidden="true">{{ keyboardPractice.closed ? '✓' : 2 }}</span>
+          <li :class="{ done: keyboardPractice.clicked, now: keyboardPractice.opened && !keyboardPractice.clicked }" data-task="kb-click">
+            <span class="cmd__tick" aria-hidden="true">{{ keyboardPractice.clicked ? '✓' : 2 }}</span>
+            Clicca una voce con il mouse
+          </li>
+          <li :class="{ done: keyboardPractice.closed, now: keyboardPractice.clicked && !keyboardPractice.closed }" data-task="kb-close">
+            <span class="cmd__tick" aria-hidden="true">{{ keyboardPractice.closed ? '✓' : 3 }}</span>
             Chiudilo con Ctrl+K
           </li>
         </ol>
-        <p class="cmd__note">Con il mouse clicchi le voci. Per usarlo in guida, assegna i pulsanti in Impostazioni → Comandi.</p>
+        <p class="cmd__note">Per usarlo in guida, assegna i pulsanti in Impostazioni → Comandi.</p>
         <div class="cmd__row cmd__row--start">
           <button type="button" class="cmd__primary cmd__primary--big" :disabled="!keyboardDone" data-cmd-finish @click="finish">Ho capito</button>
           <button v-if="wheelAvailable" type="button" class="cmd__ghost" data-cmd-wheel @click="chooseWheel">Ho un volante</button>
         </div>
       </div>
       <div class="cmd__mock cmd__mock--screen" :class="{ 'is-open': keyboardPractice.open }" data-cmd-kb-mock>
-        <OnboardingPanelReplica v-if="keyboardPractice.open" status="È questo: lo vedi anche in alto a destra." />
+        <OnboardingPanelReplica
+          v-if="keyboardPractice.open || !keyboardPracticeSupported"
+          :selected="kbSelected"
+          :confirmed="kbConfirmed"
+          :status="kbConfirmed !== null ? `Hai scelto: ${PRACTICE_TILES[kbConfirmed]} (prova)` : 'È questo: lo vedi anche in alto a destra.'"
+          @select="kbSelected = $event"
+          @confirm="onKeyboardConfirm"
+        />
         <div v-else class="cmd__keys" aria-hidden="true"><kbd>Ctrl</kbd><span>+</span><kbd>K</kbd></div>
         <p class="cmd__kb-status" role="status">
           <template v-if="!keyboardPracticeSupported">Provalo quando vuoi: Ctrl+K funziona sempre.</template>
           <template v-else-if="keyboardDone">Perfetto, sai già usarlo.</template>
-          <template v-else-if="keyboardPractice.open">Aperto. Ora premi di nuovo Ctrl+K.</template>
+          <template v-else-if="keyboardPractice.open && !keyboardPractice.clicked">Aperto. Clicca una voce qui sopra.</template>
+          <template v-else-if="keyboardPractice.open">Bene. Ora premi di nuovo Ctrl+K.</template>
+          <template v-else-if="keyboardPractice.opened">Riaprilo con Ctrl+K e clicca una voce.</template>
           <template v-else>Premi Ctrl+K adesso.</template>
         </p>
       </div>

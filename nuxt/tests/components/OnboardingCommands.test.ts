@@ -9,6 +9,7 @@ const mock = await vi.hoisted(async () => {
   return { bridge: null as any, ref }
 })
 vi.mock('~/composables/useWheelInputBridge', () => ({ useWheelInputBridge: () => mock.bridge }))
+vi.mock('~/composables/usePublicPath', () => ({ usePublicPath: () => ({ getPublicPath: (p: string) => p }) }))
 
 const ORDER: WheelControlAction[] = ['togglePalette', 'nextAction', 'previousAction', 'activateAction']
 const binding = (button: number) => ({ deviceId: 'Wheel', deviceLabel: 'Wheel', button })
@@ -68,6 +69,11 @@ describe('OnboardingCommands (PIP-571)', () => {
     expect(wrapper.get('[data-cmd-mock]').text()).toContain('Pannello rapido chiuso')
     await tap('togglePalette')
     expect(wrapper.find('.replica__tile.is-selected').text()).toContain('Stima pressioni')
+    // The mouse drives the same copy, like the real panel, without ticking button exercises.
+    await wrapper.get('[data-replica-tile="4"]').trigger('mouseenter')
+    expect(wrapper.get('[data-replica-tile="4"]').classes()).toContain('is-selected')
+    expect(wrapper.find('[data-task="next"]').classes()).not.toContain('done')
+    await wrapper.get('[data-replica-tile="0"]').trigger('mouseenter')
     await tap('nextAction'); await tap('nextAction'); await tap('previousAction'); await tap('activateAction')
     expect(wrapper.get('[data-cmd-mock]').text()).toContain('Hai confermato: Correggi pressioni')
     await tap('togglePalette')
@@ -142,6 +148,17 @@ describe('OnboardingCommands (PIP-571)', () => {
     push({ visible: true }); await flushPromises()
     expect(wrapper.find('[data-task="kb-open"]').classes()).toContain('done')
     expect(wrapper.get('[data-cmd-kb-mock]').text()).toContain('Correggi pressioni')
+    expect(wrapper.text()).toContain('Clicca una voce qui sopra')
+    // Hover selects like the real panel; closing before the click does not count.
+    await wrapper.get('[data-replica-tile="3"]').trigger('mouseenter')
+    expect(wrapper.get('[data-replica-tile="3"]').classes()).toContain('is-selected')
+    push({ visible: false }); await flushPromises()
+    expect(wrapper.find('[data-task="kb-close"]').classes()).not.toContain('done')
+    expect(wrapper.text()).toContain('Riaprilo con Ctrl+K')
+    push({ visible: true }); await flushPromises()
+    await wrapper.get('[data-replica-tile="1"]').trigger('click')
+    expect(wrapper.find('[data-task="kb-click"]').classes()).toContain('done')
+    expect(wrapper.get('[data-cmd-kb-mock]').text()).toContain('Hai scelto: Correggi pressioni')
     expect(wrapper.text()).toContain('Ora premi di nuovo Ctrl+K')
     expect(wrapper.get('[data-cmd-finish]').attributes('disabled')).toBeDefined()
     push({ visible: false }); await flushPromises()
