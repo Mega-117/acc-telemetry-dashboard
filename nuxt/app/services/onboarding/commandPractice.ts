@@ -1,6 +1,7 @@
 // PIP-571: mini-tutorial of the Ctrl+K panel driven by the pilot's own buttons. In one sentence:
 // every press moves a pretend panel exactly like the real one would (open/close, next, previous,
-// confirm, back) and the current exercise ticks off when the pilot does what it asks.
+// confirm, back) and the current exercise ticks off when the pilot does what it asks. Each button
+// is tried right after it is assigned (TRY_TASKS), then the panel is closed (CLOSE_TASK).
 import type { WheelControlAction } from '~/services/controls/wheelBindingModel'
 
 export const PRACTICE_TILES = [
@@ -18,19 +19,16 @@ export interface PracticeTask {
   text: string
 }
 
-export const PRACTICE_TASKS: readonly PracticeTask[] = [
-  { id: 'open', action: 'togglePalette', times: 1, text: 'Apri il pannello' },
-  { id: 'next', action: 'nextAction', times: 2, text: 'Vai avanti di due voci' },
-  { id: 'previous', action: 'previousAction', times: 1, text: 'Torna indietro di una voce' },
-  { id: 'confirm', action: 'activateAction', times: 1, text: 'Conferma la voce selezionata' },
-  { id: 'back', action: 'mainMenu', times: 1, text: 'Esci dalla voce con Indietro' },
-  { id: 'close', action: 'togglePalette', times: 1, text: 'Chiudi il pannello' },
-]
-
-/** Indietro is optional: without its button the "back" exercise is left out. */
-export function practiceTasks(withBack: boolean): readonly PracticeTask[] {
-  return withBack ? PRACTICE_TASKS : PRACTICE_TASKS.filter(task => task.id !== 'back')
+/** Right after assigning a button the pilot presses it once and sees what it does. */
+export const TRY_TASKS: Readonly<Record<WheelControlAction, PracticeTask>> = {
+  togglePalette: { id: 'open', action: 'togglePalette', times: 1, text: 'il pannello si apre' },
+  nextAction: { id: 'next', action: 'nextAction', times: 1, text: 'vai alla voce dopo' },
+  previousAction: { id: 'previous', action: 'previousAction', times: 1, text: 'torni alla voce prima' },
+  activateAction: { id: 'confirm', action: 'activateAction', times: 1, text: 'confermi la voce' },
+  mainMenu: { id: 'back', action: 'mainMenu', times: 1, text: 'esci dalla voce' },
 }
+/** Last exercise, after every button: close the panel. */
+export const CLOSE_TASK: PracticeTask = { id: 'close', action: 'togglePalette', times: 1, text: 'Chiudi il pannello' }
 
 export interface PracticeState {
   /** Index of the current exercise; equals the number of exercises when finished. */
@@ -46,12 +44,12 @@ export function initialPractice(): PracticeState {
   return { task: 0, count: 0, open: false, selected: 0, confirmed: null }
 }
 
-export function practiceDone(state: PracticeState, tasks: readonly PracticeTask[] = PRACTICE_TASKS): boolean {
+export function practiceDone(state: PracticeState, tasks: readonly PracticeTask[]): boolean {
   return state.task >= tasks.length
 }
 
 /** The pretend panel reacts like the real one; the exercise advances only on the asked effect. */
-export function applyPracticePress(state: PracticeState, action: WheelControlAction, tasks: readonly PracticeTask[] = PRACTICE_TASKS): PracticeState {
+export function applyPracticePress(state: PracticeState, action: WheelControlAction, tasks: readonly PracticeTask[]): PracticeState {
   const tiles = PRACTICE_TILES.length
   const next = { ...state }
   let effect: PracticeTask['id'] | null = null
@@ -109,7 +107,7 @@ export function keyboardPracticeDone(state: KeyboardPracticeState): boolean {
 }
 
 /** A gentle hint when the panel state blocks the current exercise. */
-export function practiceHint(state: PracticeState, tasks: readonly PracticeTask[] = PRACTICE_TASKS): string {
+export function practiceHint(state: PracticeState, tasks: readonly PracticeTask[]): string {
   const task = tasks[state.task]
   if (!task) return ''
   if (!state.open && task.id !== 'open' && task.id !== 'close') return 'Il pannello è chiuso. Riaprilo.'

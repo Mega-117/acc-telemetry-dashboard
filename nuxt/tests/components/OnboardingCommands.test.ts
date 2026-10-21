@@ -45,9 +45,15 @@ async function tap(action: WheelControlAction) {
   mock.bridge.testedActions.value = [action]; await flushPromises()
   mock.bridge.testedActions.value = []; await flushPromises()
 }
+/** Press the command just assigned (after the short grace) and let the step move on. */
+async function tryIt(action: WheelControlAction) {
+  vi.advanceTimersByTime(500)
+  await tap(action)
+  vi.advanceTimersByTime(1200); await flushPromises()
+}
 
 describe('OnboardingCommands (PIP-571)', () => {
-  it('wheel path: assigns the five commands one at a time, practises the panel and finishes', async () => {
+  it('wheel path: each command is assigned and tried at once on the copy of the panel, then closed', async () => {
     const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } })
     await flushPromises()
     expect(mock.bridge.start).toHaveBeenCalledTimes(1)
@@ -59,36 +65,36 @@ describe('OnboardingCommands (PIP-571)', () => {
     expect(wrapper.text()).toContain('Collegati: Wheel')
     expect(wrapper.text()).not.toContain('Wheel, Wheel')
     await wrapper.get('button[data-cmd-wheel]').trigger('click'); await flushPromises()
+    const effects: Record<string, () => void> = {
+      togglePalette: () => expect(wrapper.find('.replica__tile.is-selected').text()).toContain('Stima pressioni'),
+      nextAction: () => expect(wrapper.find('.replica__tile.is-selected').text()).toContain('Correggi pressioni'),
+      previousAction: () => expect(wrapper.find('.replica__tile.is-selected').text()).toContain('Stima pressioni'),
+      activateAction: () => expect(wrapper.get('[data-cmd-mock]').text()).toContain('Hai confermato: Stima pressioni'),
+      mainMenu: () => expect(wrapper.find('.replica__tile.is-confirmed').exists()).toBe(false),
+    }
     for (const [i, action] of ORDER.entries()) {
+      // The title is the action to do; the wheel blinks while waiting.
       expect(mock.bridge.beginCapture).toHaveBeenLastCalledWith(action)
-      expect(wrapper.text()).toContain('Assegna i pulsanti del volante')
-      expect(wrapper.text()).toContain(`Comando ${i + 1} di 5`)
-      expect(wrapper.get('[data-cmd-ask]').text()).toContain('Premi ora un pulsante del volante')
+      expect(wrapper.get('[data-cmd-target] .cmd__title').text()).toMatch(/^Premi il pulsante per /)
+      expect(wrapper.get('[data-cmd-ask]').text()).toContain('Aspetto il pulsante')
+      expect(wrapper.text()).toContain(`Pulsante ${i + 1} di 5`)
       expect(wrapper.find(`[data-slot="${action}"]`).classes()).toContain('now')
-      expect(wrapper.find(`[data-slot="${action}"]`).text()).toContain('premi un pulsante')
-      // Only Indietro can be skipped.
       expect(wrapper.find('[data-cmd-skip]').exists()).toBe(action === 'mainMenu')
       await pressAndSave(action, i + 1)
-      if (i < ORDER.length - 1) expect(wrapper.find(`[data-slot="${action}"]`).classes()).toContain('set')
+      // Try it right away (test mode: the game receives nothing).
+      expect(mock.bridge.setTestMode).toHaveBeenLastCalledWith(true)
+      expect(wrapper.get('[data-cmd-target] .cmd__title').text()).toMatch(/^Ora premilo/)
+      if (action === 'togglePalette') expect(wrapper.get('[data-cmd-mock]').text()).toContain('Pannello rapido chiuso')
+      await tryIt(action)
+      effects[action]!()
     }
-    expect(wrapper.find('[data-cmd-screen="practice"]').exists()).toBe(true)
-    expect(mock.bridge.setTestMode).toHaveBeenLastCalledWith(true)
+    expect(wrapper.text()).toContain('Ultimo passo')
+    expect(wrapper.get('[data-cmd-target] .cmd__title').text()).toContain('chiudi il pannello')
+    vi.advanceTimersByTime(500); await tap('togglePalette')
     expect(wrapper.get('[data-cmd-mock]').text()).toContain('Pannello rapido chiuso')
-    await tap('togglePalette')
-    expect(wrapper.find('.replica__tile.is-selected').text()).toContain('Stima pressioni')
-    // The mouse drives the same copy, like the real panel, without ticking button exercises.
-    await wrapper.get('[data-replica-tile="4"]').trigger('mouseenter')
-    expect(wrapper.get('[data-replica-tile="4"]').classes()).toContain('is-selected')
-    expect(wrapper.find('[data-task="next"]').classes()).not.toContain('done')
-    await wrapper.get('[data-replica-tile="0"]').trigger('mouseenter')
-    await tap('nextAction'); await tap('nextAction'); await tap('previousAction'); await tap('activateAction')
-    expect(wrapper.get('[data-cmd-mock]').text()).toContain('Hai confermato: Correggi pressioni')
-    await tap('mainMenu')
-    expect(wrapper.find('[data-task="back"]').classes()).toContain('done')
-    expect(wrapper.find('.replica__tile.is-confirmed').exists()).toBe(false)
-    await tap('togglePalette')
+    expect(wrapper.find('[data-cmd-tried]').exists()).toBe(true)
+    vi.advanceTimersByTime(1200); await flushPromises()
     expect(mock.bridge.setTestMode).toHaveBeenLastCalledWith(false)
-    vi.advanceTimersByTime(1000); await flushPromises()
     expect(wrapper.find('[data-cmd-screen="ready"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Wheel · Pulsante 2')
     await wrapper.get('[data-cmd-finish]').trigger('click'); await flushPromises()
@@ -97,20 +103,55 @@ describe('OnboardingCommands (PIP-571)', () => {
     wrapper.unmount()
   })
 
-  it('Indietro is optional: skipping it leaves it unassigned and drops its exercise', async () => {
+  it('a wrong button does not count, the mouse moves the copy, a held press is ignored', async () => {
     const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } })
     await wrapper.get('button[data-cmd-wheel]').trigger('click'); await flushPromises()
-    expect(wrapper.find('[data-slot="mainMenu"]').text()).toContain('facoltativo')
-    for (const [i, action] of ORDER.slice(0, 4).entries()) await pressAndSave(action, i + 1)
-    expect(wrapper.text()).toContain('Comando 5 di 5 · facoltativo')
+    await pressAndSave('togglePalette', 1)
+    await tap('togglePalette') // still held from the assignment: ignored
+    expect(wrapper.get('[data-cmd-mock]').text()).toContain('Pannello rapido chiuso')
+    await tryIt('togglePalette')
+    await pressAndSave('nextAction', 2)
+    vi.advanceTimersByTime(500)
+    await tap('togglePalette') // closes the copy, not the asked effect
+    expect(wrapper.find('[data-cmd-tried]').exists()).toBe(false)
+    expect(wrapper.get('[data-cmd-ask]').text()).toMatch(/chiuso/)
+    await tap('togglePalette')
+    await wrapper.get('[data-replica-tile="4"]').trigger('mouseenter')
+    expect(wrapper.get('[data-replica-tile="4"]').classes()).toContain('is-selected')
+    expect(wrapper.find('[data-cmd-tried]').exists()).toBe(false)
+    await tap('nextAction')
+    expect(wrapper.find('[data-cmd-tried]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('silence: after a while without input it says what to check', async () => {
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } })
+    await wrapper.get('button[data-cmd-wheel]').trigger('click'); await flushPromises()
+    expect(wrapper.find('[data-cmd-quiet]').exists()).toBe(false)
+    vi.advanceTimersByTime(8100); await flushPromises()
+    expect(wrapper.get('[data-cmd-quiet]').text()).toContain('Il volante è collegato?')
+    await pressAndSave('togglePalette', 1)
+    expect(wrapper.find('[data-cmd-quiet]').exists()).toBe(false)
+    vi.advanceTimersByTime(8100); await flushPromises()
+    expect(wrapper.get('[data-cmd-quiet]').text()).toContain('cambiare pulsante')
+    // "Cambia pulsante" goes back to the capture of the same command.
+    await wrapper.get('[data-cmd-change]').trigger('click'); await flushPromises()
+    expect(mock.bridge.setTestMode).toHaveBeenLastCalledWith(false)
+    expect(mock.bridge.beginCapture).toHaveBeenLastCalledWith('togglePalette')
+    wrapper.unmount()
+  })
+
+  it('Indietro is optional: skipping it leaves it unassigned and goes straight to closing', async () => {
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } })
+    await wrapper.get('button[data-cmd-wheel]').trigger('click'); await flushPromises()
+    for (const [i, action] of ORDER.slice(0, 4).entries()) { await pressAndSave(action, i + 1); await tryIt(action) }
+    expect(wrapper.text()).toContain('Pulsante 5 di 5 · facoltativo')
     await wrapper.get('[data-cmd-skip]').trigger('click'); await flushPromises()
     expect(mock.bridge.cancelCapture).toHaveBeenCalled()
     expect(mock.bridge.state.value.bindings.mainMenu).toBeNull()
-    expect(wrapper.find('[data-cmd-screen="practice"]').exists()).toBe(true)
-    expect(wrapper.find('[data-task="back"]').exists()).toBe(false)
-    await tap('togglePalette'); await tap('nextAction'); await tap('nextAction'); await tap('previousAction'); await tap('activateAction')
-    await tap('togglePalette')
-    vi.advanceTimersByTime(1000); await flushPromises()
+    expect(wrapper.find('[data-slot="mainMenu"]').classes()).toContain('skip')
+    expect(wrapper.text()).toContain('Ultimo passo')
+    await tryIt('togglePalette')
     expect(wrapper.find('[data-cmd-screen="ready"]').exists()).toBe(true)
     expect(wrapper.find('.cmd__summary b.off').text()).toBe('Non assegnato')
     wrapper.unmount()
@@ -133,13 +174,15 @@ describe('OnboardingCommands (PIP-571)', () => {
     const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } })
     await wrapper.get('button[data-cmd-wheel]').trigger('click'); await flushPromises()
     expect(mock.bridge.beginCapture).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain('Già assegnato: Wheel · Pulsante 8')
+    expect(wrapper.get('[data-cmd-target] .cmd__title').text()).toBe('Per aprire il pannello usi Wheel · Pulsante 8')
     await wrapper.get('[data-cmd-keep]').trigger('click'); await flushPromises()
-    expect(wrapper.text()).toContain('Comando 2 di 5')
+    expect(wrapper.get('[data-cmd-target] .cmd__title').text()).toMatch(/^Ora premilo/)
+    await tryIt('togglePalette')
+    expect(wrapper.text()).toContain('Pulsante 2 di 5')
     expect(mock.bridge.beginCapture).toHaveBeenLastCalledWith('nextAction')
     await wrapper.get('[data-cmd-back]').trigger('click'); await flushPromises()
     expect(mock.bridge.cancelCapture).toHaveBeenCalled()
-    expect(wrapper.text()).toContain('Comando 1 di 5')
+    expect(wrapper.text()).toContain('Pulsante 1 di 5')
     wrapper.unmount()
   })
 
