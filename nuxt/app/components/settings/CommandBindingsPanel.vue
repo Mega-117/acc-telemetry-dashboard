@@ -9,7 +9,7 @@ import {
 } from '~/services/controls/wheelBindingModel'
 
 const actions: Array<{ id: WheelControlAction; title: string; description: string }> = [
-  { id: 'togglePalette', title: 'Apri / chiudi Control K', description: 'Mostra o nasconde il pannello comandi.' },
+  { id: 'togglePalette', title: 'Apri / chiudi pannello rapido', description: 'Mostra o nasconde il pannello rapido (Ctrl+K).' },
   { id: 'nextAction', title: 'Voce successiva', description: 'Passa alla voce successiva; dentro un valore lo aumenta. Tienilo premuto per ripetere.' },
   { id: 'previousAction', title: 'Voce precedente', description: 'Passa alla voce precedente; dentro un valore lo diminuisce. Tienilo premuto per ripetere.' },
   { id: 'activateAction', title: 'Conferma', description: 'Attiva la voce selezionata.' },

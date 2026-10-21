@@ -1,16 +1,20 @@
 <script setup lang="ts">
-// PIP-571: the last step of the introduction. One path, three moves: choose what you drive
-// with, assign the four panel commands one at a time, then practise opening, moving, confirming
-// and closing a pretend Ctrl+K panel with your own buttons. Keyboard-only is an explicit choice;
-// "Lo faccio dopo" postpones and the next launch asks again.
+// PIP-571: the last step of the introduction, all about the "pannello rapido" (Ctrl+K).
+// Wheel: choose, assign four buttons one at a time, practise on a faithful copy of the panel
+// (test mode: the game receives nothing). Keyboard: press the real Ctrl+K twice; the copy
+// mirrors the real panel opening. "Lo faccio dopo" postpones and the next launch asks again.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import OnboardingPanelReplica from '~/components/onboarding/OnboardingPanelReplica.vue'
 import { useKeyboardCapture } from '~/composables/useKeyboardCapture'
 import { useWheelInputBridge } from '~/composables/useWheelInputBridge'
 import { canBeginAutoCapture, commandErrorText } from '~/services/controls/commandCapture'
 import { formatWheelBinding, type WheelControlAction } from '~/services/controls/wheelBindingModel'
 import {
+  applyKeyboardVisibility,
   applyPracticePress,
+  initialKeyboardPractice,
   initialPractice,
+  keyboardPracticeDone,
   PRACTICE_TASKS,
   PRACTICE_TILES,
   practiceDone,
@@ -22,7 +26,7 @@ const emit = defineEmits<{ done: []; later: [] }>()
 
 type Screen = 'choose' | 'assign' | 'practice' | 'ready' | 'keyboard'
 const REQUIRED: Array<{ id: WheelControlAction; title: string; detail: string }> = [
-  { id: 'togglePalette', title: 'Apri e chiudi il pannello', detail: 'Il pulsante che userai di più.' },
+  { id: 'togglePalette', title: 'Apri e chiudi il pannello rapido', detail: 'Il pulsante che userai di più.' },
   { id: 'nextAction', title: 'Voce successiva', detail: 'Passa alla voce dopo.' },
   { id: 'previousAction', title: 'Voce precedente', detail: 'Torna alla voce prima.' },
   { id: 'activateAction', title: 'Conferma', detail: 'Attiva la voce scelta.' },
@@ -54,7 +58,25 @@ const readerStatus = computed(() => {
   if (state.value.inputStatus === 'unavailable') return 'Lettura dei comandi non disponibile: riavvia Racer Core e riprova.'
   return ''
 })
-const stepNumber = computed(() => ({ choose: 1, keyboard: 1, assign: 2, practice: 3, ready: 3 } as const)[screen.value])
+const stepNumber = computed(() => ({ choose: 1, keyboard: 2, assign: 2, practice: 3, ready: 3 } as const)[screen.value])
+const steps = computed(() => screen.value === 'keyboard' ? ['Scegli', 'Prova'] : ['Scegli', 'Assegna', 'Prova'])
+
+// Keyboard path: practise on the REAL panel. The page only hears that it was shown/hidden.
+type VisibilityApi = { onTrainingOverlayVisibility?: (cb: (p: { visible?: boolean }) => void) => () => void }
+const visibilityApi = (): VisibilityApi | undefined => (typeof window === 'undefined' ? undefined : (window as Window & { electronAPI?: VisibilityApi }).electronAPI)
+const keyboardPractice = ref(initialKeyboardPractice())
+const keyboardPracticeSupported = computed(() => props.wheelAvailable && !!visibilityApi()?.onTrainingOverlayVisibility)
+const keyboardDone = computed(() => !keyboardPracticeSupported.value || keyboardPracticeDone(keyboardPractice.value))
+let stopVisibility: (() => void) | null = null
+function chooseKeyboard() {
+  screen.value = 'keyboard'
+  keyboardPractice.value = initialKeyboardPractice()
+  if (!stopVisibility && keyboardPracticeSupported.value) {
+    stopVisibility = visibilityApi()!.onTrainingOverlayVisibility!((payload) => {
+      if (screen.value === 'keyboard') keyboardPractice.value = applyKeyboardVisibility(keyboardPractice.value, payload?.visible === true)
+    })
+  }
+}
 
 function chooseWheel() { screen.value = 'assign'; enterAction(0) }
 function enterAction(index: number) {
@@ -129,6 +151,7 @@ function finish() { void release(); emit('done') }
 async function release() {
   for (const t of timers) clearTimeout(t)
   timers.clear()
+  stopVisibility?.(); stopVisibility = null
   await bridge.finishConfiguration()
 }
 
@@ -139,27 +162,24 @@ onBeforeUnmount(() => { void release() })
 <template>
   <section class="cmd" aria-label="Comandi del pannello">
     <header class="cmd__head">
-      <span class="cmd__eyebrow">Tre mosse</span>
       <ol class="cmd__steps" aria-label="Passi dei comandi">
-        <li :class="{ on: stepNumber === 1, done: stepNumber > 1 }">1 Scegli</li>
-        <li :class="{ on: stepNumber === 2, done: stepNumber > 2 }">2 Assegna</li>
-        <li :class="{ on: stepNumber === 3 }">3 Prova</li>
+        <li v-for="(label, i) in steps" :key="label" :class="{ on: stepNumber === i + 1 || (screen === 'keyboard' && i === 1), done: screen !== 'keyboard' ? stepNumber > i + 1 : i === 0 }">{{ i + 1 }} {{ label }}</li>
       </ol>
     </header>
 
     <Transition name="cmd-swap" mode="out-in">
     <!-- 1. Scegli -->
     <div v-if="screen === 'choose'" class="cmd__screen" data-cmd-screen="choose">
-      <h2 class="cmd__title">Comanda il pannello <em>dal volante</em></h2>
+      <h2 class="cmd__title">Il pannello rapido <em>dal volante</em></h2>
       <p class="cmd__lead">In guida le mani restano sul volante. Usa i suoi pulsanti.</p>
       <div class="cmd__choices">
         <button type="button" class="cmd__choice cmd__choice--main" data-cmd-wheel @click="chooseWheel">
           <strong>Ho un volante o una button box</strong>
           <span>Assegniamo 4 pulsanti. Due minuti.</span>
         </button>
-        <button type="button" class="cmd__choice" data-cmd-keyboard @click="screen = 'keyboard'">
+        <button type="button" class="cmd__choice" data-cmd-keyboard @click="chooseKeyboard">
           <strong>Uso solo tastiera e mouse</strong>
-          <span>Ti spiego come aprirlo.</span>
+          <span>Proviamo Ctrl+K insieme.</span>
         </button>
       </div>
       <p class="cmd__devices" role="status">
@@ -222,7 +242,7 @@ onBeforeUnmount(() => { void release() })
     <!-- 3. Prova il pannello -->
     <div v-else-if="screen === 'practice'" class="cmd__screen cmd__screen--practice" data-cmd-screen="practice">
       <div class="cmd__tasks">
-        <h2 class="cmd__title">Prova <em>il pannello</em></h2>
+        <h2 class="cmd__title">Prova il <em>pannello rapido</em></h2>
         <p class="cmd__lead">Usa i tuoi pulsanti. Il gioco non riceve niente.</p>
         <ol class="cmd__tasklist">
           <li v-for="(task, i) in PRACTICE_TASKS" :key="task.id" :class="{ done: i < practice.task, now: i === practice.task }" :data-task="task.id">
@@ -233,19 +253,13 @@ onBeforeUnmount(() => { void release() })
         <p v-if="hint" class="cmd__hint" role="status">{{ hint }}</p>
       </div>
       <div class="cmd__mock" :class="{ 'is-open': practice.open }" data-cmd-mock>
-        <div v-if="practice.open" class="cmd__panel">
-          <span class="cmd__logo">RC</span>
-          <div class="cmd__grid">
-            <span
-              v-for="(tile, i) in PRACTICE_TILES"
-              :key="tile"
-              class="cmd__tile"
-              :class="{ 'is-selected': i === practice.selected, 'is-confirmed': i === practice.confirmed }"
-            >{{ tile }}</span>
-          </div>
-          <p class="cmd__panel-status">{{ practice.confirmed !== null ? `Hai confermato: ${PRACTICE_TILES[practice.confirmed]} (prova)` : 'Seleziona una voce' }}</p>
-        </div>
-        <div v-else class="cmd__closed">Pannello chiuso</div>
+        <OnboardingPanelReplica
+          v-if="practice.open"
+          :selected="practice.selected"
+          :confirmed="practice.confirmed"
+          :status="practice.confirmed !== null ? `Hai confermato: ${PRACTICE_TILES[practice.confirmed]} (prova)` : undefined"
+        />
+        <div v-else class="cmd__closed">Pannello rapido chiuso</div>
       </div>
     </div>
 
@@ -260,23 +274,42 @@ onBeforeUnmount(() => { void release() })
     </div>
 
     <!-- Solo tastiera e mouse -->
-    <div v-else class="cmd__screen" data-cmd-screen="keyboard">
-      <h2 class="cmd__title">Con tastiera <em>e mouse</em></h2>
-      <ul class="cmd__bullets">
-        <li><kbd>Ctrl</kbd> + <kbd>K</kbd> apre e chiude il pannello, anche in gioco.</li>
-        <li>Con il mouse clicchi le voci.</li>
-        <li>Per usarlo in guida assegna i pulsanti in Impostazioni → Comandi.</li>
-      </ul>
-      <div class="cmd__row">
-        <button type="button" class="cmd__primary cmd__primary--big" data-cmd-finish @click="finish">Ho capito</button>
-        <button v-if="wheelAvailable" type="button" class="cmd__ghost" data-cmd-wheel @click="chooseWheel">Ho un volante: assegniamoli</button>
+    <div v-else class="cmd__screen cmd__screen--practice" data-cmd-screen="keyboard">
+      <div class="cmd__tasks">
+        <h2 class="cmd__title">Prova il <em>pannello rapido</em></h2>
+        <p class="cmd__lead">Tieni premuto Ctrl e premi K. Si apre davvero, in alto a destra dello schermo.</p>
+        <ol v-if="keyboardPracticeSupported" class="cmd__tasklist">
+          <li :class="{ done: keyboardPractice.opened, now: !keyboardPractice.opened }" data-task="kb-open">
+            <span class="cmd__tick" aria-hidden="true">{{ keyboardPractice.opened ? '✓' : 1 }}</span>
+            Apri il pannello con Ctrl+K
+          </li>
+          <li :class="{ done: keyboardPractice.closed, now: keyboardPractice.opened && !keyboardPractice.closed }" data-task="kb-close">
+            <span class="cmd__tick" aria-hidden="true">{{ keyboardPractice.closed ? '✓' : 2 }}</span>
+            Chiudilo con Ctrl+K
+          </li>
+        </ol>
+        <p class="cmd__note">Con il mouse clicchi le voci. Per usarlo in guida, assegna i pulsanti in Impostazioni → Comandi.</p>
+        <div class="cmd__row cmd__row--start">
+          <button type="button" class="cmd__primary cmd__primary--big" :disabled="!keyboardDone" data-cmd-finish @click="finish">Ho capito</button>
+          <button v-if="wheelAvailable" type="button" class="cmd__ghost" data-cmd-wheel @click="chooseWheel">Ho un volante</button>
+        </div>
+      </div>
+      <div class="cmd__mock cmd__mock--screen" :class="{ 'is-open': keyboardPractice.open }" data-cmd-kb-mock>
+        <OnboardingPanelReplica v-if="keyboardPractice.open" status="È questo: lo vedi anche in alto a destra." />
+        <div v-else class="cmd__keys" aria-hidden="true"><kbd>Ctrl</kbd><span>+</span><kbd>K</kbd></div>
+        <p class="cmd__kb-status" role="status">
+          <template v-if="!keyboardPracticeSupported">Provalo quando vuoi: Ctrl+K funziona sempre.</template>
+          <template v-else-if="keyboardDone">Perfetto, sai già usarlo.</template>
+          <template v-else-if="keyboardPractice.open">Aperto. Ora premi di nuovo Ctrl+K.</template>
+          <template v-else>Premi Ctrl+K adesso.</template>
+        </p>
       </div>
     </div>
     </Transition>
 
-    <footer v-if="wheelAvailable && screen !== 'ready' && screen !== 'keyboard'" class="cmd__foot">
+    <footer v-if="wheelAvailable && screen !== 'ready'" class="cmd__foot">
       <template v-if="confirmLater">
-        <span>Senza pulsanti non usi il pannello in guida. Te lo richiedo al prossimo avvio.</span>
+        <span>Senza pulsanti non usi il pannello rapido in guida. Te lo richiedo al prossimo avvio.</span>
         <span class="cmd__foot-actions">
           <button type="button" class="cmd__ghost" @click="confirmLater = false">Li assegno ora</button>
           <button type="button" class="cmd__ghost" data-cmd-later-confirm @click="postpone">Sì, dopo</button>
@@ -284,6 +317,7 @@ onBeforeUnmount(() => { void release() })
       </template>
       <template v-else>
         <button v-if="screen === 'assign'" type="button" class="cmd__back" data-cmd-back @click="previousAction">Indietro</button>
+        <button v-else-if="screen === 'keyboard'" type="button" class="cmd__back" data-cmd-back @click="screen = 'choose'">Indietro</button>
         <button v-else-if="screen === 'practice'" type="button" class="cmd__back" data-cmd-reassign @click="restartAssign">Non funziona? Riassegna</button>
         <span v-else />
         <button type="button" class="cmd__later" data-cmd-later @click="askLater">Lo faccio dopo</button>
@@ -376,14 +410,6 @@ $ease: cubic-bezier(.22, .61, .36, 1);
 .cmd__hint { margin: 4px 0 0; font-size: 16px; color: $sel; }
 .cmd__mock { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; border: 1px solid $line; background: #050507; min-height: 300px; }
 .cmd__closed { padding: 18px 26px; border: 1px dashed $line; color: #8a8a90; font-size: 16px; }
-.cmd__panel { display: grid; grid-template-columns: auto 1fr; gap: 10px 14px; padding: 14px; background: #0b0b0b; border: 1px solid rgba(255,255,255,.15); box-shadow: 0 20px 60px rgba(0,0,0,.7); animation: cmd-open .45s $ease; }
-@keyframes cmd-open { from { opacity: 0; transform: scale(.97) } to { opacity: 1; transform: scale(1) } }
-.cmd__logo { align-self: center; font: 800 italic 22px/1 'Racer Display', sans-serif; color: $red; }
-.cmd__grid { display: grid; grid-template-columns: repeat(5, 74px); gap: 6px; }
-.cmd__tile { display: flex; align-items: center; justify-content: center; height: 58px; padding: 4px; border: 1px solid rgba(255,255,255,.12); background: #141414; color: #ddd; font-size: 11px; text-align: center; line-height: 1.2;
-  &.is-selected { outline: 3px solid $sel; outline-offset: -3px; color: #fff; }
-  &.is-confirmed { background: $sel; color: #111; font-weight: 700; } }
-.cmd__panel-status { grid-column: 1 / -1; margin: 0; font-size: 12px; color: rgba(255,255,255,.7); }
 .cmd__summary { display: grid; gap: 0; width: min(580px, 100%); margin: 0; padding: 0; list-style: none; border: 1px solid $line;
   li { display: flex; justify-content: space-between; gap: 20px; padding: 14px 18px; font-size: 16px; } li + li { border-top: 1px solid $line; } b { color: $ok; } }
 .cmd__bullets { display: grid; gap: 0; max-width: 660px; margin: 4px 0 12px; padding: 0; list-style: none; font-size: 17px; text-align: left; border: 1px solid $line;
@@ -391,6 +417,14 @@ $ease: cubic-bezier(.22, .61, .36, 1);
   kbd { padding: 2px 8px; background: #fff; color: #111; font-weight: 800; } }
 .cmd__foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 52px; padding-top: 14px; border-top: 1px solid $line; font-size: 14px; color: #c9c9ce; }
 .cmd__foot-actions { display: flex; gap: 10px; }
+.cmd__primary:disabled { background: #ffffff1f; color: #8a8a90; cursor: default; }
+.cmd__note { margin: 0; font-size: 14px; line-height: 1.6; color: #8a8a90; }
+.cmd__row--start { justify-content: flex-start; margin-top: 6px; }
+// Keyboard practice: a sketch of the screen with the corner where the real panel appears.
+.cmd__mock--screen { position: relative; flex-direction: column; gap: 22px; }
+.cmd__keys { display: flex; align-items: center; gap: 12px; color: #fff; font-size: 26px; font-weight: 700;
+  kbd { min-width: 64px; padding: 12px 18px; background: #fff; color: #111; font: 800 28px/1 'Inter', sans-serif; text-align: center; box-shadow: 0 5px 0 #8a8a92; } }
+.cmd__kb-status { margin: 0; font-size: 18px; font-weight: 600; color: $sel; .is-open & { color: $ok; } }
 // Never push content above the frame: centre only when it fits.
 .cmd__screen { justify-content: safe center; }
 .cmd__screen--assign { align-content: safe center; }
@@ -415,7 +449,7 @@ $ease: cubic-bezier(.22, .61, .36, 1);
   .cmd__screen--assign { grid-template-columns: 1fr; grid-template-rows: auto; grid-template-areas: 'head' 'target' 'slots'; }
   .cmd__screen--practice { flex-direction: column; }
   .cmd__tasks { flex: none; }
-  .cmd__grid { grid-template-columns: repeat(5, 56px); }
+
   .cmd__target-name { font-size: 28px; }
 }
 </style>

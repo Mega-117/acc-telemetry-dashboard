@@ -27,10 +27,10 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
   },
   {
     id: 'ctrlk',
-    label: 'Ctrl+K',
-    title: 'Il tuo pannello:',
+    label: 'Pannello rapido',
+    title: 'Pannello rapido:',
     accent: 'Ctrl+K',
-    text: 'In guida è piccolo, in alto a destra. In pausa mostra tutti i comandi.',
+    text: 'Il centro di Racer Core: da qui comandi tutto. Lo apri con Ctrl+K o dal volante.',
     video: '/onboarding/02-ctrlk.webm',
     poster: '/onboarding/02-ctrlk.jpg',
   },

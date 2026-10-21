@@ -170,6 +170,7 @@ export default defineConfig({
         'app/composables/useOnboardingIntro.ts',
         'app/components/onboarding/OnboardingIntro.vue',
         'app/components/onboarding/OnboardingCommands.vue',
+        'app/components/onboarding/OnboardingPanelReplica.vue',
         'app/services/onboarding/commandPractice.ts',
         'app/services/controls/commandCapture.ts',
         'app/composables/useKeyboardCapture.ts',

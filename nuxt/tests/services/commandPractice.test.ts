@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyKeyboardVisibility,
+  initialKeyboardPractice,
+  keyboardPracticeDone,
   applyPracticePress,
   initialPractice,
   PRACTICE_TASKS,
@@ -39,6 +42,19 @@ describe('commandPractice (PIP-571)', () => {
     expect(s).toMatchObject({ selected: 0, count: 0, task: 1 })
     s = applyPracticePress(s, 'togglePalette')
     expect(practiceHint(s)).toBe('')
+  })
+
+  it('keyboard practice: a close before any open does not count; open then close finishes', () => {
+    let s = initialKeyboardPractice()
+    s = applyKeyboardVisibility(s, false)
+    expect(s).toEqual({ opened: false, closed: false, open: false })
+    s = applyKeyboardVisibility(s, true)
+    expect(s).toMatchObject({ opened: true, open: true, closed: false })
+    expect(keyboardPracticeDone(s)).toBe(false)
+    s = applyKeyboardVisibility(s, false)
+    expect(keyboardPracticeDone(s)).toBe(true)
+    s = applyKeyboardVisibility(s, true)
+    expect(keyboardPracticeDone(s)).toBe(true)
   })
 
   it('wrong buttons still move the panel but do not tick the exercise; selection wraps', () => {

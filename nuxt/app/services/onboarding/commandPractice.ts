@@ -70,6 +70,25 @@ export function applyPracticePress(state: PracticeState, action: WheelControlAct
   return next
 }
 
+/**
+ * Keyboard practice on the REAL panel: Ctrl+K is a global shortcut, so the page only learns
+ * that the panel was shown or hidden. Open it once, then close it once.
+ */
+export interface KeyboardPracticeState { opened: boolean; closed: boolean; open: boolean }
+
+export function initialKeyboardPractice(): KeyboardPracticeState {
+  return { opened: false, closed: false, open: false }
+}
+
+export function applyKeyboardVisibility(state: KeyboardPracticeState, visible: boolean): KeyboardPracticeState {
+  if (visible) return { ...state, open: true, opened: true }
+  return { ...state, open: false, closed: state.closed || state.opened }
+}
+
+export function keyboardPracticeDone(state: KeyboardPracticeState): boolean {
+  return state.opened && state.closed
+}
+
 /** A gentle hint when the panel state blocks the current exercise. */
 export function practiceHint(state: PracticeState): string {
   const task = PRACTICE_TASKS[state.task]
