@@ -19,6 +19,10 @@ export default defineConfig({
     },
   },
   test: {
+    // PIP-585: by default Vitest runs availableParallelism() - 1 forks (23 here); under load a fork
+    // crashed inside V8 while loading jsdom with zero failing tests. A fixed cap keeps
+    // CPU/memory bounded locally and in CI without changing the test model.
+    maxWorkers: 4,
     environment: 'node',
     globals: true,
     include: ['tests/**/*.test.ts', 'tests/**/*.spec.ts'],
