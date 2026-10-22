@@ -37,15 +37,25 @@ describe('useOnboardingIntro (PIP-571)', () => {
     expect(await useOnboardingIntro().showIfFirstTime()).toBe(false)
   })
 
-  it('"later" reopens straight on the commands at the next launch', async () => {
+  it('only the very first launch opens it: "later", or quitting halfway, never bring it back (22/10)', async () => {
     electron(); mock.currentUser.value = { uid: 'u1' }
     const first = useOnboardingIntro()
     await first.showIfFirstTime(); first.close('later')
     expect(await first.showIfFirstTime()).toBe(false) // not twice in the same session
     states.clear()
-    const next = useOnboardingIntro()
-    expect(await next.showIfFirstTime()).toBe(true)
-    expect(next.startPhase.value).toBe('commands')
+    expect(await useOnboardingIntro().showIfFirstTime()).toBe(false) // nor at the next launch
+    // Quitting the app while the intro is still on screen: already marked as seen.
+    states.clear(); mock.currentUser.value = { uid: 'u5' }
+    expect(await useOnboardingIntro().showIfFirstTime()).toBe(true)
+    expect(window.localStorage.getItem(onboardingSeenKey('u5', 'inst-a'))).toBe('1')
+    states.clear()
+    expect(await useOnboardingIntro().showIfFirstTime()).toBe(false)
+  })
+
+  it('an older "commands-pending" status does not reopen it either', async () => {
+    electron(); mock.currentUser.value = { uid: 'u6' }
+    window.localStorage.setItem(onboardingSeenKey('u6', 'inst-a'), 'commands-pending')
+    expect(await useOnboardingIntro().showIfFirstTime()).toBe(false)
   })
 
   it('waits for the user, falls back to "browser" without Electron and reopens on demand from the tour', async () => {

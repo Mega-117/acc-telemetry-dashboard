@@ -1,7 +1,8 @@
-// PIP-571: shared state of the introduction. In one sentence: the first dashboard of a user on
-// this installation opens it by itself; it ends only on the command setup ("done") or with
-// "Lo faccio dopo" ("commands-pending", which reopens straight on the commands next launch);
-// Impostazioni reopens it from the start at any time.
+// PIP-571: shared state of the introduction. In one sentence: it opens by itself only the very
+// first time a user starts Racer Core on this installation, and never again by itself (user
+// request 22/10, the usual "show once" pattern): it is marked as seen as soon as it appears, so
+// "Lo faccio dopo", "Salta" or quitting halfway do not bring it back. Impostazioni reopens it
+// from the start at any time.
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import {
   BROWSER_INSTALLATION_ID,
@@ -45,7 +46,7 @@ export function useOnboardingIntro() {
   const owner = useState<{ uid: string; installationId: string } | null>('onboarding-intro-owner', () => null)
   const { currentUser } = useFirebaseAuth()
 
-  /** Opens the intro by itself when this user on this installation has not finished it. */
+  /** Opens the intro by itself only when this user on this installation has never seen it. */
   const showIfFirstTime = async (): Promise<boolean> => {
     const uid = currentUser.value?.uid
     if (!uid || visible.value) return false
@@ -54,9 +55,10 @@ export function useOnboardingIntro() {
     if (evaluatedOwner.value === key) return false
     evaluatedOwner.value = key
     owner.value = { uid, installationId }
-    const status = readOnboardingStatus(storage(), uid, installationId)
-    if (status === 'done') return false
-    startPhase.value = status === 'commands-pending' ? 'commands' : 'tour'
+    if (readOnboardingStatus(storage(), uid, installationId) !== 'unseen') return false
+    // Seen from the moment it appears: the first launch is the only automatic one.
+    writeOnboardingStatus(storage(), uid, installationId, 'done')
+    startPhase.value = 'tour'
     visible.value = true
     return true
   }

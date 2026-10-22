@@ -1,6 +1,7 @@
 // PIP-571: where the introduction stands for one user on one installation, kept in the local
-// browser/Electron profile. 'done' = never again by itself; 'commands-pending' = the pilot chose
-// "Lo faccio dopo" on the command setup, so the next launch reopens straight on that step.
+// browser/Electron profile. Any stored value means "seen": it never opens again by itself
+// (22/10). 'done' is written as soon as it appears; 'commands-pending' records that the pilot
+// chose "Lo faccio dopo" on the command setup, for information only.
 // Pure logic: the storage is injected and every access is guarded.
 
 export const ONBOARDING_SEEN_PREFIX = 'racercore.onboarding.seen.v1'
