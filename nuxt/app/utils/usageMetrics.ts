@@ -7,7 +7,9 @@ export interface UsageItem { key: string; uid: string; summary: UsageSummary | n
 export interface UsageDetail { producer: string; source: string; day: string; context: UsageContext; firstAt: number; lastAt: number; counters: Record<string, number>; durations: Record<string, number>; sessions: string[]; partial: boolean }
 export interface UsageFilter { query: string; game: string; mode: string; sessionType: string; version: string; channel: string; includeTests: boolean }
 export interface UsageUser { uid: string; lastAt: number; drivingMs: number; sessions: Set<string>; outcomes: Record<string, number>; features: Set<string>; partial: boolean; items: UsageItem[] }
-export function usageCalendarDays(count: 7 | 30, now = new Date()): string[] {
+// Usage statistics live 90 Rome days on the Worker; diagnostics keep their own 30.
+export type UsagePeriod = 7 | 30 | 90
+export function usageCalendarDays(count: UsagePeriod, now = new Date()): string[] {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now).map(p => [p.type, p.value]))
   const noon = Date.parse(`${parts.year}-${parts.month}-${parts.day}T12:00:00Z`)
   return Array.from({ length: count }, (_, i) => new Date(noon - (count - i - 1) * 86400000).toISOString().slice(0, 10))

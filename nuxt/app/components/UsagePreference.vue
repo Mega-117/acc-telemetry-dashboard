@@ -33,7 +33,7 @@ onBeforeUnmount(() => {
 <template>
   <section class="usage-preference">
     <label><input type="checkbox" :checked="enabled === true" :disabled="busy || enabled === null" @change="change"> Condividi statistiche di utilizzo</label>
-    <p>Condividi tempi di utilizzo, sessioni e funzionalità usate, con i relativi esiti. La scelta vale per desktop e Pitwall web. I riepiloghi restano disponibili per 30 giorni.</p>
+    <p>Condividi tempi di utilizzo, sessioni e funzionalità usate, con i relativi esiti. La scelta vale per desktop e Pitwall web. I riepiloghi restano disponibili per 90 giorni.</p>
     <p>Non vengono raccolti screenshot, testo degli avvisi o telemetria dettagliata. La diagnostica tecnica resta separata.</p>
     <p v-if="message" role="status">{{ message }} <button v-if="enabled === null" :disabled="busy" @click="load">Riprova</button></p>
   </section>

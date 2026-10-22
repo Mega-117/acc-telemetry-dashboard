@@ -27,6 +27,8 @@ describe('usage totals', () => {
   it('uses Rome calendar days across DST rather than rolling hours', () => {
     const days = usageCalendarDays(7, new Date('2026-10-25T23:30:00Z'))
     expect(days).toHaveLength(7); expect(days[0]).toBe('2026-10-20'); expect(days[6]).toBe('2026-10-26')
+    const quarter = usageCalendarDays(90, new Date('2026-10-19T12:00:00Z'))
+    expect(quarter).toHaveLength(90); expect(quarter[0]).toBe('2026-07-22'); expect(quarter[89]).toBe('2026-10-19')
     expect(usageDaily([item('a')], ['2026-10-19', '2026-10-20']).map(x => x.drivingMs)).toEqual([60000, 0])
   })
 })

@@ -2,7 +2,7 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import AdminUsageView from '~/components/admin/AdminUsageView.vue'
 import { loadUsage, loadUsageNames, loadUsageDetails, loadUsagePreferences } from '~/repositories/usageRepository'
-import { usageCalendarDays, type UsageItem, type UsageDetail } from '~/utils/usageMetrics'
+import { usageCalendarDays, type UsageItem, type UsageDetail, type UsagePeriod } from '~/utils/usageMetrics'
 definePageMeta({ layout: 'coach', middleware: ['admin-only'] })
 useHead({ title: 'Utilizzo · Racer Core' })
 const items = ref<UsageItem[]>([]), names = ref<Record<string, string>>({}), days = ref(usageCalendarDays(7))
@@ -10,7 +10,7 @@ const loading = ref(false), updatedAt = ref<number | null>(null), error = ref(''
 const selected = ref(''), details = ref<UsageDetail[]>([]), detailLoading = ref(false), detailError = ref('')
 const preferences = ref<Record<string, { enabled: boolean }>>({})
 let requestId = 0, detailId = 0, disposed = false
-async function refresh(period: 7 | 30 = 7) {
+async function refresh(period: UsagePeriod = 7) {
   const id = ++requestId, nextDays = usageCalendarDays(period)
   loading.value = true; error.value = ''
   try {

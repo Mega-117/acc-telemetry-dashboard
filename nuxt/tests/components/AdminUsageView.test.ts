@@ -29,4 +29,11 @@ describe('admin usage view', () => {
     expect(view.find('[role="alert"]').text()).toContain('ultimo risultato valido')
     view.unmount()
   })
+  it('offers a 90-day period matching usage retention', async () => {
+    const view = mount(AdminUsageView, { props })
+    const period = view.findAll('select').find(s => s.text().includes('90 giorni'))!
+    await period.setValue('90')
+    expect(view.emitted('refresh')?.[0]).toEqual([90])
+    view.unmount()
+  })
 })

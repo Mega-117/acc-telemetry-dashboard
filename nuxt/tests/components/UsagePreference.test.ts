@@ -24,4 +24,10 @@ describe('usage preference', () => {
     expect((view.find('input').element as HTMLInputElement).checked).toBe(false)
     view.unmount()
   })
+  it('tells the user summaries stay 90 days', async () => {
+    vi.mocked(usagePreference).mockResolvedValueOnce({ enabled: true, revision: 0 })
+    const view = mount(UsagePreference); await flushPromises()
+    expect(view.text()).toContain('restano disponibili per 90 giorni')
+    view.unmount()
+  })
 })
