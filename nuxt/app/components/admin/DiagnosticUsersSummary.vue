@@ -34,7 +34,7 @@ watch(() => props.events, () => { expanded.value = false })
     </div>
     <div v-if="groups.length" class="diagnostic-recap" aria-label="Riepilogo errori di questa pagina">
       <div class="diagnostic-users__heading">
-        <strong>Riepilogo errori</strong>
+        <strong>Riepilogo errori di questa pagina</strong>
         <span>{{ groups.length }} {{ groups.length === 1 ? 'tipo di errore' : 'tipi di errore' }} · Ricorrenze nei rapporti di questa pagina</span>
       </div>
       <ol class="diagnostic-recap__list" tabindex="0" aria-label="Tipi di errore">

@@ -59,6 +59,15 @@ describe('AdminCockpitTable', () => {
     expect(html.toLowerCase()).not.toContain('online')
   })
 
+  it('PIP-540: stato in parole semplici, codici tecnici visibili, soglia spiegata', async () => {
+    const html = await renderToString(createSSRApp(AdminCockpitTable, { rows: rows() }))
+    expect(html).toContain('Operativa')
+    expect(html).toContain('healthy · ready')
+    expect(html).toContain('Stato e migrazione')
+    expect(html).toContain('Versioni installazione')
+    expect(html).toContain('ogni 60 minuti')
+  })
+
   it('usa skeleton righe coerenti durante il caricamento', async () => {
     const html = await renderToString(createSSRApp(AdminCockpitTable, { rows: [], loading: true }))
     expect(html).toContain('aria-busy="true"')

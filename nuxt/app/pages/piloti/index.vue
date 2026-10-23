@@ -235,9 +235,9 @@ watch(searchQuery, () => {
       <div class="list-header" :class="{ 'list-header--admin': isAdmin }">
         <span class="lh-name">Pilota</span>
         <span class="lh-nickname">Nickname</span>
-        <span class="lh-sessions">Sessioni (7gg)</span>
+        <span class="lh-sessions">{{ isAdmin ? 'Sessioni (168 h)' : 'Sessioni (7 gg)' }}</span>
         <span class="lh-last">Ultima sessione</span>
-        <span v-if="isAdmin" class="lh-version">Versione</span>
+        <span v-if="isAdmin" class="lh-version" title="Versione dichiarata dall'account all'ultima sincronizzazione; quella di ogni PC è nel Cockpit">Versione account</span>
         <span class="lh-cta"></span>
       </div>
       

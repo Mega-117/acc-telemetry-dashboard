@@ -38,6 +38,17 @@ function contactState(value: string | null | undefined) {
   if (status === 'stale') return { tone: 'warning', label: 'Contatto oltre 2 ore' }
   return { tone: 'neutral', label: 'Contatto sconosciuto' }
 }
+// PIP-540: the threshold explained where it is shown.
+const CONTACT_HINT = 'Il programma invia un segnale ogni 60 minuti: oltre 2 ore vuol dire che almeno un invio atteso non è arrivato.'
+
+/** PIP-540: the runtime health in plain words; the raw codes stay visible below. */
+function healthLabel(value: string | null | undefined): string {
+  const tone = semanticTone(value)
+  if (tone === 'success') return 'Operativa'
+  if (tone === 'danger') return 'Problema segnalato'
+  if (tone === 'warning') return 'In verifica'
+  return 'Non noto'
+}
 
 function semanticTone(value: string | null | undefined): string {
   const normalized = String(value || '').toLowerCase()
@@ -98,13 +109,13 @@ const skeletonRows = Array.from({ length: 6 }, (_, index) => index)
           <tr>
             <th scope="col">Utente</th>
             <th scope="col">Installazione</th>
-            <th scope="col">Versioni</th>
+            <th scope="col" title="Lette dal segnale periodico di questa installazione">Versioni installazione</th>
             <th scope="col">Installazione registrata il</th>
             <th scope="col">Ultimo avvio della Suite</th>
             <th scope="col">Ultima apertura Dashboard</th>
             <th scope="col">Ultimo contatto segnalato</th>
             <th scope="col">Update</th>
-            <th scope="col">Health e migrazione</th>
+            <th scope="col">Stato e migrazione</th>
             <th scope="col">Errori sintetici</th>
           </tr>
         </thead>
@@ -159,7 +170,7 @@ const skeletonRows = Array.from({ length: 6 }, (_, index) => index)
                 <time class="mono" :datetime="row.installation.lastContactAt || undefined">
                   {{ formatTimestamp(row.installation.lastContactAt) }}
                 </time>
-                <span class="status-line">
+                <span class="status-line" :title="CONTACT_HINT">
                   <i class="status-dot" :class="`status-dot--${contactState(row.installation.lastContactAt).tone}`"></i>
                   {{ contactState(row.installation.lastContactAt).label }}
                 </span>
@@ -176,8 +187,9 @@ const skeletonRows = Array.from({ length: 6 }, (_, index) => index)
               <td>
                 <span class="status-line">
                   <i class="status-dot" :class="`status-dot--${semanticTone(row.installation.health.status)}`"></i>
-                  {{ row.installation.health.status }} · {{ row.installation.health.phase }}
+                  {{ healthLabel(row.installation.health.status) }}
                 </span>
+                <span class="secondary mono">{{ row.installation.health.status }} · {{ row.installation.health.phase }}</span>
                 <span class="secondary">
                   Migrazione {{ row.installation.migration.status }} ·
                   <span class="tabular">{{ row.installation.migration.progress }}%</span>
