@@ -13,33 +13,36 @@ const session = (id: string, track: string) => ({
   meta: { track, car: 'ferrari_296_gt3', date_start: '2026-10-01T10:00:00Z', date_end: null, session_type: 2, driver: null, gameId: 'acc' },
   summary: { laps: 5, lapsValid: 5, bestLap: null, avgCleanLap: null, totalTime: 600000, stintCount: 1 },
 })
+const mountPicker = () => mount(SessionPickerModal, {
+  props: { isOpen: true, currentTrack: 'monza', gameId: 'acc', excludeSessionId: 'current' },
+  global: { stubs: { Teleport: true } },
+})
 
 beforeEach(() => vi.clearAllMocks())
 
 describe('session picker paging (PIP-591)', () => {
-  it('reads further pages when the first fifty are other tracks', async () => {
-    const other = Array.from({ length: 50 }, (_, i) => session(`o${i}`, 'spa'))
-    mocks.page
-      .mockResolvedValueOnce({ sessions: other, state: { hasNext: true } })
-      .mockResolvedValueOnce({ sessions: [session('m1', 'monza')], state: { hasNext: false } })
-    const view = mount(SessionPickerModal, {
-      props: { isOpen: true, currentTrack: 'monza', gameId: 'acc', excludeSessionId: 'current' },
-      global: { stubs: { Teleport: true } },
-    })
+  it('opens with one page, the same unfiltered read as before', async () => {
+    mocks.page.mockResolvedValueOnce({ sessions: [session('m1', 'monza')], state: { hasNext: false } })
+    const view = mountPicker()
     await flushPromises()
-    expect(mocks.page).toHaveBeenCalledTimes(2)
-    expect(mocks.page.mock.calls[0]![1]).toEqual({ gameId: 'acc' })
-    expect(mocks.page.mock.calls.map(call => call[2])).toEqual([1, 2])
+    expect(mocks.page).toHaveBeenCalledTimes(1)
+    expect(mocks.page.mock.calls[0]!.slice(1)).toEqual([{}, 1, 50, true])
     expect(view.findAll('.session-row')).toHaveLength(1)
+    expect(view.find('.spm-load-more').exists()).toBe(false)
   })
 
-  it('stops after the page limit even if nothing matches', async () => {
-    mocks.page.mockResolvedValue({ sessions: [session('o', 'spa')], state: { hasNext: true } })
-    mount(SessionPickerModal, {
-      props: { isOpen: true, currentTrack: 'monza', gameId: 'acc', excludeSessionId: 'current' },
-      global: { stubs: { Teleport: true } },
-    })
+  it('reaches an older comparable session with "Carica altre sessioni"', async () => {
+    mocks.page
+      .mockResolvedValueOnce({ sessions: Array.from({ length: 50 }, (_, i) => session(`o${i}`, 'spa')), state: { hasNext: true } })
+      .mockResolvedValueOnce({ sessions: [session('m1', 'monza')], state: { hasNext: false } })
+    const view = mountPicker()
     await flushPromises()
-    expect(mocks.page).toHaveBeenCalledTimes(10)
+    expect(view.findAll('.session-row')).toHaveLength(0)
+    expect(view.get('.spm-empty').text()).toContain('tra le più recenti')
+    await view.get('.spm-load-more').trigger('click')
+    await flushPromises()
+    expect(mocks.page.mock.calls[1]!.slice(1)).toEqual([{}, 2, 50, false])
+    expect(view.findAll('.session-row')).toHaveLength(1)
+    expect(view.find('.spm-load-more').exists()).toBe(false)
   })
 })

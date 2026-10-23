@@ -155,39 +155,48 @@ function closeModal() {
 }
 
 const SESSION_PICKER_PAGE_SIZE = 50
-const SESSION_PICKER_TARGET = 50
-const SESSION_PICKER_MAX_PAGES = 10
 // Una riapertura rapida non mescola le pagine della lettura precedente.
 let loadGeneration = 0
+const loadedPage = ref(0)
+const hasMoreSessions = ref(false)
+
+// PIP-591 (X-A05-23): pista e gioco si filtrano dopo la lettura, quindi una sola pagina poteva
+// nascondere le sessioni confrontabili piu' vecchie. La prima pagina resta quella di sempre
+// (stesso costo); "Carica altre sessioni" legge la successiva solo su richiesta, senza limite.
+// Il gioco non va nella query: il pager lo filtra nel client e leggerebbe l'archivio intero.
+async function loadSessionsPage(page: number) {
+  const generation = ++loadGeneration
+  isLoadingSessions.value = true
+  try {
+    const result = await telemetryGateway.getSessionsPage(undefined, {}, page, SESSION_PICKER_PAGE_SIZE, page === 1)
+    if (!props.isOpen || generation !== loadGeneration) return
+    modalSessions.value = page === 1 ? result.sessions : [...modalSessions.value, ...result.sessions]
+    loadedPage.value = page
+    hasMoreSessions.value = result.state.hasNext === true
+  } catch (e) {
+    console.error('[SESSION_PICKER] Failed to load sessions page:', e)
+    if (page === 1) modalSessions.value = []
+  } finally {
+    if (generation === loadGeneration) isLoadingSessions.value = false
+  }
+}
+
+function loadMoreSessions() {
+  if (isLoadingSessions.value || !hasMoreSessions.value) return
+  void loadSessionsPage(loadedPage.value + 1)
+}
 
 watch(
   () => props.isOpen,
   async (isOpen) => {
     if (typeof window === 'undefined') return
     if (isOpen) {
-      isLoadingSessions.value = true
-      try {
-        // PIP-591 (X-A05-23): la pista si filtra dopo la lettura, quindi una sola pagina globale
-        // poteva nascondere le sessioni confrontabili piu' vecchie. Si leggono altre pagine
-        // (gioco gia' filtrato nella ricerca) finche' ci sono SESSION_PICKER_TARGET sessioni
-        // confrontabili, al massimo SESSION_PICKER_MAX_PAGES pagine.
-        const generation = ++loadGeneration
-        const collected: SessionDocument[] = []
-        for (let page = 1; page <= SESSION_PICKER_MAX_PAGES; page += 1) {
-          const result = await telemetryGateway.getSessionsPage(undefined, { gameId: props.gameId || null }, page, SESSION_PICKER_PAGE_SIZE, page === 1)
-          if (!props.isOpen || generation !== loadGeneration) return
-          collected.push(...result.sessions)
-          if (!result.state.hasNext || collected.filter(isComparable).length >= SESSION_PICKER_TARGET) break
-        }
-        modalSessions.value = collected
-      } catch (e) {
-        console.error('[SESSION_PICKER] Failed to load sessions page:', e)
-        modalSessions.value = []
-      } finally {
-        isLoadingSessions.value = false
-      }
+      await loadSessionsPage(1)
     } else {
+      loadGeneration += 1
       modalSessions.value = []
+      hasMoreSessions.value = false
+      loadedPage.value = 0
     }
   },
   { immediate: true }
@@ -282,9 +291,18 @@ watch(
           </div>
           
           <!-- Empty state -->
-          <div v-if="filteredSessions.length === 0" class="spm-empty">
-            Nessuna altra sessione disponibile per questa pista.
+          <div v-if="filteredSessions.length === 0 && !isLoadingSessions" class="spm-empty">
+            {{ hasMoreSessions ? 'Nessuna sessione di questa pista tra le più recenti.' : 'Nessuna altra sessione disponibile per questa pista.' }}
           </div>
+          <button
+            v-if="hasMoreSessions"
+            type="button"
+            class="spm-load-more"
+            :disabled="isLoadingSessions"
+            @click="loadMoreSessions"
+          >
+            {{ isLoadingSessions ? 'Caricamento…' : 'Carica altre sessioni' }}
+          </button>
         </div>
       </div>
     </div>
@@ -533,6 +551,22 @@ watch(
   padding: 48px 20px;
   color: rgba(255, 255, 255, 0.4);
   font-size: 14px;
+}
+
+.spm-load-more {
+  display: block;
+  margin: 12px auto 4px;
+  padding: 8px 18px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover:not(:disabled) { border-color: rgba(255, 255, 255, 0.4); color: #fff; }
+  &:disabled { opacity: 0.5; cursor: default; }
 }
 
 // === LINK INPUT SECTION ===
