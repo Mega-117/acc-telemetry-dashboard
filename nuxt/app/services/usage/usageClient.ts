@@ -103,6 +103,8 @@ export function bindUsageUser(next: User | null) {
   channel.onmessage = e => {
     const shared = e.data?.preference
     if (shared && typeof shared.disabled === 'boolean') {
+      // Una richiesta di preferenza partita prima di questo messaggio non deve piu' poterlo annullare.
+      preferenceGeneration++
       if (shared.disabled) disabledInMemory.add(owner); else disabledInMemory.delete(owner)
       if (shared.pending) pendingInMemory.add(owner); else pendingInMemory.delete(owner)
       onPreference()
@@ -184,6 +186,8 @@ export function bindUsageUser(next: User | null) {
   const upload = window.setInterval(() => { void flush() }, 300000)
   void acquire()
   stopProducer = () => {
+    // Si ferma una volta sola: dopo un logout il canale e' chiuso e un secondo postMessage lancerebbe InvalidStateError.
+    if (ended) return
     ended = true; for (const [feature] of states) channel.postMessage({ tab, value: { feature, active: false } })
     collector?.stop(); persist(); release(); sharePreference = null; channel.close()
     clearInterval(heartbeat); clearInterval(checkpoint); clearInterval(upload)

@@ -55,6 +55,17 @@ describe('browser usage ownership and preference', () => {
     setSpy.mockRestore()
   })
 
+  it('PIP-591: logout and login with an active Pitwall role does not touch the closed channel', async () => {
+    bindUsageUser(account('pilot')); await settle()
+    recordUsage({ feature: 'pitwall.engineer', active: true })
+    const first = channels[0] as unknown as { close: ReturnType<typeof vi.fn>; postMessage: ReturnType<typeof vi.fn> }
+    first.postMessage.mockImplementation(() => { if (first.close.mock.calls.length) throw new DOMException('closed', 'InvalidStateError') })
+    bindUsageUser(null); await settle()
+    expect(() => bindUsageUser(account('pilot'))).not.toThrow()
+    await settle()
+    expect(channels).toHaveLength(2)
+  })
+
   it('PIP-591: an opt-out made in another tab stops this tab too, even without storage', async () => {
     bindUsageUser(account('pilot')); await settle()
     recordUsage({ feature: 'pitwall.engineer', event: 'order', id: 'before' })
