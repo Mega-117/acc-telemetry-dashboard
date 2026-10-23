@@ -902,8 +902,10 @@ service cloud.firestore {
         match /rawChunks/{chunkId} {
           allow read: if isAdmin();
 
-          // Public chunk access mirrors session sharing (denormalized field).
-          allow read: if isSignedIn() && resource.data.isPublic == true;
+          // Public chunk access mirrors session sharing (denormalized field). PIP-591: the session
+          // must be public too, so a revoke that raced or failed on the chunks never leaves them readable.
+          allow read: if isSignedIn() && resource.data.isPublic == true
+            && get(/databases/$(database)/documents/users/$(userId)/sessions/$(sessionId)).data.isPublic == true;
 
           // Owner full access.
           allow read, write: if isOwner(userId);

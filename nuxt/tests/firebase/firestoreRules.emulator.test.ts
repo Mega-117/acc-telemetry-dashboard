@@ -1123,3 +1123,22 @@ describe('Pitwall cutover: legacy Firestore protocol is closed for every client'
     }
   })
 })
+
+it('PIP-591 public raw chunks are readable only while their session is public too', async () => {
+  const foreign = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+  const sessionPath = `users/${PILOT_UID}/sessions/pip591-share`
+  const chunkPath = `${sessionPath}/rawChunks/0`
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore()
+    // Stato lasciato da una revoca interrotta: sessione privata, chunk ancora pubblico.
+    await setDoc(doc(db, sessionPath), { isPublic: false, ownerId: PILOT_UID })
+    await setDoc(doc(db, chunkPath), { isPublic: true, idx: 0, chunk: 'x' })
+  })
+  await assertFails(getDoc(doc(foreign, chunkPath)))
+  await assertFails(getDocs(query(collection(foreign, `${sessionPath}/rawChunks`), where('isPublic', '==', true))))
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), sessionPath), { isPublic: true, ownerId: PILOT_UID })
+  })
+  await assertSucceeds(getDoc(doc(foreign, chunkPath)))
+  await assertSucceeds(getDocs(query(collection(foreign, `${sessionPath}/rawChunks`), where('isPublic', '==', true))))
+})
