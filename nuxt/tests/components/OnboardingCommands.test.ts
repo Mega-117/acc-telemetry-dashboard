@@ -136,6 +136,23 @@ describe('OnboardingCommands (PIP-571)', () => {
     wrapper.unmount()
   })
 
+  it('Indietro right after a save cancels the pending move to the next command', async () => {
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } })
+    await wrapper.get('button[data-cmd-wheel]').trigger('click'); await flushPromises()
+    await pressAndSave('togglePalette', 1)
+    expect(wrapper.text()).toContain('Imposta i pulsanti · 2 di 5')
+    // Second command saved, then Indietro and "keep" before the 900 ms tick runs out.
+    const s = mock.bridge.state
+    s.value = { ...s.value, capture: null, bindings: { ...s.value.bindings, nextAction: binding(2) }, operation: { ok: true, saved: true } }
+    await flushPromises()
+    await wrapper.get('[data-cmd-back]').trigger('click'); await flushPromises()
+    await wrapper.get('[data-cmd-keep]').trigger('click'); await flushPromises()
+    expect(wrapper.text()).toContain('Imposta i pulsanti · 2 di 5')
+    vi.advanceTimersByTime(1000); await flushPromises()
+    expect(wrapper.text()).toContain('Imposta i pulsanti · 2 di 5')
+    wrapper.unmount()
+  })
+
   it('an existing assignment can be kept without pressing anything, and Indietro goes back', async () => {
     mock.bridge.state.value.bindings.togglePalette = binding(7)
     const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } })
@@ -165,7 +182,9 @@ describe('OnboardingCommands (PIP-571)', () => {
     const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } })
     await wrapper.get('[data-cmd-later]').trigger('click')
     expect(wrapper.emitted('later')).toBeUndefined()
-    expect(wrapper.text()).toContain('Te lo richiedo al prossimo avvio')
+    // The intro opens by itself only once (22/10): point to where the commands are, no false promise.
+    expect(wrapper.text()).toContain('Impostazioni → Comandi')
+    expect(wrapper.text()).not.toContain('prossimo avvio')
     await wrapper.get('[data-cmd-later-confirm]').trigger('click'); await flushPromises()
     expect(wrapper.emitted('later')).toHaveLength(1)
     wrapper.unmount()

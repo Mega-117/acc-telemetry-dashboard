@@ -56,6 +56,8 @@ const practice = ref(initialPractice())
 const skipped = ref<WheelControlAction[]>([])
 const timers = new Set<ReturnType<typeof setTimeout>>()
 const later = (fn: () => void, ms: number) => { const t = setTimeout(() => { timers.delete(t); fn() }, ms); timers.add(t) }
+// A step the pilot leaves (Indietro, Rifai) must not be advanced later by its own pending timer.
+function cancelPending() { for (const t of timers) clearTimeout(t); timers.clear() }
 
 const current = computed(() => REQUIRED[assignIndex.value]!)
 const currentBinding = computed(() => state.value.bindings[current.value.id])
@@ -97,6 +99,7 @@ function chooseKeyboard() {
 
 function chooseWheel() { screen.value = 'assign'; enterAction(0) }
 function enterAction(index: number) {
+  cancelPending()
   assignIndex.value = index
   error.value = ''
   saved.value = false
@@ -126,6 +129,7 @@ function goNextAction() {
   else startPractice()
 }
 function previousAction() {
+  cancelPending()
   if (state.value.capture) void bridge.cancelCapture()
   if (assignIndex.value > 0) enterAction(assignIndex.value - 1)
   else screen.value = 'choose'
@@ -180,8 +184,7 @@ function askLater() { confirmLater.value = true }
 function postpone() { confirmLater.value = false; void release(); emit('later') }
 function finish() { void release(); emit('done') }
 async function release() {
-  for (const t of timers) clearTimeout(t)
-  timers.clear()
+  cancelPending()
   if (quietTimer) clearTimeout(quietTimer)
   stopVisibility?.(); stopVisibility = null
   await bridge.finishConfiguration()
@@ -348,7 +351,7 @@ onBeforeUnmount(() => { void release() })
 
     <footer v-if="wheelAvailable && screen !== 'ready'" class="cmd__foot">
       <template v-if="confirmLater">
-        <span>Senza pulsanti non usi il pannello rapido in guida. Te lo richiedo al prossimo avvio.</span>
+        <span>Senza pulsanti non usi il pannello rapido in guida. Puoi assegnarli quando vuoi da Impostazioni → Comandi.</span>
         <span class="cmd__foot-actions">
           <button type="button" class="cmd__ghost" @click="confirmLater = false">Li assegno ora</button>
           <button type="button" class="cmd__ghost" data-cmd-later-confirm @click="postpone">Sì, dopo</button>
