@@ -10,6 +10,7 @@ import {
 import type { SessionDocument } from '~/types/telemetry'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { useSessionPickerPages } from '~/composables/useSessionPickerPages'
 import { onHistoryTrack } from '~/services/projections/vehicleHistory'
 import { sessionGame, sessionFilterType } from '~/services/telemetry/gameIdentity'
 import { sessionTiming } from '~/services/telemetry/fuelHistorySummary'
@@ -29,8 +30,11 @@ const emit = defineEmits<{
 
 const telemetryGateway = useTelemetryGateway()
 const { getUserProfile } = useFirebaseAuth()
-const modalSessions = ref<SessionDocument[]>([])
-const isLoadingSessions = ref(false)
+const pages = useSessionPickerPages(
+  (page, pageSize, reset) => telemetryGateway.getSessionsPage(undefined, {}, page, pageSize, reset),
+  () => props.isOpen,
+)
+const { sessions: modalSessions, loading: isLoadingSessions, hasMore: hasMoreSessions, loadError: sessionsLoadError } = pages
 
 // === SHARED LINK INPUT ===
 const sharedLink = ref('')
@@ -154,58 +158,12 @@ function closeModal() {
   emit('close')
 }
 
-const SESSION_PICKER_PAGE_SIZE = 50
-// Una riapertura rapida non mescola le pagine della lettura precedente.
-let loadGeneration = 0
-const loadedPage = ref(0)
-const hasMoreSessions = ref(false)
-const sessionsLoadError = ref(false)
-
-// PIP-591 (X-A05-23): pista e gioco si filtrano dopo la lettura, quindi una sola pagina poteva
-// nascondere le sessioni confrontabili piu' vecchie. La prima pagina resta quella di sempre
-// (stesso costo); "Carica altre sessioni" legge la successiva solo su richiesta, senza limite.
-// Il gioco non va nella query: il pager lo filtra nel client e leggerebbe l'archivio intero.
-async function loadSessionsPage(page: number) {
-  const generation = ++loadGeneration
-  isLoadingSessions.value = true
-  try {
-    const result = await telemetryGateway.getSessionsPage(undefined, {}, page, SESSION_PICKER_PAGE_SIZE, page === 1)
-    if (!props.isOpen || generation !== loadGeneration) return
-    // Il pager assorbe gli errori e restituisce []: conta solo la pagina davvero raggiunta,
-    // cosi' una pagina fallita si riprova invece di essere saltata.
-    if (page > 1 && result.state.currentPage !== page) throw new Error('Pagina non caricata')
-    sessionsLoadError.value = false
-    modalSessions.value = page === 1 ? result.sessions : [...modalSessions.value, ...result.sessions]
-    loadedPage.value = page
-    hasMoreSessions.value = result.state.hasNext === true
-  } catch (e) {
-    if (generation !== loadGeneration) return
-    console.error('[SESSION_PICKER] Failed to load sessions page:', e)
-    sessionsLoadError.value = true
-    if (page === 1) modalSessions.value = []
-  } finally {
-    if (generation === loadGeneration) isLoadingSessions.value = false
-  }
-}
-
-function loadMoreSessions() {
-  if (isLoadingSessions.value || !hasMoreSessions.value) return
-  void loadSessionsPage(loadedPage.value + 1)
-}
-
 watch(
   () => props.isOpen,
   async (isOpen) => {
     if (typeof window === 'undefined') return
-    if (isOpen) {
-      await loadSessionsPage(1)
-    } else {
-      loadGeneration += 1
-      modalSessions.value = []
-      hasMoreSessions.value = false
-      sessionsLoadError.value = false
-      loadedPage.value = 0
-    }
+    if (isOpen) await pages.loadFirst()
+    else pages.reset()
   },
   { immediate: true }
 )
@@ -308,7 +266,7 @@ watch(
             type="button"
             class="spm-load-more"
             :disabled="isLoadingSessions"
-            @click="loadMoreSessions"
+            @click="pages.loadMore"
           >
             {{ isLoadingSessions ? 'Caricamento…' : 'Carica altre sessioni' }}
           </button>
