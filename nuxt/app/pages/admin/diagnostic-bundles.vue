@@ -32,7 +32,12 @@ const origin = resolveDiagnosticsOrigin(useRuntimeConfig().public.diagnosticsIng
 const deps = { getToken, origin }
 const totalBytes = computed(() => items.value.reduce((sum, item) => sum + item.size, 0))
 
+// PIP-591 (X-A05-39): conta solo la risposta dell'ultima richiesta; una piu' lenta, partita con
+// filtri vecchi, non sovrascrive elenco e cursore.
+let loadRevision = 0
+
 async function load(append = false) {
+  const revision = ++loadRevision
   loading.value = true
   errorMessage.value = ''
   try {
@@ -41,12 +46,14 @@ async function load(append = false) {
       date: dateFilter.value,
       cursor: append ? cursor.value : null
     })
+    if (revision !== loadRevision) return
     items.value = append ? [...items.value, ...page.items] : page.items
     cursor.value = page.cursor
   } catch (error: any) {
+    if (revision !== loadRevision) return
     errorMessage.value = error?.message || 'Impossibile leggere i pacchetti.'
   } finally {
-    loading.value = false
+    if (revision === loadRevision) loading.value = false
   }
 }
 

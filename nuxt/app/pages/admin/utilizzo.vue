@@ -15,7 +15,12 @@ async function refresh(period: UsagePeriod = 7) {
   loading.value = true; error.value = ''
   try {
     const next = await loadUsage(nextDays)
-    const nextNames = await loadUsageNames([...new Set(next.map(i => i.uid))])
+    // PIP-591 (X-A05-41): i nomi sono un arricchimento; se Firestore non risponde i dati R2 si
+    // mostrano lo stesso, con i nomi gia' noti (gli altri restano come identificativo).
+    const nextNames = await loadUsageNames([...new Set(next.map(i => i.uid))]).catch((e) => {
+      console.warn('[Utilizzo] Nomi dei piloti non disponibili:', e)
+      return names.value
+    })
     if (disposed || requestId !== id) return
     items.value = next; names.value = nextNames; days.value = nextDays; updatedAt.value = Date.now()
     if (selected.value) void select(selected.value)

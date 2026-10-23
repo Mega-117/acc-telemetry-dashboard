@@ -9,6 +9,10 @@ export const DIAGNOSTIC_BUNDLES_PAGE_SIZE = 100
 
 const KEY = /^diag\/([A-Za-z0-9-]{8,64})\/(\d{4}-\d{2}-\d{2})\/(([a-z][a-z-]{1,15})-\d{8}T\d{6}-[0-9a-f]{8})\.jsonl\.gz$/
 const DAY_MS = 24 * 60 * 60 * 1000
+// PIP-591 (X-A05-38): una risposta che non arriva (o un corpo che non finisce) non blocca il
+// pannello. Lo stesso segnale copre la richiesta e la lettura del corpo.
+export const DIAGNOSTICS_LIST_TIMEOUT_MS = 30_000
+export const DIAGNOSTICS_DOWNLOAD_TIMEOUT_MS = 120_000
 
 export interface DiagnosticBundleItem {
   key: string
@@ -32,7 +36,7 @@ export interface DiagnosticBundlePage {
   cursor: string | null
 }
 
-type Deps = { getToken: () => Promise<string | null>, fetchImpl?: typeof fetch, origin?: string }
+type Deps = { getToken: () => Promise<string | null>, fetchImpl?: typeof fetch, origin?: string, timeoutMs?: number }
 type ListedObject = {
   key: string, size: number, uploaded: string, uid?: string | null, trigger?: string | null, os?: string | null,
   version?: string | null, channel?: string | null
@@ -65,14 +69,39 @@ export function resolveDiagnosticsOrigin(configured?: unknown): string {
   return /^https:\/\/[^/\s]+$/.test(value) || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(value) ? value : DIAGNOSTICS_INGEST_ORIGIN
 }
 
-async function authorizedFetch(path: string, { getToken, fetchImpl = fetch, origin = DIAGNOSTICS_INGEST_ORIGIN }: Deps) {
+function isAbort(error: unknown) {
+  const name = (error as { name?: string } | null)?.name
+  return name === 'AbortError' || name === 'TimeoutError'
+}
+
+/** Richiesta autorizzata al Worker e lettura del corpo, entrambe entro `timeoutMs`. */
+async function authorizedRequest<T>(
+  path: string,
+  { getToken, fetchImpl = fetch, origin = DIAGNOSTICS_INGEST_ORIGIN, timeoutMs = DIAGNOSTICS_LIST_TIMEOUT_MS }: Deps,
+  readBody: (response: Response) => Promise<T>
+): Promise<T> {
   const token = await getToken()
   if (!token) throw new DiagnosticBundlesError('Sessione non disponibile: accedi di nuovo.', 0)
-  const response = await fetchImpl(`${origin}${path}`, { headers: { Authorization: `Bearer ${token}` } })
-  if (response.status === 401) throw new DiagnosticBundlesError('Sessione scaduta: accedi di nuovo.', 401)
-  if (response.status === 403) throw new DiagnosticBundlesError('Questo account non è autorizzato a leggere i pacchetti.', 403)
-  if (!response.ok) throw new DiagnosticBundlesError(`Il servizio pacchetti non risponde (${response.status}).`, response.status)
-  return response
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetchImpl(`${origin}${path}`, { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal })
+    if (response.status === 401) throw new DiagnosticBundlesError('Sessione scaduta: accedi di nuovo.', 401)
+    if (response.status === 403) throw new DiagnosticBundlesError('Questo account non è autorizzato a leggere i pacchetti.', 403)
+    if (!response.ok) throw new DiagnosticBundlesError(`Il servizio pacchetti non risponde (${response.status}).`, response.status)
+    // La lettura del corpo corre contro lo stesso timer: un corpo che non finisce viene interrotto.
+    return await Promise.race([
+      readBody(response),
+      new Promise<never>((_, reject) => controller.signal.addEventListener('abort', () => reject(new DOMException('timeout', 'AbortError')), { once: true })),
+    ])
+  } catch (error) {
+    if (isAbort(error) || controller.signal.aborted) {
+      throw new DiagnosticBundlesError('Il servizio pacchetti non risponde (tempo scaduto). Riprova.', 0)
+    }
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 function toItems(objects: ListedObject[] | undefined): DiagnosticBundleItem[] {
@@ -96,8 +125,8 @@ export async function listDiagnosticBundles(
     limit: String(options.limit ?? DIAGNOSTIC_BUNDLES_PAGE_SIZE)
   })
   if (options.cursor) params.set('cursor', options.cursor)
-  const response = await authorizedFetch(`/v1/admin/list?${params}`, deps)
-  const body = await response.json() as { objects?: ListedObject[], cursor?: string | null }
+  const body = await authorizedRequest(`/v1/admin/list?${params}`, deps,
+    (response) => response.json() as Promise<{ objects?: ListedObject[], cursor?: string | null }>)
   return { items: toItems(body.objects), cursor: body.cursor ?? null }
 }
 
@@ -110,8 +139,8 @@ export async function listDiagnosticBundlesOfDay(
   for (let page = 0; page < maxPages; page += 1) {
     const params = new URLSearchParams({ day, limit: '500' })
     if (cursor) params.set('cursor', cursor)
-    const response = await authorizedFetch(`/v1/admin/list?${params}`, deps)
-    const body = await response.json() as { objects?: ListedObject[], cursor?: string | null, indexVersion?: number }
+    const body = await authorizedRequest(`/v1/admin/list?${params}`, deps,
+      (response) => response.json() as Promise<{ objects?: ListedObject[], cursor?: string | null, indexVersion?: number }>)
     if (body.indexVersion !== 1) throw new DiagnosticBundlesError('Indice per giorno non disponibile.', 400)
     items.push(...toItems(body.objects))
     cursor = body.cursor ?? null
@@ -167,8 +196,8 @@ export async function listRecentDiagnosticBundles(
 
 export async function downloadDiagnosticBundle(deps: Deps, key: string): Promise<Blob> {
   if (!parseBundleKey(key)) throw new Error('Pacchetto non valido.')
-  const response = await authorizedFetch(`/v1/admin/object?key=${encodeURIComponent(key)}`, deps)
-  return await response.blob()
+  return await authorizedRequest(`/v1/admin/object?key=${encodeURIComponent(key)}`,
+    { timeoutMs: DIAGNOSTICS_DOWNLOAD_TIMEOUT_MS, ...deps }, (response) => response.blob())
 }
 
 /** Scarica il pacchetto e lo salva nel browser con un nome riconoscibile. */

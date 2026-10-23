@@ -100,13 +100,35 @@ describe('admin status page (PIP-540)', () => {
     expect(view.get('.issue a').attributes('href')).toBe('/admin-diagnostics')
   })
 
+  it('PIP-591: asks the server for errors and fatals only, and a full page is not "Tutto ok"', async () => {
+    mocks.diagnostics.mockImplementation(async ({ filters }: any) => ({
+      events: [], nextCursor: filters.severity === 'error' ? { receivedAtMs: 1, path: 'p' } : null, estimate: {},
+    }))
+    const view = mountPage()
+    await flushPromises()
+    expect(mocks.diagnostics.mock.calls.map(([options]: any) => options.filters.severity).sort()).toEqual(['error', 'fatal'])
+    expect(view.get('.verdict').classes()).toContain('verdict--warn')
+    expect(view.text()).toContain('Molti errori: ho letto solo i più recenti')
+    expect(view.text()).not.toContain('Nessun problema negli ultimi')
+  })
+
+  it('PIP-591: installations beyond the read limit are not "Tutto ok"', async () => {
+    mocks.snapshot.mockResolvedValue({ ...snapshotWith(installation('pilot-a', 'inst-a')), coverageLimited: true })
+    const view = mountPage()
+    await flushPromises()
+    expect(view.get('.verdict strong').text()).toBe('Nessun problema nei dati letti, ma sono incompleti')
+    expect(view.text()).toContain('Molte installazioni: ne ho lette solo una parte')
+  })
+
   it('says which source could not be read and still shows the rest', async () => {
     mocks.recent.mockRejectedValue(new Error('Failed to fetch'))
     mocks.diagnostics.mockRejectedValue(new Error('quota'))
     const view = mountPage()
     await flushPromises()
     expect(view.get('[role="alert"]').text()).toContain('pacchetti diagnostici, errori segnalati')
-    expect(view.get('.verdict').classes()).toContain('verdict--ok')
+    // PIP-591: con una fonte mancante non si dice "Tutto ok".
+    expect(view.get('.verdict').classes()).toContain('verdict--warn')
+    expect(view.get('.verdict strong').text()).toBe('Nessun problema nei dati letti, ma sono incompleti')
   })
 
   it('test accounts are hidden behind a toggle and a failed download is explained', async () => {
@@ -114,7 +136,7 @@ describe('admin status page (PIP-540)', () => {
     mocks.save.mockRejectedValue(new Error('Sessione scaduta: accedi di nuovo.'))
     const view = mountPage()
     await flushPromises()
-    expect(view.get('.verdict strong').text()).toBe('Tutto ok')
+    expect(view.get('.verdict strong').text()).toBe('Nessun problema nei dati letti, ma sono incompleti')
     expect(view.text()).toContain('ho letto solo i primi 2000')
     expect(view.findAll('.issue')).toHaveLength(0)
     await view.get('.tests__toggle').trigger('click')

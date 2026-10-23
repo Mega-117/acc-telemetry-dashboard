@@ -42,7 +42,7 @@ describe('diagnosticBundlesRepository', () => {
       cursor: 'next'
     }))
     const page = await listDiagnosticBundles({ getToken: async () => 'tok', fetchImpl, origin: 'https://w.test' }, { installationId: 'abcdefgh' })
-    expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining('https://w.test/v1/admin/list?prefix=diag%2Fabcdefgh%2F'), { headers: { Authorization: 'Bearer tok' } })
+    expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining('https://w.test/v1/admin/list?prefix=diag%2Fabcdefgh%2F'), expect.objectContaining({ headers: { Authorization: 'Bearer tok' } }))
     expect(page.items.map((i) => i.size)).toEqual([70, 56])
     expect(page.cursor).toBe('next')
   })
@@ -225,5 +225,26 @@ describe('orphan diagnostic markers', () => {
     expect(new Set(result.items.map(row => row.key))).toEqual(new Set([KEY, legacy]))
     expect(result.items.find(row => row.key === KEY)?.size).toBe(99)
     expect(result.complete).toBe(true)
+  })
+
+  it('PIP-591: una richiesta o un corpo che non arrivano scadono con un messaggio chiaro', async () => {
+    vi.useFakeTimers()
+    try {
+      const never = vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_, reject) => {
+        init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+      }))
+      const listing = listDiagnosticBundles({ getToken: async () => 'tok', fetchImpl: never as unknown as typeof fetch, timeoutMs: 1000 })
+      const listingExpect = expect(listing).rejects.toThrow('tempo scaduto')
+      await vi.advanceTimersByTimeAsync(1001)
+      await listingExpect
+
+      const stuckBody = vi.fn().mockResolvedValue({ ok: true, status: 200, json: () => new Promise(() => {}), blob: () => new Promise(() => {}) })
+      const download = downloadDiagnosticBundle({ getToken: async () => 'tok', fetchImpl: stuckBody, timeoutMs: 1000 }, KEY)
+      const downloadExpect = expect(download).rejects.toThrow('tempo scaduto')
+      await vi.advanceTimersByTimeAsync(1001)
+      await downloadExpect
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

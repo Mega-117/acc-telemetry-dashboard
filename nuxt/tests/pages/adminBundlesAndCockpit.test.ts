@@ -79,6 +79,19 @@ describe('admin diagnostic bundles page', () => {
     expect(view.findAll('tbody tr')).toHaveLength(2)
     expect(view.text()).not.toContain('Carica altri')
   })
+
+  it('PIP-591: a slower earlier search does not overwrite the results of the newer one', async () => {
+    let releaseFirst: (value: unknown) => void = () => {}
+    mocks.list.mockReturnValueOnce(new Promise((resolve) => { releaseFirst = resolve }))
+    const view = mount(BundlesPage, { global: { stubs: { NuxtLink: true } } })
+    mocks.list.mockResolvedValueOnce({ items: [item({ key: 'new-filter' })], cursor: null })
+    await view.findAll('button').find((b) => b.text().includes('Aggiorna'))!.trigger('click')
+    await flushPromises()
+    releaseFirst({ items: [item({ key: 'old-a' }), item({ key: 'old-b' })], cursor: 'old' })
+    await flushPromises()
+    expect(view.findAll('tbody tr')).toHaveLength(1)
+    expect(view.text()).not.toContain('Carica altri')
+  })
 })
 
 describe('admin cockpit scope', () => {
