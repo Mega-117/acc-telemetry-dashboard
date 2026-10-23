@@ -1,4 +1,11 @@
-import { DIAGNOSTICS_INGEST_ORIGIN } from '~/repositories/diagnosticBundlesRepository'
+import { DIAGNOSTICS_INGEST_ORIGIN, resolveDiagnosticsOrigin } from '~/repositories/diagnosticBundlesRepository'
+
+// PIP-591 (X-A07-19): come i pacchetti diagnostici, Utilizzo usa il Worker configurato
+// (NUXT_PUBLIC_DIAGNOSTICS_INGEST_URL, es. Worker locale nei collaudi) e solo altrimenti la
+// produzione. Fuori da un contesto Nuxt (test, chiamate tardive) resta la produzione.
+export function usageOrigin(): string {
+  try { return resolveDiagnosticsOrigin(useRuntimeConfig().public.diagnosticsIngestUrl) } catch { return DIAGNOSTICS_INGEST_ORIGIN }
+}
 import { createUsageCollector } from './usageCore.js'
 
 export interface UsagePreference { enabled: boolean; revision: number }
@@ -38,7 +45,7 @@ export async function usageRequest(route: string, body?: unknown, isCurrent: () 
   check()
   const token = await captured.getIdToken()
   check()
-  const response = await fetch(`${DIAGNOSTICS_INGEST_ORIGIN}${route}`, { method: body === undefined ? 'GET' : 'PUT',
+  const response = await fetch(`${usageOrigin()}${route}`, { method: body === undefined ? 'GET' : 'PUT',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(10000) })
   if (!response.ok) throw Error(`Statistiche di utilizzo non disponibili (${response.status}).`)

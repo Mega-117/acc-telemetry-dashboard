@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-vi.mock('../../app/repositories/diagnosticBundlesRepository', () => ({ DIAGNOSTICS_INGEST_ORIGIN: 'https://usage.invalid' }))
-import { bindUsageUser, recordUsage, usagePreference, usageRequest } from '../../app/services/usage/usageClient'
+vi.mock('../../app/repositories/diagnosticBundlesRepository', () => ({
+  DIAGNOSTICS_INGEST_ORIGIN: 'https://usage.invalid',
+  resolveDiagnosticsOrigin: (configured?: string) => configured || 'https://usage.invalid',
+}))
+import { bindUsageUser, recordUsage, usageOrigin, usagePreference, usageRequest } from '../../app/services/usage/usageClient'
 
 const account = (uid: string) => ({ uid, getIdToken: async () => `token-${uid}` })
 const response = (value: unknown) => ({ ok: true, json: async () => value })
@@ -146,5 +149,17 @@ describe('suspended usage uploads', () => {
     holdToken = false; await usagePreference(false)
     releaseToken('token-A'); await settle()
     expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/summaries/'))).toHaveLength(0)
+  })
+})
+
+describe('usage origin (PIP-591)', () => {
+  afterEach(() => vi.unstubAllGlobals())
+  it('uses the configured Worker, like the diagnostic bundles', () => {
+    vi.stubGlobal('useRuntimeConfig', () => ({ public: { diagnosticsIngestUrl: 'http://127.0.0.1:8787' } }))
+    expect(usageOrigin()).toBe('http://127.0.0.1:8787')
+  })
+  it('falls back to production outside a Nuxt context', () => {
+    vi.stubGlobal('useRuntimeConfig', () => { throw new Error('no nuxt app') })
+    expect(usageOrigin()).toBe('https://usage.invalid')
   })
 })
