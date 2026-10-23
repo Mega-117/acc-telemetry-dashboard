@@ -79,20 +79,53 @@ describe('useSessionSharing', () => {
       await expect(setSessionPublic('session-abc', true)).rejects.toThrow('Not authenticated')
     })
 
-    it('chiama trackedUpdateDoc e non lancia se autenticato', async () => {
-      const { trackedUpdateDoc, trackedGetDocs } = await import('~/composables/useFirebaseTracker')
-      vi.mocked(trackedGetDocs).mockResolvedValue({ docs: [] } as any)
-      vi.mocked(trackedUpdateDoc).mockResolvedValue(undefined)
+    it('PIP-591: sessione e chunk cambiano nello stesso batch, quindi insieme o per niente', async () => {
+      const { trackedGetDocs, trackedWriteBatch, trackedUpdateDoc } = await import('~/composables/useFirebaseTracker')
+      const chunkRefs = [{ id: 'c1' }, { id: 'c2' }]
+      vi.mocked(trackedGetDocs).mockResolvedValue({ docs: chunkRefs.map(ref => ({ ref })) } as any)
+      const batch = { update: vi.fn(), commit: vi.fn(async () => {}) }
+      vi.mocked(trackedWriteBatch).mockReturnValue(batch as any)
 
       mockCurrentUser.value = { uid: 'user-789' }
       const { setSessionPublic } = useSessionSharing()
-
       await expect(setSessionPublic('session-abc', false)).resolves.toBeUndefined()
-      expect(trackedUpdateDoc).toHaveBeenCalledWith(
-        expect.anything(),
-        { isPublic: false },
-        expect.any(String)
-      )
+
+      expect(trackedWriteBatch).toHaveBeenCalledTimes(1)
+      expect(batch.update).toHaveBeenCalledTimes(3) // sessione + 2 chunk
+      expect(batch.update).toHaveBeenCalledWith(chunkRefs[0], { isPublic: false })
+      expect(batch.commit).toHaveBeenCalledTimes(1)
+      expect(trackedUpdateDoc).not.toHaveBeenCalled()
+    })
+
+    it('PIP-591: oltre il limite del batch, in revoca i chunk diventano privati prima della sessione', async () => {
+      const { trackedGetDocs, trackedWriteBatch, trackedUpdateDoc } = await import('~/composables/useFirebaseTracker')
+      vi.mocked(trackedGetDocs).mockResolvedValue({ docs: Array.from({ length: 460 }, (_, i) => ({ ref: { id: `c${i}` } })) } as any)
+      const order: string[] = []
+      vi.mocked(trackedWriteBatch).mockImplementation(() => ({ update: vi.fn(), commit: vi.fn(async () => { order.push('chunks') }) }) as any)
+      vi.mocked(trackedUpdateDoc).mockImplementation(async () => { order.push('session') })
+
+      mockCurrentUser.value = { uid: 'user-789' }
+      const { setSessionPublic } = useSessionSharing()
+      await setSessionPublic('big', false)
+      expect(order).toEqual(['chunks', 'chunks', 'session'])
+
+      order.length = 0
+      await setSessionPublic('big', true)
+      expect(order).toEqual(['session', 'chunks', 'chunks'])
+    })
+
+    it('PIP-591: se i chunk falliscono durante la revoca, la sessione resta pubblica e "Revoca tutto" la ritrova', async () => {
+      const { trackedGetDocs, trackedWriteBatch, trackedUpdateDoc } = await import('~/composables/useFirebaseTracker')
+      vi.mocked(trackedGetDocs).mockResolvedValue({ docs: Array.from({ length: 460 }, (_, i) => ({ ref: { id: `c${i}` } })) } as any)
+      vi.mocked(trackedWriteBatch).mockImplementation(() => ({ update: vi.fn(), commit: vi.fn(async () => { throw new Error('offline') }) }) as any)
+
+      mockCurrentUser.value = { uid: 'user-789' }
+      const { setSessionPublic } = useSessionSharing()
+      await expect(setSessionPublic('big', false)).rejects.toThrow('offline')
+      expect(trackedUpdateDoc).not.toHaveBeenCalled()
+      // clearAllMocks non ripristina le implementazioni: torna al batch che riesce per i test successivi.
+      vi.mocked(trackedWriteBatch).mockImplementation(() => ({ update: vi.fn(), commit: vi.fn(async () => {}) }) as any)
+      vi.mocked(trackedUpdateDoc).mockImplementation(async () => {})
     })
   })
 

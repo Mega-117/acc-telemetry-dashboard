@@ -27,20 +27,34 @@ export function useSessionSharing() {
         if (!userId) throw new Error('Not authenticated')
 
         const sessionRef = doc(db, `users/${userId}/sessions/${sessionId}`)
-        await updateDoc(sessionRef, { isPublic })
-        console.log(`[SHARING] Session ${sessionId} set isPublic=${isPublic}`)
-
         const chunksRef = collection(db, `users/${userId}/sessions/${sessionId}/rawChunks`)
-        const chunksSnap = await getDocs(query(chunksRef))
+        const chunks = (await getDocs(query(chunksRef))).docs
 
-        if (chunksSnap.docs.length > 0) {
-            const batch = trackedWriteBatch(db, CALLER)
-            chunksSnap.docs.forEach(chunkDoc => {
-                batch.update(chunkDoc.ref, { isPublic })
-            })
-            await batch.commit()
-            console.log(`[SHARING] Updated ${chunksSnap.docs.length} chunks with isPublic=${isPublic}`)
+        // PIP-591: sessione e chunk cambiano insieme in un solo batch (atomico, entro il limite di 500).
+        // Oltre il limite l'ordine evita fughe: in revoca i chunk diventano privati PRIMA della sessione,
+        // cosi' un errore lascia la sessione pubblica e "Revoca tutto" la ritrova; in pubblicazione la
+        // sessione va prima, cosi' un errore lascia chunk privati, mai chunk pubblici di una sessione privata.
+        const MAX_CHUNKS_PER_BATCH = 450
+        const commitChunks = async () => {
+            for (let start = 0; start < chunks.length; start += MAX_CHUNKS_PER_BATCH) {
+                const batch = trackedWriteBatch(db, CALLER)
+                chunks.slice(start, start + MAX_CHUNKS_PER_BATCH).forEach(chunkDoc => batch.update(chunkDoc.ref, { isPublic }))
+                await batch.commit()
+            }
         }
+        if (chunks.length < MAX_CHUNKS_PER_BATCH) {
+            const batch = trackedWriteBatch(db, CALLER)
+            batch.update(sessionRef, { isPublic })
+            chunks.forEach(chunkDoc => batch.update(chunkDoc.ref, { isPublic }))
+            await batch.commit()
+        } else if (isPublic) {
+            await updateDoc(sessionRef, { isPublic })
+            await commitChunks()
+        } else {
+            await commitChunks()
+            await updateDoc(sessionRef, { isPublic })
+        }
+        console.log(`[SHARING] Session ${sessionId} set isPublic=${isPublic} with ${chunks.length} chunks`)
     }
 
     /**
