@@ -166,9 +166,9 @@ export async function ensureUserDocument(user: User): Promise<EnsuredUserProfile
     const shouldRepairUserDirectoryFields = needsUserDirectoryFieldRepair(data, user.uid, directoryFields)
     // PIP-591: le Rules vogliono l'email del documento uguale a quella del token. Dopo un cambio email
     // il documento ha ancora la vecchia: ogni scrittura su users/{uid} verrebbe rifiutata, riparazione compresa.
-    // Senza campo email le Rules non chiedono nulla: si ripara solo un'email salvata e diversa.
+    // Senza campo email le Rules non chiedono nulla: si ripara un campo presente (anche null) e diverso.
     const shouldRepairEmail = typeof user.email === 'string' && user.email !== ''
-        && typeof data.email === 'string' && data.email !== user.email
+        && 'email' in data && data.email !== user.email
     const shouldRepairEmailVerification = shouldRepairEmail || data.emailVerified !== user.emailVerified
     const emailPatch = {
         ...(shouldRepairEmail ? { email: user.email } : {}),

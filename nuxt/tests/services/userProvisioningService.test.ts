@@ -191,6 +191,19 @@ describe('ensureUserDocument', () => {
     expect(batchCommitMock).toHaveBeenCalledOnce()
   })
 
+  it('PIP-591: anche un campo email null viene allineato all\'account', async () => {
+    const projections = () => trackedGetDocMock
+      .mockResolvedValueOnce({ exists: () => true, data: () => ({ uid: freshUser.uid, nickname: 'QA Pilot', avatarUrl: null, updatedAt: 'now' }) })
+      .mockResolvedValueOnce({ exists: () => true, data: () => ({ schemaVersion: 1, uid: freshUser.uid, role: 'pilot',
+        coachId: null, nickname: 'QA Pilot', directorySortName: 'qa fresh pilot', searchPrefixes: ['q', 'qa'] }) })
+    trackedGetDocMock.mockResolvedValueOnce({ exists: () => true, data: () => ({ uid: freshUser.uid, role: 'pilot', coachId: null,
+      nickname: 'QA Pilot', directorySortName: 'qa fresh pilot', searchPrefixes: ['q', 'qa'], email: null, emailVerified: true }) })
+    projections()
+    await ensureUserDocument(freshUser)
+    expect(batchSetMock).toHaveBeenCalledWith({ path: 'users/qa-fresh-pilot' },
+      expect.objectContaining({ email: freshUser.email }), { merge: true })
+  })
+
   it('propaga un errore provisioning invece di fingere un profilo pilot pronto', async () => {
     const failure = new Error('firestore unavailable')
     trackedGetDocMock.mockRejectedValueOnce(failure)
