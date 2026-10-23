@@ -947,6 +947,11 @@ function trainingSourceReady(): boolean {
   }
   return true
 }
+// PIP-591 (X-A05-27): "Skippa step" passa dallo stesso controllo di Avanti e Riprendi:
+// dopo un cambio di gioco o sessione l'allenamento non avanza da solo.
+function skipPausedStepIfSourceReady() {
+  if (trainingSourceReady()) skipPausedStep()
+}
 watch(fastState, () => {
   if (!['running', 'expired'].includes(phase.value) || !trainingSourceKey) return
   const live = fastState.value.commonLive
@@ -1431,7 +1436,8 @@ watch(presentationVisible, async (visible) => {
 onBeforeUnmount(() => {
   dryPressureActivity.stop()
   qaBotActivity.stop()
-  clearTimer(); cancelStopHold(); stopLiveStatePolling(); stopFastStatePolling(); stopVoice(); cleanupSize()
+  // PIP-591 (X-A05-28): anche il countdown di avanzamento automatico, o la vecchia istanza avanza dopo lo smontaggio.
+  clearTimer(); cancelAutoAdvance(); cancelStopHold(); stopLiveStatePolling(); stopFastStatePolling(); stopVoice(); cleanupSize()
   if (voicePointNoticeTimer) clearTimeout(voicePointNoticeTimer)
   removeCommandListener?.()
   removePlacementListener?.()
@@ -1905,7 +1911,7 @@ onBeforeUnmount(() => {
                       data-overlay-wheel-action="skip-step"
                       aria-label="Skippa lo step corrente"
                       title="Skippa step"
-                      @click="skipPausedStep"
+                      @click="skipPausedStepIfSourceReady"
                     >
                       Skippa step
                     </button>

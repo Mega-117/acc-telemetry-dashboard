@@ -195,7 +195,11 @@ export function useSessionOrchestrator(
   // pulsa bastano, la voce annunciava un'azione appena fatta dall'utente.
   function pauseSession() {
     if (phase.value !== 'running') return
-    closeShortcutStopConfirm(); tickTimer(); clearTimer(); phase.value = 'paused'
+    closeShortcutStopConfirm(); tickTimer()
+    // PIP-591 (X-A05-26): l'ultimo tick puo' aver gia' chiuso lo step o l'allenamento:
+    // in quel caso vale la scadenza, non la pausa.
+    if (phase.value !== 'running') return
+    clearTimer(); phase.value = 'paused'
     stopVoice()
   }
 

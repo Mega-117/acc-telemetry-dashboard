@@ -188,6 +188,27 @@ describe('useSessionOrchestrator - completamento manuale e skip', () => {
     expect(activeStepIndex.value).toBe(1)
   })
 
+  it('PIP-591: Pausa dopo la scadenza reale, prima del tick, lascia valere la scadenza', () => {
+    const { phase, orchestrator, trackingComplete } = setup()
+    orchestrator.startStep(2)
+    // Il renderer e' in ritardo: l'orologio supera la fine dello step senza che il tick sia girato.
+    vi.setSystemTime(Date.now() + 61_000)
+    orchestrator.pauseSession()
+    expect(phase.value).toBe('completed')
+    expect(trackingComplete).toHaveBeenCalledTimes(1)
+    orchestrator.resumeSession()
+    expect(phase.value).toBe('completed')
+    expect(trackingComplete).toHaveBeenCalledTimes(1)
+  })
+
+  it('PIP-591: Pausa a scadenza di uno step intermedio lascia lo step scaduto, non in pausa', () => {
+    const { phase, orchestrator } = setup()
+    orchestrator.startStep(0)
+    vi.setSystemTime(Date.now() + 61_000)
+    orchestrator.pauseSession()
+    expect(phase.value).toBe('expired')
+  })
+
   it('skipPausedStep sull ultimo step chiude la sessione come completata', () => {
     const { phase, orchestrator } = setup()
     orchestrator.startStep(2)
