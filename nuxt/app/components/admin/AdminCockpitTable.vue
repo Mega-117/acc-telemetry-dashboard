@@ -269,9 +269,11 @@ h2 {
   box-shadow: inset 0 0 0 2px var(--theme-accent);
 }
 
+/* PIP-588: fixed columns fit a 1440 px screen; below that the table scrolls inside its box. */
 table {
   width: 100%;
-  min-width: 1640px;
+  min-width: 1280px;
+  table-layout: fixed;
   border-collapse: collapse;
   color: $text-secondary;
   font-family: $font-primary;
@@ -280,10 +282,12 @@ table {
 
 th,
 td {
-  padding: $spacing-sm $spacing-md;
+  padding: $spacing-sm 10px;
   text-align: left;
   vertical-align: top;
   border-bottom: 1px solid rgba(255, 255, 255, 0.065);
+  // Long ids and codes wrap inside their fixed column instead of widening the table.
+  overflow-wrap: anywhere;
 }
 
 th {
@@ -292,9 +296,18 @@ th {
   z-index: $z-base;
   color: $text-muted;
   font-weight: $font-weight-medium;
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.25;
   background: $bg-secondary;
 }
+
+th:nth-child(1) { width: 14%; }
+th:nth-child(2) { width: 10%; }
+th:nth-child(3) { width: 13%; }
+th:nth-child(n + 4):nth-child(-n + 7) { width: 9%; }
+th:nth-child(8) { width: 8%; }
+th:nth-child(9) { width: 11%; }
+th:nth-child(10) { width: 8%; }
 
 tbody tr {
   transition: background-color 80ms ease-out;
@@ -319,7 +332,7 @@ td > code {
 
 .pilot-cell {
   display: grid;
-  min-width: 180px;
+  min-width: 0;
   gap: $spacing-xs;
 }
 
@@ -335,12 +348,12 @@ code {
 }
 
 code {
-  max-width: 220px;
-  overflow: hidden;
+  // PIP-588: ids and error codes wrap within the fixed column; never cut with an ellipsis.
+  display: block;
+  max-width: 100%;
   color: #c4b5fd;
   font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .secondary {
@@ -353,7 +366,6 @@ code {
   align-items: center;
   gap: $spacing-sm;
   color: $text-secondary;
-  white-space: nowrap;
 }
 
 .status-dot {

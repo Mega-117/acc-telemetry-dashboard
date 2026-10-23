@@ -675,5 +675,18 @@ watch(searchQuery, () => {
   .lh-last, .lr-last {
     display: none;
   }
+
+  .list-header--admin, .list-row--admin {
+    grid-template-columns: minmax(0, 1fr) 56px 118px 88px;
+    padding-inline: 10px;
+  }
+}
+
+/* PIP-588: admin rows have one cell more (version): keep "Visualizza" on the same line.
+   Placed after the generic rules so the admin grids win at the same specificity. */
+@media (max-width: 900px) and (min-width: 601px) {
+  .list-header--admin, .list-row--admin {
+    grid-template-columns: minmax(0, 1fr) 72px 100px 140px 96px;
+  }
 }
 </style>
