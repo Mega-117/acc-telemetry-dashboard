@@ -255,6 +255,16 @@ export function createSessionUploadService(params: {
         const batch = trackedWriteBatch(db, 'SessionUploadService')
 
         const sessionRef = doc(db, `users/${uid}/sessions/${sessionId}`)
+        // PIP-591: la scelta di condivisione (`isPublic`) sopravvive a una nuova sincronizzazione.
+        // Sessione e chunk si scrivono con mergeFields: si sostituiscono per intero i soli campi del
+        // caricamento, il resto resta. I chunk NUOVI devono pero' sapere se la sessione e' condivisa:
+        // se il registro locale non lo dice, una sola lettura del documento, solo in quel caso.
+        let shared = existing?.isPublic === true
+        if (chunksNeedUpdate && existing && existing.isPublic === undefined
+            && chunks.length > Number(existing.rawChunkCount || 0)) {
+          shared = (await getExistingSession(uid, sessionId))?.isPublic === true
+          assertActive()
+        }
         const sessionDocument = {
           fileHash,
           rawDataHash,
@@ -269,7 +279,7 @@ export function createSessionUploadService(params: {
           rawEncoding: existing?.rawEncoding || 'json-string',
           version: (existing?.version || 0) + 1
         }
-        batch.set(sessionRef, sessionDocument)
+        batch.set(sessionRef, sessionDocument, { mergeFields: Object.keys(sessionDocument) })
 
         // PIP-444: `uploads/{fileHash}` non viene piu' scritto. Era un registro di dedupe
         // per hash che nessun lettore consulta (rules senza get, nessun repository/admin):
@@ -278,7 +288,8 @@ export function createSessionUploadService(params: {
         if (chunksNeedUpdate) {
           for (let idx = 0; idx < chunks.length; idx++) {
             const chunkRef = doc(collection(db, `users/${uid}/sessions/${sessionId}/rawChunks`), `${idx}`)
-            batch.set(chunkRef, { idx, chunk: chunks[idx] })
+            const chunkDocument = { idx, chunk: chunks[idx], ...(shared ? { isPublic: true } : {}) }
+            batch.set(chunkRef, chunkDocument, { mergeFields: Object.keys(chunkDocument) })
           }
           const nextChunkIds = new Set(chunks.map((_, idx) => String(idx)))
           for (const existingChunk of existingChunks) {

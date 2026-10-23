@@ -1142,3 +1142,35 @@ it('PIP-591 public raw chunks are readable only while their session is public to
   await assertSucceeds(getDoc(doc(foreign, chunkPath)))
   await assertSucceeds(getDocs(query(collection(foreign, `${sessionPath}/rawChunks`), where('isPublic', '==', true))))
 })
+
+it('PIP-591 a shared session stays shared after a new sync that rewrites and adds chunks', async () => {
+  const owner = testEnv.authenticatedContext(PILOT_UID).firestore()
+  const foreign = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+  const lap = (n: number) => ({ lap_number: n, lap_time_ms: 120000 + n, sector_times_ms: [], validity: 'valid', completeness: 'complete' })
+  const raw = (laps: number) => ({ schema: 'racercore.session', version: 1, game_id: 'acc', session_id: 'pip591-resync', ownerId: PILOT_UID,
+    capabilities: {}, session_info: { track: 'Monza', track_variant: 'gp', car: 'Ferrari', date_start: '2026-10-23T18:00:00Z',
+      session_kind: 'unknown', laps_total: laps },
+    stints: [{ stint_number: 1, laps: Array.from({ length: laps }, (_, i) => lap(i + 1)) }], recording_state: 'stopped',
+    summary: { schema: 'racercore.timing-summary', version: 1, laps, lapsValid: laps, bestLap: 120001, avgCleanLap: null,
+      totalTime: 120000 * laps, stintCount: 1 } })
+  const service = createSessionUploadService({ db: owner, chunkSize: 200, getExistingSession: async (uid: string, id: string) =>
+    (await getDoc(doc(owner, `users/${uid}/sessions/${id}`))).data() ?? null,
+  loadRegistryCache: async () => ({}), canSkipViaRegistry: () => false,
+  listExistingChunks: async (uid: string, id: string) => (await getDocs(collection(owner, `users/${uid}/sessions/${id}/rawChunks`))).docs.map(d => ({ id: d.id, ref: d.ref })) })
+  const first = raw(2)
+  const created = await service.uploadOrUpdateSession(first, JSON.stringify(first), 'pip591.json', PILOT_UID)
+  const path = `users/${PILOT_UID}/sessions/${created.sessionId}`
+  // Condivisione come fa useSessionSharing: sessione e chunk pubblici insieme.
+  const batch = writeBatch(owner)
+  batch.update(doc(owner, path), { isPublic: true })
+  for (const chunk of (await getDocs(collection(owner, `${path}/rawChunks`))).docs) batch.update(chunk.ref, { isPublic: true })
+  await batch.commit()
+  const before = (await getDocs(collection(owner, `${path}/rawChunks`))).size
+  const second = raw(12) // piu' giri: chunk riscritti e chunk nuovi
+  const updated = await service.uploadOrUpdateSession(second, JSON.stringify(second), 'pip591.json', PILOT_UID)
+  expect(updated.status, JSON.stringify(updated)).not.toBe('unchanged')
+  const after = await getDocs(collection(owner, `${path}/rawChunks`))
+  expect(after.size).toBeGreaterThan(before)
+  await assertSucceeds(getDoc(doc(foreign, path)))
+  for (const chunk of after.docs) await assertSucceeds(getDoc(doc(foreign, chunk.ref.path)))
+})
