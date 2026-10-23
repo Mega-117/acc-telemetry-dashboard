@@ -40,6 +40,27 @@ function buildPublicProfilePayload(user: Pick<User, 'uid' | 'displayName' | 'ema
     }
 }
 
+// PIP-591 (X-A06-10): su un profilo pubblico che esiste, le Rules lasciano al proprietario solo
+// nickname, avatarUrl e updatedAt. Aggiungere createdAt a un profilo vecchio che non l'ha faceva
+// rifiutare l'intero batch di provisioning, e con lui l'accesso. La creazione resta completa.
+// Un profilo con uid sbagliato o mancante si ripara solo da admin: null = non toccarlo, cosi'
+// il resto del provisioning va a buon fine.
+export function buildPublicProfileRepair(
+    user: Pick<User, 'uid' | 'displayName' | 'email'>,
+    nickname: string,
+    exists: boolean,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+    current: any
+): Record<string, unknown> | null {
+    const payload = buildPublicProfilePayload(user, nickname)
+    if (!exists) return { ...payload, createdAt: new Date().toISOString() }
+    if (current?.uid !== user.uid) {
+        console.warn('[AUTH] Profilo pubblico con uid non valido: lo ripara un admin.')
+        return null
+    }
+    return { nickname: payload.nickname, avatarUrl: current?.avatarUrl ?? null, updatedAt: payload.updatedAt }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 function sameStringArray(a: any, b: any): boolean {
     if (!Array.isArray(a) || !Array.isArray(b)) return false
@@ -213,14 +234,11 @@ export async function ensureUserDocument(user: User): Promise<EnsuredUserProfile
         if (shouldRepairPilotDirectory) {
             batch.set(pilotDirectoryRef, pilotDirectoryProjection, { merge: true })
         }
-        if (shouldRepairPublicProfile) {
-            batch.set(publicProfileRef, {
-                ...buildPublicProfilePayload(user, nickname),
-                avatarUrl: publicProfileData.avatarUrl ?? null,
-                ...(typeof publicProfileData.createdAt === 'string'
-                    ? { createdAt: publicProfileData.createdAt }
-                    : { createdAt: new Date().toISOString() })
-            }, { merge: true })
+        const publicProfileRepair = shouldRepairPublicProfile
+            ? buildPublicProfileRepair(user, nickname, publicProfileSnap.exists(), publicProfileData)
+            : null
+        if (publicProfileRepair) {
+            batch.set(publicProfileRef, publicProfileRepair, { merge: true })
         }
         await batch.commit()
         if (shouldRepairUserDirectoryFields || shouldRepairEmailVerification) {

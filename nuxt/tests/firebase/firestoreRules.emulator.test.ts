@@ -34,6 +34,7 @@ import {
   isCompletedCanonicalMigrationCheckpoint
 } from '~/services/sync/canonicalMigrationCheckpoint'
 import { createSessionUploadService } from '~/services/sync/sessionUploadService'
+import { buildPublicProfileRepair } from '~/services/auth/userProvisioningService'
 import { refreshSyncProjections, type ProjectionWrite } from '~/services/sync/syncProjectionRefreshService'
 import { inspectFirebaseStructureState } from '~/services/sync/firebaseStructureHealthService'
 import { repairPilotDirectoryFromUser } from '~/services/pilotDirectoryProjectionService'
@@ -1217,4 +1218,26 @@ it('PIP-591 sharing that starts during a sync also covers the chunks that sync a
   expect(after.size).toBeGreaterThan(before)
   await assertSucceeds(getDoc(doc(foreign, path)))
   for (const chunk of after.docs) await assertSucceeds(getDoc(doc(foreign, chunk.ref.path)))
+})
+
+it('PIP-591 the owner can repair an old public profile that has no createdAt', async () => {
+  const db = testEnv.authenticatedContext(PILOT_UID).firestore()
+  const profileRef = doc(db, `publicProfiles/${PILOT_UID}`)
+  // Profilo vecchio: senza createdAt e con un nickname da riallineare.
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), `publicProfiles/${PILOT_UID}`), {
+      uid: PILOT_UID, nickname: 'Vecchio', avatarUrl: null, updatedAt: '2026-01-01T00:00:00.000Z',
+    })
+  })
+  const user = { uid: PILOT_UID, displayName: 'Nuovo', email: 'qa@example.invalid' }
+  const current = (await getDoc(profileRef)).data()
+  // Prima della correzione il ripristino aggiungeva createdAt e le Rules lo rifiutavano.
+  await assertFails(setDoc(profileRef, { ...current, nickname: 'Nuovo', createdAt: '2026-10-24T00:00:00.000Z' }, { merge: true }))
+  await assertSucceeds(setDoc(profileRef, buildPublicProfileRepair(user, 'Nuovo', true, current)!, { merge: true }))
+  expect((await getDoc(profileRef)).data()?.nickname).toBe('Nuovo')
+  // Profilo con uid sbagliato: non si tocca (lo ripara un admin), il resto del provisioning prosegue.
+  expect(buildPublicProfileRepair(user, 'Nuovo', true, { ...current, uid: 'altro' })).toBeNull()
+  // Profilo nuovo: creazione completa, accettata dalle Rules.
+  await testEnv.withSecurityRulesDisabled(async (context) => { await deleteDoc(doc(context.firestore(), `publicProfiles/${PILOT_UID}`)) })
+  await assertSucceeds(setDoc(profileRef, buildPublicProfileRepair(user, 'Nuovo', false, null)!))
 })
