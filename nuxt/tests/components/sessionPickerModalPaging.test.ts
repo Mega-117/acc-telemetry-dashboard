@@ -22,7 +22,7 @@ beforeEach(() => vi.clearAllMocks())
 
 describe('session picker paging (PIP-591)', () => {
   it('opens with one page, the same unfiltered read as before', async () => {
-    mocks.page.mockResolvedValueOnce({ sessions: [session('m1', 'monza')], state: { hasNext: false } })
+    mocks.page.mockResolvedValueOnce({ sessions: [session('m1', 'monza')], state: { hasNext: false, currentPage: 1 } })
     const view = mountPicker()
     await flushPromises()
     expect(mocks.page).toHaveBeenCalledTimes(1)
@@ -33,8 +33,8 @@ describe('session picker paging (PIP-591)', () => {
 
   it('reaches an older comparable session with "Carica altre sessioni"', async () => {
     mocks.page
-      .mockResolvedValueOnce({ sessions: Array.from({ length: 50 }, (_, i) => session(`o${i}`, 'spa')), state: { hasNext: true } })
-      .mockResolvedValueOnce({ sessions: [session('m1', 'monza')], state: { hasNext: false } })
+      .mockResolvedValueOnce({ sessions: Array.from({ length: 50 }, (_, i) => session(`o${i}`, 'spa')), state: { hasNext: true, currentPage: 1 } })
+      .mockResolvedValueOnce({ sessions: [session('m1', 'monza')], state: { hasNext: false, currentPage: 2 } })
     const view = mountPicker()
     await flushPromises()
     expect(view.findAll('.session-row')).toHaveLength(0)
@@ -44,5 +44,23 @@ describe('session picker paging (PIP-591)', () => {
     expect(mocks.page.mock.calls[1]!.slice(1)).toEqual([{}, 2, 50, false])
     expect(view.findAll('.session-row')).toHaveLength(1)
     expect(view.find('.spm-load-more').exists()).toBe(false)
+  })
+
+  it('a failed later page is retried, not skipped', async () => {
+    mocks.page
+      .mockResolvedValueOnce({ sessions: [session('o1', 'spa')], state: { hasNext: true, currentPage: 1 } })
+      // Il pager assorbe l'errore: lista vuota e pagina corrente ancora 1.
+      .mockResolvedValueOnce({ sessions: [], state: { hasNext: true, currentPage: 1 } })
+      .mockResolvedValueOnce({ sessions: [session('m1', 'monza')], state: { hasNext: false, currentPage: 2 } })
+    const view = mountPicker()
+    await flushPromises()
+    await view.get('.spm-load-more').trigger('click')
+    await flushPromises()
+    expect(view.text()).toContain('Caricamento non riuscito')
+    await view.get('.spm-load-more').trigger('click')
+    await flushPromises()
+    expect(mocks.page.mock.calls.map(call => call[2])).toEqual([1, 2, 2])
+    expect(view.findAll('.session-row')).toHaveLength(1)
+    expect(view.text()).not.toContain('Caricamento non riuscito')
   })
 })

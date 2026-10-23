@@ -159,6 +159,7 @@ const SESSION_PICKER_PAGE_SIZE = 50
 let loadGeneration = 0
 const loadedPage = ref(0)
 const hasMoreSessions = ref(false)
+const sessionsLoadError = ref(false)
 
 // PIP-591 (X-A05-23): pista e gioco si filtrano dopo la lettura, quindi una sola pagina poteva
 // nascondere le sessioni confrontabili piu' vecchie. La prima pagina resta quella di sempre
@@ -170,11 +171,17 @@ async function loadSessionsPage(page: number) {
   try {
     const result = await telemetryGateway.getSessionsPage(undefined, {}, page, SESSION_PICKER_PAGE_SIZE, page === 1)
     if (!props.isOpen || generation !== loadGeneration) return
+    // Il pager assorbe gli errori e restituisce []: conta solo la pagina davvero raggiunta,
+    // cosi' una pagina fallita si riprova invece di essere saltata.
+    if (page > 1 && result.state.currentPage !== page) throw new Error('Pagina non caricata')
+    sessionsLoadError.value = false
     modalSessions.value = page === 1 ? result.sessions : [...modalSessions.value, ...result.sessions]
     loadedPage.value = page
     hasMoreSessions.value = result.state.hasNext === true
   } catch (e) {
+    if (generation !== loadGeneration) return
     console.error('[SESSION_PICKER] Failed to load sessions page:', e)
+    sessionsLoadError.value = true
     if (page === 1) modalSessions.value = []
   } finally {
     if (generation === loadGeneration) isLoadingSessions.value = false
@@ -196,6 +203,7 @@ watch(
       loadGeneration += 1
       modalSessions.value = []
       hasMoreSessions.value = false
+      sessionsLoadError.value = false
       loadedPage.value = 0
     }
   },
@@ -294,6 +302,7 @@ watch(
           <div v-if="filteredSessions.length === 0 && !isLoadingSessions" class="spm-empty">
             {{ hasMoreSessions ? 'Nessuna sessione di questa pista tra le più recenti.' : 'Nessuna altra sessione disponibile per questa pista.' }}
           </div>
+          <p v-if="sessionsLoadError" class="spm-empty">Caricamento non riuscito: riprova.</p>
           <button
             v-if="hasMoreSessions"
             type="button"
