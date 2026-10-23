@@ -14,10 +14,10 @@ export function buildSessionShareUrl(params: {
   baseURL: string | null | undefined
 }): string {
   const { location } = params
-  const reachable = !!location && (location.protocol === 'https:' || location.protocol === 'http:')
-    && !LOCAL_HOSTS.has(location.hostname)
+  const reachableOrigin = location && (location.protocol === 'https:' || location.protocol === 'http:')
+    && !LOCAL_HOSTS.has(location.hostname) ? location.origin : null
   // baseURL '/' oppure '/acc-telemetry-dashboard/docs/': sempre con una sola barra ai due capi.
   const path = `/${String(params.baseURL || '').replace(/^\/+|\/+$/g, '')}/`.replace(/^\/\/$/, '/')
-  const base = reachable ? `${location!.origin}${path}` : PUBLIC_SITE_URL
+  const base = reachableOrigin ? `${reachableOrigin}${path}` : PUBLIC_SITE_URL
   return `${base}sessioni/${encodeURIComponent(params.sessionId)}?userId=${encodeURIComponent(params.userId)}`
 }

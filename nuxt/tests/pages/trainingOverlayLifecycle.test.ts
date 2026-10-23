@@ -14,8 +14,7 @@ describe('training overlay lifecycle (PIP-591)', () => {
   })
 
   it('unmounting also stops the auto-advance countdown', () => {
-    const cleanup = source.split('
-').find((line) => line.includes('stopFastStatePolling(); stopVoice(); cleanupSize()'))
+    const cleanup = source.split('\n').find((line) => line.includes('stopFastStatePolling(); stopVoice(); cleanupSize()'))
     expect(cleanup).toContain('clearTimer(); cancelAutoAdvance();')
   })
 })
