@@ -50,6 +50,7 @@ export default defineConfig({
         'app/utils/equipmentSaveOutcome.ts',
         'app/utils/sessionShareUrl.ts',
         'app/composables/useSessionPickerPages.ts',
+        'app/utils/coachLessonPermissions.ts',
         'app/repositories/usageRepository.ts',
         'app/services/usage/usageClient.ts',
         'app/components/admin/AdminUsageView.vue',

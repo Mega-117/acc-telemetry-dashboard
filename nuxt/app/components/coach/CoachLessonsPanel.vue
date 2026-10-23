@@ -5,6 +5,7 @@ import { db } from '~/config/firebase'
 import { ACC_CAR_OPTIONS, ACC_TRACK_OPTIONS } from '~/constants/accCatalog'
 import CoachRaceCalendarPanel from '~/components/coach/CoachRaceCalendarPanel.vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { canCreateCoachLesson, canEditCoachLesson, coachLessonSaveErrorMessage } from '~/utils/coachLessonPermissions'
 import { trackedGetDoc } from '~/composables/useFirebaseTracker'
 import {
   countCoachLessons,
@@ -25,9 +26,10 @@ const props = defineProps<{
 
 interface PilotPrivateProfile {
   equipment?: Record<string, unknown>
+  coachId?: string | null
 }
 
-const { currentUser, userDisplayName } = useFirebaseAuth()
+const { currentUser, userDisplayName, isCoach } = useFirebaseAuth()
 const CUSTOM_OPTION = '__custom__'
 const durationPresets = [
   { label: '30 min', value: 30 },
@@ -79,7 +81,13 @@ const feedbackDraft = ref<CoachFeedbackItem[]>([])
 const isEditingLesson = computed(() => Boolean(editingLessonId.value))
 const activeLesson = computed(() => selectedLesson.value)
 const equipment = computed(() => pilotProfile.value?.equipment || {})
-const canSaveLesson = computed(() => Boolean(form.value.lessonAt && form.value.trackName.trim()) && !isSaving.value)
+// PIP-591 (X-A06-14): azioni offerte solo se le Rules le consentono.
+const lessonPermission = computed(() => ({ isCoach: isCoach.value, uid: currentUser.value?.uid, pilotCoachId: pilotProfile.value?.coachId }))
+const canWriteLessons = computed(() => canCreateCoachLesson(lessonPermission.value))
+const canEditLesson = (lesson: CoachLesson) => canEditCoachLesson({ ...lessonPermission.value, lessonCoachId: lesson.coachId })
+// La modifica parte solo da "Modifica", visibile soltanto all'autore: basta il permesso di scrittura.
+const canSaveLesson = computed(() => Boolean(form.value.lessonAt && form.value.trackName.trim()) && !isSaving.value
+  && canWriteLessons.value)
 const hasActiveHistoryFilters = computed(() => Boolean(
   historyFilters.value.trackName?.trim()
   || historyFilters.value.carName?.trim()
@@ -418,6 +426,9 @@ async function saveLesson() {
     if (updatedLessonId) {
       selectedLesson.value = lessons.value.find((lesson) => lesson.id === updatedLessonId) || lessons.value[0] || null
     }
+  } catch (error) {
+    console.error('[CoachLessonsPanel] Save lesson failed:', error)
+    errorMessage.value = coachLessonSaveErrorMessage(error)
   } finally {
     isSaving.value = false
   }
@@ -626,6 +637,9 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
+          <p v-if="!canWriteLessons && !isLoadingProfile" class="form-error">
+            Solo il coach assegnato a questo pilota può scrivere lezioni: qui puoi leggerle.
+          </p>
           <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
           <div class="form-actions">
             <button class="primary-action" type="submit" :disabled="!canSaveLesson">
@@ -693,7 +707,7 @@ onBeforeUnmount(() => {
                       <h4>Analisi sessione</h4>
                       <p>Informazioni operative registrate dal coach.</p>
                     </div>
-                    <button class="ghost-action ghost-action--compact" type="button" @click="startEditLesson(lesson)">
+                    <button v-if="canEditLesson(lesson)" class="ghost-action ghost-action--compact" type="button" @click="startEditLesson(lesson)">
                       Modifica
                     </button>
                   </header>
