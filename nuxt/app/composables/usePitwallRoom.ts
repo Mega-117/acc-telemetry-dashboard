@@ -170,24 +170,33 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   const availableTargets = computed(() => eligibleSocialDrivers(members.value.filter(member => isPitwallMemberFresh(member, nowTick.value))))
   // PIP-515: true while the recipient was chosen by the system, not the engineer.
   const targetAutomatic = ref(false)
+  // L'esito mostrato appartiene al destinatario: cambiando destinatario si azzera, sia per
+  // scelta dell'ingegnere sia per cambio automatico (PIP-591, X-A05-18).
+  function clearOrderView() {
+    stopOrderWatch?.(); stopOrderWatch = null
+    orderId.value = null; orderStatus.value = null; orderReason.value = null; orderFields.value = {}
+    orderMethod.value = 'standard'; orderDiary.value = ''
+  }
+  function retargetAutomatically(uid: string | null) {
+    if (uid !== selectedTargetUid.value) clearOrderView()
+    selectedTargetUid.value = uid
+  }
   watch(availableTargets, drivers => {
     // Never retarget while an order is on its way to the current recipient.
     const orderInFlight = sending.value || orderStatus.value === 'pending' || orderStatus.value === 'applying'
     const autoFill = !selectedTargetUid.value && !targetTouched.value && drivers.length === 1
     const resolved = resolveSocialTarget(drivers, selectedTargetUid.value, targetTouched.value, targetAutomatic.value && !orderInFlight)
     if (resolved.selectedUid) {
-      selectedTargetUid.value = resolved.selectedUid; targetTouched.value = true
+      retargetAutomatically(resolved.selectedUid); targetTouched.value = true
       if (autoFill) targetAutomatic.value = true
     } else {
-      if (targetAutomatic.value && selectedTargetUid.value && !orderInFlight) { selectedTargetUid.value = null; targetAutomatic.value = false }
+      if (targetAutomatic.value && selectedTargetUid.value && !orderInFlight) { retargetAutomatically(null); targetAutomatic.value = false }
       if (drivers.length > 1) targetTouched.value = true
     }
   }, { flush: 'sync' })
   function selectTarget(uid: string | null) {
     if (sending.value || orderStatus.value === 'pending' || orderStatus.value === 'applying') return
-    stopOrderWatch?.(); stopOrderWatch = null
-    orderId.value = null; orderStatus.value = null; orderReason.value = null; orderFields.value = {}
-    orderMethod.value = 'standard'; orderDiary.value = ''
+    clearOrderView()
     selectedTargetUid.value = uid
     targetTouched.value = true
     targetAutomatic.value = false

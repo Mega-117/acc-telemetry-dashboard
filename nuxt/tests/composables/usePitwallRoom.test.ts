@@ -520,6 +520,22 @@ describe('driver swap without reloading the room', () => {
     expect(link.canSend.value).toBe(false)
   })
 
+  it('PIP-591: an automatic change of recipient does not keep the previous driver outcome', async () => {
+    fakes.roomDoc = room({ membershipModel: 'social', memberUids: ['me', 'popo'] })
+    const a = member({ protocolVersion: 3, connected: true })
+    const b = member({ uid: 'popo', nickname: 'popo', protocolVersion: 3, connected: true, driving: false })
+    const link = await open([a, b])
+    expect(link.selectedTargetUid.value).toBe('me')
+    expect(await link.sendPlan({ tyreSet: 4 })).toBe(true)
+    fakes.pushOrder?.({ status: 'applied', result: { reason: 'ok', fields: { tyreSet: { outcome: 'verified', requested: 4, observed: 4, reason: null, via: 'memory' } } } })
+    expect(link.orderStatus.value).toBe('applied')
+    fakes.pushMembers?.([{ ...a, driving: false }, { ...b, driving: true }])
+    expect(link.selectedTargetUid.value).toBe('popo')
+    expect(link.orderId.value).toBeNull()
+    expect(link.orderStatus.value).toBeNull()
+    expect(link.orderFields.value).toEqual({})
+  })
+
   it('PIP-515: two drivers at the wheel clear an automatic recipient and ask', async () => {
     fakes.roomDoc = room({ membershipModel: 'social', memberUids: ['me', 'popo'] })
     const link = await open([member()])
