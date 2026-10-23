@@ -99,7 +99,8 @@ describe('useSessionSharing', () => {
 
     it('PIP-591: oltre il limite del batch, in revoca i chunk diventano privati prima della sessione', async () => {
       const { trackedGetDocs, trackedWriteBatch, trackedUpdateDoc } = await import('~/composables/useFirebaseTracker')
-      vi.mocked(trackedGetDocs).mockResolvedValue({ docs: Array.from({ length: 460 }, (_, i) => ({ ref: { id: `c${i}` } })) } as any)
+      // Il secondo elenco (dopo la pubblicazione) trova tutti i chunk gia' pubblici: nessuna scrittura in piu'.
+      vi.mocked(trackedGetDocs).mockResolvedValue({ docs: Array.from({ length: 460 }, (_, i) => ({ ref: { id: `c${i}` }, data: () => ({ isPublic: true }) })) } as any)
       const order: string[] = []
       vi.mocked(trackedWriteBatch).mockImplementation(() => ({ update: vi.fn(), commit: vi.fn(async () => { order.push('chunks') }) }) as any)
       vi.mocked(trackedUpdateDoc).mockImplementation(async () => { order.push('session') })
@@ -112,6 +113,28 @@ describe('useSessionSharing', () => {
       order.length = 0
       await setSessionPublic('big', true)
       expect(order).toEqual(['session', 'chunks', 'chunks'])
+    })
+
+    it('PIP-591: dopo la pubblicazione rielenca i chunk e rende pubblici quelli aggiunti da un sync in corso', async () => {
+      const { trackedGetDocs, trackedWriteBatch } = await import('~/composables/useFirebaseTracker')
+      const first = [{ id: 'c0', ref: { id: 'c0' }, data: () => ({}) }]
+      const second = [{ id: 'c0', ref: { id: 'c0' }, data: () => ({ isPublic: true }) }, { id: 'c1', ref: { id: 'c1' }, data: () => ({}) }]
+      vi.mocked(trackedGetDocs).mockResolvedValueOnce({ docs: first } as any).mockResolvedValueOnce({ docs: second } as any)
+      const batches: Array<{ update: ReturnType<typeof vi.fn>, commit: ReturnType<typeof vi.fn> }> = []
+      vi.mocked(trackedWriteBatch).mockImplementation(() => {
+        const batch = { update: vi.fn(), commit: vi.fn(async () => {}) }
+        batches.push(batch)
+        return batch as any
+      })
+
+      mockCurrentUser.value = { uid: 'user-789' }
+      const { setSessionPublic } = useSessionSharing()
+      await setSessionPublic('growing', true)
+
+      expect(trackedGetDocs).toHaveBeenCalledTimes(2)
+      expect(batches).toHaveLength(2)
+      expect(batches[1]!.update).toHaveBeenCalledTimes(1)
+      expect(batches[1]!.update).toHaveBeenCalledWith(second[1]!.ref, { isPublic: true })
     })
 
     it('PIP-591: se i chunk falliscono durante la revoca, la sessione resta pubblica e "Revoca tutto" la ritrova', async () => {

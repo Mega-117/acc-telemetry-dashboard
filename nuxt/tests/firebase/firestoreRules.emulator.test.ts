@@ -1174,3 +1174,47 @@ it('PIP-591 a shared session stays shared after a new sync that rewrites and add
   await assertSucceeds(getDoc(doc(foreign, path)))
   for (const chunk of after.docs) await assertSucceeds(getDoc(doc(foreign, chunk.ref.path)))
 })
+
+it('PIP-591 sharing that starts during a sync also covers the chunks that sync adds', async () => {
+  const owner = testEnv.authenticatedContext(PILOT_UID).firestore()
+  const foreign = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+  const lap = (n: number) => ({ lap_number: n, lap_time_ms: 120000 + n, sector_times_ms: [], validity: 'valid', completeness: 'complete' })
+  const raw = (laps: number) => ({ schema: 'racercore.session', version: 1, game_id: 'acc', session_id: 'pip591-race', ownerId: PILOT_UID,
+    capabilities: {}, session_info: { track: 'Monza', track_variant: 'gp', car: 'Ferrari', date_start: '2026-10-23T19:00:00Z',
+      session_kind: 'unknown', laps_total: laps },
+    stints: [{ stint_number: 1, laps: Array.from({ length: laps }, (_, i) => lap(i + 1)) }], recording_state: 'stopped',
+    summary: { schema: 'racercore.timing-summary', version: 1, laps, lapsValid: laps, bestLap: 120001, avgCleanLap: null,
+      totalTime: 120000 * laps, stintCount: 1 } })
+  let shareDuringRead: string | null = null
+  const service = createSessionUploadService({ db: owner, chunkSize: 200, getExistingSession: async (uid: string, id: string) => {
+    const data = (await getDoc(doc(owner, `users/${uid}/sessions/${id}`))).data() ?? null
+    if (shareDuringRead) {
+      // La condivisione (come useSessionSharing) avviene dopo che l'upload ha letto la sessione privata.
+      const path = shareDuringRead
+      shareDuringRead = null
+      const batch = writeBatch(owner)
+      batch.update(doc(owner, path), { isPublic: true })
+      for (const chunk of (await getDocs(collection(owner, `${path}/rawChunks`))).docs) batch.update(chunk.ref, { isPublic: true })
+      await batch.commit()
+    }
+    return data
+  },
+  loadRegistryCache: async () => ({}), canSkipViaRegistry: () => false,
+  listExistingChunks: async (uid: string, id: string) => (await getDocs(collection(owner, `users/${uid}/sessions/${id}/rawChunks`))).docs.map(d => ({ id: d.id, ref: d.ref })) })
+  const first = raw(2)
+  const created = await service.uploadOrUpdateSession(first, JSON.stringify(first), 'pip591-race.json', PILOT_UID)
+  const path = `users/${PILOT_UID}/sessions/${created.sessionId}`
+  // Gia' condivisa e poi revocata: il documento dice esplicitamente isPublic=false,
+  // quindi l'upload non rilegge la sessione prima del commit.
+  await updateDoc(doc(owner, path), { isPublic: false })
+  const before = (await getDocs(collection(owner, `${path}/rawChunks`))).size
+  shareDuringRead = path
+  const second = raw(12)
+  const updated = await service.uploadOrUpdateSession(second, JSON.stringify(second), 'pip591-race.json', PILOT_UID)
+  expect(updated.status, JSON.stringify(updated)).not.toBe('unchanged')
+  expect(shareDuringRead).toBeNull()
+  const after = await getDocs(collection(owner, `${path}/rawChunks`))
+  expect(after.size).toBeGreaterThan(before)
+  await assertSucceeds(getDoc(doc(foreign, path)))
+  for (const chunk of after.docs) await assertSucceeds(getDoc(doc(foreign, chunk.ref.path)))
+})

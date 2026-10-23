@@ -326,6 +326,37 @@ export function createSessionUploadService(params: {
         assertActive()
         await batch.commit()
         committedResult = { committedStatus, sessionId, projectionDelta, cloudState }
+        // PIP-591: una condivisione partita durante questo upload puo' aver elencato i chunk prima
+        // del commit, lasciando privati quelli NUOVI. Le due parti si coprono a vicenda: la
+        // condivisione, dopo aver reso pubblica la sessione, rielenca i chunk; l'upload, dopo il
+        // commit, rilegge la sessione. Qualunque sia l'ordine, una delle due vede i chunk nuovi.
+        // Solo per una sessione gia' esistente, cresciuta e non condivisa: una lettura.
+        const previousChunkCount = Number(existing?.rawChunkCount || 0)
+        if (chunksNeedUpdate && existing && !shared && chunks.length > previousChunkCount) {
+          // Un errore qui non annulla l'upload gia' salvato: la condivisione resta riparabile
+          // condividendo di nuovo. Il lease si ricontrolla prima di scrivere, fuori dal try.
+          const sharedNow = await getExistingSession(uid, sessionId)
+            .then(session => session?.isPublic === true)
+            .catch((error) => {
+              console.warn('[SessionUploadService] Lettura condivisione dopo il commit non riuscita:', error)
+              return false
+            })
+          assertActive()
+          if (sharedNow) {
+            try {
+              // Firestore: massimo 500 operazioni per batch.
+              for (let start = previousChunkCount; start < chunks.length; start += 450) {
+                const healBatch = trackedWriteBatch(db, 'SessionUploadService')
+                for (let idx = start; idx < Math.min(start + 450, chunks.length); idx++) {
+                  healBatch.update(doc(db, `users/${uid}/sessions/${sessionId}/rawChunks/${idx}`), { isPublic: true })
+                }
+                await healBatch.commit()
+              }
+            } catch (error) {
+              console.warn('[SessionUploadService] Allineamento condivisione chunk non riuscito:', error)
+            }
+          }
+        }
         assertActive()
 
         return {

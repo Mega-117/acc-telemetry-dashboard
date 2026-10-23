@@ -54,6 +54,18 @@ export function useSessionSharing() {
             await commitChunks()
             await updateDoc(sessionRef, { isPublic })
         }
+        if (isPublic) {
+            // PIP-591: un sync in corso puo' aver aggiunto chunk dopo il primo elenco. Si rielenca
+            // ora che la sessione e' pubblica; l'upload copre l'ordine opposto (rilegge la sessione
+            // dopo il proprio commit). Solo i chunk rimasti privati vengono scritti.
+            const added = (await getDocs(query(chunksRef))).docs
+                .filter(chunkDoc => chunkDoc.data()?.isPublic !== true)
+            for (let start = 0; start < added.length; start += MAX_CHUNKS_PER_BATCH) {
+                const batch = trackedWriteBatch(db, CALLER)
+                added.slice(start, start + MAX_CHUNKS_PER_BATCH).forEach(chunkDoc => batch.update(chunkDoc.ref, { isPublic: true }))
+                await batch.commit()
+            }
+        }
         console.log(`[SHARING] Session ${sessionId} set isPublic=${isPublic} with ${chunks.length} chunks`)
     }
 
