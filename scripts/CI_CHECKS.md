@@ -17,10 +17,15 @@ Nella directory `nuxt`, installare le dipendenze con `npm ci`. Tornati nella roo
 python scripts/ci_checks.py --group all
 ```
 
-`--group frontend` esegue typecheck, pipeline, unit test e coverage con emulatore
+`--group frontend` esegue typecheck, lint, pipeline, unit test e coverage con emulatore
 RTDB demo. `--group python` esegue flake8 e pytest. `--list` mostra il piano senza
 eseguirlo. Il gate desktop richiama entrambi e conserva i controlli aggiuntivi
-Electron/logger/emulatori e il lint FE KNOWN esplicito.
+Electron/logger/emulatori.
+
+Il lint e' bloccante dal 23/10/2026 (PIP-132, PIP-591): gli errori gia' esistenti
+`no-explicit-any` e `max-lines` sono in `nuxt/eslint-suppressions.json`, che conta
+per file e regola. Quando si riduce il debito: `npx eslint . --prune-suppressions` in
+locale e commit del file; mai rigenerarlo in CI.
 
 Il runner rifiuta versioni Node/Python e dipendenze Python diverse da quelle
 dichiarate. Su Windows invoca npm col Node selezionato, evitando il Node implicito
