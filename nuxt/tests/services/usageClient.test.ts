@@ -36,6 +36,24 @@ describe('browser usage ownership and preference', () => {
     expect(saved.rows).toEqual([])
   })
 
+  it('PIP-591: opting out stops collection even when the browser refuses to store the choice', async () => {
+    bindUsageUser(account('pilot')); await settle()
+    recordUsage({ feature: 'pitwall.engineer', active: true })
+    await vi.advanceTimersByTimeAsync(60000)
+    const realSet = Storage.prototype.setItem
+    const setSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key: string, value: string) {
+      if (key.startsWith('rc-usage-disabled') || key.startsWith('rc-usage-pending')) throw new DOMException('full', 'QuotaExceededError')
+      return realSet.call(this, key, value)
+    })
+    vi.mocked(fetch).mockRejectedValue(Error('offline'))
+    await expect(usagePreference(false)).rejects.toThrow('offline')
+    recordUsage({ feature: 'pitwall.engineer', event: 'opened', id: 'after-opt-out' })
+    await vi.advanceTimersByTimeAsync(60000)
+    const saved = JSON.parse(localStorage.getItem('rc-usage:pilot') || '{"rows":[]}')
+    expect(saved.rows).toEqual([])
+    setSpy.mockRestore()
+  })
+
   it('coalesces the same active Pitwall role across tabs', async () => {
     bindUsageUser(account('pilot')); await settle()
     recordUsage({ feature: 'pitwall.engineer', active: true })

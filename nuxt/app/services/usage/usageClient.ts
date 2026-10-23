@@ -12,6 +12,21 @@ let preferenceGeneration = 0
 let bindingGeneration = 0
 const bridge = () => typeof window === 'undefined' ? null : (window as Window & { electronAPI?: Bridge }).electronAPI
 
+// PIP-591: il "no" dell'utente vale subito, prima in memoria. localStorage pieno o bloccato
+// (QuotaExceededError, SecurityError) non deve lasciare la raccolta accesa mentre la UI dice spenta.
+const disabledInMemory = new Set<string>()
+const pendingInMemory = new Set<string>()
+const storageGet = (key: string) => { try { return localStorage.getItem(key) } catch { return null } }
+const storageSet = (key: string, value: string) => { try { localStorage.setItem(key, value) } catch { /* veto in memoria */ } }
+const storageRemove = (key: string) => { try { localStorage.removeItem(key) } catch { /* best effort */ } }
+const isDisabled = (owner: string) => disabledInMemory.has(owner) || !!storageGet(`rc-usage-disabled:${owner}`)
+const isPending = (owner: string) => pendingInMemory.has(owner) || !!storageGet(`rc-usage-pending-disable:${owner}`)
+function setDisabled(owner: string, disabled: boolean) {
+  if (disabled) { disabledInMemory.add(owner); storageSet(`rc-usage-disabled:${owner}`, '1') }
+  else { disabledInMemory.delete(owner); storageRemove(`rc-usage-disabled:${owner}`) }
+}
+function clearPending(owner: string) { pendingInMemory.delete(owner); storageRemove(`rc-usage-pending-disable:${owner}`) }
+
 export async function usageRequest(route: string, body?: unknown, isCurrent: () => boolean = () => true): Promise<any> {
   const captured = user, generation = bindingGeneration
   if (!captured) throw Error('Accedi per gestire le statistiche di utilizzo.')
@@ -35,15 +50,14 @@ export async function usagePreference(enabled?: boolean): Promise<UsagePreferenc
   const owner = user.uid
   const generation = enabled === undefined ? preferenceGeneration : ++preferenceGeneration
   if (enabled === false) {
-    localStorage.setItem(`rc-usage-disabled:${owner}`, '1')
-    localStorage.setItem(`rc-usage-pending-disable:${owner}`, '1')
+    setDisabled(owner, true)
+    pendingInMemory.add(owner); storageSet(`rc-usage-pending-disable:${owner}`, '1')
     window.dispatchEvent(new Event('rc-usage-preference'))
   }
   const result = await usageRequest('/v1/usage/preference', enabled === undefined ? undefined : { enabled })
   if (generation !== preferenceGeneration) throw Error('Preferenza cambiata durante la richiesta.')
-  if (enabled !== undefined) localStorage.removeItem(`rc-usage-pending-disable:${owner}`)
-  if (result.enabled) localStorage.removeItem(`rc-usage-disabled:${owner}`)
-  else localStorage.setItem(`rc-usage-disabled:${owner}`, '1')
+  if (enabled !== undefined) clearPending(owner)
+  setDisabled(owner, !result.enabled)
   window.dispatchEvent(new Event('rc-usage-preference'))
   return result
 }
@@ -58,8 +72,6 @@ export function bindUsageUser(next: User | null) {
   stopProducer(); user = next; deliver = null
   if (!next || bridge() || !navigator.locks || typeof BroadcastChannel === 'undefined') return
   const owner = next.uid, tab = crypto.randomUUID(), storageKey = `rc-usage:${owner}`
-  const disabledKey = `rc-usage-disabled:${owner}`
-  const pendingKey = `rc-usage-pending-disable:${owner}`
   const channel = new BroadcastChannel(`rc-usage:${owner}`)
   const states = new Map<string, boolean>()
   const remoteStates = new Map<string, { feature: string; at: number; active: boolean }>()
@@ -71,7 +83,7 @@ export function bindUsageUser(next: User | null) {
     try { localStorage.setItem(storageKey, JSON.stringify(collector.checkpoint())) } catch { /* quota: no crash */ }
   }
   function receive(message: { tab: string; value: UsageSignal }) {
-    if (!collector || preference?.enabled !== true || localStorage.getItem(disabledKey)) return
+    if (!collector || preference?.enabled !== true || isDisabled(owner)) return
     const value = message?.value
     if (!value || !['pitwall.driver', 'pitwall.engineer'].includes(value.feature)) return
     if (typeof value.active === 'boolean') {
@@ -85,22 +97,22 @@ export function bindUsageUser(next: User | null) {
   }
   channel.onmessage = e => receive(e.data)
   function onPreference() {
-    if (localStorage.getItem(disabledKey)) {
+    if (isDisabled(owner)) {
       preference = { enabled: false, revision: preference?.revision || 0 }
-      collector?.setIdentity(owner, { enabled: false }); localStorage.removeItem(storageKey)
+      collector?.setIdentity(owner, { enabled: false }); storageRemove(storageKey)
     }
   }
   window.addEventListener('storage', onPreference)
   window.addEventListener('rc-usage-preference', onPreference)
   async function refresh() {
     if (!collector || ended || user?.uid !== owner) return
-    const generation = preferenceGeneration, pending = localStorage.getItem(pendingKey)
+    const generation = preferenceGeneration, pending = isPending(owner)
     const result = await usageRequest('/v1/usage/preference', pending ? { enabled: false } : undefined)
-    if (ended || user?.uid !== owner || !collector || generation !== preferenceGeneration || (!pending && localStorage.getItem(pendingKey))) return
+    if (ended || user?.uid !== owner || !collector || generation !== preferenceGeneration || (!pending && isPending(owner))) return
     preference = result; collector.setIdentity(owner, result)
-    localStorage.removeItem(pendingKey)
-    if (result.enabled) localStorage.removeItem(disabledKey)
-    if (!result.enabled) { localStorage.setItem(disabledKey, '1'); localStorage.removeItem(storageKey) }
+    clearPending(owner)
+    setDisabled(owner, !result.enabled)
+    if (!result.enabled) storageRemove(storageKey)
   }
   async function flush() {
     if (uploading || !collector) return
@@ -110,7 +122,7 @@ export function bindUsageUser(next: User | null) {
       if (preference?.enabled !== true || !collector) return
       const generation = preferenceGeneration, revision = preference.revision
       const isCurrent = () => !ended && user?.uid === owner && generation === preferenceGeneration
-        && preference?.enabled === true && preference.revision === revision && !localStorage.getItem(disabledKey)
+        && preference?.enabled === true && preference.revision === revision && !isDisabled(owner)
       persist()
       for (const row of collector.exportState().rows.filter((r: { owner: string; preferenceRevision: number }) => r.owner === owner && r.preferenceRevision === preference?.revision)) {
         if (!isCurrent()) break
