@@ -47,11 +47,23 @@ describe('browser usage ownership and preference', () => {
     })
     vi.mocked(fetch).mockRejectedValue(Error('offline'))
     await expect(usagePreference(false)).rejects.toThrow('offline')
-    recordUsage({ feature: 'pitwall.engineer', event: 'opened', id: 'after-opt-out' })
+    // 'order' e' un evento che il collector conta davvero: se la raccolta fosse accesa comparirebbe.
+    recordUsage({ feature: 'pitwall.engineer', event: 'order', id: 'after-opt-out' })
     await vi.advanceTimersByTimeAsync(60000)
     const saved = JSON.parse(localStorage.getItem('rc-usage:pilot') || '{"rows":[]}')
-    expect(saved.rows).toEqual([])
+    expect(JSON.stringify(saved)).not.toContain('pitwall.engineer.order')
     setSpy.mockRestore()
+  })
+
+  it('PIP-591: an opt-out made in another tab stops this tab too, even without storage', async () => {
+    bindUsageUser(account('pilot')); await settle()
+    recordUsage({ feature: 'pitwall.engineer', event: 'order', id: 'before' })
+    await vi.advanceTimersByTimeAsync(60000)
+    expect(localStorage.getItem('rc-usage:pilot')).toContain('pitwall.engineer.order')
+    channels[0].onmessage?.({ data: { preference: { disabled: true, pending: true } } })
+    recordUsage({ feature: 'pitwall.engineer', event: 'order', id: 'after-other-tab' })
+    await vi.advanceTimersByTimeAsync(60000)
+    expect(localStorage.getItem('rc-usage:pilot') || '').not.toContain('pitwall.engineer.order')
   })
 
   it('coalesces the same active Pitwall role across tabs', async () => {

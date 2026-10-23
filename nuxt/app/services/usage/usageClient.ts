@@ -26,6 +26,8 @@ function setDisabled(owner: string, disabled: boolean) {
   else { disabledInMemory.delete(owner); storageRemove(`rc-usage-disabled:${owner}`) }
 }
 function clearPending(owner: string) { pendingInMemory.delete(owner); storageRemove(`rc-usage-pending-disable:${owner}`) }
+// Impostata da bindUsageUser: avvisa le altre schede dello stesso account (BroadcastChannel).
+let sharePreference: ((disabled: boolean, pending: boolean) => void) | null = null
 
 export async function usageRequest(route: string, body?: unknown, isCurrent: () => boolean = () => true): Promise<any> {
   const captured = user, generation = bindingGeneration
@@ -52,12 +54,14 @@ export async function usagePreference(enabled?: boolean): Promise<UsagePreferenc
   if (enabled === false) {
     setDisabled(owner, true)
     pendingInMemory.add(owner); storageSet(`rc-usage-pending-disable:${owner}`, '1')
+    sharePreference?.(true, true)
     window.dispatchEvent(new Event('rc-usage-preference'))
   }
   const result = await usageRequest('/v1/usage/preference', enabled === undefined ? undefined : { enabled })
   if (generation !== preferenceGeneration) throw Error('Preferenza cambiata durante la richiesta.')
   if (enabled !== undefined) clearPending(owner)
   setDisabled(owner, !result.enabled)
+  sharePreference?.(!result.enabled, isPending(owner))
   window.dispatchEvent(new Event('rc-usage-preference'))
   return result
 }
@@ -95,7 +99,18 @@ export function bindUsageUser(next: User | null) {
     if (typeof value.active === 'boolean') states.set(value.feature, value.active)
     const message = { tab, value }; channel.postMessage(message); receive(message)
   }
-  channel.onmessage = e => receive(e.data)
+  // PIP-591: la scelta fatta in un'altra scheda arriva anche qui, pure se localStorage l'ha rifiutata.
+  channel.onmessage = e => {
+    const shared = e.data?.preference
+    if (shared && typeof shared.disabled === 'boolean') {
+      if (shared.disabled) disabledInMemory.add(owner); else disabledInMemory.delete(owner)
+      if (shared.pending) pendingInMemory.add(owner); else pendingInMemory.delete(owner)
+      onPreference()
+      return
+    }
+    receive(e.data)
+  }
+  sharePreference = (disabled, pending) => { try { channel.postMessage({ preference: { disabled, pending } }) } catch { /* closed */ } }
   function onPreference() {
     if (isDisabled(owner)) {
       preference = { enabled: false, revision: preference?.revision || 0 }
@@ -112,6 +127,8 @@ export function bindUsageUser(next: User | null) {
     preference = result; collector.setIdentity(owner, result)
     clearPending(owner)
     setDisabled(owner, !result.enabled)
+    // Conferma del server: le altre schede smettono di ritentare l'opt-out (niente pending vecchi in memoria).
+    sharePreference?.(!result.enabled, false)
     if (!result.enabled) storageRemove(storageKey)
   }
   async function flush() {
@@ -168,7 +185,7 @@ export function bindUsageUser(next: User | null) {
   void acquire()
   stopProducer = () => {
     ended = true; for (const [feature] of states) channel.postMessage({ tab, value: { feature, active: false } })
-    collector?.stop(); persist(); release(); channel.close()
+    collector?.stop(); persist(); release(); sharePreference = null; channel.close()
     clearInterval(heartbeat); clearInterval(checkpoint); clearInterval(upload)
     window.removeEventListener('storage', onPreference); window.removeEventListener('rc-usage-preference', onPreference)
     window.removeEventListener('pagehide', onPageHide)
