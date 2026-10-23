@@ -82,15 +82,16 @@ export function overlayPendingActivity(
         const dateKey = getTelemetryActivityDateKey(session.meta?.date_start)
         if (!dateKey) continue
         const index = dateKeys.indexOf(dateKey)
+        // PIP-591 (X-A05-14): i totali sono quelli dei 7 giorni del grafico; una sessione
+        // fuori finestra non conta ne' nelle barre ne' nei numeri.
+        const dayRow = index >= 0 ? resultData[index] : null
+        if (!dayRow) continue
         const sessionType = session.meta?.session_type
         const bucket = getActivityBucketForSessionType(sessionType, SESSION_TYPES)
         if (!bucket) continue
         resultTotals[bucket].minutes += minutes
         resultTotals[bucket].sessions += 1
-        const dayRow = index >= 0 ? resultData[index] : null
-        if (dayRow) {
-            dayRow[bucket] += minutes
-        }
+        dayRow[bucket] += minutes
     }
 
     return { activity7d: resultData, activityTotals: resultTotals }

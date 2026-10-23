@@ -52,7 +52,8 @@ function makeSession(overrides: {
         meta: {
             track: 'monza',
             car: 'ferrari_296_gt3',
-            date_start: overrides.date_start ?? '2024-05-20T18:00:00',
+            // Oggi, dentro la finestra dei 7 giorni (le sessioni fuori finestra non contano).
+            date_start: overrides.date_start ?? `${buildRecentActivityBuckets(7)[6]!.date}T12:00:00`,
             date_end: null,
             session_type: overrides.session_type ?? 2,
             driver: null
@@ -388,15 +389,16 @@ describe('overlayPendingActivity', () => {
         expect(todayBucket?.race).toBe(30)
     })
 
-    it('sessione fuori dai 7 giorni aggiorna i totali ma non i dati per-giorno', () => {
+    it('PIP-591: sessione fuori dai 7 giorni non conta nei totali e nei dati per-giorno', () => {
         const data = makeEmptyActivity7d(7)
         const totals = makeActivityTotals()
         // Data di 30 giorni fa — fuori dalla finestra
         const oldDate = '2020-01-01'
         const session = makeSession({ session_type: 2, totalTime: 1800000, date_start: `${oldDate}T10:00:00` })
         const result = overlayPendingActivity(data, totals, [session])
-        // I totali aumentano ma nessun bucket della finestra cambia
-        expect(result.activityTotals.race.sessions).toBe(1)
+        // Totali e barre restano coerenti: nessuno dei due cambia.
+        expect(result.activityTotals.race.sessions).toBe(0)
+        expect(result.activityTotals.race.minutes).toBe(0)
         const totalDayRace = result.activity7d.reduce((s, b) => s + b.race, 0)
         expect(totalDayRace).toBe(0)
     })
