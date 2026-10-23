@@ -157,7 +157,10 @@ export function buildStatusSummary(input: {
   function add(rule: Rule, key: string, at: string, ctx: {
     ownerUid: string | null, installationId: string | null, bundle?: StatusIssue['bundle'], count?: number
   }) {
-    const id = `${key}|${rule.title}`
+    // PIP-591 (X-A07-15): anche chi ha subito il problema fa parte del gruppo. Sulla stessa
+    // installazione un account di prova e uno reale restano separati: l'anomalia del pilota
+    // reale non finisce nascosta fra gli account di prova.
+    const id = `${key}|${ctx.ownerUid ?? ''}|${rule.title}`
     const existing = grouped.get(id)
     if (existing) {
       existing.count += ctx.count ?? 1

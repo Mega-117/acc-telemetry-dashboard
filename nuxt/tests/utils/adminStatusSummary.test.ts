@@ -134,6 +134,19 @@ describe('admin status summary (PIP-540)', () => {
     expect(summary.testIssues[0]!.who).toBe('Installazione inst-t')
   })
 
+  it('PIP-591: on a shared installation a real pilot anomaly is not hidden among the test accounts', () => {
+    const summary = run({
+      bundles: [
+        bundle('inst-shared', { uploaderUid: TEST_UID, trigger: 'app.unclean-exit', uploadedAt: hoursAgo(3) }),
+        bundle('inst-shared', { uploaderUid: 'pilot-a', trigger: 'app.unclean-exit', uploadedAt: hoursAgo(2) }),
+      ] as any,
+    })
+    expect(summary.level).toBe('problem')
+    expect(summary.issues).toHaveLength(1)
+    expect(summary.issues[0]!.who).toBe('Mario')
+    expect(summary.testIssues).toHaveLength(1)
+  })
+
   it('counts Windows versions and who sends bundles among real active installations', () => {
     const summary = run({
       installations: [
