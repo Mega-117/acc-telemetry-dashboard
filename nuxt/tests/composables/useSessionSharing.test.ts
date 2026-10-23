@@ -34,6 +34,7 @@ describe('useSessionSharing', () => {
   beforeEach(() => {
     mockCurrentUser.value = null
     vi.clearAllMocks()
+    vi.stubGlobal('useRuntimeConfig', () => ({ app: { baseURL: '/' } }))
   })
 
   // ───────────────────────────────────────────────────

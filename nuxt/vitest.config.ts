@@ -48,6 +48,7 @@ export default defineConfig({
         'app/utils/usageMetrics.ts',
         // PIP-591: esito del salvataggio attrezzatura.
         'app/utils/equipmentSaveOutcome.ts',
+        'app/utils/sessionShareUrl.ts',
         'app/repositories/usageRepository.ts',
         'app/services/usage/usageClient.ts',
         'app/components/admin/AdminUsageView.vue',

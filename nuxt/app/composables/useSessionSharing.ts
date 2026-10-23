@@ -9,6 +9,7 @@ import {
     trackedWriteBatch
 } from './useFirebaseTracker'
 import { db } from '~/config/firebase'
+import { buildSessionShareUrl } from '~/utils/sessionShareUrl'
 
 const CALLER = 'SessionSharing'
 async function getDocs(q: Query) { return trackedGetDocs(q, CALLER) }
@@ -114,8 +115,12 @@ export function useSessionSharing() {
 
         await setSessionPublic(sessionId, true)
 
-        const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
-        return `${baseUrl}/sessioni/${sessionId}?userId=${userId}`
+        return buildSessionShareUrl({
+            sessionId,
+            userId,
+            location: typeof window !== 'undefined' ? window.location : null,
+            baseURL: useRuntimeConfig().app.baseURL,
+        })
     }
 
     return {
