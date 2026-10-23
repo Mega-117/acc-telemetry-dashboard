@@ -8,6 +8,7 @@ import { useTelemetryData } from '~/composables/useTelemetryData'
 import { trackedUpdateDoc } from '~/composables/useFirebaseTracker'
 import { db } from '~/config/firebase'
 import { invalidateTelemetryCaches } from '~/services/cache/telemetryCacheInvalidationService'
+import { resolveEquipmentSaveOutcome } from '~/utils/equipmentSaveOutcome'
 
 const brandBase = useRuntimeConfig().app.baseURL
 
@@ -267,17 +268,21 @@ async function resetHistoricalBests() {
 async function handleSaveEquipment() {
   if (!currentUser.value || !cloudWriteGate.value.allowed) return
   isSaving.value = true
+  // PIP-591 (X-A05-42/43): si conferma solo cio' che e' stato inviato, all'account a cui e'
+  // stato inviato. Modifiche fatte durante l'attesa restano da salvare; un cambio account
+  // durante l'attesa non tocca la pagina del nuovo account.
+  const uid = currentUser.value.uid
+  const sent = cloneEquipment(equipment.value)
 
   try {
-    await trackedUpdateDoc(doc(db, 'users', currentUser.value.uid), {
-      equipment: equipment.value
-    }, 'ProfilePage')
-    updateCachedUserProfile(currentUser.value.uid, {
-      equipment: equipment.value
-    })
-    invalidateTelemetryCaches({ uid: currentUser.value.uid, scope: 'profile' })
-    savedEquipment.value = cloneEquipment(equipment.value)
-    configuredEquipmentKeys.value = Object.keys(equipment.value)
+    await trackedUpdateDoc(doc(db, 'users', uid), { equipment: sent }, 'ProfilePage')
+    updateCachedUserProfile(uid, { equipment: sent })
+    invalidateTelemetryCaches({ uid, scope: 'profile' })
+    const outcome = resolveEquipmentSaveOutcome({ sentUid: uid, currentUid: currentUser.value?.uid, sent, current: equipment.value })
+    if (outcome === 'other-account') return
+    savedEquipment.value = cloneEquipment(sent)
+    configuredEquipmentKeys.value = Object.keys(sent)
+    if (outcome === 'keep-editing') return
     isEditingEquipment.value = false
     saveSuccess.value = true
     setTimeout(() => saveSuccess.value = false, 2000)
