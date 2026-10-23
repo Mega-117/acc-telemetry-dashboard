@@ -130,7 +130,7 @@ export function buildIncludedLapSummary(
   minAverageLaps = 5
 ): LapSeriesSummary {
   const included = points.filter((point) => point.timeSeconds > 0)
-  const valid = included.filter((point) => point.valid && !point.pit)
+  const valid = included.filter((point) => point.valid && !point.pit && !point.raw.pitOut)
   const bestSeconds = valid.reduce<number | null>((best, point) => {
     return best == null ? point.timeSeconds : Math.min(best, point.timeSeconds)
   }, null)

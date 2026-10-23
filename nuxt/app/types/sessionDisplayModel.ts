@@ -36,6 +36,10 @@ export interface SessionDisplayLap {
   delta: string
   valid: boolean
   pit: boolean
+  // PIP-591 (X-A05-24): giro di uscita box e affidabilita' dei settori arrivano fino ai calcoli
+  // del dettaglio. Assenti nei dati vecchi: uscita box = no, settori = affidabili.
+  pitOut?: boolean
+  sectorsReliable?: boolean
   sectors: string[]
   sector_times_ms: number[]
   fuel: number

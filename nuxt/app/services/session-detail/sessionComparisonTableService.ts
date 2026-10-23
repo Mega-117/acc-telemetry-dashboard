@@ -56,6 +56,8 @@ export function buildSessionDetailLaps(
       is_valid: lap.is_valid,
       pit: lap.has_pit_stop,
       has_pit_stop: lap.has_pit_stop,
+      pitOut: lap.pit_out_lap === true,
+      sectorsReliable: lap.sectors_reliable !== false,
       sectors: lap.sector_times_ms.map((sector) => formatLapTime(sector)),
       sector_times_ms: lap.sector_times_ms,
       s1: formatLapTime(lap.sector_times_ms[0]),
@@ -83,8 +85,9 @@ export function buildBestSectorSummary(laps: SessionDetailLap[]): SessionBestSec
   let bestLapMs = Infinity
 
   for (const lap of laps || []) {
-    if (!lap.valid || lap.pit) continue
-    const sectors = lap.sector_times_ms || []
+    if (!lap.valid || lap.pit || lap.pitOut) continue
+    // Settori inaffidabili: il tempo giro vale, i settori no.
+    const sectors = lap.sectorsReliable === false ? [] : lap.sector_times_ms || []
     if (sectors[0] && sectors[0] > 0 && sectors[0] < bestS1) bestS1 = sectors[0]
     if (sectors[1] && sectors[1] > 0 && sectors[1] < bestS2) bestS2 = sectors[1]
     if (sectors[2] && sectors[2] > 0 && sectors[2] < bestS3) bestS3 = sectors[2]

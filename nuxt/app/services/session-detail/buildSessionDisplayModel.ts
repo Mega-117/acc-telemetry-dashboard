@@ -97,6 +97,8 @@ export function buildSessionDisplayModel(params: {
       delta: sessionBestLap ? `+${((lap.lap_time_ms - sessionBestLap) / 1000).toFixed(3)}` : '-',
       valid: lap.is_valid,
       pit: lap.has_pit_stop,
+      pitOut: lap.pit_out_lap === true,
+      sectorsReliable: lap.sectors_reliable !== false,
       sectors: lap.sector_times_ms?.map((sector) => (sector / 1000).toFixed(3)) || ['-', '-', '-'],
       sector_times_ms: lap.sector_times_ms || [],
       fuel: Math.round(lap.fuel_remaining),
