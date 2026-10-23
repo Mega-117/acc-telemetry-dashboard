@@ -321,10 +321,17 @@ function buildLegacyCompatibilitySummary(rawObj: Record<string, unknown>, sessio
       }
     })
 
+    // PIP-591 (X-A04-07): stesso campione del logger e del riepilogo Python: giri entro il 115%
+    // del best di sessione. Media, numero di giri e condizioni vengono tutti da qui.
+    const sessionBestLap = toPositiveNumber(sessionInfo['session_best_lap'])
     const validStintLaps = laps.filter((lap) => {
-      return !!toPositiveNumber(lap?.['lap_time_ms']) && lap?.['is_valid'] && !lap?.['has_pit_stop'] && !lap?.['pit_out_lap']
+      const lapTime = toPositiveNumber(lap?.['lap_time_ms'])
+      return !!lapTime && lap?.['is_valid'] && !lap?.['has_pit_stop'] && !lap?.['pit_out_lap']
+        && (!sessionBestLap || lapTime <= sessionBestLap * 1.15)
     })
-    const avgCleanLap = toPositiveNumber(stint?.['avg_clean_lap'])
+    const avgCleanLap = validStintLaps.length
+      ? Math.trunc(validStintLaps.reduce((sum, lap) => sum + (toPositiveNumber(lap?.['lap_time_ms']) ?? 0), 0) / validStintLaps.length)
+      : toPositiveNumber(stint?.['avg_clean_lap'])
     const historicalEligibility = classifyHistoricalEligibility(stintFuelStart, sessionType, stintType)
     if (!avgCleanLap || validStintLaps.length < 5 || historicalEligibility !== 'race_historical') {
       return
