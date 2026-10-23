@@ -100,20 +100,21 @@ async function loadSharedLink() {
 }
 
 // Filter sessions by same track, exclude current session
-const filteredSessions = computed(() => {
+function isComparable(s: SessionDocument): boolean {
+  // Exclude current session
+  if (s.sessionId === props.excludeSessionId) return false
+  if (props.gameId && sessionGame(s) !== props.gameId) return false
+  if (props.currentTrackId) return onHistoryTrack(s, props.currentTrackId)
+
+  // Match track
   const trackNorm = props.currentTrack.toLowerCase().replace(/[^a-z0-9]/g, '_')
-  
+  const sessionTrack = (s.meta?.track || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
+  return sessionTrack.includes(trackNorm) || trackNorm.includes(sessionTrack)
+}
+
+const filteredSessions = computed(() => {
   return modalSessions.value
-    .filter(s => {
-      // Exclude current session
-      if (s.sessionId === props.excludeSessionId) return false
-      if (props.gameId && sessionGame(s) !== props.gameId) return false
-      if (props.currentTrackId) return onHistoryTrack(s, props.currentTrackId)
-      
-      // Match track
-      const sessionTrack = (s.meta?.track || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
-      return sessionTrack.includes(trackNorm) || trackNorm.includes(sessionTrack)
-    })
+    .filter(isComparable)
     .map(s => {
       const timing = sessionTiming(s)
       const filterType = sessionFilterType(s)
@@ -153,6 +154,12 @@ function closeModal() {
   emit('close')
 }
 
+const SESSION_PICKER_PAGE_SIZE = 50
+const SESSION_PICKER_TARGET = 50
+const SESSION_PICKER_MAX_PAGES = 10
+// Una riapertura rapida non mescola le pagine della lettura precedente.
+let loadGeneration = 0
+
 watch(
   () => props.isOpen,
   async (isOpen) => {
@@ -160,8 +167,19 @@ watch(
     if (isOpen) {
       isLoadingSessions.value = true
       try {
-        const page = await telemetryGateway.getSessionsPage(undefined, {}, 1, 50, true)
-        modalSessions.value = page.sessions
+        // PIP-591 (X-A05-23): la pista si filtra dopo la lettura, quindi una sola pagina globale
+        // poteva nascondere le sessioni confrontabili piu' vecchie. Si leggono altre pagine
+        // (gioco gia' filtrato nella ricerca) finche' ci sono SESSION_PICKER_TARGET sessioni
+        // confrontabili, al massimo SESSION_PICKER_MAX_PAGES pagine.
+        const generation = ++loadGeneration
+        const collected: SessionDocument[] = []
+        for (let page = 1; page <= SESSION_PICKER_MAX_PAGES; page += 1) {
+          const result = await telemetryGateway.getSessionsPage(undefined, { gameId: props.gameId || null }, page, SESSION_PICKER_PAGE_SIZE, page === 1)
+          if (!props.isOpen || generation !== loadGeneration) return
+          collected.push(...result.sessions)
+          if (!result.state.hasNext || collected.filter(isComparable).length >= SESSION_PICKER_TARGET) break
+        }
+        modalSessions.value = collected
       } catch (e) {
         console.error('[SESSION_PICKER] Failed to load sessions page:', e)
         modalSessions.value = []
