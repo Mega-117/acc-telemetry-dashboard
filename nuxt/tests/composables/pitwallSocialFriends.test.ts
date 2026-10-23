@@ -80,3 +80,36 @@ describe('presence subscription recovery', () => {
     presence.stop()
   })
 })
+
+describe('PIP-561 friend diagnostics', () => {
+  const lines = () => (console.info as unknown as { mock: { calls: string[][] } }).mock.calls
+    .map(c => c[0]).filter(t => t.startsWith('[PITWALL_DIAGNOSTIC] ')).map(t => JSON.parse(t.slice(21)))
+  const rows = () => lines().map(l => [l.event, l.operation, l.code ?? null, l.afterCooldown ?? null])
+  it('each action carries its own reason; a request after an expired wait is flagged', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    const s = setup()
+    s.trust.requestLink.mockResolvedValueOnce({ ok: false, code: 'cooldown' } as never)
+    await s.befriend('B')
+    s.friendViews.value = [{ personId: 'B', state: 'friends', mineStatus: 'granted', theirsStatus: 'granted' } as PitwallFriendView]
+    s.trust.decide.mockResolvedValueOnce({ ok: false, code: 'permission-denied' } as never)
+    await s.unfriend('B')
+    s.friendViews.value = []
+    s.trust.requestLink.mockResolvedValueOnce({ ok: true, code: null, afterCooldown: true } as never)
+    await s.befriend('B')
+    expect(rows()).toEqual([
+      ['friend_failed', 'request', 'cooldown', null],
+      ['friend_failed', 'close', 'permission-denied', null],
+      ['friend_requested', 'request', null, true],
+    ])
+    info.mockRestore()
+  })
+  it('a close that writes nothing is not reported as accepted; a plain false stays unknown', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {})
+    const s = setup()
+    await s.unfriend('nobody')
+    s.trust.preAuthorise.mockResolvedValueOnce(false)
+    await s.befriend('C')
+    expect(rows()).toEqual([['friend_failed', 'request', 'unknown', null]])
+    info.mockRestore()
+  })
+})

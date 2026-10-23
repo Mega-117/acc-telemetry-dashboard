@@ -17,7 +17,16 @@ export function createPitwallRealtimeEngineerService(options: { db: Firestore, e
   return service
 }
 export function stopPitwallRealtimeEngineerAccount(uid: string) { instances.get(uid)?.dispose(); instances.delete(uid) }
-const failure = (error: unknown): { ok: false, reason: string } => ({ ok: false, reason: error instanceof Error ? error.message : String(error) })
+/** PIP-561: a short reason code for diagnostics; the text stays for the user. */
+export type PitwallFailureCode = 'cooldown' | 'permission-denied' | 'network' | 'unknown'
+export function pitwallFailureCode(error: unknown): PitwallFailureCode {
+  const text = `${(error as { code?: unknown })?.code ?? ''} ${error instanceof Error ? error.message : String(error)}`.toLowerCase()
+  if (/permission[_ -]?denied/.test(text)) return 'permission-denied'
+  if (/network|offline|disconnect|unavailable|timeout/.test(text)) return 'network'
+  return 'unknown'
+}
+const failure = (error: unknown): { ok: false, reason: string, code: PitwallFailureCode } =>
+  ({ ok: false, reason: error instanceof Error ? error.message : String(error), code: pitwallFailureCode(error) })
 
 function buildService(db: Firestore, uid: string, io: PitwallRealtimeTransport) {
   const profiles = createPitwallProfileCache(db)
@@ -30,8 +39,11 @@ function buildService(db: Firestore, uid: string, io: PitwallRealtimeTransport) 
   const ownedStops = new Set<() => void>()
 
   async function requestLink(driverUid: string, requestedScope: PitwallGrantScope = 'once', note: string | null = null) {
+    // PIP-561: a request after an expired wait, also when the write landed but its answer was lost.
+    let afterCooldown = false
     try {
       const existing = await io.read<PitwallGrant>(path(driverUid, uid))
+      afterCooldown = existing?.status === 'revoked' && existing.cooldown === true
       if (valid(existing)) return { ok: true as const, alreadyGranted: true }
       if (existing?.status === 'pending') return { ok: true as const, alreadyGranted: false }
       const wait = cooldownFailure(existing)
@@ -39,20 +51,20 @@ function buildService(db: Firestore, uid: string, io: PitwallRealtimeTransport) 
       const request = buildPitwallGrantRequest(driverUid, uid, stamp(), note, requestedScope)
       if (!request) throw new Error('Pilota non valido.')
       await io.write('', { [path(driverUid, uid)]: request.data, [`outgoing/${uid}/${driverUid}`]: true })
-      return { ok: true as const, alreadyGranted: false }
+      return { ok: true as const, alreadyGranted: false, afterCooldown }
     } catch (error) {
       // Another tab/request may have won between the read and atomic write.
       // Success requires an observed existing request, never just a denied write.
       const current = await io.read<PitwallGrant>(path(driverUid, uid)).catch(() => null)
       if (valid(current)) return { ok: true as const, alreadyGranted: true }
-      if (current?.status === 'pending') return { ok: true as const, alreadyGranted: false }
+      if (current?.status === 'pending') return { ok: true as const, alreadyGranted: false, afterCooldown }
       return cooldownFailure(current) ?? failure(error)
     }
   }
   /** PIP-561: the Rules refuse a request during the wait; say how long instead of a permission error. */
   function cooldownFailure(grant: PitwallGrant | null) {
     const retryAtMs = pitwallRequestRetryAtMs(grant, io.serverNow())
-    return retryAtMs == null ? null : { ok: false as const, reason: pitwallRequestWaitMessage(retryAtMs, io.serverNow()), retryAtMs }
+    return retryAtMs == null ? null : { ok: false as const, reason: pitwallRequestWaitMessage(retryAtMs, io.serverNow()), retryAtMs, code: 'cooldown' as const }
   }
   async function withdraw(driverUid: string) {
     try {

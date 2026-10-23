@@ -7,6 +7,10 @@ export interface PitwallDiagnosticContext {
   connectionId?: string
   targetConnectionId?: string
   reason?: string | null
+  /** PIP-561 friend actions: what was tried and why it failed, never who. */
+  operation?: 'request' | 'close'
+  code?: string | null
+  afterCooldown?: boolean
 }
 
 /** Correlation only: no strategy payload, nickname, credentials or telemetry. */

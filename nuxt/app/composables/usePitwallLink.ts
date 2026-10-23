@@ -37,6 +37,14 @@ export interface PitwallFieldOutcome {
   dragged?: boolean
 }
 
+/** PIP-561: result of one permission action, with a short reason code for diagnostics. */
+export interface PitwallActionOutcome {
+  ok: boolean
+  code: string | null
+  /** A request sent again after the 24 h wait had expired. */
+  afterCooldown?: boolean
+}
+
 export interface PitwallLinkOptions {
   /** Uid dell'ingegnere collegato. Null finche' non e' autenticato. */
   engineerUid: () => string | null
@@ -54,6 +62,9 @@ export function usePitwallLink(options: PitwallLinkOptions) {
   const loading = ref(false)
   const sending = ref(false)
   const rawError = ref<string | null>(null)
+  // PIP-561: each action returns its own outcome (no shared "last failure" state).
+  const codeOf = (result: object) => ('code' in result && typeof result.code === 'string' ? result.code : 'unknown')
+  const failed = (code: string): PitwallActionOutcome => ({ ok: false, code })
   // Cio' che legge l'ingegnere e' la frase tradotta, non il gergo del servizio.
   const lastError = computed(() => describePitwallLinkError(rawError.value))
 
@@ -165,17 +176,17 @@ export function usePitwallLink(options: PitwallLinkOptions) {
    * "sempre". Qualunque rifiuto diventa un messaggio in pagina: un errore di
    * permessi non deve mai propagarsi e far cadere la schermata.
    */
-  async function requestLink(driverUid: string, scope: PitwallGrantScope = 'once'): Promise<boolean> {
+  async function requestLinkOutcome(driverUid: string, scope: PitwallGrantScope = 'once'): Promise<PitwallActionOutcome> {
     const engineer = service()
     if (!engineer) {
       rawError.value = 'Devi essere collegato al tuo account.'
-      return false
+      return failed('auth-required')
     }
     try {
       const result = await engineer.requestLink(driverUid, scope)
       if (!result.ok) {
         rawError.value = result.reason
-        return false
+        return failed(codeOf(result))
       }
       notice.value = result.alreadyGranted
         ? 'Sei gia autorizzato da questo pilota.'
@@ -183,31 +194,33 @@ export function usePitwallLink(options: PitwallLinkOptions) {
             ? 'Richiesta inviata: hai chiesto il collegamento permanente.'
             : 'Richiesta inviata: hai chiesto il collegamento per oggi.')
       if (!stopGrantedWatch) await refreshPilots()
-      return true
+      return { ok: true, code: null, afterCooldown: 'afterCooldown' in result && result.afterCooldown === true }
     } catch (error) {
       rawError.value = (error as Error)?.message || 'Richiesta non riuscita.'
-      return false
+      return failed('unknown')
     }
   }
 
   /** Ritira una richiesta in attesa (o rinuncia a un collegamento). */
-  async function withdrawRequest(driverUid: string): Promise<boolean> {
+  async function withdrawRequestOutcome(driverUid: string): Promise<PitwallActionOutcome> {
     const engineer = service()
-    if (!engineer) { rawError.value = 'Devi essere collegato al tuo account.'; return false }
+    if (!engineer) { rawError.value = 'Devi essere collegato al tuo account.'; return failed('auth-required') }
     try {
       const result = await engineer.withdraw(driverUid)
       if (!result.ok) {
         rawError.value = result.reason
-        return false
+        return failed(codeOf(result))
       }
       notice.value = 'Richiesta ritirata.'
       if (!stopGrantedWatch) await refreshPilots()
-      return true
+      return { ok: true, code: null }
     } catch (error) {
       rawError.value = (error as Error)?.message || 'Ritiro non riuscito.'
-      return false
+      return failed('unknown')
     }
   }
+  const requestLink = async (driverUid: string, scope: PitwallGrantScope = 'once') => (await requestLinkOutcome(driverUid, scope)).ok
+  const withdrawRequest = async (driverUid: string) => (await withdrawRequestOutcome(driverUid)).ok
 
   /**
    * Invia la strategia al pilota selezionato e segue l'ordine fino all'esito.
@@ -299,19 +312,19 @@ export function usePitwallLink(options: PitwallLinkOptions) {
    * Il pilota concede o toglie: e' l'unico che puo' deciderlo. Concedendo
    * sceglie la portata: "solo per oggi" scade da solo, "sempre" resta.
    */
-  async function decide(
+  async function decideOutcome(
     requesterUid: string,
     decision: 'granted' | 'revoked',
     scope: PitwallGrantScope = 'always',
     expiresAtMs: number | null = null
-  ): Promise<boolean> {
+  ): Promise<PitwallActionOutcome> {
     const engineer = service()
-    if (!engineer) { rawError.value = 'Devi essere collegato al tuo account.'; return false }
+    if (!engineer) { rawError.value = 'Devi essere collegato al tuo account.'; return failed('auth-required') }
     try {
       const result = await engineer.decideRequest(requesterUid, decision, scope, expiresAtMs)
       if (!result.ok) {
         rawError.value = result.reason
-        return false
+        return failed(codeOf(result))
       }
       notice.value = decision === 'granted'
         ? null
@@ -319,35 +332,39 @@ export function usePitwallLink(options: PitwallLinkOptions) {
       // L'elenco si aggiorna da solo tramite l'ascolto; si rilegge solo se
       // quell'ascolto non e' attivo, per non pagare due volte la stessa cosa.
       if (!stopIncomingWatch) await refreshIncoming()
-      return true
+      return { ok: true, code: null }
     } catch (error) {
       rawError.value = (error as Error)?.message || 'Decisione non riuscita.'
-      return false
+      return failed('unknown')
     }
   }
 
   /** Autorizza qualcuno in anticipo, senza attendere che chieda. */
-  async function preAuthorise(
+  async function preAuthoriseOutcome(
     uid: string,
     scope: PitwallGrantScope = 'always',
     expiresAtMs: number | null = null
-  ): Promise<boolean> {
+  ): Promise<PitwallActionOutcome> {
     const engineer = service()
-    if (!engineer) { rawError.value = 'Devi essere collegato al tuo account.'; return false }
+    if (!engineer) { rawError.value = 'Devi essere collegato al tuo account.'; return failed('auth-required') }
     try {
       const result = await engineer.preAuthorise(uid, scope, expiresAtMs)
       if (!result.ok) {
         rawError.value = result.reason
-        return false
+        return failed(codeOf(result))
       }
       notice.value = null
       if (!stopIncomingWatch) await refreshIncoming()
-      return true
+      return { ok: true, code: null }
     } catch (error) {
       rawError.value = (error as Error)?.message || 'Pre-autorizzazione non riuscita.'
-      return false
+      return failed('unknown')
     }
   }
+  const decide = async (requesterUid: string, decision: 'granted' | 'revoked', scope: PitwallGrantScope = 'always', expiresAtMs: number | null = null) =>
+    (await decideOutcome(requesterUid, decision, scope, expiresAtMs)).ok
+  const preAuthorise = async (uid: string, scope: PitwallGrantScope = 'always', expiresAtMs: number | null = null) =>
+    (await preAuthoriseOutcome(uid, scope, expiresAtMs)).ok
 
   /** Cambia l'orario di un "solo per oggi" gia' concesso: solo il pilota puo'. */
   async function setExpiry(uid: string, expiresAtMs: number): Promise<void> {
@@ -471,5 +488,9 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     decide,
     preAuthorise,
     setExpiry,
+    requestLinkOutcome,
+    withdrawRequestOutcome,
+    decideOutcome,
+    preAuthoriseOutcome,
   }
 }

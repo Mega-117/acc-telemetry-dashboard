@@ -121,7 +121,7 @@ function makeLink() {
 function makeTrust() {
   const incomingRef = ref<ReturnType<typeof incoming>[]>([])
   const outgoingRef = ref<ReturnType<typeof outgoing>[]>([])
-  return {
+  const trust = {
     incoming: incomingRef,
     outgoing: outgoingRef,
     pendingIncoming: computed(() => incomingRef.value.filter(entry => entry.status === 'pending')),
@@ -142,6 +142,16 @@ function makeTrust() {
     stop: vi.fn(),
     notice: ref<string | null>(null),
     lastError: ref<string | null>(null),
+  }
+  // PIP-561: the store passes the per-call outcome methods to the friend actions;
+  // they delegate to the same spies so existing expectations keep working.
+  const asOutcome = (ok: boolean) => ({ ok, code: ok ? null : 'unknown' })
+  return {
+    ...trust,
+    requestLinkOutcome: async (...a: Parameters<typeof trust.requestLink>) => asOutcome(await trust.requestLink(...a)),
+    withdrawRequestOutcome: async (...a: Parameters<typeof trust.withdrawRequest>) => asOutcome(await trust.withdrawRequest(...a)),
+    preAuthoriseOutcome: async (...a: Parameters<typeof trust.preAuthorise>) => asOutcome(await trust.preAuthorise(...a)),
+    decideOutcome: async (...a: Parameters<typeof trust.decide>) => asOutcome(await trust.decide(...a)),
   }
 }
 

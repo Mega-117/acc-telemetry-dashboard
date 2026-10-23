@@ -123,10 +123,20 @@ describe('RTDB engineer relationships and event-only discovery', () => {
     h.values.set('grants/driver/me', { ...grant(), status: 'revoked', closedAtMs: Date.now() - 20 * 60_000, cooldown: true })
     expect(await h.service.requestLink('driver')).toMatchObject({ ok: false, reason: 'Potrai inviare di nuovo la richiesta tra 23 h 40 min.', retryAtMs: expect.any(Number) })
     expect(h.io.write).toHaveBeenCalledTimes(writes)
+    expect(await h.service.requestLink('driver')).toMatchObject({ code: 'cooldown' })
     // A denied write that raced the close still reports the wait, not a permission error.
     h.values.set('grants/driver/me', { ...grant(), status: 'revoked', closedAtMs: Date.now() - 25 * 60 * 60_000, cooldown: true })
     h.io.write.mockImplementationOnce(async () => { h.values.set('grants/driver/me', { ...grant(), status: 'revoked', closedAtMs: Date.now(), cooldown: true }); throw new Error('PERMISSION_DENIED') })
     expect(await h.service.requestLink('driver')).toMatchObject({ ok: false, reason: 'Potrai inviare di nuovo la richiesta tra 24 h.' })
+    // After the wait the request is written and flagged; permission errors keep their own code.
+    h.values.set('grants/driver/me', { ...grant(), status: 'revoked', closedAtMs: Date.now() - 25 * 60 * 60_000, cooldown: true })
+    expect(await h.service.requestLink('driver')).toMatchObject({ ok: true, afterCooldown: true })
+    // The write landed but its answer was lost: still a request after the wait.
+    h.values.set('grants/driver/me', { ...grant(), status: 'revoked', closedAtMs: Date.now() - 25 * 60 * 60_000, cooldown: true })
+    h.io.write.mockImplementationOnce(async () => { h.values.set('grants/driver/me', { ...grant(), status: 'pending' }); throw new Error('network timeout') })
+    expect(await h.service.requestLink('driver')).toMatchObject({ ok: true, afterCooldown: true })
+    h.io.write.mockRejectedValueOnce(new Error('PERMISSION_DENIED: Permission denied'))
+    expect(await h.service.decideRequest('peer', 'revoked')).toMatchObject({ ok: false, code: 'permission-denied' })
     h.service.dispose()
   })
   it('requests and updates permissions only for explicit actions, returns errors without retry', async () => {
@@ -143,7 +153,7 @@ describe('RTDB engineer relationships and event-only discovery', () => {
     expect((await h.service.updateGrantExpiry('driver', Date.now() - 1)).ok).toBe(false)
     expect((await h.service.updateGrantExpiry('driver', Date.now() + 5000)).ok).toBe(true)
     h.io.write.mockRejectedValueOnce(new Error('quota'))
-    expect(await h.service.withdraw('driver')).toEqual({ ok: false, reason: 'quota' })
+    expect(await h.service.withdraw('driver')).toEqual({ ok: false, reason: 'quota', code: 'unknown' })
     expect((await h.service.sendOrder({})).ok).toBe(false)
     const order = vi.fn(); h.service.watchOrder('driver', 'old', order)(); expect(order).toHaveBeenCalledWith(null)
     h.service.dispose()

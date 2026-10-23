@@ -12,14 +12,18 @@ import { emitPitwallDiagnostic } from '~/services/pitwall/pitwallDiagnostics'
 import { pitwallFriendActions, type PitwallFriendView } from '~/services/pitwall/pitwallFriends'
 import type { PitwallRoom } from '~/services/pitwall/pitwallRoomContract'
 
+/** PIP-561: an action answers yes/no or, better, its own outcome with a reason code. */
+type ActionResult = boolean | { ok: boolean, code: string | null, afterCooldown?: boolean }
+const outcome = (value: ActionResult) => typeof value === 'boolean' ? { ok: value, code: value ? null : 'unknown', afterCooldown: false } : value
+
 export interface PitwallFriendActionDeps {
   uid: () => string | null
   friendViews: Ref<PitwallFriendView[]>
   trust: {
-    preAuthorise: (uid: string, scope: 'always' | 'once', expiresAtMs: number | null) => Promise<boolean>
-    requestLink: (uid: string, scope: 'always' | 'once') => Promise<boolean>
-    decide: (uid: string, decision: 'granted' | 'revoked') => Promise<boolean>
-    withdrawRequest: (uid: string) => Promise<boolean>
+    preAuthorise: (uid: string, scope: 'always' | 'once', expiresAtMs: number | null) => Promise<ActionResult>
+    requestLink: (uid: string, scope: 'always' | 'once') => Promise<ActionResult>
+    decide: (uid: string, decision: 'granted' | 'revoked') => Promise<ActionResult>
+    withdrawRequest: (uid: string) => Promise<ActionResult>
   }
   link: {
     rooms: Ref<PitwallRoom[]>
@@ -38,11 +42,15 @@ export function createPitwallFriendActions({ uid, friendViews, trust, link }: Pi
     const account = uid()
     if (!account) return false
     link.notice.value = null
-    const context = { uid: uid() ?? undefined, peerUid: personId }
-    if (!await trust.preAuthorise(personId, 'always', null) || uid() !== account) { emitPitwallDiagnostic('friend_failed', context); return false }
-    if (!before?.theyAllow && !await trust.requestLink(personId, 'always')) { emitPitwallDiagnostic('friend_failed', context); return false }
+    const context = { uid: uid() ?? undefined, peerUid: personId, operation: 'request' as const }
+    const failed = (code: string | null) => emitPitwallDiagnostic('friend_failed', { ...context, code: code ?? 'unknown' })
+    const authorised = outcome(await trust.preAuthorise(personId, 'always', null))
+    if (!authorised.ok || uid() !== account) { if (!authorised.ok) failed(authorised.code); return false }
+    const requested = before?.theyAllow ? null : outcome(await trust.requestLink(personId, 'always'))
+    if (requested && !requested.ok) { failed(requested.code); return false }
     if (uid() !== account) return false
-    emitPitwallDiagnostic(before?.theyAllow ? 'friend_accepted' : 'friend_requested', context)
+    emitPitwallDiagnostic(before?.theyAllow ? 'friend_accepted' : 'friend_requested',
+      { ...context, afterCooldown: requested?.afterCooldown === true })
     link.notice.value = before?.theyAllow
       ? null
       : 'Richiesta inviata: quando accetta, siete amici.'
@@ -55,13 +63,23 @@ export function createPitwallFriendActions({ uid, friendViews, trust, link }: Pi
     if (!account) return false
     const actions = pitwallFriendActions(before)
     link.notice.value = null
-    if (actions.revokeMine && !await trust.decide(personId, 'revoked')) return false
+    const context = { uid: uid() ?? undefined, peerUid: personId, operation: 'close' as const }
+    // PIP-561: a refused close (e.g. old client against the 24 h Rules) must leave a trace.
+    const failed = (code: string | null) => emitPitwallDiagnostic('friend_failed', { ...context, code: code ?? 'unknown' })
+    if (actions.revokeMine) {
+      const revoked = outcome(await trust.decide(personId, 'revoked'))
+      if (!revoked.ok) { failed(revoked.code); return false }
+    }
     if (uid() !== account) return false
-    if (actions.withdrawTheirs && !await trust.withdrawRequest(personId)) return false
+    if (actions.withdrawTheirs) {
+      const withdrawn = outcome(await trust.withdrawRequest(personId))
+      if (!withdrawn.ok) { failed(withdrawn.code); return false }
+    }
     if (uid() !== account) return false
     // I servizi parlano di permessi; l'utente ha tolto un amico o una richiesta.
     link.notice.value = before?.state === 'friends' ? 'Non siete più amici.' : 'Richiesta annullata.'
-    emitPitwallDiagnostic('friend_revoked', { uid: uid() ?? undefined, peerUid: personId })
+    // Only a close that actually wrote something counts as accepted by the Rules.
+    if (actions.revokeMine || actions.withdrawTheirs) emitPitwallDiagnostic('friend_revoked', context)
     return true
   }
 

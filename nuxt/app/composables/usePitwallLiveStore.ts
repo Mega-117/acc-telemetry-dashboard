@@ -294,7 +294,11 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
   ))
 
   // ---- Amici: chiedere, accettare, togliere (usePitwallFriendActions) --------
-  const { befriend, unfriend } = createPitwallFriendActions({ uid, friendViews, trust, link })
+  // PIP-561: the friend actions use the per-call outcomes, so diagnostics carry the right reason.
+  const { befriend, unfriend } = createPitwallFriendActions({ uid, friendViews, link, trust: {
+    preAuthorise: trust.preAuthoriseOutcome, requestLink: trust.requestLinkOutcome,
+    decide: trust.decideOutcome, withdrawRequest: trust.withdrawRequestOutcome,
+  } })
 
   // ---- Il mio Pitwall -------------------------------------------------------
   const { pitwallIntent } = usePitwallIntent()
