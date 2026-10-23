@@ -95,7 +95,6 @@ export function normalizeActivity(activity: TrackActivityProjection | null | und
 export function buildRecentSessionProjection(session: SessionDocument): TrackRecentSessionProjection {
     const summary = session.summary || {}
     const dateObj = new Date(session.meta.date_start)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     const timing = sessionTiming(session)
     return {
         id: session.sessionId,

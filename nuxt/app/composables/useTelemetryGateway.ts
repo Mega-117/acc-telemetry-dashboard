@@ -125,7 +125,6 @@ export interface TrackSnapshot {
 
 const MAX_DIAGNOSTICS = 300
 const globalGatewayDiagnostics = ref<PipelineDiagnosticEvent[]>([])
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 let gatewayCacheGeneration = 0
 const trackDetailProjectionCache = new Map<string, { cachedAt: number; detail: TrackDetailProjectionDocument; trackBest: any | null }>()
 const pendingLocalOverlayCache = new Map<string, { cachedAt: number; sessions: SessionDocument[] }>()

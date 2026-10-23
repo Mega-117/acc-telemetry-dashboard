@@ -68,14 +68,26 @@ export default [
       // Keep TypeScript escape hatches visible inside <script setup> blocks.
       '@typescript-eslint/no-explicit-any': 'error',
 
-      // ── Stile ────────────────────────────────────────────────────────────
-      'vue/html-indent': ['warn', 2],
-      'vue/html-self-closing': ['warn', {
-        html: { void: 'always', normal: 'never', component: 'always' },
-        svg: 'always',
-        math: 'always',
-      }],
+      // ── Stile: spento (PIP-591/PIP-132, 23/10/2026) ───────────────────────
+      // Le regole di sola formattazione del template producevano ~8.700 avvisi senza trovare bug;
+      // il loro autofix riscriveva 13.000 righe, rompeva i test che cercano il markup nel sorgente e
+      // inseriva spazi visibili nei contenuti inline. Il lint controlla la correttezza, non lo stile.
+      'vue/html-indent': 'off',
+      'vue/max-attributes-per-line': 'off',
+      'vue/singleline-html-element-content-newline': 'off',
+      'vue/multiline-html-element-content-newline': 'off',
+      'vue/html-closing-bracket-newline': 'off',
+      'vue/html-closing-bracket-spacing': 'off',
+      'vue/first-attribute-linebreak': 'off',
+      'vue/html-self-closing': 'off',
+      'vue/attributes-order': 'off',
     },
+  },
+
+  // Pagine e layout Nuxt prendono il nome dalla route: niente nomi composti forzati.
+  {
+    files: ['app/pages/**/*.vue', 'app/layouts/**/*.vue', 'app/app.vue', 'app/error.vue'],
+    rules: { 'vue/multi-word-component-names': 'off' },
   },
 
   // ── TypeScript (composables, stores, services, utils) ────────────────────────
@@ -134,6 +146,8 @@ export default [
     rules: {
       'max-lines': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
+      // I test definiscono componenti finti nello stesso file.
+      'vue/one-component-per-file': 'off',
     },
   },
 ]

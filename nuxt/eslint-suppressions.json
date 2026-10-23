@@ -1,0 +1,525 @@
+{
+  "app/app.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/components/ChatterboxVoiceLabPanel.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    }
+  },
+  "app/components/ProfilePage.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/components/coach/CoachLessonsPanel.vue": {
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/components/electron/ElectronTitlebar.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/components/overlay/SectorReferenceSetup.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "app/components/overlay/SetupFuelPanel.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "app/components/overlay/SurfaceRegion.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/components/overview/UpcomingRacesCard.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/components/pages/SessionDetailPage.vue": {
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/components/pitwall/concept/PitwallConcept.vue": {
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/components/profile/CoachLessonsCard.vue": {
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/components/profile/RaceCalendarCard.vue": {
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/components/ui/SessionPickerModal.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/composables/useActivityFeed.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "app/composables/useClientDiagnostics.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "app/composables/useClientHeartbeat.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "app/composables/useCoachStatePoller.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/composables/useDebugValidator.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 12
+    }
+  },
+  "app/composables/useElectronSync.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    },
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/composables/useFastStatePoller.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "app/composables/useFirebaseAuth.ts": {
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/composables/useFirebaseTracker.ts": {
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/composables/useKokoroVoiceLabLifecycle.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/composables/useLiveStatePoller.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 5
+    }
+  },
+  "app/composables/useOverlayInteractionContract.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "app/composables/useOverlayRegionApi.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "app/composables/useOverlaySettings.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/composables/useOverlaySize.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/composables/useOverlayTelemetrySource.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/composables/useOwnerDataMaintenance.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/composables/usePitwallController.ts": {
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/composables/usePitwallRoom.ts": {
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/composables/usePrimaryCloudOwner.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/composables/useQualifyingVoice.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/composables/useSessionLoader.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 5
+    }
+  },
+  "app/composables/useSessionPager.ts": {
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/composables/useSessionSharing.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/composables/useStandingsState.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/composables/useTelemetryData.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/composables/useTelemetryGateway.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    },
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/composables/useTrackBests.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/composables/useTrackingRecord.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/composables/useVoiceLabRuntime.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 8
+    }
+  },
+  "app/pages/admin/cockpit.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/pages/admin/diagnostic-bundles.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "app/pages/admin/stato.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/pages/dev-cleanup.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 19
+    },
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/pages/dev-data-audit.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 7
+    }
+  },
+  "app/pages/dev-rebuild.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 7
+    }
+  },
+  "app/pages/dev-telemetry-compare.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "app/pages/dev-upload.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "app/pages/dev-voice-lab.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 14
+    },
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/pages/hud.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 9
+    }
+  },
+  "app/pages/overlay-surface.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "app/pages/piloti/index.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    },
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/pages/preparazione.vue": {
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/pages/spotter.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "app/pages/training-overlay.vue": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    },
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/repositories/adminCockpitRepository.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "app/repositories/clientDiagnosticsRepository.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    }
+  },
+  "app/repositories/coachLessonsRepository.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/repositories/pilotDirectoryRepository.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "app/repositories/telemetryLocalRepository.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "app/repositories/usageRepository.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/services/gateway/activityProjectionBuilders.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "app/services/gateway/bestTimesBuilders.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/services/gateway/gatewayHelpers.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "app/services/overlay/spectatorTelemetry.ts": {
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/services/overlay/standingsPresentation.ts": {
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/services/overlay/surfaceRegionBridge.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "app/services/overlay/telemetryRecovery.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/services/overlay/tyreSetupViewModel.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    }
+  },
+  "app/services/pitwall/pitwallEngineerService.ts": {
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/services/pitwall/pitwallRoomDriverService.ts": {
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/services/pitwall/pitwallRoomService.ts": {
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/services/projections/buildTrackDetailProjection.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "app/services/projections/trackBestProjectionGuard.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/services/runtime/rendererRuntimeBootstrapAdapter.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "app/services/sim/acc/fastStateAdapter.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 8
+    }
+  },
+  "app/services/sync/canonicalSummaryBridge.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    }
+  },
+  "app/services/sync/firebaseStructureHealthService.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "app/services/sync/legacySummaryMigrationService.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/services/sync/ownerDataMaintenanceService.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    },
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/services/sync/ownerDataRepairService.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 9
+    },
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/services/sync/sessionListProjectionService.ts": {
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/services/sync/sessionUploadService.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    }
+  },
+  "app/services/sync/syncQueueService.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "app/services/sync/syncScanService.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "app/services/sync/trackBestsProjectionService.ts": {
+    "max-lines": {
+      "count": 1
+    }
+  },
+  "app/services/telemetry/activityProjectionService.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/services/telemetry/commonSessionAnalysis.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    }
+  },
+  "app/services/telemetry/fastStateIngress.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/services/telemetry/lapTraceChart.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/services/telemetry/telemetryMergeService.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/services/usage/usageClient.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "app/utils/localCanonicalSummary.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "app/utils/sessionParser.ts": {
+    "max-lines": {
+      "count": 1
+    }
+  }
+}

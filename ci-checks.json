@@ -13,6 +13,16 @@
         "timeoutSeconds": 120
       },
       {
+        "id": "lint",
+        "cwd": "nuxt",
+        "argv": [
+          "npm",
+          "run",
+          "lint"
+        ],
+        "timeoutSeconds": 180
+      },
+      {
         "id": "pipeline",
         "cwd": "nuxt",
         "argv": [
