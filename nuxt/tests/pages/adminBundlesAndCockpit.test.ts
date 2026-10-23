@@ -80,6 +80,18 @@ describe('admin diagnostic bundles page', () => {
     expect(view.text()).not.toContain('Carica altri')
   })
 
+  it('PIP-591: "Carica altri" continues the search already made, even if the fields were edited', async () => {
+    mocks.list.mockResolvedValueOnce({ items: [item()], cursor: 'c1' })
+    const view = mount(BundlesPage, { global: { stubs: { NuxtLink: true } } })
+    await flushPromises()
+    const [installationInput] = view.findAll('input')
+    await installationInput!.setValue('other-installation')
+    mocks.list.mockResolvedValueOnce({ items: [item({ key: 'k3' })], cursor: null })
+    await view.findAll('button').find((b) => b.text() === 'Carica altri')!.trigger('click')
+    await flushPromises()
+    expect(mocks.list).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ installationId: '', cursor: 'c1' }))
+  })
+
   it('PIP-591: a slower earlier search does not overwrite the results of the newer one', async () => {
     let releaseFirst: (value: unknown) => void = () => {}
     mocks.list.mockReturnValueOnce(new Promise((resolve) => { releaseFirst = resolve }))

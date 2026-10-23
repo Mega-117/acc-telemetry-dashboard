@@ -35,18 +35,19 @@ const totalBytes = computed(() => items.value.reduce((sum, item) => sum + item.s
 // PIP-591 (X-A05-39): conta solo la risposta dell'ultima richiesta; una piu' lenta, partita con
 // filtri vecchi, non sovrascrive elenco e cursore.
 let loadRevision = 0
+// "Carica altri" continua la ricerca gia' fatta: filtri e cursore vanno insieme, anche se nel
+// frattempo i campi sono stati modificati senza cercare.
+const appliedFilters = ref({ installationId: '', date: '' })
 
 async function load(append = false) {
   const revision = ++loadRevision
   loading.value = true
   errorMessage.value = ''
   try {
-    const page = await listDiagnosticBundles(deps, {
-      installationId: installationFilter.value,
-      date: dateFilter.value,
-      cursor: append ? cursor.value : null
-    })
+    const filters = append ? appliedFilters.value : { installationId: installationFilter.value, date: dateFilter.value }
+    const page = await listDiagnosticBundles(deps, { ...filters, cursor: append ? cursor.value : null })
     if (revision !== loadRevision) return
+    appliedFilters.value = filters
     items.value = append ? [...items.value, ...page.items] : page.items
     cursor.value = page.cursor
   } catch (error: any) {
