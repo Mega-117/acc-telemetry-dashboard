@@ -170,6 +170,27 @@ describe('ensureUserDocument', () => {
     expect(batchCommitMock).toHaveBeenCalledOnce()
   })
 
+  it('PIP-591: dopo un cambio email la riparazione allinea anche l\'email, altrimenti le Rules rifiutano il batch', async () => {
+    trackedGetDocMock
+      .mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ uid: freshUser.uid, role: 'pilot', coachId: null, nickname: 'QA Pilot',
+          directorySortName: 'qa fresh pilot', searchPrefixes: ['q', 'qa'],
+          email: 'old-address@accsuite.invalid', emailVerified: true })
+      })
+      .mockResolvedValueOnce({ exists: () => true, data: () => ({ uid: freshUser.uid, nickname: 'QA Pilot', avatarUrl: null, updatedAt: 'now' }) })
+      .mockResolvedValueOnce({ exists: () => true, data: () => ({ schemaVersion: 1, uid: freshUser.uid, role: 'pilot',
+        coachId: null, nickname: 'QA Pilot', directorySortName: 'qa fresh pilot', searchPrefixes: ['q', 'qa'] }) })
+
+    await ensureUserDocument(freshUser)
+    expect(batchSetMock).toHaveBeenCalledWith(
+      { path: 'users/qa-fresh-pilot' },
+      expect.objectContaining({ email: freshUser.email, emailVerified: true }),
+      { merge: true }
+    )
+    expect(batchCommitMock).toHaveBeenCalledOnce()
+  })
+
   it('propaga un errore provisioning invece di fingere un profilo pilot pronto', async () => {
     const failure = new Error('firestore unavailable')
     trackedGetDocMock.mockRejectedValueOnce(failure)

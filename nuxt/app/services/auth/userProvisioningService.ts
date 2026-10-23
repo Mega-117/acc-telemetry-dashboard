@@ -161,16 +161,25 @@ export async function ensureUserDocument(user: User): Promise<EnsuredUserProfile
         firstName: data.firstName || '',
         lastName: data.lastName || '',
         nickname,
-        email: data.email || user.email
+        email: user.email || data.email
     })
     const shouldRepairUserDirectoryFields = needsUserDirectoryFieldRepair(data, user.uid, directoryFields)
-    const shouldRepairEmailVerification = data.emailVerified !== user.emailVerified
+    // PIP-591: le Rules vogliono l'email del documento uguale a quella del token. Dopo un cambio email
+    // il documento ha ancora la vecchia: ogni scrittura su users/{uid} verrebbe rifiutata, riparazione compresa.
+    // Senza campo email le Rules non chiedono nulla: si ripara solo un'email salvata e diversa.
+    const shouldRepairEmail = typeof user.email === 'string' && user.email !== ''
+        && typeof data.email === 'string' && data.email !== user.email
+    const shouldRepairEmailVerification = shouldRepairEmail || data.emailVerified !== user.emailVerified
+    const emailPatch = {
+        ...(shouldRepairEmail ? { email: user.email } : {}),
+        ...(shouldRepairEmailVerification ? { emailVerified: user.emailVerified } : {})
+    }
     const repairedUserData = {
         ...data,
         uid: user.uid,
         nickname,
         ...(shouldRepairUserDirectoryFields ? directoryFields : {}),
-        ...(shouldRepairEmailVerification ? { emailVerified: user.emailVerified } : {})
+        ...emailPatch
     }
     const pilotDirectoryProjection = buildPilotDirectoryProjection(user.uid, repairedUserData)
     const receiptProjection = { nickname, directory: pilotDirectoryProjection }
@@ -196,7 +205,7 @@ export async function ensureUserDocument(user: User): Promise<EnsuredUserProfile
         const userPatch = {
             uid: user.uid,
             ...(shouldRepairUserDirectoryFields ? directoryFields : {}),
-            ...(shouldRepairEmailVerification ? { emailVerified: user.emailVerified } : {})
+            ...emailPatch
         }
         if (shouldRepairUserDirectoryFields || shouldRepairEmailVerification) {
             batch.set(userDocRef, userPatch, { merge: true })
