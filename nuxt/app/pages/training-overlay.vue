@@ -1785,7 +1785,12 @@ onBeforeUnmount(() => {
                     <Info v-if="controlKStatus" :size="12" aria-hidden="true" /><span>{{ controlKStatus?.text }}</span>
                   </p>
                 </div>
-                <QuickCountdown v-else-if="isQuickTimerOpen" ref="quickCountdownView" :status="quickTimer.status.value" :display="quickTimer.display.value" @start="startQuickTimer" @cancel="closeQuickTimer"
+                <!-- ACC: the Racer Core mark keeps its column in every view, so the editor
+                     header (←) never sits under the placement lock in the top-left corner. -->
+                <div v-else :class="usesAccLayout ? 'ck-shell' : 'ck-shell--plain'">
+                <img v-if="usesAccLayout" class="quick-panel-logo ck-shell__logo" src="/branding/auth/racercore-rc.svg" alt="Racer Core" width="56" height="28">
+                <div :class="usesAccLayout ? 'ck-shell__view' : 'ck-shell--plain'">
+                <QuickCountdown v-if="isQuickTimerOpen" ref="quickCountdownView" :status="quickTimer.status.value" :display="quickTimer.display.value" @start="startQuickTimer" @cancel="closeQuickTimer"
                   :armed="timerCancelArmed" @back="leaveQuickTimer" />
                 <InfoTargetSetup
                   v-else-if="isTargetSetupOpen"
@@ -1806,6 +1811,8 @@ onBeforeUnmount(() => {
                   :number-field="usesAccLayout"
                   @notice="(text, tone) => usesAccLayout && showVoicePointNotice(text, tone)" />
                 <SectorReferenceSetup v-else-if="isSectorReferenceSetupOpen && support.quickSectorReferences" ref="sectorReferenceSetup" keyboard-overlay @cancel="closeSectorReferenceSetup" @saved="saveSectorReferenceSetup" />
+                </div>
+                </div>
               </template>
 
               <template v-else-if="phase === 'completed'">

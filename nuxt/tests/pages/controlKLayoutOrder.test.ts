@@ -197,6 +197,16 @@ describe('ACC Control K single layout (PIP-556)', () => {
     expect(source).toContain("'ck--no-target': !isFullQuickPanelPreview.value && !infoTargetActive.value")
     expect(source).toContain("'ck--no-track-references': !isFullQuickPanelPreview.value && trackVoiceReferences.available.value === false")
   })
+  it('editors keep the logo column, so their ← never sits under the placement lock', () => {
+    expect(source).toContain(`<div v-else :class="usesAccLayout ? 'ck-shell' : 'ck-shell--plain'">`)
+    expect(source).toContain('<img v-if="usesAccLayout" class="quick-panel-logo ck-shell__logo"')
+    expect(acc).toContain('.ck-shell { display: grid; grid-template-columns: 56px minmax(0, 1fr); column-gap: $ck-gap;')
+    // Same height as the grid logo: centred on the two rows of commands.
+    expect(acc).toContain('margin-top: (2 * $ck-cell + $ck-gap - 24px) * .5;')
+    expect(styles).toContain('.ck-shell--plain { display: contents; }')
+    // Avvisi and Notifiche anchor the mark at the grid height too.
+    expect(acc).toContain('.quick-panel-logo { align-self: start; margin-top: (2 * $ck-cell + $ck-gap - 24px) * .5; }')
+  })
   it('views replace the commands inside the same two rows instead of stretching the frame', () => {
     expect(acc).toMatch(/\.quick-panel-notifications \{\s*grid-area: 1 \/ 2 \/ 3 \/ -1;[\s\S]{0,80}?height: 2 \* \$ck-cell \+ \$ck-gap;/)
     expect(acc).toContain('&.overlay-content--target { width: $ck-width; }')
