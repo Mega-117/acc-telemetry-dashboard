@@ -13,8 +13,8 @@ function memoryStorage() {
 
 describe('onboardingSeen (PIP-571)', () => {
   it('keys the status per user and per installation, with a browser fallback', () => {
-    expect(onboardingSeenKey('u1', 'inst-a')).toBe('racercore.onboarding.seen.v1:u1:inst-a')
-    expect(onboardingSeenKey('u1', '')).toBe(`racercore.onboarding.seen.v1:u1:${BROWSER_INSTALLATION_ID}`)
+    expect(onboardingSeenKey('u1', 'inst-a')).toBe('racercore.onboarding.seen.v2:u1:inst-a')
+    expect(onboardingSeenKey('u1', '')).toBe(`racercore.onboarding.seen.v2:u1:${BROWSER_INSTALLATION_ID}`)
   })
 
   it('goes unseen -> commands-pending -> done, scoped to that user and installation', () => {

@@ -11,6 +11,8 @@ export interface OnboardingStep {
   /** Second part of the title, in red. */
   accent: string
   text: string
+  /** PIP-612: what else is there, named in a few tags instead of one card each. */
+  chips?: readonly string[]
   /** Clip of the card; absent when the card shows the live panel copy instead (`scene`). */
   video?: string
   poster?: string
@@ -18,40 +20,28 @@ export interface OnboardingStep {
   scene?: 'panel'
 }
 
+// PIP-612: two cards only, the promise and the one thing it does for you; then the
+// keys (the only task) and "Avvia ACC". The Ctrl+K card is gone: the menu is
+// discovered in the key setup, next to the buttons being assigned.
 export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
   {
     id: 'benvenuto',
     label: 'Racer Core',
-    title: 'Ti assiste',
-    accent: 'mentre guidi',
-    text: 'In pista: classifica, mappa, cruscotto, settori e gomme. Dopo trovi ogni sessione qui.',
+    title: 'Ti aiuta',
+    accent: 'in pista',
+    text: 'Ti mostra quello che serve mentre guidi, e uno spotter ti avvisa a voce.',
+    chips: ['HUD', 'Avvisi vocali', 'Pitwall con un amico'],
     video: '/onboarding/01-benvenuto.webm',
     poster: '/onboarding/01-benvenuto.jpg',
   },
   {
-    id: 'ctrlk',
-    label: 'Pannello rapido',
-    title: 'Pannello rapido:',
-    accent: 'Ctrl+K',
-    text: 'Il centro di Racer Core: da qui comandi tutto, anche gli avvisi vocali. Lo apri con Ctrl+K o dal volante.',
-    scene: 'panel',
-  },
-  {
     id: 'automazioni',
     label: 'Automazioni',
-    title: 'Lui clicca',
-    accent: 'per te',
-    text: 'Premi Correggi pressioni. Racer Core sistema le gomme da solo.',
+    title: 'Racer Core',
+    accent: 'clicca per te',
+    text: 'Premi un tasto e Racer Core fa le regolazioni nel gioco al posto tuo.',
+    chips: ['Correggi pressioni', 'Benzina a minuti', 'Benzina per la sessione'],
     video: '/onboarding/03-automazioni.webm',
     poster: '/onboarding/03-automazioni.jpg',
-  },
-  {
-    id: 'hud',
-    label: 'HUD',
-    title: 'Gli HUD',
-    accent: 'li scegli tu',
-    text: 'Ognuno risponde a una domanda di gara. Li accendi e li sposti dalla pagina HUD.',
-    video: '/onboarding/04-hud.webm',
-    poster: '/onboarding/04-hud.jpg',
   },
 ]

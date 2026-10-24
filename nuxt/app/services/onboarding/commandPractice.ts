@@ -19,12 +19,12 @@ export interface PracticeTask {
 }
 
 export const PRACTICE_TASKS: readonly PracticeTask[] = [
-  { id: 'open', action: 'togglePalette', times: 1, text: 'Apri il pannello' },
+  { id: 'open', action: 'togglePalette', times: 1, text: 'Apri il menu' },
   { id: 'next', action: 'nextAction', times: 2, text: 'Vai avanti di due voci' },
   { id: 'previous', action: 'previousAction', times: 1, text: 'Torna indietro di una voce' },
   { id: 'confirm', action: 'activateAction', times: 1, text: 'Conferma la voce selezionata' },
   { id: 'back', action: 'mainMenu', times: 1, text: 'Esci dalla voce con Indietro' },
-  { id: 'close', action: 'togglePalette', times: 1, text: 'Chiudi il pannello' },
+  { id: 'close', action: 'togglePalette', times: 1, text: 'Chiudi il menu' },
 ]
 
 /** Indietro is optional: without its button the "back" exercise is left out. */
@@ -112,7 +112,7 @@ export function keyboardPracticeDone(state: KeyboardPracticeState): boolean {
 export function practiceHint(state: PracticeState, tasks: readonly PracticeTask[] = PRACTICE_TASKS): string {
   const task = tasks[state.task]
   if (!task) return ''
-  if (!state.open && task.id !== 'open' && task.id !== 'close') return 'Il pannello è chiuso. Riaprilo.'
+  if (!state.open && task.id !== 'open' && task.id !== 'close') return 'Il menu è chiuso. Riaprilo.'
   if (task.id === 'back' && state.confirmed === null) return 'Prima conferma una voce, poi premi Indietro.'
   return ''
 }

@@ -581,6 +581,10 @@ const controlKStatus = computed<ControlKStatusMessage | null>(() => pickControlK
     tone: 'error',
     text: `${unreadNotificationErrors.value.at(-1)!.label}${unreadNotificationErrors.value.length > 1 ? ` (+${unreadNotificationErrors.value.length - 1} nelle notifiche)` : ''}`,
   },
+  // PIP-612: no pop-up in the driver's flow; when the pressure plan can be applied the
+  // menu itself says so, where the driver is already looking.
+  usesAccLayout.value && quickPanelPressureState.value.state === 'ready' && !isDryPressureApplying.value
+    && { tone: 'ok', text: 'Pressioni pronte: premi Correggi pressioni.' },
   effectiveControlKContext.value === 'pause' && { tone: 'hint', text: quickPanelHint.value },
 ]))
 const accLayoutClasses = computed(() => usesAccLayout.value ? [

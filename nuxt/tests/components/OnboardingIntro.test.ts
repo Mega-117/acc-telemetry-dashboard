@@ -25,7 +25,8 @@ vi.mock('~/composables/usePublicPath', () => ({ usePublicPath: () => ({ getPubli
 const commandsStub = {
   props: ['wheelAvailable'],
   emits: ['done', 'later'],
-  template: '<div data-stub-commands :data-wheel="String(wheelAvailable)"><button data-done @click="$emit(\'done\')" /><button data-later @click="$emit(\'later\')" /></div>',
+  methods: { postpone(this: { $emit: (event: string) => void }) { this.$emit('later') } },
+  template: '<div data-stub-commands :data-wheel="String(wheelAvailable)"><button data-done @click="$emit(\'done\', \'Wheel · Pulsante 26\')" /><button data-later @click="$emit(\'later\')" /></div>',
 }
 function mountIntro() {
   return mount(OnboardingIntro, { global: { stubs: { OnboardingCommands: commandsStub } }, attachTo: document.body })
@@ -51,7 +52,7 @@ describe('OnboardingIntro (PIP-571)', () => {
     wrapper.unmount()
   })
 
-  it('walks the four video cards, then hands over to the command setup', async () => {
+  it('walks the two video cards, then hands over to the key setup (PIP-612)', async () => {
     const wrapper = mountIntro(); await open()
     expect(document.body.querySelectorAll('[data-rail-step]').length).toBe(ONBOARDING_STEPS.length + 1)
     expect(q('[aria-current="step"]')!.textContent).toContain(ONBOARDING_STEPS[0]!.label)
@@ -97,7 +98,9 @@ describe('OnboardingIntro (PIP-571)', () => {
     await click('[data-done]')
     expect(mock.save).toHaveBeenLastCalledWith('done')
     expect(mock.close).not.toHaveBeenCalled()
-    expect(q('[data-onboarding-finish]')!.textContent).toContain('a guidare')
+    expect(q('[data-onboarding-finish]')!.textContent).toContain('per la pista')
+    // The key just chosen, drawn as a key, next to Ctrl+K.
+    expect([...document.body.querySelectorAll('[data-onboarding-keys] kbd')].map(k => k.textContent)).toEqual(['Wheel · Pulsante 26', 'Ctrl+K'])
     expect(document.body.querySelectorAll('.onboarding__rail-item.is-done').length).toBe(ONBOARDING_STEPS.length + 1)
     expect((q('[data-rail-step]') as HTMLButtonElement).disabled).toBe(true)
     await click('[data-onboarding-start]')
@@ -106,7 +109,7 @@ describe('OnboardingIntro (PIP-571)', () => {
     await click('[data-onboarding-skip]')
     await click('[data-later]')
     expect(mock.save).toHaveBeenLastCalledWith('later')
-    expect(q('[data-onboarding-finish]')!.textContent).toContain('completato')
+    expect(q('[data-onboarding-finish]')!.textContent).toContain('Impostazioni → Comandi')
     q('[data-onboarding-intro]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await flushPromises()
     expect(mock.close).toHaveBeenLastCalledWith('later')
     wrapper.unmount()
@@ -124,6 +127,25 @@ describe('OnboardingIntro (PIP-571)', () => {
     const other = mountIntro(); await open()
     expect(q('[data-stub-commands]')!.getAttribute('data-wheel')).toBe('false')
     other.unmount()
+  })
+
+  // PIP-612: the way out stays in the same corner; on the commands it asks for
+  // confirmation right under itself, nothing appears elsewhere.
+  it('"Lo faccio dopo" sits where "Salta" was and confirms in place', async () => {
+    Object.assign(window, { electronAPI: { localIdentityRole: 'primary', controlsGetState: vi.fn() } })
+    const wrapper = mountIntro(); await open()
+    expect(q('[data-onboarding-skip]')).not.toBeNull()
+    await click('[data-onboarding-skip]'); await new Promise(r => setTimeout(r, 400)); await flushPromises()
+    expect(q('[data-cmd-later]')).not.toBeNull()
+    expect(q('[data-later-confirm]')).toBeNull()
+    await click('[data-cmd-later]')
+    expect(q('[data-later-confirm]')!.textContent).toContain('Impostazioni → Comandi')
+    await click('[data-later-cancel]')
+    expect(mock.save).not.toHaveBeenCalled()
+    await click('[data-cmd-later]'); await click('[data-cmd-later-confirm]')
+    expect(mock.save).toHaveBeenLastCalledWith('later')
+    expect(q('[data-onboarding-finish]')).not.toBeNull()
+    wrapper.unmount()
   })
 
   it('retries the first-time check when the user arrives after mount', async () => {
