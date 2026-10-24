@@ -2,33 +2,31 @@
 import { computed, ref } from 'vue'
 import ControlKNumberField from '~/components/overlay/ControlKNumberField.vue'
 import ControlKViewHeader from '~/components/overlay/ControlKViewHeader.vue'
-import { stepNumberField, type NumberFieldLimits } from '~/utils/controlKNumberField'
+import { fieldStartPart, fieldWheelCommand, type NumberFieldSpec } from '~/utils/controlKNumberField'
 // armed: while running, the first wheel press only reveals "Annulla timer";
 // a second OK cancels it (no accidental stop while driving, no permanent highlight).
 defineProps<{ status: 'idle' | 'running' | 'finished'; display: string; armed?: boolean }>()
 const emit = defineEmits<{ start: [seconds: number]; cancel: []; back: [] }>()
-const minutes = ref(1)
-const seconds = ref(0)
-const duration = computed(() => Number(minutes.value) * 60 + Number(seconds.value))
+// PIP-526: presets reachable from the wheel. PIP-611: one MM:SS field in seconds
+// (typed 1 3 0 = 01:30; wheel OK engages the minutes, OK again the seconds).
+const duration = ref(5 * 60)
 const valid = computed(() => duration.value > 0)
-// PIP-526: presets reachable from the wheel. PIP-556: MIN | SEC with the shared
-// number field (wheel OK + Up/Down, mouse scroll, typed digits), no +/- buttons.
-const PRESETS = [1, 3, 5, 10]
-function preset(value: number) { minutes.value = value; seconds.value = 0 }
-type Field = 'minutes' | 'seconds'
-const LIMITS: Record<Field, NumberFieldLimits> = {
-  minutes: { min: 0, max: 99, digits: 2, wrap: false },
-  seconds: { min: 0, max: 59, digits: 2, wrap: true },
+const PRESETS = [5, 10, 20, 30]
+function preset(value: number) { duration.value = value * 60 }
+const SPEC: NumberFieldSpec = {
+  parts: [
+    { label: 'MIN', min: 0, max: 99, wrap: false, digits: 2, unit: 60, pad: 2 },
+    { label: 'SEC', min: 0, max: 59, wrap: true, digits: 2, unit: 1, separator: ':' },
+  ],
+  min: 0, max: 99 * 60 + 59,
 }
-const editing = ref<Field | null>(null)
-function set(field: Field, value: number) { (field === 'minutes' ? minutes : seconds).value = value }
-function toggle(field: Field) { editing.value = editing.value === field ? null : field }
+const part = ref<number | null>(null)
+function toggle() { part.value = part.value === null ? fieldStartPart(SPEC) : null }
 function handleWheelCommand(command: string | undefined): boolean {
-  if (!editing.value) return false
-  if (command === 'activate-action' || command === 'primary' || command === 'back') { editing.value = null; return true }
-  if (command !== 'next-action' && command !== 'previous-action') return false
-  const field = editing.value
-  set(field, stepNumberField((field === 'minutes' ? minutes : seconds).value, command === 'next-action' ? 1 : -1, LIMITS[field]))
+  const result = fieldWheelCommand(part.value, duration.value, command, SPEC)
+  if (!result.handled) return false
+  if (result.value !== null) duration.value = result.value
+  part.value = result.part
   return true
 }
 defineExpose({ handleWheelCommand })
@@ -37,20 +35,18 @@ defineExpose({ handleWheelCommand })
 <template>
   <section class="quick-countdown" :class="{ 'quick-countdown--quiet': status === 'running' && !armed }" aria-label="Timer">
     <!-- PIP-556: shared Control K structure: ← header, fields, shortcuts, hint, one primary action. -->
-    <ControlKViewHeader title="Timer" :subtitle="status === 'idle' ? 'Conto alla rovescia' : null" action="timer-back"
+    <ControlKViewHeader title="Timer" action="timer-back"
       @back="status === 'idle' ? emit('cancel') : emit('back')" />
     <template v-if="status === 'idle'">
       <div class="ck-editor__fields">
-        <ControlKNumberField :value="minutes" label="MIN" action="timer-minutes" name="Minuti timer" v-bind="LIMITS.minutes"
-          :editing="editing === 'minutes'" @toggle="toggle('minutes')" @update:value="set('minutes', $event)" />
-        <ControlKNumberField :value="seconds" label="SEC" action="timer-seconds" name="Secondi timer" v-bind="LIMITS.seconds"
-          :editing="editing === 'seconds'" @toggle="toggle('seconds')" @update:value="set('seconds', $event)" />
+        <ControlKNumberField class="ck-field--time" :value="duration" :spec="SPEC" label="DURATA" action="timer-time" name="Durata timer"
+          :part="part" @toggle="toggle" @release="part = null" @update:value="duration = $event ?? duration" />
       </div>
       <div class="ck-editor__shortcuts" role="group" aria-label="Durate rapide">
         <button v-for="value in PRESETS" :key="value" type="button" :data-overlay-wheel-action="`timer-preset-${value}`"
-          :aria-pressed="minutes === value && seconds === 0" @click="preset(value)">{{ value }} min</button>
+          :aria-pressed="duration === value * 60" @click="preset(value)">{{ value }} min</button>
       </div>
-      <p class="ck-editor__hint">Il pannello si chiude e riappare negli ultimi 5 secondi; tre bip alla fine.</p>
+      <p v-if="part !== null" class="ck-editor__hint">Su/Giù cambiano {{ SPEC.parts[part]!.label }} · OK passa al successivo · Indietro fatto</p>
       <div class="ck-editor__actions">
         <button type="button" class="ck-editor__primary" aria-label="Avvia timer" data-overlay-wheel-action="timer-start" :disabled="!valid" @click="emit('start', duration)">Avvia</button>
       </div>

@@ -45,16 +45,17 @@ describe('sector reference editor',()=>{
   button('sector-mode-bestSector').click();await flush();button('sector-save').click();await flush()
   expect(api.hudOverlaySaveSettings).toHaveBeenCalledWith('sectors',{deltaReference:'bestSector'})
  })
- // PIP-556: in Ctrl+K each sector has independent SEC and DEC fields, pre-filled
- // from the best sectors, edited with OK + Up/Down and left with OK or Back.
- it('starts from the best sectors and edits one sector field from the wheel',async()=>{
+ // PIP-611: in Ctrl+K one field per sector (31,2 s), pre-filled from the best
+ // sectors; OK engages the seconds, OK again the tenths, Up/Down change, Back leaves.
+ it('starts from the best sectors and edits one sector from the wheel',async()=>{
   const sectorHud={sectors:[{bestMs:31_249},{bestMs:42_050},{bestMs:30_970}]}
   const {api}=await setup(true,{sectorHud})
-  expect([...document.querySelectorAll('.ck-field strong')].map(el=>el.textContent)).toEqual(['31',',2','42',',1','31',',0'])
+  expect([...document.querySelectorAll('.ck-field strong')].map(el=>el.textContent)).toEqual(['31,2 s','42,1 s','31,0 s'])
   expect(document.querySelector('input')).toBeNull()
   const editor=(app as any)._instance.exposed as {handleWheelCommand(command:string):boolean}
   expect(editor.handleWheelCommand('next-action')).toBe(false)
-  button('sector-1-tenths').click();await flush()
+  button('sector-1').click();await flush()
+  expect(editor.handleWheelCommand('activate-action')).toBe(true)
   expect(editor.handleWheelCommand('next-action')).toBe(true);expect(editor.handleWheelCommand('next-action')).toBe(true)
   expect(editor.handleWheelCommand('previous-action')).toBe(true)
   expect(editor.handleWheelCommand('back')).toBe(true);await flush()
@@ -71,30 +72,53 @@ describe('sector reference editor',()=>{
 
 it('offers the best sectors again after manual changes',async()=>{
  await setup(true,{sectorHud:{sectors:[{bestMs:31_000},{bestMs:42_000},{bestMs:31_000}]}})
- button('sector-0-tenths').click();await flush()
+ button('sector-0').click();await flush()
  const editor=(app as any)._instance.exposed as {handleWheelCommand(command:string):boolean}
- editor.handleWheelCommand('next-action');editor.handleWheelCommand('back');await flush()
- expect(button('sector-0-tenths').querySelector('strong')!.textContent).toBe(',1')
+ editor.handleWheelCommand('activate-action');editor.handleWheelCommand('next-action');editor.handleWheelCommand('back');await flush()
+ expect(button('sector-0').querySelector('strong')!.textContent).toBe('31,1 s')
  button('sector-use-best').click();await flush()
- expect(button('sector-0-tenths').querySelector('strong')!.textContent).toBe(',0')
+ expect(button('sector-0').querySelector('strong')!.textContent).toBe('31,0 s')
 })
-// PIP-556: mouse and keyboard: scroll over a field, or type its digits.
+// PIP-611: mouse and keyboard: scroll over a part of the field, or type the digits from the right.
 it('accepts mouse scroll and typed digits on a sector field',async()=>{
  await setup(true,{sectorHud:{sectors:[{bestMs:31_000},{bestMs:42_000},{bestMs:31_000}]}})
- const seconds=button('sector-1-seconds')
- seconds.dispatchEvent(new WheelEvent('wheel',{deltaY:-100,bubbles:true,cancelable:true}));await flush()
- expect(seconds.querySelector('strong')!.textContent).toBe('43')
- for(const key of ['3','5']) seconds.dispatchEvent(new KeyboardEvent('keydown',{key,bubbles:true,cancelable:true}))
+ const sector=button('sector-1')
+ sector.querySelector('[data-part="0"]')!.dispatchEvent(new WheelEvent('wheel',{deltaY:-100,bubbles:true,cancelable:true}));await flush()
+ expect(sector.querySelector('strong')!.textContent).toBe('43,0 s')
+ for(const key of ['3','5','4']) sector.dispatchEvent(new KeyboardEvent('keydown',{key,bubbles:true,cancelable:true}))
  await flush()
- expect(seconds.querySelector('strong')!.textContent).toBe('35')
- expect(button('sector-1-tenths').querySelector('strong')!.textContent).toBe(',0')
+ expect(sector.querySelector('strong')!.textContent).toBe('35,4 s')
+ // Backspace removes the last digit: 3 5 = 3,5, kept at the 10,0 s minimum.
+ sector.dispatchEvent(new KeyboardEvent('keydown',{key:'Backspace',bubbles:true,cancelable:true}));await flush()
+ expect(sector.querySelector('strong')!.textContent).toBe('3,5 s')
+ sector.dispatchEvent(new Event('blur'));await flush()
+ expect(sector.querySelector('strong')!.textContent).toBe('10,0 s')
+})
+// PIP-611: ▲/▼ on a part step it with the mouse, without engaging the wheel.
+it('steps a part with its mouse arrows',async()=>{
+ await setup(true,{sectorHud:{sectors:[{bestMs:31_000},{bestMs:42_000},{bestMs:31_000}]}})
+ const sector=button('sector-2')
+ const press=(selector:string)=>{sector.querySelector(selector)!.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,cancelable:true}));window.dispatchEvent(new PointerEvent('pointerup'))}
+ press('[data-part="0"] [data-step="1"]');await flush()
+ press('[data-part="1"] [data-step="-1"]');await flush()
+ expect(sector.querySelector('strong')!.textContent).toBe('32,9 s')
+ expect(sector.querySelector('.is-active')).toBeNull()
+})
+it('Esc gives back an empty sector when typing started from empty',async()=>{
+ await setup(true)
+ const sector=button('sector-0')
+ expect(sector.querySelector('strong')!.textContent).toBe('— s')
+ for(const key of ['3','7','0','Escape']) sector.dispatchEvent(new KeyboardEvent('keydown',{key,bubbles:true,cancelable:true}))
+ await flush()
+ expect(sector.querySelector('strong')!.textContent).toBe('— s')
+ expect(button('sector-save').disabled).toBe(true)
 })
 it('changes seconds without touching the tenths, up to 4:00 per sector',async()=>{
  await setup(true,{sectorHud:{sectors:[{bestMs:159_900},{bestMs:42_000},{bestMs:31_000}]}})
- button('sector-0-seconds').click();await flush()
+ button('sector-0').click();await flush()
  const editor=(app as any)._instance.exposed as {handleWheelCommand(command:string):boolean}
  editor.handleWheelCommand('next-action');await flush()
- expect([button('sector-0-seconds'),button('sector-0-tenths')].map(b=>b.querySelector('strong')!.textContent)).toEqual(['160',',9'])
+ expect(button('sector-0').querySelector('strong')!.textContent).toBe('160,9 s')
 })
 it('restores existing times and ignores late settings after unmount',async()=>{
  const {api}=await setup();app!.unmount();app=null

@@ -2974,16 +2974,27 @@ $ck-width: 56px + 5 * $ck-cell + 5 * $ck-gap;
   &.overlay-content--target .fuel-panel--editor {
     gap: 10px;
     .fuel-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 0; border: 0; background: transparent; }
-    .fuel-minutes-field { order: 1; width: 96px; }
-    .fuel-presets { order: 2; display: flex; flex-wrap: wrap; gap: 8px; }
-    .fuel-presets button { min-height: 32px; padding: 0 12px; border-color: #ffffff30; background: #ffffff08; font-size: 12px; }
+    .fuel-minutes-field { order: 1; width: 100%; }
+    .fuel-presets { order: 2; display: flex; gap: 8px; }
+    .fuel-presets button { flex: 1 1 0; min-height: 34px; padding: 0 10px; font-weight: 500; border-color: #ffffff30; background: #ffffff08; font-size: 12px; }
     .fuel-presets button[aria-pressed=true] { border-color: #ffffff90; color: #fff; background: #ffffff14; box-shadow: inset 0 -2px #ff0024; }
     .ck-editor__hint { order: 3; }
     .fuel-body > .fuel-status { order: 4; padding: 10px 12px; font-size: 12px; }
-    // Same place and look as every primary action: bottom right, above a separator.
-    .fuel-apply { order: 6; justify-self: end; width: auto; min-width: 140px; min-height: 36px; padding: 0 16px; border: 1px solid #ff002480; color: #fff; background: #ff00241a; font-size: 13px; }
-    .fuel-body::after { content: ''; order: 5; height: 1px; background: #ffffff25; }
+    // Same look as every primary action: last, across the whole row.
+    .fuel-apply { order: 6; justify-self: stretch; width: auto; min-height: 38px; padding: 0 16px; border: 1px solid #ff002480; color: #fff; background: #ff00241a; font-size: 13px; }
     :is(button, input, .fuel-status) { border-radius: 0; }
+  }
+  // PIP-611: views that change inside the panel (Notifiche, Avvisi, back to the
+  // commands, Guida <-> Pausa, a new notification card) enter softly like the
+  // editors: an element shown again replays the animation. `backwards` only, so
+  // hover and pressed styles are untouched once it has played.
+  .launcher-tools.ck {
+    :is(.pressure-test__button, .launcher-tool-button--pressure, .fuel-open, [data-overlay-wheel-action='pitwall'],
+      .quick-reference, .ck-voice-alerts, .quick-panel-timer, .quick-panel-notifications-button, .quick-panel-voice-button,
+      .ck-view-close, .quick-panel-notifications, .quick-panel-section[aria-label='Avvisi vocali'] > .quick-panel-heading,
+      .fuel-status, .pressure-plan, .control-k-request, .quick-panel-pressure-status, .pressure-test__result, .pressure-test__error) {
+      animation: ck-view-in 260ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    }
   }
   // Editors keep the grid's logo column: the mark never moves, the view changes on
   // its right, and the top-left corner stays free for the placement lock.
@@ -2991,7 +3002,6 @@ $ck-width: 56px + 5 * $ck-cell + 5 * $ck-gap;
   // Same height as in the grid: centred on its two rows of commands.
   .ck-shell__logo { display: block; width: 48px; height: 24px; justify-self: center; margin-top: (2 * $ck-cell + $ck-gap - 24px) * .5; object-fit: contain; }
   .ck-shell__view { min-width: 0; }
-  .ck-shell__view .ck-sector-fields { gap: 8px; }
   // Voice alerts: ← and title on the first row (as every view), the four switches below.
   .launcher-tools.ck--pause.ck--voice-view {
     grid-template-areas: none;
@@ -3048,33 +3058,48 @@ $ck-width: 56px + 5 * $ck-cell + 5 * $ck-gap;
 
 // PIP-556: one structure for every Control K editor (giro, settori, timer, benzina):
 // ← header, fields row, shortcuts row, hint line, one primary action bottom right.
+@keyframes ck-view-in {
+  from { opacity: 0; filter: blur(0.8px); transform: translateY(4px) scale(0.985); }
+  to { opacity: 1; filter: none; transform: none; }
+}
+// PIP-611: the persistent Racer Core mark of the ACC panel (outside the content
+// swap); the mark inside each view only gives it its place.
+.training-overlay {
+  .ck-logo-anchor {
+    position: absolute; z-index: 2; object-fit: contain; pointer-events: none;
+    transition: top 260ms cubic-bezier(0.16, 1, 0.3, 1), left 260ms cubic-bezier(0.16, 1, 0.3, 1),
+      width 260ms cubic-bezier(0.16, 1, 0.3, 1), height 260ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .ck-logo-anchored .overlay-content .quick-panel-logo { visibility: hidden; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .training-overlay .ck-logo-anchor { transition: none; }
+  .training-overlay .launcher-tools.ck * { animation: none !important; }
+}
 .training-overlay {
   // Outside ACC the editor wrappers add no box of their own.
   .ck-shell--plain { display: contents; }
-  .ck-editor__fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
-  .ck-editor__fields .ck-field { width: 64px; }
-  .ck-editor__fields .ck-field--tolerance { width: 96px; }
-  .ck-editor__shortcuts { display: flex; flex-wrap: wrap; gap: 8px; }
+  // PIP-611: one field per value; fields, choices and the primary action fill
+  // their row, so a view with few elements has no empty corners.
+  .ck-editor__fields { display: flex; align-items: stretch; gap: 8px; }
+  .ck-editor__fields .ck-field { flex: 1 1 0; width: auto; }
+  .ck-editor__fields .ck-field--time { flex-grow: 2; }
+  .ck-editor__shortcuts { display: flex; gap: 8px; }
   .ck-editor__shortcuts > button {
-    min-height: 32px; padding: 0 12px; border: 1px solid #ffffff30; border-radius: 0; background: #ffffff08;
+    flex: 1 1 0; min-width: 0; min-height: 34px; padding: 0 10px; border: 1px solid #ffffff30; border-radius: 0; background: #ffffff08;
     color: #eee; font: inherit; font-size: 12px; font-weight: 500; cursor: pointer;
   }
   .ck-editor__shortcuts > button[aria-pressed=true] { border-color: #ffffff90; color: #fff; background: #ffffff14; box-shadow: inset 0 -2px #ff0024; }
   .ck-editor__shortcuts > button:disabled { opacity: .4; cursor: default; }
   .ck-editor__hint { margin: 0; color: #9fb3c8; font-size: 11px; line-height: 1.4; }
   .ck-editor__alert { margin: 0; color: #fecaca; font-size: 12px; line-height: 1.4; }
-  .ck-editor__actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 10px; border-top: 1px solid #ffffff25; }
+  .ck-editor__actions { display: flex; gap: 8px; padding-top: 2px; }
   .ck-editor__primary {
-    min-width: 140px; min-height: 36px; padding: 0 16px; border: 1px solid #ff002480; border-radius: 0; background: #ff00241a;
+    flex: 1 1 auto; min-width: 140px; min-height: 38px; padding: 0 16px; border: 1px solid #ff002480; border-radius: 0; background: #ff00241a;
     color: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
   }
   .ck-editor__primary:hover:not(:disabled) { background: #ff002430; }
   .ck-editor__primary:disabled { opacity: .4; cursor: default; }
-  // Settori: S1 S2 S3, each with its SEC and DEC fields.
-  .ck-sector-fields { gap: 12px; }
-  .ck-sector { display: grid; gap: 4px; }
-  .ck-sector > span { color: #aaa; font-size: 11px; font-weight: 600; }
-  .ck-sector__pair { display: flex; gap: 4px; }
-  .ck-sector__pair .ck-field { width: 60px; }
-  .ck-sector__pair .ck-field:last-child { width: 44px; }
+  // Settori: S1 S2 S3, one field each.
+  .ck-sector-fields { gap: 8px; }
 }

@@ -4,9 +4,9 @@ import { hudSourcePolicy } from '~/services/sim/hudSourceAdapter'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import type { HudOverlaySettings } from '~/composables/useHudOverlay'
-import { MAX_SECTOR_MS, MIN_SECTOR_MS, adjustSectorReferenceField, adjustSectorReferenceTime, formatSectorReferenceTime, parseSectorReferenceTime,
-  resolveCustomSectorTimes, sectorReferenceContextKey, splitSectorReferenceTime, type SectorReferenceField } from '~/utils/customSectorReferences'
-import type { NumberFieldLimits } from '~/utils/controlKNumberField'
+import { MAX_SECTOR_MS, MIN_SECTOR_MS, adjustSectorReferenceTime, formatSectorReferenceTime, parseSectorReferenceTime,
+  resolveCustomSectorTimes, sectorReferenceContextKey } from '~/utils/customSectorReferences'
+import { fieldStartPart, fieldWheelCommand, type NumberFieldSpec } from '~/utils/controlKNumberField'
 import ControlKNumberField from '~/components/overlay/ControlKNumberField.vue'
 import ControlKViewHeader from '~/components/overlay/ControlKViewHeader.vue'
 import { normalizeSectorDeltaReference, type SectorDeltaReference } from '~/utils/sectorDeltaPresentation'
@@ -59,34 +59,33 @@ function bestSectorDraft(): string[] | null {
 }
 const bestAvailable = computed(() => !!bestSectorDraft())
 function useBestSectors() { const best = bestSectorDraft(); if (best) draft.value = best }
-// PIP-556: wheel editing per field. OK on the seconds or the tenths of a
-// sector edits only that field; Up/Down change it (holding repeats), OK/Back leave.
-const editing = ref<{ index: number, field: SectorReferenceField } | null>(null)
-const fields: { id: SectorReferenceField, label: string }[] = [{ id: 'seconds', label: 'SEC' }, { id: 'tenths', label: 'DEC' }]
-function toggleEditing(index: number, field: SectorReferenceField) {
-  editing.value = editing.value?.index === index && editing.value.field === field ? null : { index, field }
+// PIP-611: one field per sector (37,0 in tenths). Typed digits enter from the
+// right (3 7 0 = 37,0); from the wheel OK engages the seconds, Up/Down change
+// them, OK moves to the tenths, then leaves. Limits 10,0 s .. 4:00,0.
+const SECTOR_SPEC: NumberFieldSpec = {
+  parts: [
+    { label: 'SEC', min: MIN_SECTOR_MS / 1000, max: MAX_SECTOR_MS / 1000, wrap: false, digits: 3, unit: 10 },
+    { label: 'DEC', min: 0, max: 9, wrap: true, digits: 1, unit: 1, separator: ',' },
+  ],
+  min: MIN_SECTOR_MS / 100, max: MAX_SECTOR_MS / 100,
 }
-// Shared number field (wheel, mouse scroll, typed digits): seconds 10..240, tenths 0..9.
-const FIELD_LIMITS: Record<SectorReferenceField, NumberFieldLimits> = {
-  seconds: { min: MIN_SECTOR_MS / 1000, max: MAX_SECTOR_MS / 1000, digits: 3, wrap: false },
-  tenths: { min: 0, max: 9, digits: 1, wrap: true },
+const editing = ref<{ index: number, part: number } | null>(null)
+function toggleEditing(index: number) {
+  editing.value = editing.value?.index === index ? null : { index, part: fieldStartPart(SECTOR_SPEC) }
 }
-function fieldNumber(index: number, field: SectorReferenceField): number | null {
-  const parts = splitSectorReferenceTime(draft.value[index] ?? '')
-  return parts ? parts[field] : null
+function fieldTenths(index: number): number | null {
+  const ms = parseSectorReferenceTime(draft.value[index] ?? '')
+  return ms === null ? null : ms / 100
 }
-function setField(index: number, field: SectorReferenceField, value: number) {
-  const parts = splitSectorReferenceTime(draft.value[index] ?? '') ?? { seconds: MIN_SECTOR_MS / 1000, tenths: 0 }
-  const next = { ...parts, [field]: value }
-  const ms = Math.min(MAX_SECTOR_MS, Math.max(MIN_SECTOR_MS, next.seconds * 1000 + next.tenths * 100))
-  draft.value[index] = formatSectorReferenceTime(ms)
-}
+// null: Esc brought back a sector that was empty.
+function setField(index: number, tenths: number | null) { draft.value[index] = tenths === null ? '' : formatSectorReferenceTime(tenths * 100) }
 function handleWheelCommand(command: string | undefined): boolean {
   if (!props.keyboardOverlay || editing.value === null) return false
-  if (command === 'activate-action' || command === 'primary' || command === 'back') { editing.value = null; return true }
-  if (command !== 'next-action' && command !== 'previous-action') return false
-  const { index, field } = editing.value
-  draft.value[index] = adjustSectorReferenceField(draft.value[index]!, field, command === 'next-action' ? 1 : -1)
+  const { index } = editing.value
+  const result = fieldWheelCommand(editing.value.part, fieldTenths(index), command, SECTOR_SPEC)
+  if (!result.handled) return false
+  if (result.value !== null) setField(index, result.value)
+  editing.value = result.part === null ? null : { index, part: result.part }
   return true
 }
 watch([contextKey, loaded], bindContext)
@@ -148,18 +147,12 @@ onBeforeUnmount(() => {
       </div>
       <template v-if="mode === 'custom'">
         <div class="ck-editor__fields ck-sector-fields">
-          <div v-for="(_, index) in draft" :key="index" class="ck-sector">
-            <span>S{{ index + 1 }}</span>
-            <div class="ck-sector__pair">
-              <ControlKNumberField v-for="field in fields" :key="field.id" :value="fieldNumber(index, field.id)"
-                :label="field.label" :action="`sector-${index}-${field.id}`" :name="`S${index + 1} ${field.id === 'seconds' ? 'secondi' : 'decimi'}`"
-                v-bind="FIELD_LIMITS[field.id]" :prefix="field.id === 'tenths' ? ',' : ''" :format="field.id === 'seconds' ? String : undefined"
-                :editing="editing?.index === index && editing.field === field.id" :disabled="saving || !boundKey || contextChanged"
-                @toggle="toggleEditing(index, field.id)" @update:value="setField(index, field.id, $event)" />
-            </div>
-          </div>
+          <ControlKNumberField v-for="(_, index) in draft" :key="index" class="ck-field--sector" :value="fieldTenths(index)" :spec="SECTOR_SPEC"
+            :label="`S${index + 1}`" :action="`sector-${index}`" :name="`Settore ${index + 1}`" suffix=" s"
+            :part="editing?.index === index ? editing.part : null" :disabled="saving || !boundKey || contextChanged"
+            @toggle="toggleEditing(index)" @release="editing = null" @update:value="setField(index, $event)" />
         </div>
-        <p class="ck-editor__hint">Totale {{ total }} s · {{ editing ? 'Su/Giù o rotella cambiano solo questo campo · OK fatto' : 'OK o clic su un campo, poi Su/Giù, rotella o cifre' }}</p>
+        <p class="ck-editor__hint">Totale {{ total }} s<template v-if="editing"> · Su/Giù cambiano {{ SECTOR_SPEC.parts[editing.part]!.label }} · OK passa al successivo</template></p>
         <p v-if="contextChanged" class="ck-editor__alert" role="alert">Gioco, pista, variante o vettura cambiati. Torna indietro e riapri.</p>
         <p v-else-if="draft.some(value => value !== '') && !valid" class="ck-editor__alert" role="status">Inserisci tutti i tempi, da 10,0 secondi a 4:00,0.</p>
       </template>

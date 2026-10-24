@@ -2,13 +2,15 @@
 import { computed, ref } from 'vue'
 import { formatInfoLapTime } from '~/utils/infoPresentation'
 import {
+  INFO_TARGET_MAX_MS,
+  INFO_TARGET_MIN_MS,
   adjustInfoTargetField,
   adjustInfoTargetTolerance,
   normalizeInfoTargetTime,
   splitInfoTargetTime,
   type InfoTargetTimeUnit,
 } from '~/utils/infoTargetPicker'
-import { stepNumberField, type NumberFieldLimits } from '~/utils/controlKNumberField'
+import { fieldStartPart, fieldWheelCommand, singleField, type NumberFieldSpec } from '~/utils/controlKNumberField'
 import ControlKNumberField from '~/components/overlay/ControlKNumberField.vue'
 import ControlKViewHeader from '~/components/overlay/ControlKViewHeader.vue'
 
@@ -65,34 +67,49 @@ function toggleEditing(id: PickerControl['id']) {
   editingControl.value = editingControl.value === id ? null : id
 }
 
-// PIP-556: Ctrl+K uses the shared number field (wheel, mouse scroll, typed digits).
-// MIN, SEC, DEC and the tolerance are independent: they never carry into each other.
-type QuickField = { id: PickerControl['id'], label: string, ariaLabel: string, value: number } & NumberFieldLimits
-  & { prefix?: string, suffix?: string, format?: (value: number) => string }
-const quickFields = computed<QuickField[]>(() => [
-  { id: 'minutes', label: 'MIN', ariaLabel: 'Minuti obiettivo', value: timeParts.value.minutes, min: 0, max: 9, digits: 1, wrap: false },
-  { id: 'seconds', label: 'SEC', ariaLabel: 'Secondi obiettivo', value: timeParts.value.seconds, min: 0, max: 59, digits: 2, wrap: true },
-  { id: 'tenths', label: 'DEC', ariaLabel: 'Decimi obiettivo', value: timeParts.value.tenths, min: 0, max: 9, digits: 1, wrap: true, prefix: ',' },
-  { id: 'tolerance', label: 'TOLLERANZA', ariaLabel: 'Tolleranza massima', value: Math.round(props.toleranceMs / 100), min: 1, max: 10, digits: 2, wrap: false,
-    suffix: ' s', format: tenths => (tenths / 10).toFixed(1).replace('.', ',') },
-])
-function setQuickField(id: PickerControl['id'], value: number) {
-  if (id === 'tolerance') { emit('select-tolerance', value * 100); return }
-  const parts = { ...timeParts.value, [id]: value }
-  emit('set-target-time', normalizeInfoTargetTime(parts.minutes * 60_000 + parts.seconds * 1_000 + parts.tenths * 100))
+// PIP-611: Ctrl+K has two fields, the lap time (1:30,5, one field in tenths) and the
+// tolerance. Typed digits enter from the right; from the wheel OK engages the
+// seconds, Up/Down change them, OK moves to tenths, then minutes, then leaves.
+// The parts never carry into each other while stepping.
+type QuickFieldId = 'time' | 'tolerance'
+const LAP_SPEC: NumberFieldSpec = {
+  parts: [
+    { label: 'MIN', min: 0, max: 9, wrap: false, digits: 1, unit: 600 },
+    { label: 'SEC', min: 0, max: 59, wrap: true, digits: 2, unit: 10, separator: ':' },
+    { label: 'DEC', min: 0, max: 9, wrap: true, digits: 1, unit: 1, separator: ',' },
+  ],
+  min: INFO_TARGET_MIN_MS / 100, max: INFO_TARGET_MAX_MS / 100, start: 1,
 }
-// OK on a field edits it; Up/Down change it (holding repeats), OK or Back leave it.
+const TOLERANCE_SPEC = singleField(1, 10, 2, tenths => (tenths / 10).toFixed(1).replace('.', ','))
+const quickFields = computed(() => [
+  { id: 'time' as const, label: 'TEMPO', ariaLabel: 'Tempo obiettivo', value: Math.round(props.targetTimeMs / 100), spec: LAP_SPEC, suffix: '' },
+  { id: 'tolerance' as const, label: 'TOLLERANZA', ariaLabel: 'Tolleranza massima', value: Math.round(props.toleranceMs / 100), spec: TOLERANCE_SPEC, suffix: ' s' },
+])
+const editingPart = ref<{ id: QuickFieldId, part: number } | null>(null)
+function toggleQuickField(id: QuickFieldId, spec: NumberFieldSpec) {
+  editingPart.value = editingPart.value?.id === id ? null : { id, part: fieldStartPart(spec) }
+}
+function setQuickField(id: QuickFieldId, tenths: number | null) {
+  if (tenths === null) return
+  if (id === 'tolerance') emit('select-tolerance', tenths * 100)
+  else emit('set-target-time', normalizeInfoTargetTime(tenths * 100))
+}
 function handleWheelCommand(command: string | undefined): boolean {
-  if (!editingControl.value || props.appearance !== 'quick-panel') return false
-  if (command === 'activate-action' || command === 'primary' || command === 'back') {
-    editingControl.value = null
-    return true
-  }
-  if (command !== 'next-action' && command !== 'previous-action') return false
-  const field = quickFields.value.find(value => value.id === editingControl.value)
-  if (field) setQuickField(field.id, stepNumberField(field.value, command === 'next-action' ? 1 : -1, field))
+  if (!editingPart.value || props.appearance !== 'quick-panel') return false
+  const field = quickFields.value.find(value => value.id === editingPart.value!.id)!
+  const result = fieldWheelCommand(editingPart.value.part, field.value, command, field.spec)
+  if (!result.handled) return false
+  if (result.value !== null && result.value !== field.value) setQuickField(field.id, result.value)
+  editingPart.value = result.part === null ? null : { id: field.id, part: result.part }
   return true
 }
+const editingHint = computed(() => {
+  if (!editingPart.value) return ''
+  const field = quickFields.value.find(value => value.id === editingPart.value!.id)!
+  return field.spec.parts.length > 1
+    ? `Su/Giù cambiano ${field.spec.parts[editingPart.value.part]!.label} · OK passa al successivo · Indietro fatto`
+    : 'Su/Giù cambiano il valore · OK fatto'
+})
 defineExpose({ handleWheelCommand })
 
 function adjustControl(control: PickerControl, direction: number) {
@@ -117,7 +134,7 @@ function onWheel(control: PickerControl, event: WheelEvent) {
     aria-label="Configura Target giro"
   >
     <!-- PIP-556: Control K editors share one structure: ← header, fields, shortcuts, hint, one primary action. -->
-    <ControlKViewHeader v-if="appearance === 'quick-panel'" title="Giro obiettivo" subtitle="Valido per questa sessione" action="target-cancel" @back="emit('cancel')" />
+    <ControlKViewHeader v-if="appearance === 'quick-panel'" title="Giro obiettivo" action="target-cancel" @back="emit('cancel')" />
     <header v-else>
       <span>{{ contextLabel }}</span>
       <strong>Target giro</strong>
@@ -126,19 +143,17 @@ function onWheel(control: PickerControl, event: WheelEvent) {
 
     <template v-if="appearance === 'quick-panel'">
       <div class="ck-editor__fields" role="group" aria-label="Tempo obiettivo">
-        <ControlKNumberField v-for="field in quickFields" :key="field.id" :value="field.value" :label="field.label"
-          :action="`target-${field.id}`" :name="field.ariaLabel" :min="field.min" :max="field.max" :digits="field.digits"
-          :wrap="field.wrap" :prefix="field.prefix" :suffix="field.suffix" :format="field.format"
-          :editing="editingControl === field.id" :class="`ck-field--${field.id}`"
-          @toggle="toggleEditing(field.id)" @update:value="setQuickField(field.id, $event)" />
+        <ControlKNumberField v-for="field in quickFields" :key="field.id" :value="field.value" :spec="field.spec" :label="field.label"
+          :action="`target-${field.id}`" :name="field.ariaLabel" :suffix="field.suffix"
+          :part="editingPart?.id === field.id ? editingPart.part : null" :class="`ck-field--${field.id}`"
+          @toggle="toggleQuickField(field.id, field.spec)" @release="editingPart = null" @update:value="setQuickField(field.id, $event)" />
       </div>
       <div v-if="usableLap(bestLapMs) || usableLap(lastLapMs)" class="ck-editor__shortcuts">
         <button v-if="usableLap(bestLapMs)" type="button" data-overlay-wheel-action="target-use-best" @click="useLap(bestLapMs!)">Usa best {{ formatInfoLapTime(Math.round(bestLapMs! / 100) * 100) }}</button>
         <button v-if="usableLap(lastLapMs)" type="button" data-overlay-wheel-action="target-use-last" @click="useLap(lastLapMs!)">Usa ultimo {{ formatInfoLapTime(Math.round(lastLapMs! / 100) * 100) }}</button>
       </div>
-      <p class="ck-editor__hint" role="status">{{ editingControl
-        ? 'Su/Giù o rotella cambiano solo questo campo · OK fatto'
-        : 'OK o clic su un campo, poi Su/Giù, rotella o cifre' }}</p>
+      <!-- Only while the wheel adjusts a field: how to move on. -->
+      <p v-if="editingHint" class="ck-editor__hint" role="status">{{ editingHint }}</p>
       <div class="ck-editor__actions">
         <button type="button" class="ck-editor__primary" data-overlay-wheel-action="target-confirm" @click="emit('confirm')">Conferma</button>
       </div>

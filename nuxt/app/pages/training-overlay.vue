@@ -847,9 +847,47 @@ const sessionOverlayOpacity = computed(() => {
 const hudTransitionKey = computed(() => `${phase.value}-${activeStepIndex.value}-${activeStep.value.id}`)
 // Le fasi di sessione condividono il contenuto: il cross-fade del contenitore
 // scatta solo tra macro-schermate; dentro la sessione anima OverlayHud.
-const contentKey = computed(() =>
-  isQuickTimerOpen.value ? 'quick-timer' : ['running', 'paused', 'expired'].includes(phase.value) ? 'session' : phase.value
-)
+// PIP-611: every Control K editor is its own content, so opening or leaving it
+// plays the same swap as the timer instead of switching at once.
+const contentKey = computed(() => {
+  if (isQuickTimerOpen.value) return 'quick-timer'
+  if (phase.value === 'launcher' && isTargetSetupOpen.value) return 'launcher-target'
+  if (phase.value === 'launcher' && isSectorReferenceSetupOpen.value) return 'launcher-sectors'
+  if (phase.value === 'launcher' && isFuelSetupOpen.value) return 'launcher-fuel'
+  return ['running', 'paused', 'expired'].includes(phase.value) ? 'session' : phase.value
+})
+// PIP-611: the Racer Core mark of the ACC panel lives outside the swap: it stays
+// on screen and glides to the place of the mark in the new view (grid, editor or
+// Guida row), whose own mark is only a placeholder.
+const overlayCard = ref<HTMLElement | null>(null)
+const ckLogoBox = ref<{ top: number, left: number, width: number, height: number } | null>(null)
+function syncCkLogo() {
+  const card = overlayCard.value
+  if (!card || !usesAccLayout.value || phase.value !== 'launcher') { ckLogoBox.value = null; return }
+  const placeholder = card.querySelector<HTMLElement>('.overlay-content .quick-panel-logo')
+  // Between the old view leaving and the new one entering there is no placeholder: keep the mark where it is.
+  if (!placeholder || !placeholder.getClientRects().length) return
+  // Layout offsets, not the on-screen box: the swap moves and scales the leaving
+  // and entering views for a moment, and the mark must not follow that motion.
+  let top = 0, left = 0
+  for (let node: HTMLElement | null = placeholder; node && node !== card; node = node.offsetParent as HTMLElement | null) {
+    top += node.offsetTop; left += node.offsetLeft
+    if (node.offsetParent && node.offsetParent !== card) { top += (node.offsetParent as HTMLElement).clientTop; left += (node.offsetParent as HTMLElement).clientLeft }
+  }
+  const next = { top, left, width: placeholder.offsetWidth, height: placeholder.offsetHeight }
+  const box = ckLogoBox.value
+  if (!box || Object.entries(next).some(([key, value]) => Math.abs(value - box[key as keyof typeof box]) > 0.5)) ckLogoBox.value = next
+}
+watch([contentKey, phase, usesAccLayout, accLayoutClasses], () => { void nextTick(syncCkLogo) }, { deep: true })
+let ckLogoResize: ResizeObserver | undefined
+watch(overlayCard, card => {
+  ckLogoResize?.disconnect()
+  if (card && typeof ResizeObserver !== 'undefined') { ckLogoResize = new ResizeObserver(() => syncCkLogo()); ckLogoResize.observe(card) }
+})
+onBeforeUnmount(() => ckLogoResize?.disconnect())
+const ckLogoStyle = computed(() => ckLogoBox.value && {
+  top: `${ckLogoBox.value.top}px`, left: `${ckLogoBox.value.left}px`, width: `${ckLogoBox.value.width}px`, height: `${ckLogoBox.value.height}px`,
+})
 const overlaySizePreset = computed<OverlaySizePreset>(() => {
   if (phase.value === 'launcher') return 'launcher'
   if (phase.value === 'select') return 'select'
@@ -986,8 +1024,8 @@ function openInfoTargetSetup() {
     }
   }
   isTargetSetupOpen.value = true
-  // PIP-556: seconds are the field a driver changes most often.
-  selectedWheelActionId.value = 'target-seconds'
+  // PIP-611: the lap time field is selected; OK engages its seconds first.
+  selectedWheelActionId.value = 'target-time'
   scheduleOverlaySizeSync()
 }
 
@@ -1510,9 +1548,10 @@ onBeforeUnmount(() => {
       <Transition name="overlay-surface" mode="out-in">
         <!-- Contenitore unico persistente (PIP-93): il morphing e' l'animazione
              di resize della finestra; dentro, il contenuto si avvicenda in cross-fade. -->
-        <section v-if="phase !== 'loading'" key="card" class="overlay-card">
+        <section v-if="phase !== 'loading'" key="card" ref="overlayCard" class="overlay-card" :class="{ 'ck-logo-anchored': !!ckLogoStyle }">
           <OverlayPlacementLock overlay-id="training" />
-          <Transition name="content-swap" :css="!preparingReopen" :mode="preparingReopen ? undefined : 'out-in'" @after-enter="actionSelection.refresh()">
+          <img v-if="ckLogoStyle" class="ck-logo-anchor" src="/branding/auth/racercore-rc.svg" alt="" aria-hidden="true" :style="ckLogoStyle">
+          <Transition name="content-swap" :css="!preparingReopen" :mode="preparingReopen ? undefined : 'out-in'" @after-enter="actionSelection.refresh(); syncCkLogo()">
             <div
               :key="contentKey"
               :class="[

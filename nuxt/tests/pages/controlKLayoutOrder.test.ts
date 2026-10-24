@@ -114,7 +114,7 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     // PIP-556: then the voice alerts view.
     expect(source).toMatch(/function runBackAction\(\) \{\s*if \(isNotificationsOpen\.value\) \{ closeNotifications\(\); return \}\s*if \(isVoiceViewOpen\.value\) \{ closeVoiceView\(\); return \}\s*if \(isQuickTimerOpen\.value\) \{ leaveQuickTimer\(\); return \}/)
     expect(source).toContain("function openFuelSetup() { isFuelSetupOpen.value = true; void nextTick(() => actionSelection.select(usesAccLayout.value ? 'fuel-minutes' : 'fuel-plus')) }")
-    expect(source).toContain("selectedWheelActionId.value = 'target-seconds'")
+    expect(source).toContain("selectedWheelActionId.value = 'target-time'")
     expect(source).toContain('<span>Giro obiettivo</span>')
     expect(source).toContain('<span>Settori obiettivo</span>')
   })
