@@ -6,7 +6,8 @@ import { useSessionLoader } from '~/composables/useSessionLoader'
 import { mergeSessionsDeterministic } from '~/services/telemetry/telemetryMergeService'
 import { sessionGame } from '~/services/telemetry/gameIdentity'
 import { sessionDataReferences, stintDataFacts, lapStatus } from '~/services/session-detail/sessionDataPresentation'
-import { formatLapTime, formatDriveTime, formatTrackName, formatCarName, getSessionTypeLabel } from '~/utils/telemetryFormat'
+import { formatLapTime, formatTrackName, formatCarName, getSessionTypeLabel } from '~/utils/telemetryFormat'
+import { TYRE_BANDS, brakeBands, temperatureColor, type BrakePad } from '~/utils/temperatureColor'
 import type { FullSession, SessionDocument } from '~/types/telemetry'
 
 definePageMeta({ layout: 'dashboard' })
@@ -25,7 +26,6 @@ function remembered(): Selection {
   try { return JSON.parse(localStorage.getItem(storageKey()) || '{}') } catch { return {} }
 }
 const latest = computed(() => sessions.value[0])
-const selected = computed(() => sessions.value.find(s => s.sessionId === sessionId.value))
 const stints = computed(() => full.value?.stints ?? [])
 const stint = computed(() => stints.value.find(s => s.stint_number === stintNumber.value))
 const laps = computed(() => stint.value?.laps ?? [])
@@ -34,12 +34,65 @@ const references = computed(() => sessionDataReferences(full.value))
 const facts = computed(() => stintDataFacts(stint.value))
 const bestLap = computed(() => references.value.best)
 const isLatest = computed(() => sessionId.value === latest.value?.sessionId)
-const wheels = ['ANT SX', 'ANT DX', 'POST SX', 'POST DX']
-const columns = [
-  { title: 'PRESSIONI', unit: 'PSI', note: 'Misure registrate nel giro', blocks: ['MASSIME', 'MEDIE', 'PERDITA PRESSIONE'] },
-  { title: 'TEMPERATURE GOMME', unit: '°C', note: 'Temperatura del nucleo', blocks: ['MASSIME', 'MEDIE', 'MINIME'] },
-  { title: 'TEMPERATURE FRENI', unit: '°C', note: 'Per singola ruota', blocks: ['MASSIME', 'MEDIE', 'MINIME'] },
+// PIP-613: the ACC Drive telemetry panel, compact. Laps recorded before the per-lap summary
+// (`lap.telemetry`) show "--" in the same places the values will fill.
+const tel = computed(() => lap.value?.telemetry)
+type WheelKind = 'pressure' | 'tyre' | 'brake'
+const wheelColumns: { title: string, unit: string, kind: WheelKind, rows: [string, 'high' | 'avg' | 'low' | 'loss'][] }[] = [
+  { title: 'Pressioni', unit: 'psi', kind: 'pressure', rows: [['Alta', 'high'], ['Media', 'avg'], ['Perdita', 'loss']] },
+  { title: 'Temp. gomme', unit: '°C', kind: 'tyre', rows: [['Alta', 'high'], ['Media', 'avg'], ['Bassa', 'low']] },
+  { title: 'Temp. freni', unit: '°C', kind: 'brake', rows: [['Alta', 'high'], ['Media', 'avg'], ['Bassa', 'low']] },
 ]
+const PAD: Record<string, BrakePad> = { standard: 'standard', endurance: 'endurance', wet: 'wet', qualy: 'qualy' }
+/** The four values of a cell (FL FR / RL RR), with the ACC Drive colour where it has one. */
+function wheelCells(kind: WheelKind, key: 'high' | 'avg' | 'low' | 'loss') {
+  const t = tel.value
+  const source = kind === 'pressure' ? t?.pressure : kind === 'tyre' ? t?.tyre_temp : t?.brake_temp
+  const values = (source as Record<string, (number | null)[]> | undefined)?.[key] ?? [null, null, null, null]
+  return values.map((value, wheel) => {
+    if (kind === 'pressure') return { text: number(value, key === 'loss' ? 2 : 1), color: key === 'loss' && value !== null ? '#ffa94d' : null }
+    const bands = kind === 'tyre'
+      ? TYRE_BANDS[t?.tyre?.wet ? 'wet' : 'dry']
+      : brakeBands(wheel < 2 ? 'front' : 'rear', PAD[String((wheel < 2 ? t?.brakes?.front_pad : t?.brakes?.rear_pad) ?? '').toLowerCase()])
+    return { text: typeof value === 'number' ? `${Math.round(value)}°` : '--', color: temperatureColor(value, bands) }
+  })
+}
+const percent = (values?: (number | null)[]) => (values ?? [null, null, null, null]).map(v => typeof v === 'number' ? `${v.toFixed(1)}%` : '--')
+const tyreType = computed(() => tel.value?.tyre?.compound ?? (tel.value?.tyre ? (tel.value.tyre.wet ? 'Bagnato' : 'Asciutto') : '--'))
+const brakeType = computed(() => {
+  const b = tel.value?.brakes
+  if (!b?.front_pad) return '--'
+  return b.rear_pad && b.rear_pad !== b.front_pad ? `${b.front_pad} / ${b.rear_pad}` : b.front_pad
+})
+const sectors = computed(() => [0, 1, 2].map(i => lap.value?.sector_times_ms?.[i] ?? null))
+// Best sectors of the session (valid laps with reliable sectors): shown in purple, as in ACC Drive.
+const bestSectors = computed(() => [0, 1, 2].map(i => {
+  const values = stints.value.flatMap(s => s.laps).filter(l => l.is_valid && l.sectors_reliable).map(l => l.sector_times_ms?.[i]).filter((v): v is number => typeof v === 'number' && v > 0)
+  return values.length ? Math.min(...values) : null
+}))
+const kmh = (value?: number | null) => typeof value === 'number' ? `${value.toFixed(1)} km/h` : '--'
+const count = (value?: number | null) => typeof value === 'number' ? String(value) : '--'
+// ↑ ↓ (buttons or keys) move to the previous or next lap of the stint, as in ACC Drive.
+function stepLap(direction: -1 | 1) {
+  const index = laps.value.findIndex(l => l.lap_number === lapNumber.value)
+  const next = laps.value[index + direction]
+  if (next) lapNumber.value = next.lap_number
+}
+function onKey(event: KeyboardEvent) {
+  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+  if ((event.target as HTMLElement | null)?.closest?.('select, input, textarea')) return
+  event.preventDefault()
+  stepLap(event.key === 'ArrowUp' ? -1 : 1)
+}
+const startAir = computed(() => recordedTemp(full.value?.session_info?.start_air_temp))
+const startTrack = computed(() => recordedTemp(full.value?.session_info?.start_road_temp))
+function recordedTemp(value: unknown) { return typeof value === 'number' && Number.isFinite(value) ? value : null }
+/** Change from the start of the session to the selected lap. */
+function delta(start: number | null, now: unknown) {
+  const value = recordedTemp(now)
+  return start === null || value === null ? null : value - start
+}
+const signed = (value: number | null) => value === null ? '--' : `${value >= 0 ? '+' : ''}${value.toFixed(2)}°`
 function saveSelection() {
   if (!profileUser.value || !sessionId.value) return
   try { localStorage.setItem(storageKey(), JSON.stringify({ sessionId: sessionId.value, latestId: latest.value?.sessionId, stint: stintNumber.value, lap: lapNumber.value })) } catch { /* Storage can be disabled. */ }
@@ -94,9 +147,13 @@ async function refreshLocal() {
     if (latest.value && previousLatest !== latest.value.sessionId) { await selectSession(latest.value.sessionId); return }
     // Poll only the selected local file; historical cloud data is immutable here.
     if (local.some(s => s.sessionId === sessionId.value)) {
+      // Watching the last lap: a new lap takes over, like the live ACC Drive panel.
+      const onLast = lapNumber.value === laps.value.at(-1)?.lap_number && stintNumber.value === stints.value.at(-1)?.stint_number
       const result = await gateway.getSessionDetail(sessionId.value, uid, { warmupSessions: false })
       if (request !== revision || uid !== profileUser.value?.uid) return
-      full.value = result; reconcileSelection(); saveSelection()
+      full.value = result
+      if (onLast) { stintNumber.value = stints.value.at(-1)?.stint_number ?? 0; lapNumber.value = stints.value.at(-1)?.laps.at(-1)?.lap_number ?? 0 }
+      reconcileSelection(); saveSelection()
       updatedAt.value = new Date().toLocaleTimeString('it-IT')
     }
   } catch { if (request === revision) error.value = 'Aggiornamento locale non riuscito. Premi Aggiorna per riprovare.' }
@@ -106,70 +163,225 @@ watch(stintNumber, () => { reconcileSelection(); saveSelection() })
 watch(lapNumber, saveSelection)
 watch(() => profileUser.value?.uid, () => { void load() })
 watch(cloudSessionReady, () => { void load() })
-onMounted(() => { void load(); timer = setInterval(() => { void refreshLocal() }, 10000) })
-onBeforeUnmount(() => { revision++; clearInterval(timer) })
+onMounted(() => { void load(); timer = setInterval(() => { void refreshLocal() }, 10000); window.addEventListener('keydown', onKey) })
+onBeforeUnmount(() => { revision++; clearInterval(timer); window.removeEventListener('keydown', onKey) })
 const time = (value: number | null | undefined) => value && value > 0 ? formatLapTime(value) : '--'
 const number = (value: number | null | undefined, digits = 1) => typeof value === 'number' && Number.isFinite(value) ? value.toFixed(digits) : '--'
-function conditions(key: 'air_temp' | 'road_temp') {
-  const a = facts.value.first?.[key], b = facts.value.last?.[key]
-  if (typeof a !== 'number' || typeof b !== 'number' || !Number.isFinite(a) || !Number.isFinite(b)) return '--'
-  return `${number(a)} → ${number(b)} °C (${b - a >= 0 ? '+' : ''}${number(b - a)} °C)`
-}
 </script>
+
 
 <template>
   <LayoutPageContainer class="data-page">
-    <header class="data-heading"><div><h1>DATI DELLA SESSIONE</h1><p>Giri, vettura e condizioni della tua sessione</p></div><button @click="load" :disabled="busy">Aggiorna</button></header>
-    <div class="data-selectors">
-      <label class="session-select">SESSIONE<select :value="sessionId" :disabled="busy || !sessions.length" @change="selectSession(($event.target as HTMLSelectElement).value)"><option v-if="!sessions.length" value="">Nessuna sessione</option><option v-for="s in sessions" :key="s.sessionId" :value="s.sessionId">{{ new Date(s.meta.date_start).toLocaleString('it-IT') }} · {{ formatTrackName(s.meta.track) }} · {{ formatCarName(s.meta.car) }}</option></select></label>
-      <button :disabled="!latest || busy" @click="latest && selectSession(latest.sessionId)">Sessione corrente / ultima</button>
-      <label>STINT<select v-model.number="stintNumber" :disabled="busy || !stints.length"><option v-for="s in stints" :key="s.stint_number" :value="s.stint_number">Stint {{ s.stint_number }} · {{ s.laps.length }} giri</option></select></label>
+    <!-- One bar: session, latest, stint, refresh; the context line under it. -->
+    <div class="data-bar">
+      <select class="data-session" :value="sessionId" :disabled="busy || !sessions.length" aria-label="Sessione" @change="selectSession(($event.target as HTMLSelectElement).value)">
+        <option v-if="!sessions.length" value="">Nessuna sessione</option>
+        <option v-for="s in sessions" :key="s.sessionId" :value="s.sessionId">{{ new Date(s.meta.date_start).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' }) }} · {{ formatTrackName(s.meta.track) }} · {{ formatCarName(s.meta.car) }} · {{ getSessionTypeLabel(s.meta.session_type) }}</option>
+      </select>
+      <select v-model.number="stintNumber" class="data-stint" :disabled="busy || !stints.length" aria-label="Stint">
+        <option v-for="s in stints" :key="s.stint_number" :value="s.stint_number">Stint {{ s.stint_number }} · {{ s.laps.length }} giri</option>
+      </select>
+      <button type="button" :disabled="!latest || busy || isLatest" @click="latest && selectSession(latest.sessionId)">Ultima sessione</button>
+      <button type="button" class="data-refresh" :disabled="busy" aria-label="Aggiorna" title="Aggiorna" @click="load">↻</button>
     </div>
-    <div class="data-context"><span>{{ selected ? formatTrackName(selected.meta.track) : '--' }} · {{ selected ? formatCarName(selected.meta.car) : '--' }} · {{ selected ? getSessionTypeLabel(selected.meta.session_type) : '--' }}</span><span>{{ isLatest ? 'ULTIMA SESSIONE REGISTRATA' : 'SESSIONE STORICA' }}<template v-if="updatedAt"> · aggiornato {{ updatedAt }}</template></span></div>
+    <p class="data-meta">{{ isLatest ? 'Ultima sessione registrata' : 'Sessione storica' }}<template v-if="updatedAt"> · aggiornato {{ updatedAt }}</template></p>
     <p v-if="error" class="data-error" role="alert">{{ error }}</p>
-    <p v-if="busy" role="status">Caricamento dati…</p>
-    <p v-else-if="!sessions.length" class="empty">Nessuna sessione ACC registrata. Completa un giro con Racer Core attivo, poi premi Aggiorna.</p>
-    <div v-else class="data-body" :aria-busy="busy">
-      <aside class="laps-panel"><h2>GIRI DELLO STINT</h2><div class="lap-list"><button v-for="l in laps" :key="l.lap_number" class="lap-row" :class="{ selected: l.lap_number === lapNumber, invalid: l.is_valid === false, best: l.lap_time_ms === bestLap && l.is_valid && !l.has_pit_stop && !l.pit_out_lap }" :aria-pressed="l.lap_number === lapNumber" @click="lapNumber = l.lap_number"><span class="lap-index">{{ l.lap_number }}</span><span><strong>{{ time(l.lap_time_ms) }}</strong><small>{{ lapStatus(l) }}</small></span><span v-if="l.lap_time_ms === bestLap && l.is_valid && !l.has_pit_stop && !l.pit_out_lap" class="best-tag">BEST</span></button></div><p v-if="!laps.length">Nessun giro concluso in questo stint.</p></aside>
-      <main class="lap-content">
-        <div class="lap-heading"><h2>GIRO {{ lap?.lap_number ?? '--' }}</h2><strong>{{ time(lap?.lap_time_ms) }}</strong><span :class="{ 'data-error': lap?.is_valid === false }">{{ lap ? lapStatus(lap) : 'Seleziona un giro' }}</span></div>
-        <div class="wheel-columns"><section v-for="column in columns" :key="column.title" class="wheel-column"><h2>{{ column.title }} <small>({{ column.unit }})</small></h2><p>{{ column.note }}</p><div v-for="block in column.blocks" :key="block" class="wheel-block"><h3>{{ block }}</h3><div class="wheel-grid"><div v-for="wheel in wheels" :key="wheel"><span>{{ wheel }}</span><strong>--</strong></div></div></div></section></div>
-        <p class="missing-note">-- = misura non registrata per questo giro. Lo storico attuale non conserva pressioni e temperature gomme/freni per giro; nessun dato live viene attribuito ai giri passati. Perdita pressione indica cali di PSI, non usura.</p>
-        <div class="time-row"><div><span>TEMPO GIRO</span><strong>{{ time(lap?.lap_time_ms) }}</strong></div><div v-for="n in 3" :key="n"><span>SETTORE {{ n }}</span><strong>{{ time(lap?.sector_times_ms?.[n - 1]) }}</strong><small v-if="lap?.sector_times_ms?.[n - 1] && !lap.sectors_reliable">Non affidabile</small></div></div>
-        <section class="facts-panel"><h2>RIFERIMENTI DELLA SESSIONE</h2><div class="facts-grid"><div><span>MIGLIORE GIRO VALIDO</span><strong>{{ time(references.best) }}</strong><small>Giri validi, esclusi ingresso e uscita box</small></div><div><span>OTTIMALE TEORICO</span><strong>{{ time(references.optimal) }}</strong><small>Somma dei migliori settori affidabili dei giri validi</small></div><div><span>PASSO MEDIO</span><strong>{{ time(references.average) }}</strong><small>Media pulita registrata dal logger: validi, senza box/outlap, entro il 115% del best</small></div></div></section>
-        <section class="facts-panel"><h2>STINT {{ stintNumber || '--' }}</h2><div class="facts-grid"><div><span>DURATA REGISTRATA</span><strong>{{ facts.duration ? formatDriveTime(facts.duration) : '--' }}</strong></div><div><span>CONSUMO MEDIO</span><strong>{{ number(facts.perLap, 2) }} <small>L/giro</small></strong></div><div><span>CARBURANTE CONSUMATO</span><strong>{{ number(facts.consumed, 2) }} <small>L</small></strong></div></div><p>Carburante: somma inizio − fine dei {{ facts.lapCount }} giri registrati nello stint, inclusi box e invalidi. Non include soste o tratti non registrati.</p></section>
-        <section class="facts-panel"><h2>CONDIZIONI STINT</h2><div class="conditions"><div><span>ARIA</span><strong>{{ conditions('air_temp') }}</strong></div><div><span>PISTA</span><strong>{{ conditions('road_temp') }}</strong></div></div><p>Dal primo all’ultimo fine giro registrato dello stint; non sono misure dell’uscita iniziale dai box.</p></section>
-        <section class="vehicle-context"><span>MESCOLA / SET <strong>-- / --</strong></span><span>FRENI <strong>--</strong></span><span>TC / TC2 / ABS <strong>-- / -- / --</strong></span><span>DANNI <strong>Non registrati nel giro</strong></span><details><summary>Usura pastiglie e dischi</summary><p>Non registrata nello storico del giro selezionato.</p></details></section>
-      </main>
+    <p v-if="busy && !full" role="status" class="data-empty">Caricamento dati…</p>
+    <p v-else-if="!sessions.length" class="data-empty">Nessuna sessione registrata. Completa un giro con Racer Core attivo, poi premi Aggiorna.</p>
+
+    <div v-else class="tele" :aria-busy="busy">
+      <!-- Laps of the stint -->
+      <aside class="tele-laps">
+        <div class="tele-laps-head">
+          <h2>Giri</h2>
+          <span class="tele-steps">
+            <button type="button" aria-label="Giro precedente" title="Giro precedente (↑)" :disabled="!laps.length || lapNumber === laps[0]?.lap_number" @click="stepLap(-1)">↑</button>
+            <button type="button" aria-label="Giro successivo" title="Giro successivo (↓)" :disabled="!laps.length || lapNumber === laps.at(-1)?.lap_number" @click="stepLap(1)">↓</button>
+          </span>
+        </div>
+        <div class="tele-lap-list">
+          <button v-for="l in laps" :key="l.lap_number" type="button" class="tele-lap"
+            :class="{ selected: l.lap_number === lapNumber, invalid: l.is_valid === false, best: l.lap_time_ms === bestLap && l.is_valid && !l.has_pit_stop && !l.pit_out_lap }"
+            :aria-pressed="l.lap_number === lapNumber" :title="lapStatus(l)" @click="lapNumber = l.lap_number">
+            <span>{{ l.lap_number }}</span><strong>{{ time(l.lap_time_ms) }}</strong>
+          </button>
+        </div>
+        <p v-if="!laps.length" class="tele-note">Nessun giro in questo stint.</p>
+      </aside>
+
+      <div class="tele-main">
+        <!-- Per wheel (FL FR / RL RR) and car -->
+        <p class="tele-section">Gomme e freni <small>· per ruota: ant. sx ant. dx / post. sx post. dx</small></p>
+        <div class="tele-grid">
+          <section v-for="column in wheelColumns" :key="column.title" class="tele-col">
+            <h3>{{ column.title }} <small>{{ column.unit }}</small></h3>
+            <div v-for="[label, key] in column.rows" :key="key" class="tele-cell">
+              <span class="tele-label">{{ label }}</span>
+              <div class="tele-wheels"><b v-for="(cell, i) in wheelCells(column.kind, key)" :key="i" :style="cell.color ? { color: cell.color } : undefined">{{ cell.text }}</b></div>
+            </div>
+          </section>
+          <section class="tele-col">
+            <h3>Gomme</h3>
+            <div class="tele-cell"><span class="tele-label">Tipo</span><strong class="tele-value">{{ tyreType }}</strong></div>
+            <div class="tele-cell"><span class="tele-label">Set</span><strong class="tele-value">{{ count(tel?.tyre?.set) }}</strong></div>
+            <div class="tele-cell"><span class="tele-label">Usura</span><strong class="tele-value muted">Non fornita da ACC</strong></div>
+          </section>
+          <section class="tele-col">
+            <h3>Freni</h3>
+            <div class="tele-cell"><span class="tele-label">Tipo</span><strong class="tele-value">{{ brakeType }}</strong></div>
+            <div class="tele-cell"><span class="tele-label">Pastiglie</span><div class="tele-wheels"><b v-for="(v, i) in percent(tel?.brakes?.pad_life)" :key="i">{{ v }}</b></div></div>
+            <div class="tele-cell"><span class="tele-label">Dischi</span><div class="tele-wheels"><b v-for="(v, i) in percent(tel?.brakes?.disc_life)" :key="i">{{ v }}</b></div></div>
+          </section>
+        </div>
+
+        <!-- Lap and sectors -->
+        <p class="tele-section">Giro e settori</p>
+        <div class="tele-row tele-row--lap">
+          <section class="tele-card">
+            <h3>Giro {{ lap?.lap_number ?? '' }}</h3>
+            <dl>
+              <div><dt>Tempo</dt><dd class="lap-time" :class="{ invalid: lap?.is_valid === false }">{{ time(lap?.lap_time_ms) }}</dd></div>
+              <div><dt>Top</dt><dd>{{ kmh(tel?.lap?.top_kmh) }}</dd></div><div><dt>Media</dt><dd>{{ kmh(tel?.lap?.avg_kmh) }}</dd></div>
+              <div><dt>TC / ABS</dt><dd>{{ count(tel?.lap?.tc) }} / {{ count(tel?.lap?.abs) }}</dd></div>
+            </dl>
+          </section>
+          <section v-for="(sector, i) in sectors" :key="i" class="tele-card">
+            <h3>Settore {{ i + 1 }}</h3>
+            <dl>
+              <div><dt>Tempo</dt><dd class="sector-time" :class="{ best: sector !== null && sector === bestSectors[i] }">{{ time(sector) }}</dd></div>
+              <div><dt>Top</dt><dd>{{ kmh(tel?.sectors?.[i]?.top_kmh) }}</dd></div><div><dt>Media</dt><dd>{{ kmh(tel?.sectors?.[i]?.avg_kmh) }}</dd></div>
+              <div><dt>TC / ABS</dt><dd>{{ count(tel?.sectors?.[i]?.tc) }} / {{ count(tel?.sectors?.[i]?.abs) }}</dd></div>
+            </dl>
+          </section>
+          <section class="tele-card tele-card--narrow">
+            <h3>Assist</h3>
+            <dl><div><dt>TC</dt><dd>{{ count(tel?.assists?.tc) }}</dd></div><div><dt>TC2</dt><dd>{{ count(tel?.assists?.tc2) }}</dd></div><div><dt>ABS</dt><dd>{{ count(tel?.assists?.abs) }}</dd></div></dl>
+          </section>
+        </div>
+
+        <!-- Session, stint, damage, conditions -->
+        <p class="tele-section">Sessione e condizioni</p>
+        <div class="tele-row tele-row--facts">
+          <!-- Same five columns as the rows above, each card with its title. -->
+          <section class="tele-card">
+            <h3>Sessione</h3>
+            <dl>
+              <div><dt>Migliore</dt><dd class="best-lap">{{ time(references.best) }}</dd></div>
+              <div><dt>Ottimale</dt><dd>{{ time(references.optimal) }}</dd></div>
+              <div><dt>Media</dt><dd>{{ time(references.average) }}</dd></div>
+            </dl>
+          </section>
+          <section class="tele-card">
+            <h3>Stint</h3>
+            <dl>
+              <div><dt>Tempo</dt><dd>{{ time(facts.duration) }}</dd></div>
+              <div><dt>Benzina</dt><dd>{{ number(facts.consumed, 2) }} L</dd></div>
+              <div><dt>Al giro</dt><dd>{{ number(facts.perLap, 2) }} L</dd></div>
+            </dl>
+          </section>
+          <section class="tele-card">
+            <h3>Danni</h3>
+            <dl><div><dt>Carrozzeria</dt><dd>{{ number(tel?.damage?.body, 1) }}</dd></div><div><dt>Sospensioni</dt><dd>{{ number(tel?.damage?.suspension, 1) }}</dd></div></dl>
+          </section>
+          <section class="tele-card">
+            <h3>Aria</h3>
+            <dl>
+              <div><dt>Avvio</dt><dd>{{ number(startAir, 1) }}°</dd></div>
+              <div><dt>Delta</dt><dd :class="{ warm: (delta(startAir, lap?.air_temp) ?? 0) > 0 }">{{ signed(delta(startAir, lap?.air_temp)) }}</dd></div>
+            </dl>
+          </section>
+          <section class="tele-card">
+            <h3>Pista</h3>
+            <dl>
+              <div><dt>Avvio</dt><dd>{{ number(startTrack, 1) }}°</dd></div>
+              <div><dt>Delta</dt><dd :class="{ warm: (delta(startTrack, lap?.road_temp) ?? 0) > 0 }">{{ signed(delta(startTrack, lap?.road_temp)) }}</dd></div>
+            </dl>
+          </section>
+        </div>
+        <p v-if="lap && !tel" class="tele-note">-- = non registrato per questo giro (gomme, freni, velocità, TC/ABS, danni): arriva con il prossimo aggiornamento del logger.</p>
+      </div>
     </div>
-    <p class="data-footer">La sessione locale si aggiorna ogni 10 secondi, dopo il salvataggio del logger al termine del giro. Una nuova sessione ha precedenza sulla selezione storica ricordata.</p>
   </LayoutPageContainer>
 </template>
 
 <style scoped lang="scss">
+// PIP-613: the ACC Drive telemetry panel in the Racer Core language: dark cells, thin borders,
+// small titles, tabular numbers; everything visible without scrolling on a desktop window.
 @use '@/assets/scss/racing-settings' as controls;
+$line: #ffffff24;
+$cell: #ffffff08;
 .data-page { @include controls.tokens; }
-h1, h2, h3 { font-family: 'Racer Display', 'Arial Narrow', sans-serif; font-style: italic; font-weight: 700; margin: 0; }
-h1 { font-size: 34px; } h2 { font-size: 20px; } h3 { font-size: 15px; }
-p { color: #aaa; font-size: 12px; line-height: 1.5; }
-button { @include controls.action; } select { @include controls.select; width: 100%; margin-top: 7px; }
-.data-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 22px; p { margin: 6px 0 0; } }
-.data-selectors { display: flex; gap: 16px; align-items: end; label { font-size: 11px; color: #bbb; min-width: 145px; } .session-select { flex: 1; min-width: 0; } }
-.data-context { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; padding: 15px 0 18px; font-size: 12px; color: #bbb; }
-.data-body { display: grid; grid-template-columns: 225px minmax(0, 1fr); gap: 22px; }
-.laps-panel { border-right: 1px solid #ffffff40; padding-right: 20px; h2 { margin-bottom: 18px; } }
-.lap-list { max-height: 760px; overflow: auto; }
-.lap-row { clip-path: none; width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 8px; border-bottom: 1px solid #ffffff20; background: transparent; text-align: left; &::after { display: none; } strong { font: italic 700 20px 'Racer Display', sans-serif; } small { display: block; font-size: 10px; margin-top: 4px; color: #aaa; } &.selected { background: #ffffff13; box-shadow: inset 3px 0 #ff0024; } &.invalid strong { color: #ff899a; } &.best strong { color: #c7a0ff; } }
-.lap-index { width: 23px; color: #aaa; font-size: 12px; }.best-tag { margin-left: auto; font-size: 9px; color: #c7a0ff; }
-.lap-content { min-width: 0; }.lap-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 18px; margin-bottom: 18px; > strong { font: italic 700 29px 'Racer Display', sans-serif; } > span { font-size: 12px; color: #bbb; } }
-.wheel-columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid #ffffff40; }.wheel-column { padding: 15px; min-width: 0; + .wheel-column { border-left: 1px solid #ffffff40; } h2 { font-size: clamp(14px, 1.4vw, 19px); line-height: 1.25; } > p { font-size: 10px; margin: 5px 0 16px; } small { font-size: 11px; font-weight: 400; } }
-.wheel-block { padding: 13px 0; border-top: 1px solid #ffffff26; h3 { color: #bbb; } }.wheel-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 12px; margin-top: 12px; span { display: block; font-size: 9px; color: #999; } strong { display: block; font: italic 700 24px 'Racer Display', sans-serif; margin-top: 4px; font-variant-numeric: tabular-nums; } }
-.missing-note { margin: 10px 0 18px; font-size: 11px; }.time-row { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); border-block: 1px solid #ffffff45; padding: 16px 0; gap: 14px; }
-.time-row, .facts-grid, .conditions { span { display: block; font-size: 10px; color: #bbb; margin-bottom: 7px; } strong { display: block; font: italic 700 24px 'Racer Display', sans-serif; font-variant-numeric: tabular-nums; } small { display: block; font: 11px/1.5 'Inter', sans-serif; color: #999; margin-top: 7px; } }
-.facts-panel { border-bottom: 1px solid #ffffff30; padding: 22px 0 18px; h2 { margin-bottom: 17px; } p { margin-bottom: 0; font-size: 11px; } }.facts-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 22px; }.conditions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 22px; strong { font-size: 20px; } }
-.vehicle-context { display: flex; flex-wrap: wrap; gap: 16px 24px; padding: 20px 0; font-size: 10px; text-transform: uppercase; color: #aaa; strong { color: #ddd; margin-left: 6px; } details { flex-basis: 100%; text-transform: none; summary { cursor: pointer; } } }
-.data-error { color: #ff899a !important; }.data-footer { border-top: 1px solid #ffffff20; padding-top: 14px; font-size: 11px; }.empty { padding: 40px 0; }
-@media(max-width: 1050px) { .data-body { grid-template-columns: 175px minmax(0,1fr); gap: 16px; }.laps-panel { padding-right: 12px; }.wheel-column { padding: 12px 9px; }.best-tag { display: none; } }
-@media(max-width: 800px) { .data-body { grid-template-columns: minmax(0,1fr); }.laps-panel { border-right: 0; padding-right: 0; }.lap-list { display: flex; max-height: none; gap: 8px; padding-bottom: 8px; }.lap-row { flex: 0 0 160px; }.data-selectors { flex-wrap: wrap; .session-select { flex-basis: 100%; } }.facts-grid { gap: 12px; }.conditions strong { font-size: 16px; } }
-@media(max-width: 480px) { h1 { font-size: 27px; }.wheel-column h2 { font-size: 13px; }.wheel-column { padding: 10px 6px; }.wheel-grid { gap: 12px 6px; }.wheel-grid span { font-size: 8px; }.facts-grid, .conditions { grid-template-columns: 1fr; }.time-row strong { font-size: 18px; }.data-selectors > button { flex: 1; } }
+h2, h3 { margin: 0; font-family: 'Racer Display', 'Arial Narrow', sans-serif; font-style: italic; font-weight: 700; text-transform: uppercase; }
+button { @include controls.action; }
+select { @include controls.select; }
+
+.data-bar { display: flex; gap: 10px; align-items: center; }
+.data-session { flex: 1; min-width: 0; }
+.data-stint { flex: 0 0 170px; }
+.data-refresh { min-width: 44px; font-size: 18px; }
+.data-meta { margin: 8px 0 14px; color: #8a8a90; font-size: 11px; }
+.data-error { color: #ff899a; font-size: 12px; }
+.data-empty { padding: 40px 0; color: #aaa; }
+
+.tele { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; }
+.tele-laps { display: flex; flex-direction: column; min-height: 0; border: 1px solid $line; background: $cell; padding: 10px 0;
+  h2 { padding: 0 12px 8px; font-size: 14px; } }
+.tele-lap-list { flex: 1; overflow: auto; max-height: 560px; }
+.tele-lap { display: flex; align-items: baseline; gap: 10px; width: 100%; padding: 5px 12px; border: 0; background: none; clip-path: none; color: #e6e6ea; text-align: left; font-variant-numeric: tabular-nums; cursor: pointer;
+  &::after { display: none; }
+  span { width: 18px; color: #8a8a90; font-size: 12px; text-align: right; }
+  strong { font: 600 14px/1.3 'Inter', sans-serif; }
+  &:hover { background: #ffffff0d; }
+  &.invalid strong { color: #ff5a6e; }
+  // The best lap, as in ACC Drive: yellow time on green.
+  &.best { background: #2f6b1f; strong { color: #ffe066; } }
+  &.selected { box-shadow: inset 3px 0 #ff0024; background: #ff002426; strong { color: #fff; } }
+  &.best.selected { background: #3d8a28; strong { color: #ffe066; } } }
+.tele-laps-head { display: flex; align-items: center; justify-content: space-between; padding: 0 8px 8px 12px; h2 { padding: 0; } }
+.tele-steps { display: flex; gap: 4px;
+  button { min-width: 26px; min-height: 26px; padding: 0; clip-path: none; font-size: 13px; } }
+.tele-note { margin: 8px 0 0; padding: 0 12px; color: #77777d; font-size: 11px; }
+.tele-main .tele-note { padding: 0; }
+
+.tele-main { display: grid; gap: 10px; min-width: 0; align-content: start; }
+// Small group label with a thin line: what to look at, without boxing the panel again.
+.tele-section { display: flex; align-items: center; gap: 10px; margin: 4px 0 -2px; color: #b3b3b8; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  small { color: #77777d; font-weight: 500; letter-spacing: 0; text-transform: none; }
+  &::after { content: ''; flex: 1; height: 1px; background: #ffffff1f; }
+  &:first-child { margin-top: 0; } }
+.tele-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+// Same rows in every column (title + three cells), so all cell edges line up.
+.tele-col { display: grid; grid-template-rows: auto repeat(3, 1fr); gap: 6px;
+  h3 { font-size: 13px; text-align: center; small { color: #8a8a90; font: 500 10px 'Inter', sans-serif; text-transform: none; } } }
+.tele-cell { display: grid; justify-items: center; gap: 4px; min-height: 60px; padding: 6px; border: 1px solid $line; background: $cell; align-content: center; }
+.tele-label { color: #b3b3b8; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.tele-wheels { display: grid; grid-template-columns: repeat(2, minmax(0, auto)); gap: 2px 14px; font: 600 14px/1.25 'Inter', sans-serif; font-variant-numeric: tabular-nums; color: #e6e6ea; b { font-weight: 600; } }
+.tele-value { font: 600 14px/1.25 'Inter', sans-serif; color: #e6e6ea; &.muted { color: #8a8a90; font-size: 11px; font-weight: 500; text-align: center; } }
+
+.tele-row { display: grid; gap: 10px; }
+.tele-row--lap { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.tele-row--facts { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.tele-card { padding: 8px 12px; border: 1px solid $line; background: $cell;
+  h3 { margin-bottom: 6px; font-size: 13px; text-align: center; }
+  dl { display: grid; gap: 3px; margin: 0; }
+  // Label right, value left: the colons line up in every card.
+  dl > div { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 13px; }
+  dt { text-align: right; }
+  dt { color: #b3b3b8; font-weight: 700; &::after { content: ':'; } }
+  dd { margin: 0; color: #e6e6ea; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .lap-time { color: #ffe066; &.invalid { color: #ff5a6e; } }
+  .sector-time { color: #e6e6ea; }
+  .best, .best-lap { color: #e14bff; }
+  .warm { color: #ff5a6e; } }
+
+@media (max-width: 1100px) {
+  .tele-grid, .tele-row--lap, .tele-row--facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .tele { grid-template-columns: 1fr; }
+  .tele-lap-list { display: flex; max-height: none; overflow-x: auto; }
+  .tele-lap { flex: 0 0 auto; }
+  .tele-grid, .tele-row--lap, .tele-row--facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .data-bar { flex-wrap: wrap; .data-session { flex-basis: 100%; } }
+}
 </style>

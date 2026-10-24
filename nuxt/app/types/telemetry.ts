@@ -83,6 +83,24 @@ export interface LapData {
   pit_out_lap: boolean
   sectors_reliable: boolean
   sector_times_ms: number[]
+  /** PIP-613: per-lap telemetry summary (ACC Drive panel); absent on laps recorded before it. */
+  telemetry?: LapTelemetry
+}
+
+/** Four values in ACC order: front left, front right, rear left, rear right. */
+export type WheelValues = [number | null, number | null, number | null, number | null]
+export interface WheelSpread { high: WheelValues; avg: WheelValues; low: WheelValues }
+export interface SectorTelemetry { top_kmh?: number | null; avg_kmh?: number | null; tc?: number | null; abs?: number | null }
+export interface LapTelemetry {
+  pressure?: { high: WheelValues; avg: WheelValues; loss: WheelValues }
+  tyre_temp?: WheelSpread
+  brake_temp?: WheelSpread
+  tyre?: { compound?: string | null; wet?: boolean; set?: number | null }
+  brakes?: { front_pad?: string | null; rear_pad?: string | null; pad_life?: WheelValues; disc_life?: WheelValues }
+  lap?: SectorTelemetry
+  sectors?: SectorTelemetry[]
+  assists?: { tc?: number | null; tc2?: number | null; abs?: number | null }
+  damage?: { body?: number | null; suspension?: number | null }
 }
 
 export interface StintData {
