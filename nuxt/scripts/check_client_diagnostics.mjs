@@ -34,6 +34,10 @@ assert.ok(indexes.fieldOverrides.some(field => field.collectionGroup === 'diagno
   && field.fieldPath === 'receivedAt'
   && field.indexes?.some(index => index.order === 'ASCENDING'
     && index.queryScope === 'COLLECTION_GROUP')), 'diagnostics.receivedAt collection-group index must support cleanup')
+assert.ok(indexes.fieldOverrides.some(field => field.collectionGroup === 'diagnostics'
+  && field.fieldPath === 'receivedAt'
+  && field.indexes?.some(index => index.order === 'DESCENDING'
+    && index.queryScope === 'COLLECTION_GROUP')), 'diagnostics.receivedAt collection-group index must serve the unfiltered page')
 assert.match(adminPage, /loadClientDiagnosticsPage/, 'admin page must use centralized paginated diagnostics repository')
 assert.match(adminPage, /CLIENT_DIAGNOSTICS_PAGE_SIZE/, 'admin page must expose the shared 50-item page size')
 assert.match(adminPage, /Elimina errori più vecchi di 30 giorni/, 'admin cleanup action must remain visible')
@@ -73,7 +77,9 @@ const diagnosticsIndexKeys = indexes.indexes
   .sort()
 // PIP-540: per ogni combinazione non vuota dei filtri, un indice pagina e uno conteggio.
 const diagnosticsEqualityFields = ['component', 'severity', 'channel', 'suiteVersion']
-const requiredDiagnosticsIndexKeys = ['receivedAt:DESCENDING|__name__:DESCENDING']
+// Senza filtri basta l'indice a campo singolo su receivedAt (fieldOverrides): Firestore
+// rifiuta il composito receivedAt+__name__ come "not necessary" (deploy 24/10/2026).
+const requiredDiagnosticsIndexKeys = []
 for (let mask = 1; mask < 1 << diagnosticsEqualityFields.length; mask += 1) {
   const equality = diagnosticsEqualityFields.filter((_, bit) => mask & (1 << bit)).map(field => `${field}:ASCENDING`)
   requiredDiagnosticsIndexKeys.push([...equality, 'receivedAt:DESCENDING', '__name__:DESCENDING'].join('|'))
