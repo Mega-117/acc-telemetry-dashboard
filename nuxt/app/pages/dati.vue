@@ -59,7 +59,7 @@ const wheelColumns: { title: string, unit: string, kind: WheelKind, hint: string
 ]
 // The lap and its sectors as one small table: read across to compare the sectors.
 const lapColumns = computed(() => [
-  { title: `Giro ${lap.value?.lap_number ?? ''}`, time: lap.value?.lap_time_ms ?? null, data: tel.value?.lap, lap: true, best: isBestLap(lap.value), stintBest: isStintBest(lap.value) },
+  { title: `Giro ${lap.value?.lap_number ?? ''}`, time: lap.value?.lap_time_ms ?? null, data: tel.value?.lap, lap: true, best: isBestLap(lap.value), stintBest: isStintBest(lap.value), unreliable: false },
   // A sector counts as best only on a valid lap with reliable sectors (not the pit-out lap).
   ...sectors.value.map((time, i) => ({ title: `Settore ${i + 1}`, time, data: tel.value?.sectors?.[i], lap: false,
     best: time !== null && !!lap.value?.is_valid && sectorsReliable.value && time === bestSectors.value[i], stintBest: false, unreliable: time !== null && !sectorsReliable.value })),

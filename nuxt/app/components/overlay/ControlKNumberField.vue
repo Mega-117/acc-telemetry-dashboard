@@ -107,7 +107,8 @@ function releaseKeyboard() {
 // a real mouse click only opens the keyboard: the driver types or scrolls.
 function onClick(event: MouseEvent) {
   if (arrowAt(event)) return // already handled on press
-  emit(event.detail === 0 ? 'toggle' : 'release')
+  if (event.detail === 0) emit('toggle')
+  else emit('release')
 }
 function consume(event: KeyboardEvent) { event.preventDefault(); event.stopPropagation() }
 function onKey(event: KeyboardEvent) {

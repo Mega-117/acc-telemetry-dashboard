@@ -1552,7 +1552,7 @@ onBeforeUnmount(() => {
       <Transition name="overlay-surface" mode="out-in">
         <!-- Contenitore unico persistente (PIP-93): il morphing e' l'animazione
              di resize della finestra; dentro, il contenuto si avvicenda in cross-fade. -->
-        <section v-if="phase !== 'loading'" key="card" ref="overlayCard" class="overlay-card" :class="{ 'ck-logo-anchored': !!ckLogoStyle }">
+        <section v-if="phase !== 'loading'" key="card" class="overlay-card" ref="overlayCard" :class="{ 'ck-logo-anchored': !!ckLogoStyle }">
           <OverlayPlacementLock overlay-id="training" />
           <img v-if="ckLogoStyle" class="ck-logo-anchor" src="/branding/auth/racercore-rc.svg" alt="" aria-hidden="true" :style="ckLogoStyle">
           <Transition name="content-swap" :css="!preparingReopen" :mode="preparingReopen ? undefined : 'out-in'" @after-enter="actionSelection.refresh(); syncCkLogo()">
