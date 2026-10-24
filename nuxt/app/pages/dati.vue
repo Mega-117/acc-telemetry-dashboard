@@ -33,6 +33,15 @@ const lap = computed(() => laps.value.find(l => l.lap_number === lapNumber.value
 const references = computed(() => sessionDataReferences(full.value))
 const facts = computed(() => stintDataFacts(stint.value))
 const bestLap = computed(() => references.value.best)
+// Sim racing colours: fuchsia = best of the session, green = best of this stint, white = valid.
+type LapLike = { lap_time_ms?: number, is_valid?: boolean, has_pit_stop?: boolean, pit_out_lap?: boolean }
+const clean = (l?: LapLike): l is LapLike => !!l && !!l.is_valid && !l.has_pit_stop && !l.pit_out_lap && Number(l.lap_time_ms) > 0
+const stintBest = computed(() => {
+  const times = laps.value.filter(clean).map(l => l.lap_time_ms)
+  return times.length ? Math.min(...times) : null
+})
+function isBestLap(l?: LapLike) { return clean(l) && !!bestLap.value && l.lap_time_ms === bestLap.value }
+function isStintBest(l?: LapLike) { return clean(l) && !isBestLap(l) && l.lap_time_ms === stintBest.value }
 const isLatest = computed(() => sessionId.value === latest.value?.sessionId)
 // PIP-613: the ACC Drive telemetry panel, compact. Laps recorded before the per-lap summary
 // (`lap.telemetry`) show "--" in the same places the values will fill.
@@ -50,8 +59,8 @@ const wheelColumns: { title: string, unit: string, kind: WheelKind, hint: string
 ]
 // The lap and its sectors as one small table: read across to compare the sectors.
 const lapColumns = computed(() => [
-  { title: `Giro ${lap.value?.lap_number ?? ''}`, time: lap.value?.lap_time_ms ?? null, data: tel.value?.lap, lap: true, best: false },
-  ...sectors.value.map((time, i) => ({ title: `Settore ${i + 1}`, time, data: tel.value?.sectors?.[i], lap: false, best: time !== null && time === bestSectors.value[i] })),
+  { title: `Giro ${lap.value?.lap_number ?? ''}`, time: lap.value?.lap_time_ms ?? null, data: tel.value?.lap, lap: true, best: isBestLap(lap.value), stintBest: isStintBest(lap.value) },
+  ...sectors.value.map((time, i) => ({ title: `Settore ${i + 1}`, time, data: tel.value?.sectors?.[i], lap: false, best: time !== null && time === bestSectors.value[i], stintBest: false })),
 ])
 const lapRows: { label: string, hint: string, value: (data?: SectorTelemetry) => string }[] = [
   { label: 'Vel. max', hint: 'Velocità più alta raggiunta', value: d => kmh(d?.top_kmh) },
@@ -225,7 +234,7 @@ const number = (value: number | null | undefined, digits = 1) => typeof value ==
         </div>
         <div class="tele-lap-list">
           <button v-for="l in laps" :key="l.lap_number" type="button" class="tele-lap"
-            :class="{ selected: l.lap_number === lapNumber, invalid: l.is_valid === false, best: l.lap_time_ms === bestLap && l.is_valid && !l.has_pit_stop && !l.pit_out_lap }"
+            :class="{ selected: l.lap_number === lapNumber, invalid: l.is_valid === false, best: isBestLap(l), 'stint-best': isStintBest(l) }"
             :aria-pressed="l.lap_number === lapNumber" :title="lapStatus(l)" @click="lapNumber = l.lap_number">
             <span>{{ l.lap_number }}</span><strong>{{ time(l.lap_time_ms) }}</strong>
           </button>
@@ -268,7 +277,7 @@ const number = (value: number | null | undefined, digits = 1) => typeof value ==
           <span v-for="col in lapColumns" :key="col.title" class="tele-th" role="columnheader">{{ col.title }}</span>
           <span class="tele-rh" role="rowheader" title="Tempo del giro e dei settori; in viola i migliori settori della sessione">Tempo</span>
           <span v-for="col in lapColumns" :key="`t-${col.title}`" class="tele-td tele-td--time" role="cell"
-            :class="{ 'lap-time': col.lap, invalid: col.lap && lap?.is_valid === false, best: col.best }">{{ time(col.time) }}</span>
+            :class="{ 'lap-time': col.lap, invalid: col.lap && lap?.is_valid === false, best: col.best, 'stint-best': col.stintBest }">{{ time(col.time) }}</span>
           <template v-for="row in lapRows" :key="row.label">
             <span class="tele-rh" role="rowheader" :title="row.hint">{{ row.label }}</span>
             <span v-for="col in lapColumns" :key="`${row.label}-${col.title}`" class="tele-td" role="cell">{{ row.value(col.data) }}</span>
@@ -349,10 +358,12 @@ select { @include controls.select; }
   strong { font: 600 14px/1.3 'Inter', sans-serif; }
   &:hover { background: #ffffff0d; }
   &.invalid strong { color: #ff5a6e; }
-  // The best lap, as in ACC Drive: yellow time on green.
-  &.best { background: #2f6b1f; strong { color: #ffe066; } }
+  // The best lap of the session in fuchsia, as everywhere in sim racing; valid laps stay white.
+  &.best strong { color: #e14bff; }
+  &.stint-best strong { color: #3ddc5a; }
   &.selected { box-shadow: inset 3px 0 #ff0024; background: #ff002426; strong { color: #fff; } }
-  &.best.selected { background: #3d8a28; strong { color: #ffe066; } } }
+  &.best.selected strong { color: #e14bff; }
+  &.stint-best.selected strong { color: #3ddc5a; } }
 .tele-laps-head { display: flex; align-items: center; justify-content: space-between; padding: 0 8px 8px 12px; h2 { padding: 0; } }
 .tele-steps { display: flex; gap: 4px;
   button { min-width: 26px; min-height: 26px; padding: 0; clip-path: none; font-size: 13px; } }
@@ -376,9 +387,10 @@ select { @include controls.select; }
   .tele-rh { color: #b3b3b8; font-weight: 700; text-align: right; }
   .tele-td { color: #e6e6ea; font-weight: 600; text-align: center; }
   .tele-td--time { font-size: 14px; }
-  .lap-time { color: #ffe066; }
+  .lap-time { color: #fff; }
   .invalid { color: #ff5a6e; }
-  .best { color: #e14bff; } }
+  .best { color: #e14bff; }
+  .stint-best { color: #3ddc5a; } }
 .tele-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
 // Same rows in every column (title + three cells), so all cell edges line up.
 .tele-col { display: grid; grid-template-rows: auto repeat(3, 1fr); gap: 6px;
@@ -399,7 +411,7 @@ select { @include controls.select; }
   dt { text-align: right; }
   dt { color: #b3b3b8; font-weight: 700; &::after { content: ':'; } }
   dd { margin: 0; color: #e6e6ea; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .lap-time { color: #ffe066; &.invalid { color: #ff5a6e; } }
+  .lap-time { color: #fff; &.invalid { color: #ff5a6e; } }
   .sector-time { color: #e6e6ea; }
   .best, .best-lap { color: #e14bff; }
   .warm { color: #ff5a6e; } }
