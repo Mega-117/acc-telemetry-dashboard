@@ -172,6 +172,52 @@ describe('OnboardingCommands (PIP-571)', () => {
     wrapper.unmount()
   })
 
+  // Codex review of PIP-612: captures left half-way.
+  it('Esc goes back to the FIRST empty row, not the next one after the changed key', async () => {
+    const s = mock.bridge.state
+    s.value.bindings = { ...s.value.bindings, togglePalette: binding(0), previousAction: binding(2), activateAction: binding(3) }
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises()
+    await wrapper.get('[data-slot="activateAction"] .cmd__bind').trigger('click'); await flushPromises()
+    s.value = { ...s.value, capture: null, operation: undefined }; await flushPromises()
+    expect(wrapper.find('[data-slot="nextAction"]').classes()).toContain('now')
+    wrapper.unmount()
+  })
+
+  it('clicking the row that is already listening does not arm it again after Esc', async () => {
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises()
+    expect(mock.bridge.beginCapture).toHaveBeenCalledTimes(1)
+    await wrapper.get('[data-slot="togglePalette"] .cmd__bind').trigger('click'); await flushPromises()
+    expect(mock.bridge.beginCapture).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('a capture that starts late after leaving for the keyboard path is dropped', async () => {
+    const s = mock.bridge.state
+    let finishBegin: () => void = () => {}
+    mock.bridge.beginCapture = vi.fn((action: WheelControlAction) => new Promise<void>((resolve) => {
+      finishBegin = () => { s.value = { ...s.value, capture: { action }, operation: undefined }; resolve() }
+    }))
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises()
+    await wrapper.get('button[data-cmd-keyboard]').trigger('click'); await flushPromises()
+    finishBegin(); await flushPromises()
+    expect(wrapper.find('[data-cmd-screen="keyboard"]').exists()).toBe(true)
+    expect(mock.bridge.cancelCapture).toHaveBeenCalled()
+    expect(s.value.capture).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('pause stops listening without an error; resume listens again on the same row', async () => {
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises()
+    const api = wrapper.vm as unknown as { pause(): void; resume(): void }
+    api.pause(); await flushPromises()
+    expect(mock.bridge.state.value.capture).toBeNull()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    api.resume(); await flushPromises()
+    expect(mock.bridge.beginCapture).toHaveBeenLastCalledWith('togglePalette')
+    expect(mock.bridge.beginCapture).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
   it('with every key already set: no capture, one Continua, and a changed key does not jump ahead', async () => {
     const s = mock.bridge.state
     s.value.bindings = Object.fromEntries(ORDER.map((action, i) => [action, binding(i)])) as any

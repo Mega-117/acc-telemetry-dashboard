@@ -22,10 +22,15 @@ vi.mock('~/composables/useOnboardingIntro', () => ({
 vi.mock('~/composables/useFirebaseAuth', () => ({ useFirebaseAuth: () => ({ currentUser: mock.currentUser }) }))
 vi.mock('~/composables/usePublicPath', () => ({ usePublicPath: () => ({ getPublicPath: (p: string) => `/base${p}` }) }))
 
+const stubCalls: string[] = []
 const commandsStub = {
   props: ['wheelAvailable'],
   emits: ['done', 'later'],
-  methods: { postpone(this: { $emit: (event: string) => void }) { this.$emit('later') } },
+  methods: {
+    postpone(this: { $emit: (event: string) => void }) { this.$emit('later') },
+    pause() { stubCalls.push('pause') },
+    resume() { stubCalls.push('resume') },
+  },
   template: '<div data-stub-commands :data-wheel="String(wheelAvailable)"><button data-done @click="$emit(\'done\', \'Wheel · Pulsante 26\')" /><button data-later @click="$emit(\'later\')" /></div>',
 }
 function mountIntro() {
@@ -138,9 +143,13 @@ describe('OnboardingIntro (PIP-571)', () => {
     await click('[data-onboarding-skip]'); await new Promise(r => setTimeout(r, 400)); await flushPromises()
     expect(q('[data-cmd-later]')).not.toBeNull()
     expect(q('[data-later-confirm]')).toBeNull()
+    stubCalls.length = 0
     await click('[data-cmd-later]')
     expect(q('[data-later-confirm]')!.textContent).toContain('Impostazioni → Comandi')
+    // The key list stops listening while the confirmation is open, and listens again after.
+    expect(stubCalls).toEqual(['pause'])
     await click('[data-later-cancel]')
+    expect(stubCalls).toEqual(['pause', 'resume'])
     expect(mock.save).not.toHaveBeenCalled()
     await click('[data-cmd-later]'); await click('[data-cmd-later-confirm]')
     expect(mock.save).toHaveBeenLastCalledWith('later')

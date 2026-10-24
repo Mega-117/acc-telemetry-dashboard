@@ -150,12 +150,19 @@ function enterAction(index: number, force = false) {
   autoArmed.value = force || isOpen(index)
   armCapture()
 }
-/** A click on a row: give that command a (new) key. */
-function pickRow(index: number) { enterAction(index, true) }
+/** A click on a row: give that command a (new) key. The row already listening stays as it is. */
+function pickRow(index: number) {
+  if (index === assignIndex.value && waiting.value) return
+  enterAction(index, true)
+}
 let bindingBefore = ''
 const bindingKey = (action: WheelControlAction) => JSON.stringify(state.value.bindings[action] ?? null)
+// While the "Lo faccio dopo" confirmation is open nothing listens: its keys are its own.
+const paused = ref(false)
+function pause() { paused.value = true; cancelPending(); if (state.value.capture) void bridge.cancelCapture() }
+function resume() { paused.value = false; if (screen.value === 'assign') enterAction(assignIndex.value, rebinding.value) }
 function armCapture() {
-  if (screen.value !== 'assign' || !autoArmed.value || saved.value || waiting.value) return
+  if (screen.value !== 'assign' || paused.value || !autoArmed.value || saved.value || waiting.value) return
   if (!canBeginAutoCapture(state.value, bridge.testMode.value)) return
   autoArmed.value = false
   bindingBefore = bindingKey(current.value.id)
@@ -188,8 +195,13 @@ watch(waiting, (now) => {
 watch(() => [state.value.available, state.value.inputStatus, state.value.devices.length, state.value.capture], () => armCapture())
 
 // End of a capture for the current command: saved -> tick and move on, otherwise explain.
+// A capture that starts late, once the pilot already left the list (keyboard path,
+// practice) or paused it, would catch keys meant for something else: drop it.
+watch(() => state.value.capture, (now) => {
+  if (now && (screen.value !== 'assign' || paused.value)) void bridge.cancelCapture()
+})
 watch(() => state.value.capture, (now, before) => {
-  if (screen.value !== 'assign' || now || before?.action !== current.value.id) return
+  if (screen.value !== 'assign' || paused.value || now || before?.action !== current.value.id) return
   const action = current.value.id
   const changed = bindingKey(action) !== bindingBefore || state.value.operation?.saved === true
   if (state.value.bindings[action] && !state.value.operation?.reason && changed) {
@@ -199,7 +211,7 @@ watch(() => state.value.capture, (now, before) => {
     // Esc while changing a key: the old key stays, nothing to explain; the cursor goes back
     // to the first row still empty (or to Continua when there is none).
     rebinding.value = false
-    const next = nextOpen(assignIndex.value)
+    const next = nextOpen(-1)
     if (next >= 0) enterAction(next)
   } else {
     error.value = commandErrorText(state.value.operation?.reason || state.value.lastError) || 'Nessun tasto ricevuto. Premi Riprova.'
@@ -230,7 +242,7 @@ const hint = computed(() => practiceHint(practice.value, tasks.value))
 // PIP-612: "Lo faccio dopo" and its confirmation live in the corner of the introduction,
 // where "Salta" is; the introduction calls postpone once the pilot confirms.
 function postpone() { void release(); emit('later') }
-defineExpose({ postpone })
+defineExpose({ postpone, pause, resume })
 function finish() {
   const key = screen.value !== 'keyboard' && state.value.bindings.togglePalette ? formatWheelBinding(state.value.bindings.togglePalette) : undefined
   void release(); emit('done', key)

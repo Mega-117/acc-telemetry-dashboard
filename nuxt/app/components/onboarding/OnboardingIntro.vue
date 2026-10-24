@@ -34,8 +34,13 @@ const finish = computed(() => FINISH[result.value])
 const current = computed(() => ({ tour: index.value, commands: steps.length, finish: railLabels.length })[phase.value])
 // The fill reaches the end of the current step (equal columns), full on the last screen.
 const progress = computed(() => `${Math.min(1, (current.value + 1) / railLabels.length) * 100}%`)
-const commands = ref<{ postpone: () => void } | null>(null)
+const commands = ref<{ postpone: () => void; pause: () => void; resume: () => void } | null>(null)
 const confirmLater = ref(false)
+// The confirmation owns the keyboard while it is open: the key list stops listening.
+watch(confirmLater, (open) => {
+  if (open) commands.value?.pause()
+  else if (phase.value === 'commands') commands.value?.resume()
+})
 
 const wheelAvailable = computed(() => {
   if (typeof window === 'undefined') return false
@@ -129,7 +134,7 @@ onMounted(() => { void intro.showIfFirstTime() })
                 <span>Senza tasti il menu in pista si apre solo con Ctrl+K. Li imposti quando vuoi in Impostazioni → Comandi.</span>
                 <span class="onboarding__confirm-actions">
                   <button type="button" class="onboarding__link" data-later-cancel @click="confirmLater = false">Li imposto ora</button>
-                  <button type="button" class="onboarding__confirm-go" data-cmd-later-confirm @click="confirmLater = false; commands?.postpone()">Sì, dopo</button>
+                  <button type="button" class="onboarding__confirm-go" data-cmd-later-confirm @click="commands?.postpone(); confirmLater = false">Sì, dopo</button>
                 </span>
               </span>
             </Transition>
