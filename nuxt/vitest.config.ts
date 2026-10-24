@@ -61,6 +61,7 @@ export default defineConfig({
         'app/composables/useTrackVoiceReferenceAvailability.ts',
         'app/utils/infoTargetPicker.ts',
         'app/utils/controlKNumberField.ts',
+        'app/utils/temperatureColor.ts',
         'app/components/overlay/ControlKNumberField.vue',
         'app/services/auth/dashboardEntryRecovery.ts',
         'app/components/overlay/PressureTestPanel.vue',
