@@ -38,6 +38,13 @@ export const CLIENT_DIAGNOSTICS_CLEANUP_MAX_BATCHES_PER_ACTION = 5
 export const CLIENT_DIAGNOSTICS_MAX_COUNT = 1000
 export const CLIENT_DIAGNOSTICS_MAX_CURSOR_HOPS_PER_ACTION = 20
 export const CLIENT_DIAGNOSTIC_COMPONENT_OPTIONS = ['electron', 'frontend', 'launcher', 'logger', 'updater'] as const
+export const CLIENT_DIAGNOSTIC_CHANNEL_OPTIONS = [
+  { value: 'develop', label: 'Develop' },
+  { value: 'main', label: 'Produzione' }
+] as const
+// PIP-540: ogni combinazione di questi filtri ha i suoi due indici (pagina e
+// conteggio) in firestore.indexes.json; tests/firestoreDiagnosticsIndexes lo verifica.
+export const CLIENT_DIAGNOSTIC_EQUALITY_FILTERS = ['component', 'severity', 'channel', 'suiteVersion'] as const
 const CLIENT_DIAGNOSTICS_RETENTION_MS = CLIENT_DIAGNOSTICS_RETENTION_DAYS * 24 * 60 * 60 * 1000
 const FIRESTORE_IN_LIMIT = 30
 
@@ -53,6 +60,8 @@ interface DiagnosticSnapshot {
 export interface ClientDiagnosticsFilters {
   component?: string
   severity?: ClientDiagnosticSeverity
+  channel?: string
+  suiteVersion?: string
   startIso: string
   endExclusiveIso: string
 }
@@ -169,6 +178,13 @@ function cursorFromDocument(document: DiagnosticSnapshotDocument): ClientDiagnos
   return { receivedAtMs, path: document.ref.path }
 }
 
+/** Filtri per uguaglianza attivi, nell'ordine degli indici. */
+export function diagnosticEqualityFilters(filters: ClientDiagnosticsFilters): Array<[string, string]> {
+  return CLIENT_DIAGNOSTIC_EQUALITY_FILTERS
+    .map(field => [field, filters[field]] as [string, string | undefined])
+    .filter((entry): entry is [string, string] => Boolean(entry[1]))
+}
+
 function diagnosticsFilterConstraints(filters: ClientDiagnosticsFilters): QueryConstraint[] {
   const startMs = Date.parse(filters.startIso)
   const endExclusiveMs = Date.parse(filters.endExclusiveIso)
@@ -179,8 +195,9 @@ function diagnosticsFilterConstraints(filters: ClientDiagnosticsFilters): QueryC
     where('receivedAt', '>=', Timestamp.fromMillis(startMs)),
     where('receivedAt', '<', Timestamp.fromMillis(endExclusiveMs))
   ]
-  if (filters.component) constraints.push(where('component', '==', filters.component))
-  if (filters.severity) constraints.push(where('severity', '==', filters.severity))
+  for (const [field, value] of diagnosticEqualityFilters(filters)) {
+    constraints.push(where(field, '==', value))
+  }
   return constraints
 }
 

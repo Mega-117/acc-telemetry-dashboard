@@ -9,6 +9,7 @@ import {
   countClientDiagnostics,
   countExpiredClientDiagnostics,
   deleteExpiredClientDiagnostics,
+  diagnosticEqualityFilters,
   diagnosticRetentionCutoffMs
 } from '~/repositories/clientDiagnosticsRepository'
 
@@ -22,6 +23,19 @@ function diagnosticRefs(count: number, offset = 0, receivedAtBase = 1000) {
     })
   }))
 }
+
+describe('clientDiagnosticsRepository filtri (PIP-540)', () => {
+  const range = { startIso: '2026-10-01T00:00:00.000Z', endExclusiveIso: '2026-10-02T00:00:00.000Z' }
+  it('applica canale e versione insieme a componente e severità', () => {
+    expect(diagnosticEqualityFilters({
+      ...range, component: 'launcher', severity: 'error', channel: 'main', suiteVersion: '0.4.9'
+    })).toEqual([['component', 'launcher'], ['severity', 'error'], ['channel', 'main'], ['suiteVersion', '0.4.9']])
+  })
+  it('senza filtri non aggiunge condizioni', () => {
+    expect(diagnosticEqualityFilters(range)).toEqual([])
+    expect(diagnosticEqualityFilters({ ...range, channel: 'develop' })).toEqual([['channel', 'develop']])
+  })
+})
 
 describe('clientDiagnosticsRepository cleanup', () => {
   it('usa esattamente 50 eventi per pagina', () => {

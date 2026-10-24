@@ -48,8 +48,10 @@ assert.match(adminPage, /color-scheme: dark/, 'diagnostic dropdowns must declare
 assert.match(diagnosticsPresentation, /Europe\/Rome/, 'date boundaries and formatting must use the Italian timezone')
 assert.match(diagnosticsRepository, /where\('receivedAt', '>=', Timestamp\.fromMillis\(startMs\)\)/, 'period start must use authoritative receivedAt')
 assert.match(diagnosticsRepository, /where\('receivedAt', '<', Timestamp\.fromMillis\(endExclusiveMs\)\)/, 'period end must include the final Europe/Rome day through receivedAt')
-assert.match(diagnosticsRepository, /where\('component', '==', filters\.component\)/, 'component filter must run server-side')
-assert.match(diagnosticsRepository, /where\('severity', '==', filters\.severity\)/, 'severity filter must run server-side')
+// PIP-540: component, severity, channel e suiteVersion passano da un'unica lista
+// (con indici verificati da tests/firestoreDiagnosticsIndexes.test.ts).
+assert.match(diagnosticsRepository, /CLIENT_DIAGNOSTIC_EQUALITY_FILTERS = \['component', 'severity', 'channel', 'suiteVersion'\]/, 'equality filters must stay one explicit list')
+assert.match(diagnosticsRepository, /constraints\.push\(where\(field, '==', value\)\)/, 'equality filters must run server-side')
 assert.match(diagnosticsRepository, /orderBy\('receivedAt', 'desc'\)/, 'diagnostics must order by server-owned receivedAt')
 assert.match(diagnosticsRepository, /orderBy\(documentId\(\), 'desc'\)/, 'diagnostics cursor must have a deterministic path tie-breaker')
 assert.match(diagnosticsRepository, /startAfter\(Timestamp\.fromMillis\(cursor\.receivedAtMs\), cursor\.path\)/, 'diagnostics pages must advance by stable cursor')
@@ -69,15 +71,15 @@ const diagnosticsIndexKeys = indexes.indexes
   .filter(index => index.collectionGroup === 'diagnostics' && index.queryScope === 'COLLECTION_GROUP')
   .map(index => index.fields.map(field => `${field.fieldPath}:${field.order || field.arrayConfig}`).join('|'))
   .sort()
-const requiredDiagnosticsIndexKeys = [
-  'receivedAt:DESCENDING|__name__:DESCENDING',
-  'component:ASCENDING|receivedAt:DESCENDING|__name__:DESCENDING',
-  'severity:ASCENDING|receivedAt:DESCENDING|__name__:DESCENDING',
-  'component:ASCENDING|severity:ASCENDING|receivedAt:DESCENDING|__name__:DESCENDING',
-  'component:ASCENDING|receivedAt:ASCENDING',
-  'severity:ASCENDING|receivedAt:ASCENDING',
-  'component:ASCENDING|severity:ASCENDING|receivedAt:ASCENDING'
-].sort()
+// PIP-540: per ogni combinazione non vuota dei filtri, un indice pagina e uno conteggio.
+const diagnosticsEqualityFields = ['component', 'severity', 'channel', 'suiteVersion']
+const requiredDiagnosticsIndexKeys = ['receivedAt:DESCENDING|__name__:DESCENDING']
+for (let mask = 1; mask < 1 << diagnosticsEqualityFields.length; mask += 1) {
+  const equality = diagnosticsEqualityFields.filter((_, bit) => mask & (1 << bit)).map(field => `${field}:ASCENDING`)
+  requiredDiagnosticsIndexKeys.push([...equality, 'receivedAt:DESCENDING', '__name__:DESCENDING'].join('|'))
+  requiredDiagnosticsIndexKeys.push([...equality, 'receivedAt:ASCENDING'].join('|'))
+}
+requiredDiagnosticsIndexKeys.sort()
 assert.deepEqual(
   diagnosticsIndexKeys,
   requiredDiagnosticsIndexKeys,

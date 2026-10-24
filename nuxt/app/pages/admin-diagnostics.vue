@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import DiagnosticEventFilters from '~/components/admin/DiagnosticEventFilters.vue'
 import DiagnosticUsersSummary from '~/components/admin/DiagnosticUsersSummary.vue'
 import {
   CLIENT_DIAGNOSTIC_COMPONENT_OPTIONS,
@@ -47,7 +48,11 @@ const currentPage = ref(1)
 const isPending = ref(true)
 const errorMessage = ref('')
 const componentFilter = ref('all')
-const severityFilter = ref<'all' | ClientDiagnosticSeverity>('all')
+const severityFilter = ref<string>('all')
+const channelFilter = ref('all')
+const versionFilter = ref('')
+// Versioni viste in questa visita: suggerimenti per il campo, senza letture in più.
+const seenVersions = ref<string[]>([])
 const periodPreset = ref<DiagnosticPeriodPreset>('7d')
 const customStart = ref('')
 const customEnd = ref('')
@@ -77,7 +82,10 @@ const activeFilters = computed<ClientDiagnosticsFilters | null>(() => {
   if (!activeRange.value) return null
   return {
     component: componentFilter.value === 'all' ? undefined : componentFilter.value,
-    severity: severityFilter.value === 'all' ? undefined : severityFilter.value,
+    severity: severityFilter.value === 'all' ? undefined : severityFilter.value as ClientDiagnosticSeverity,
+    channel: channelFilter.value === 'all' ? undefined : channelFilter.value,
+    // La versione e' salvata senza "v" iniziale (la lista la mostra come v0.4.9).
+    suiteVersion: versionFilter.value.trim().replace(/^v/i, '') || undefined,
     ...activeRange.value
   }
 })
@@ -172,6 +180,10 @@ async function loadPage(
     if (version !== requestVersion) return
     if (!requestedPage) return
     events.value = requestedPage.events
+    seenVersions.value = [...new Set([
+      ...seenVersions.value,
+      ...requestedPage.events.map(event => event.suiteVersion).filter((value): value is string => Boolean(value))
+    ])].sort().reverse()
     currentPage.value = Math.min(pageNumber, totalPages.value)
     if (selected.value && !events.value.some(event => event.eventId === selected.value?.eventId)) {
       selected.value = null
@@ -210,6 +222,8 @@ async function goToPage(pageNumber: number) {
 function resetFilters() {
   componentFilter.value = 'all'
   severityFilter.value = 'all'
+  channelFilter.value = 'all'
+  versionFilter.value = ''
   periodPreset.value = '7d'
   customStart.value = ''
   customEnd.value = ''
@@ -298,7 +312,7 @@ async function confirmCleanup() {
 }
 
 watch(
-  [componentFilter, severityFilter, periodPreset, customStart, customEnd],
+  [componentFilter, severityFilter, channelFilter, versionFilter, periodPreset, customStart, customEnd],
   scheduleFilterReload
 )
 onMounted(() => resetAndLoad())
@@ -350,24 +364,14 @@ onMounted(() => resetAndLoad())
     </p>
 
     <section class="filters" aria-label="Filtri diagnostica">
-      <label>
-        Componente
-        <select v-model="componentFilter">
-          <option value="all">Tutti i componenti</option>
-          <option v-for="component in componentOptions" :key="component" :value="component">
-            {{ component }}
-          </option>
-        </select>
-      </label>
-      <label>
-        Severità
-        <select v-model="severityFilter">
-          <option value="all">Tutte le severità</option>
-          <option value="warning">Warning</option>
-          <option value="error">Error</option>
-          <option value="fatal">Fatal</option>
-        </select>
-      </label>
+      <DiagnosticEventFilters
+        v-model:component="componentFilter"
+        v-model:severity="severityFilter"
+        v-model:channel="channelFilter"
+        v-model:version="versionFilter"
+        :component-options="componentOptions"
+        :version-options="seenVersions"
+      />
       <label>
         Periodo
         <select v-model="periodPreset">

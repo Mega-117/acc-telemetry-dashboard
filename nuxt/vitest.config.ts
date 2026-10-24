@@ -166,6 +166,7 @@ export default defineConfig({
         'app/services/pitwall/pitwallChangePublisher.ts',
         'app/services/pitwall/firestoreSnapshotEstimate.ts',
         'app/components/electron/DataMaintenanceNotification.vue',
+        'app/components/admin/DiagnosticEventFilters.vue',
         'app/components/admin/DiagnosticUsersSummary.vue',
         'app/composables/useWheelInputBridge.ts',
         'app/composables/useOverlayActionSelection.ts',

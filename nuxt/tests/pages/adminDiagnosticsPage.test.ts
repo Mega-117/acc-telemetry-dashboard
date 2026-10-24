@@ -196,6 +196,25 @@ describe('admin diagnostics cleanup flow', () => {
     wrapper.unmount()
   })
 
+  it('PIP-540: canale e versione arrivano alla query e si azzerano con i filtri', async () => {
+    const wrapper = await mountReadyPage()
+    await wrapper.get('[data-testid="channel-filter"]').setValue('main')
+    await wrapper.get('[data-testid="version-filter"]').setValue(' v0.4.9 ')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await flushPromises()
+    const filters = repositoryMocks.loadClientDiagnosticsPage.mock.calls.at(-1)?.[0]?.filters
+    expect(filters).toMatchObject({ channel: 'main', suiteVersion: '0.4.9' })
+    expect(repositoryMocks.countClientDiagnostics.mock.calls.at(-1)?.[0]).toMatchObject({ channel: 'main', suiteVersion: '0.4.9' })
+
+    await wrapper.get('.empty-state button').trigger('click')
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await flushPromises()
+    const cleared = repositoryMocks.loadClientDiagnosticsPage.mock.calls.at(-1)?.[0]?.filters
+    expect(cleared.channel).toBeUndefined()
+    expect(cleared.suiteVersion).toBeUndefined()
+    wrapper.unmount()
+  })
+
   it('invalida cache e ricarica anche se la failure non espone progresso', async () => {
     repositoryMocks.deleteExpiredClientDiagnostics.mockRejectedValueOnce(new Error('ack ambiguo'))
     const wrapper = await mountReadyPage()
