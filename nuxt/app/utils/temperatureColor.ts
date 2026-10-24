@@ -34,6 +34,25 @@ function step(value: number, [min, max]: Band): number | null {
   return value >= min && value <= max ? Math.round(200 / (max - min) * (value - min)) : null
 }
 
+// Hot pressure windows of Correggi pressioni (logger_core/tyre_pressure_recommendation.py,
+// ACCEPTED_BANDS_TENTHS): keep the two in step.
+export const PRESSURE_WINDOW_PSI: Record<'dry' | 'wet', readonly [number, number]> = { dry: [27.0, 27.2], wet: [30.5, 30.7] }
+const PRESSURE_NEAR_PSI = 0.3
+const PRESSURE_FAR_PSI = 0.8
+
+/**
+ * PIP-613: colour of a hot tyre pressure against the Correggi pressioni window: green inside
+ * (or within 0.3 psi), yellow within 0.8 psi, then light blue when too low, red when too high.
+ */
+export function pressureColor(value: number | null | undefined, wet = false): string | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  const [min, max] = PRESSURE_WINDOW_PSI[wet ? 'wet' : 'dry']
+  const off = value < min ? min - value : value > max ? value - max : 0
+  if (off <= PRESSURE_NEAR_PSI + 1e-9) return 'rgb(0, 200, 0)'
+  if (off <= PRESSURE_FAR_PSI + 1e-9) return 'rgb(230, 230, 0)'
+  return value < min ? 'rgb(0, 170, 220)' : 'rgb(255, 60, 40)'
+}
+
 /** CSS colour of a temperature on the given bands; null for a missing value. */
 export function temperatureColor(value: number | null | undefined, bands: TemperatureBands): string | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null

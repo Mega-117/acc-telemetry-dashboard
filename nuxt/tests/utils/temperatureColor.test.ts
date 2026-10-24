@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { TYRE_BANDS, brakeBands, temperatureColor } from '~/utils/temperatureColor'
+import { TYRE_BANDS, brakeBands, pressureColor, temperatureColor } from '~/utils/temperatureColor'
 
 describe('temperature colour (PIP-613, ACC Drive scale)', () => {
   it('runs blue -> light blue -> green -> yellow -> orange -> red on dry tyres', () => {
@@ -22,6 +22,16 @@ describe('temperature colour (PIP-613, ACC Drive scale)', () => {
     // The qualifying pad uses the standard bands; the rear has its own.
     expect(brakeBands('front', 'qualy')).toEqual(brakeBands('front', 'standard'))
     expect(brakeBands('rear', 'standard')[0]).toEqual([61, 140])
+  })
+
+  it('colours hot pressures against the Correggi pressioni window', () => {
+    expect(pressureColor(27.1)).toBe('rgb(0, 200, 0)')
+    expect(pressureColor(26.8)).toBe('rgb(0, 200, 0)') // within 0.3 psi
+    expect(pressureColor(26.5)).toBe('rgb(230, 230, 0)') // within 0.8 psi
+    expect(pressureColor(25.9)).toBe('rgb(0, 170, 220)') // too low
+    expect(pressureColor(28.3)).toBe('rgb(255, 60, 40)') // too high
+    expect(pressureColor(30.6, true)).toBe('rgb(0, 200, 0)')
+    expect(pressureColor(null)).toBeNull()
   })
 
   it('has no colour for a missing value', () => {
