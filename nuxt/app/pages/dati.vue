@@ -7,7 +7,7 @@ import { mergeSessionsDeterministic } from '~/services/telemetry/telemetryMergeS
 import { sessionGame } from '~/services/telemetry/gameIdentity'
 import { sessionDataReferences, stintDataFacts, lapStatus } from '~/services/session-detail/sessionDataPresentation'
 import { formatLapTime, formatTrackName, formatCarName, getSessionTypeLabel } from '~/utils/telemetryFormat'
-import { TYRE_BANDS, brakeBands, pressureColor, temperatureColor, type BrakePad } from '~/utils/temperatureColor'
+import { brakeColor, pressureColor, tyreColor, type BrakePad } from '~/utils/temperatureColor'
 import type { FullSession, SectorTelemetry, SessionDocument } from '~/types/telemetry'
 
 definePageMeta({ layout: 'dashboard' })
@@ -60,8 +60,11 @@ const wheelColumns: { title: string, unit: string, kind: WheelKind, hint: string
 // The lap and its sectors as one small table: read across to compare the sectors.
 const lapColumns = computed(() => [
   { title: `Giro ${lap.value?.lap_number ?? ''}`, time: lap.value?.lap_time_ms ?? null, data: tel.value?.lap, lap: true, best: isBestLap(lap.value), stintBest: isStintBest(lap.value) },
-  ...sectors.value.map((time, i) => ({ title: `Settore ${i + 1}`, time, data: tel.value?.sectors?.[i], lap: false, best: time !== null && time === bestSectors.value[i], stintBest: false })),
+  // A sector counts as best only on a valid lap with reliable sectors (not the pit-out lap).
+  ...sectors.value.map((time, i) => ({ title: `Settore ${i + 1}`, time, data: tel.value?.sectors?.[i], lap: false,
+    best: time !== null && !!lap.value?.is_valid && sectorsReliable.value && time === bestSectors.value[i], stintBest: false, unreliable: time !== null && !sectorsReliable.value })),
 ])
+const sectorsReliable = computed(() => lap.value?.sectors_reliable !== false)
 const lapRows: { label: string, hint: string, value: (data?: SectorTelemetry) => string }[] = [
   { label: 'Vel. max', hint: 'Velocità più alta raggiunta', value: d => kmh(d?.top_kmh) },
   { label: 'Vel. media', hint: 'Velocità media', value: d => kmh(d?.avg_kmh) },
@@ -84,10 +87,11 @@ function wheelCells(kind: WheelKind, key: WheelKey) {
       const color = key === 'loss' ? (value !== null ? '#ffa94d' : null) : pressureColor(value, !!t?.tyre?.wet)
       return { text: number(value, key === 'loss' ? 2 : 1), color }
     }
-    const bands = kind === 'tyre'
-      ? TYRE_BANDS[t?.tyre?.wet ? 'wet' : 'dry']
-      : brakeBands(wheel < 2 ? 'front' : 'rear', PAD[String((wheel < 2 ? t?.brakes?.front_pad : t?.brakes?.rear_pad) ?? '').toLowerCase()])
-    return { text: typeof value === 'number' ? `${Math.round(value)}°` : '--', color: temperatureColor(value, bands) }
+    const axle = wheel < 2 ? 'front' : 'rear'
+    const color = kind === 'tyre'
+      ? tyreColor(value, !!t?.tyre?.wet)
+      : brakeColor(value, axle, PAD[String((axle === 'front' ? t?.brakes?.front_pad : t?.brakes?.rear_pad) ?? '').toLowerCase()])
+    return { text: typeof value === 'number' ? `${Math.round(value)}°` : '--', color }
   })
 }
 const percent = (values?: (number | null)[]) => (values ?? [null, null, null, null]).map(v => typeof v === 'number' ? `${v.toFixed(1)}%` : '--')
@@ -182,10 +186,12 @@ async function refreshLocal() {
     if (local.some(s => s.sessionId === sessionId.value)) {
       // Watching the last lap: a new lap takes over, like the live ACC Drive panel.
       const onLast = lapNumber.value === laps.value.at(-1)?.lap_number && stintNumber.value === stints.value.at(-1)?.stint_number
+      const watched = { stint: stintNumber.value, lap: lapNumber.value }
       const result = await gateway.getSessionDetail(sessionId.value, uid, { warmupSessions: false })
       if (request !== revision || uid !== profileUser.value?.uid) return
       full.value = result
-      if (onLast) { stintNumber.value = stints.value.at(-1)?.stint_number ?? 0; lapNumber.value = stints.value.at(-1)?.laps.at(-1)?.lap_number ?? 0 }
+      // Only if the pilot did not pick another lap while the file was loading.
+      if (onLast && stintNumber.value === watched.stint && lapNumber.value === watched.lap) { stintNumber.value = stints.value.at(-1)?.stint_number ?? 0; lapNumber.value = stints.value.at(-1)?.laps.at(-1)?.lap_number ?? 0 }
       reconcileSelection(); saveSelection()
       updatedAt.value = new Date().toLocaleTimeString('it-IT')
     }
@@ -277,7 +283,8 @@ const number = (value: number | null | undefined, digits = 1) => typeof value ==
           <span v-for="col in lapColumns" :key="col.title" class="tele-th" role="columnheader">{{ col.title }}</span>
           <span class="tele-rh" role="rowheader" title="Tempo del giro e dei settori; in viola i migliori settori della sessione">Tempo</span>
           <span v-for="col in lapColumns" :key="`t-${col.title}`" class="tele-td tele-td--time" role="cell"
-            :class="{ 'lap-time': col.lap, invalid: col.lap && lap?.is_valid === false, best: col.best, 'stint-best': col.stintBest }">{{ time(col.time) }}</span>
+            :class="{ 'lap-time': col.lap, invalid: col.lap && lap?.is_valid === false, best: col.best, 'stint-best': col.stintBest, unreliable: col.unreliable }"
+            :title="col.unreliable ? 'Settore non affidabile (giro di uscita dai box)' : undefined">{{ time(col.time) }}<small v-if="col.unreliable"> *</small></span>
           <template v-for="row in lapRows" :key="row.label">
             <span class="tele-rh" role="rowheader" :title="row.hint">{{ row.label }}</span>
             <span v-for="col in lapColumns" :key="`${row.label}-${col.title}`" class="tele-td" role="cell">{{ row.value(col.data) }}</span>
@@ -323,6 +330,7 @@ const number = (value: number | null | undefined, digits = 1) => typeof value ==
             </dl>
           </section>
         </div>
+        <p v-if="lapColumns.some(c => c.unreliable)" class="tele-note">* Settori non affidabili in questo giro (uscita dai box): non contano per i migliori.</p>
         <p v-if="lap && !tel" class="tele-note">-- = non registrato per questo giro (gomme, freni, velocità, TC/ABS, danni): arriva con il prossimo aggiornamento del logger.</p>
       </div>
     </div>
@@ -363,7 +371,8 @@ select { @include controls.select; }
   &.stint-best strong { color: #3ddc5a; }
   &.selected { box-shadow: inset 3px 0 #ff0024; background: #ff002426; strong { color: #fff; } }
   &.best.selected strong { color: #e14bff; }
-  &.stint-best.selected strong { color: #3ddc5a; } }
+  &.stint-best.selected strong { color: #3ddc5a; }
+  &.invalid.selected strong { color: #ff5a6e; } }
 .tele-laps-head { display: flex; align-items: center; justify-content: space-between; padding: 0 8px 8px 12px; h2 { padding: 0; } }
 .tele-steps { display: flex; gap: 4px;
   button { min-width: 26px; min-height: 26px; padding: 0; clip-path: none; font-size: 13px; } }
@@ -390,7 +399,8 @@ select { @include controls.select; }
   .lap-time { color: #fff; }
   .invalid { color: #ff5a6e; }
   .best { color: #e14bff; }
-  .stint-best { color: #3ddc5a; } }
+  .stint-best { color: #3ddc5a; }
+  .unreliable { color: #8a8a90; font-style: italic; } }
 .tele-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
 // Same rows in every column (title + three cells), so all cell edges line up.
 .tele-col { display: grid; grid-template-rows: auto repeat(3, 1fr); gap: 6px;

@@ -8,7 +8,7 @@ export function temperatureTargetColor(ratio: number | null | undefined): string
   return `hsl(${hue}, 100%, 45%)`
 }
 
-interface TemperatureRange {
+export interface TemperatureRange {
   min: number
   max: number
   from: readonly [number, number, number]
@@ -44,9 +44,27 @@ export function tyreTemperatureColor(
   temperatureC: number | null,
   compound: TyreTemperatureCompound = 'DRY',
 ): string {
-  if (temperatureC === null || !Number.isFinite(temperatureC)) return '#6b7280'
+  return bandedTemperatureColor(temperatureC, compound === 'WET' ? WET_RANGES : DRY_RANGES)
+}
 
-  const ranges = compound === 'WET' ? WET_RANGES : DRY_RANGES
+/**
+ * PIP-613: the same ACC Drive four-band scale on any limits (brakes per axle and pad), so
+ * tyres and brakes are coloured alike everywhere. `bands` are [min, max] for the light blue,
+ * green, yellow and orange bands, as in ColorPickerManager.
+ */
+type Limits = readonly [number, number]
+export function temperatureRangesFor(bands: readonly [Limits, Limits, Limits, Limits]): readonly TemperatureRange[] {
+  const [lightBlue, green, yellow, orange] = bands
+  return [
+    { min: lightBlue[0], max: lightBlue[1], from: BLUE, to: CYAN },
+    { min: green[0], max: green[1], from: CYAN, to: GREEN },
+    { min: yellow[0], max: yellow[1], from: [0, 255, 0], to: YELLOW },
+    { min: orange[0], max: orange[1], from: YELLOW, to: RED },
+  ]
+}
+
+export function bandedTemperatureColor(temperatureC: number | null, ranges: readonly TemperatureRange[]): string {
+  if (temperatureC === null || !Number.isFinite(temperatureC)) return '#6b7280'
   const integerTemperature = Math.trunc(temperatureC)
   if (integerTemperature < ranges[0]!.min) return 'rgb(0, 0, 200)'
   if (integerTemperature > ranges[ranges.length - 1]!.max) return 'rgb(255, 0, 0)'
