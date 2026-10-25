@@ -2438,12 +2438,12 @@ const gripZones = computed(() => {
         <span class="sep">•</span>
         <span class="car">{{ session.car }}</span>
       </div>
-    </header>
-
     <div v-if="!isEvoSession" class="detail-tabs" role="tablist" aria-label="Vista della sessione">
       <button type="button" role="tab" :aria-selected="detailTab === 'sessione'" :class="{ active: detailTab === 'sessione' }" @click="detailTab = 'sessione'">Sessione</button>
       <button type="button" role="tab" :aria-selected="detailTab === 'avanzata'" :class="{ active: detailTab === 'avanzata' }" title="Il giro contro un riferimento: delta, curve, traiettorie e telemetria" @click="detailTab = 'avanzata'">Avanzata</button>
     </div>
+    </header>
+
     <SessionAnalysisPanel v-if="detailTab === 'avanzata' && !isEvoSession" :session-token="analysisToken" :laps="analysisLaps" />
 
     <!-- ========================================== -->
@@ -3211,7 +3211,9 @@ const gripZones = computed(() => {
 .session-header { margin-bottom: 20px; }
 // PIP-618: in Avanzata the analysis needs the height, the header shrinks to one line.
 .session-header--compact { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin: -24px 0 8px;
-  .header-row { margin-bottom: 0; } .track-name { font-size: 20px; letter-spacing: 1px; } .header-meta { margin-bottom: 0; font-size: 12px; } }
+  .header-row { margin-bottom: 0; } .track-name { font-size: 20px; letter-spacing: 1px; } .header-meta { margin-bottom: 0; font-size: 12px; }
+  // The Sessione / Avanzata switch on the same line: one row less above the analysis.
+  .detail-tabs { margin: 0 0 0 auto; align-self: center; } }
 .header-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
 .track-name { font-family: 'Outfit', $font-primary; font-size: 28px; font-weight: 800; color: #fff; letter-spacing: 2px; margin: 0; }
 .type-badge {

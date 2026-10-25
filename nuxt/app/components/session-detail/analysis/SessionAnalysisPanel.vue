@@ -18,9 +18,9 @@ const props = defineProps<{
 
 type Layout = 'pilota' | 'curve' | 'tracce'
 const LAYOUTS: { id: Layout, label: string, hint: string }[] = [
+  { id: 'tracce', label: 'Tracce', hint: 'Tutti i canali sul giro intero, un cursore condiviso' },
   { id: 'pilota', label: 'Pilota', hint: 'La mappa colorata e le tre curve dove migliorare, in parole semplici' },
   { id: 'curve', label: 'Curve', hint: 'Il giro diviso per curve: dove perdi tempo, la traiettoria e la telemetria della curva scelta' },
-  { id: 'tracce', label: 'Tracce', hint: 'Tutti i canali sul giro intero, un cursore condiviso' },
 ]
 // Per-viewer preferences: remembered, never required.
 function remembered<T extends string>(key: string, values: readonly T[], fallback: T) {
@@ -29,7 +29,8 @@ function remembered<T extends string>(key: string, values: readonly T[], fallbac
   watch(value, v => { try { localStorage.setItem(key, v) } catch { /* Storage can be disabled. */ } })
   return value
 }
-const layout = remembered<Layout>('rc:analysis:layout', ['pilota', 'curve', 'tracce'], 'pilota')
+// Tracce is the main view (Garage 61 + Track Titan + VRS); Pilota and Curve stay as alternatives.
+const layout = remembered<Layout>('rc:analysis:layout', ['pilota', 'curve', 'tracce'], 'tracce')
 const mapMode = remembered<'intera' | 'zoom'>('rc:analysis:map', ['intera', 'zoom'], 'intera')
 const allChannels = ref(false)
 
@@ -343,6 +344,9 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
         <div class="tracce-strip">
           <div class="strip-head">
             <span>{{ viewLabel }}</span>
+            <span v-if="worst.length" class="strip-worst" title="Le curve dove perdi di più: clic per andarci">
+              <button v-for="(c, i) in worst" :key="c.corner.number" type="button" :class="{ active: selectedCorner === c.corner.number }" @click="selectCorner(c.corner.number)">{{ i + 1 }} · Curva {{ c.corner.number }} <b>{{ formatDelta(c.timeLostS) }}</b></button>
+            </span>
             <button v-if="viewLabel !== 'Giro intero'" type="button" class="strip-reset" title="Torna al giro intero (anche Esc o doppio clic sul grafico)" @click="wholeLap">⟲ Giro intero</button>
           </div>
           <div v-if="sectorList.length" class="strip-row">
@@ -432,6 +436,8 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .tracce-right { grid-area: right; min-width: 0; }
 // Sector and corner strip: sticky under the lap bar, aligned to the plot area (42 px axis, 8 px right).
 .strip-head { display: flex; align-items: center; gap: 10px; height: 20px; margin-left: -34px; color: #b3b3b8; font: 700 11px "Inter", sans-serif; text-transform: uppercase; letter-spacing: .04em; }
+.strip-worst { display: flex; gap: 4px; margin-left: auto;
+  button { height: 20px; padding: 0 8px; border: 1px solid #ff5a6e66; background: #ff5a6e14; color: #e6e6ea; font: 600 11px "Inter", sans-serif; text-transform: none; letter-spacing: 0; cursor: pointer; b { color: #ff5a6e; } &.active { border-color: #ff0024; background: #ff002433; } } }
 .strip-reset { height: 20px; padding: 0 8px; border: 1px solid #ff0024; background: #ff00241f; color: #fff; font: 700 11px "Inter", sans-serif; text-transform: none; cursor: pointer; }
 .tracce-strip { position: sticky; top: 50px; z-index: 4; display: grid; gap: 2px; margin-bottom: 6px; padding: 4px 9px 4px 43px; background: #0b0b10f2; box-shadow: 0 8px 10px -10px #000; }
 .strip-row { position: relative; height: 24px;
