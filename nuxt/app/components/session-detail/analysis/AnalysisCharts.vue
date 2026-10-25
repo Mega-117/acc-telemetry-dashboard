@@ -221,7 +221,7 @@ function onDouble() {
     <div v-for="(chart, index) in charts" :key="chart.row.key" class="chart">
       <!-- Track Titan header: the channel name, readable, and the values at the cursor. -->
       <div class="chart-head">
-        <span class="chart-title">{{ chart.row.title }}<small v-if="chart.row.unit"> {{ chart.row.unit }}</small></span>
+        <span class="chart-title">{{ chart.row.title }}</span>
         <span v-if="headerValues[index]" class="chart-values">
           <span class="v v--lap">Tu <b>{{ headerValues[index]!.lap }}</b></span>
           <span v-if="headerValues[index]!.ref" class="v v--ref">Rif. <b>{{ headerValues[index]!.ref }}</b></span>
@@ -283,7 +283,9 @@ svg { display: block; width: 100%; touch-action: none; cursor: crosshair; }
 .chart-title { color: #fff; font: italic 700 13px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; letter-spacing: .03em;
   small { color: #8a8a90; font: 500 11px 'Inter', sans-serif; text-transform: none; } }
 .chart-values { display: flex; gap: 12px; font: 600 11px 'Inter', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap;
-  .v { color: #8a8a90; b { font-weight: 700; font-size: 12px; } }
+  // Fixed width per value, right-aligned: changing digits never shifts the others.
+  .v { color: #8a8a90; b { display: inline-block; min-width: 9ch; text-align: right; font-weight: 700; font-size: 12px; } }
+  .v--diff b { min-width: 6ch; }
   .v--lap b { color: #38bdf8; } .v--ref b { color: #fbbf24; } .v--diff b { color: #e6e6ea; } }
 .chart-grid--x { stroke-dasharray: none; stroke: #ffffff0d; }
 .chart-xaxis { grid-column: 2; position: relative; overflow: hidden; height: 16px; color: #8a8a90; font: 600 10px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
