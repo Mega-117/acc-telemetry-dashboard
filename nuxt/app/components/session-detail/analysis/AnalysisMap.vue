@@ -40,7 +40,8 @@ const lapsMode = computed(() => props.colorMode === 'laps')
 const manualZoom = ref(1)
 const focusRange = computed<[number, number] | null>(() => {
   const corner = props.selected !== null ? props.corners[props.selected - 1] : null
-  if (zoomed.value && corner) return [corner.start, corner.end]
+  // Corner zoom on the apex area, about 2.5x closer than the whole peak-to-peak stretch.
+  if (zoomed.value && corner) return [corner.apex - (corner.apex - corner.start) * 0.4, corner.apex + (corner.end - corner.apex) * 0.4]
   return props.focus && (props.focus[0] > 0 || props.focus[1] < 1) ? props.focus : null
 })
 watch(focusRange, () => { manualZoom.value = 1 })

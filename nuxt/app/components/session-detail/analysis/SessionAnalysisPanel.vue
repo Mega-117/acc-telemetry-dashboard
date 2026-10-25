@@ -342,6 +342,10 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
         <div class="tracce-strip">
           <div class="strip-head">
             <span>{{ viewLabel }}</span>
+            <!-- Navigation as Garage 61 and Track Titan: every sector always there, whatever the zoom. -->
+            <span v-if="sectorList.length" class="strip-nav">
+              <button v-for="s in sectorList" :key="s.index" type="button" :class="{ active: selectedSector === s.index }" @click="selectSector(s.index)">S{{ s.index + 1 }}</button>
+            </span>
             <button type="button" class="strip-channels" :class="{ active: allChannels }" @click="allChannels = !allChannels">{{ allChannels ? 'Solo l’essenziale' : '+ Altri canali' }}</button>
             <button v-if="viewLabel !== 'Giro intero'" type="button" class="strip-reset" title="Torna al giro intero (anche Esc o doppio clic sul grafico)" @click="wholeLap">⟲ Giro intero</button>
           </div>
@@ -423,8 +427,9 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .sector-gap { display: grid; place-items: center; color: #fff; font: 700 12px 'Inter', sans-serif; }
 .corner-rank { position: absolute; top: 1px; left: 2px; color: #ffd43b; font: 700 8px 'Inter', sans-serif; font-style: normal; }
 // Two columns: the list takes half the height.
-.corner-list { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; > .corner-row:first-child { grid-column: 1 / -1; grid-template-columns: 74px 1fr; } }
-.corner-row { display: grid; grid-template-columns: 28px 1fr; gap: 3px; padding: 0; border: 0; background: none; cursor: pointer; text-align: center;
+// One corner per row, the section scrolls on its own when the list is longer than the column.
+.corner-list { display: grid; gap: 3px; max-height: 46vh; overflow-y: auto; padding-right: 2px; > .corner-row:first-child { grid-template-columns: 74px 1fr; } }
+.corner-row { display: grid; grid-template-columns: 40px 1fr; gap: 3px; padding: 0; border: 0; background: none; cursor: pointer; text-align: center;
   &.active .corner-num { background: #ff0024; color: #fff; }
   &.active .corner-cell { box-shadow: inset 0 0 0 1px #ff0024; } }
 .corner-num { position: relative; display: grid; place-items: center; padding: 3px 0; background: #ffffff0d; color: #e6e6ea; font: italic 700 15px 'Racer Display', 'Arial Narrow', sans-serif;
@@ -435,6 +440,8 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .tracce-right { grid-area: right; min-width: 0; height: 100%; overflow-y: auto; }
 // Sector and corner strip: sticky under the lap bar, aligned to the plot area (42 px axis, 8 px right).
 .strip-head { display: flex; align-items: center; gap: 10px; height: 20px; margin-left: -34px; color: #b3b3b8; font: 700 11px "Inter", sans-serif; text-transform: uppercase; letter-spacing: .04em; }
+.strip-nav { display: flex; gap: 3px;
+  button { height: 20px; min-width: 30px; padding: 0 6px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font: 700 11px "Inter", sans-serif; text-transform: none; cursor: pointer; &.active { border-color: #ff0024; background: #ff002433; color: #fff; } } }
 .strip-channels { margin-left: auto; height: 20px; padding: 0 8px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font: 700 11px "Inter", sans-serif; text-transform: none; letter-spacing: 0; cursor: pointer; &.active { border-color: #ff0024; } }
 .strip-reset { height: 20px; padding: 0 8px; border: 1px solid #ff0024; background: #ff00241f; color: #fff; font: 700 11px "Inter", sans-serif; text-transform: none; cursor: pointer; }
 .tracce-strip { position: sticky; top: 0; z-index: 4; display: grid; gap: 2px; margin-bottom: 6px; padding: 4px 9px 4px 43px; background: #0b0b10f2; box-shadow: 0 8px 10px -10px #000; }
