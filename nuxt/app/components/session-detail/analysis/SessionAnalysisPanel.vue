@@ -110,7 +110,12 @@ const viewportHeight = ref(900)
 function measure() { viewportHeight.value = window.innerHeight }
 onMounted(() => { measure(); window.addEventListener('resize', measure) })
 onBeforeUnmount(() => window.removeEventListener('resize', measure))
-const traceRowHeight = computed(() => Math.max(100, Math.floor((viewportHeight.value - 250) / Math.max(traceRows.value.length, 1)) - 30))
+// Tracce: under the sticky bar the charts fill one screen (about 150 px for bar and margins).
+const traceRowHeight = computed(() => Math.max(80, Math.floor((viewportHeight.value - 150) / Math.max(traceRows.value.length, 1)) - 30))
+// Garage 61 keeps the lap bar on the left; on a 1400 px window it would squeeze the charts,
+// so it opens by default only on wide windows and folds away with a button.
+const leftOpen = ref(false)
+onMounted(() => { leftOpen.value = window.innerWidth >= 1700 })
 // Garage 61 sectors: the official sector times of the reference, placed on its trace.
 const sectorTimes = (e: Entry | null) => e ? props.laps.find(l => l.lap_number === e.lapNumber)?.sector_times_ms ?? null : null
 const sectorList = computed(() => {
@@ -243,20 +248,20 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
           </tbody>
         </table>
         <p v-if="!reference" class="analysis-note">Senza un riferimento diverso vedi solo le curve del giro.</p>
+        <AnalysisCar :lap="lap" :reference="reference" :cursor="cursor" :ref-cursor="refCursor" />
       </aside>
       <div class="curve-main">
         <p v-if="selectedCorner !== null && comparison[selectedCorner - 1]" class="curve-advice">Curva {{ selectedCorner }} · {{ cornerAdvice(comparison[selectedCorner - 1]!) }}</p>
         <div class="curve-grid">
           <AnalysisCharts :lap="lap" :reference="reference" :rows="cornerRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" @hover="cursor = $event" />
-          <AnalysisCar :lap="lap" :reference="reference" :cursor="cursor" :ref-cursor="refCursor" />
         </div>
       </div>
     </div>
 
     <!-- TRACCE, as the Garage 61 analyzer: laps and gaps on the left, the map with the
          lap lines and the delta in the middle, the channels on the right, sectors below. -->
-    <div v-else-if="lap && layout === 'tracce'" class="layout-tracce">
-      <aside class="panel tracce-left">
+    <div v-else-if="lap && layout === 'tracce'" class="layout-tracce" :class="{ 'layout-tracce--narrow': !leftOpen }">
+      <aside v-if="leftOpen" class="panel tracce-left">
         <h4>Giri</h4>
         <ul class="tracce-laps">
           <li><b class="sq sq--ref" /><span><strong>{{ refEntry ? formatLapTime(refEntry.lapTimeMs) : '--' }}</strong> Riferimento · Giro {{ refEntry?.lapNumber ?? '--' }}</span></li>
@@ -286,8 +291,9 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
         <button type="button" class="tracce-btn" :class="{ active: allChannels }" @click="allChannels = !allChannels">{{ allChannels ? 'Solo l’essenziale' : 'Altri canali' }}</button>
       </aside>
       <div class="tracce-center">
+        <button type="button" class="tracce-btn tracce-toggle" @click="leftOpen = !leftOpen">{{ leftOpen ? "‹ Chiudi giri e gap" : "Giri, gap e curve ›" }}</button>
         <div class="panel">
-          <AnalysisMap :lap="lap" :reference="reference" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null" :focus="selectedSector !== null ? range : null" color-mode="laps" zoom-controls :size="520" @hover="cursor = $event" @select="selectCorner($event)" />
+          <AnalysisMap :lap="lap" :reference="reference" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null" :focus="selectedSector !== null ? range : null" color-mode="laps" zoom-controls :size="320" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>
         <AnalysisCharts v-if="reference" :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="120" zoomable @hover="cursor = $event" @zoom="zoomRange = $event" />
       </div>
@@ -303,7 +309,8 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 <style scoped lang="scss">
 // Racer Core language: dark cells, thin borders, red accent, italic display titles.
 .analysis { display: grid; gap: 10px; }
-.analysis-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+// Sticky: lap pickers and layout stay in sight while the charts scroll under them.
+.analysis-bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 6px 0; background: #0b0b10f2; box-shadow: 0 8px 12px -10px #000; }
 .seg { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid #ffffff1f; background: #0a0a0feb;
   button { height: 30px; padding: 0 16px; border: 0; background: transparent; color: #b3b3b8; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; cursor: pointer;
     &.active { background: #ffffff14; color: #fff; box-shadow: inset 0 -2px #ff0024; }
@@ -324,7 +331,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .map-legend { display: flex; gap: 5px; align-items: center; color: #8a8a90; font-size: 11px;
   i { width: 14px; height: 3px; margin-left: 6px; &.g { background: #3ddc5a; } &.r { background: #ff5a6e; } &.n { background: #8a8a90; } } }
 
-.layout-pilota { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+.layout-pilota { display: grid; grid-template-columns: minmax(0, 460px) minmax(0, 1fr); gap: 12px; align-items: start; }
 .pilota-side { display: grid; gap: 8px;
   h3 { margin: 0; font: italic 700 15px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; color: #fff; } }
 .pilota-card { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border: 1px solid #ffffff1f; background: #ffffff08; color: #e6e6ea; font-size: 13px; text-align: left; cursor: pointer;
@@ -339,14 +346,16 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
   td { padding: 4px 6px; color: #e6e6ea; small { color: #77777d; } }
   tr { cursor: pointer; &:hover td { background: #ffffff0a; } &.active td { background: #ff002426; } &.active td:first-child { box-shadow: inset 3px 0 #ff0024; } } }
 .curve-main { display: grid; gap: 8px; min-width: 0; }
-.curve-grid { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 8px; align-items: start; }
+.curve-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-items: start; }
 .curve-advice { margin: 0; padding: 8px 12px; border: 1px solid #ffffff1f; background: #ffffff08; color: #e6e6ea; font-size: 13px; font-weight: 600; }
 
 // Garage 61 analyzer: left bar, map + delta in the middle, channels on the right, sectors below.
-.layout-tracce { display: grid; grid-template-columns: 220px minmax(320px, 0.9fr) minmax(0, 1.4fr); grid-template-areas: 'left center right' 'left sectors sectors'; gap: 10px; align-items: start; }
-.tracce-left { grid-area: left; position: sticky; top: 8px;
+.layout-tracce { display: grid; grid-template-columns: 210px 320px minmax(0, 1fr); grid-template-areas: 'left center right' 'left sectors sectors';
+  &--narrow { grid-template-columns: 320px minmax(0, 1fr); grid-template-areas: 'center right' 'sectors sectors'; } gap: 10px; align-items: start; }
+.tracce-left { grid-area: left; position: sticky; top: 56px;
   h4 { margin: 4px 0 0; color: #fff; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; } }
-.tracce-center { grid-area: center; display: grid; gap: 8px; position: sticky; top: 8px; }
+.tracce-center { grid-area: center; display: grid; gap: 8px; position: sticky; top: 56px; }
+.tracce-toggle { justify-self: start; padding: 0 10px; }
 .tracce-right { grid-area: right; }
 .sq { display: inline-block; width: 10px; height: 10px; flex: 0 0 10px; &--lap { background: #38bdf8; } &--ref { background: #fbbf24; } }
 .tracce-laps { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none;

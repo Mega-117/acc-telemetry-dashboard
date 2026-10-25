@@ -78,7 +78,8 @@ const viewBox = computed(() => {
   const inside = range && base.value ? base.value.filter((_, i) => at[i]! >= range[0] && at[i]! <= range[1]) : []
   if (inside.length >= 2) {
     const xs = inside.map(p => p.x), ys = inside.map(p => p.y)
-    span = Math.max(Math.max(...xs) - Math.min(...xs), (Math.max(...ys) - Math.min(...ys)) / 0.8, 16) * 1.25
+    // Generous margin: corner numbers near the edge stay inside the frame.
+    span = Math.max(Math.max(...xs) - Math.min(...xs), (Math.max(...ys) - Math.min(...ys)) / 0.8, 16) * 1.6
     cx = (Math.max(...xs) + Math.min(...xs)) / 2; cy = (Math.max(...ys) + Math.min(...ys)) / 2
   }
   if (manualZoom.value > 1) {

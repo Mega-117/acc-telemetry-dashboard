@@ -269,10 +269,10 @@ svg { display: block; width: 100%; touch-action: none; cursor: crosshair; }
 .chart-grid { stroke: #ffffff14; stroke-width: 1; stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
 .chart-dot { position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--c); border: 1.5px solid #fff; pointer-events: none;
   &.ref { background: #0a0a0f; border: 2px solid var(--c); } }
-.chart-tip { position: absolute; top: 6px; display: grid; gap: 1px; padding: 4px 7px; border: 1px solid #ffffff2e; background: #0d0d12ee; pointer-events: none;
+.chart-tip { position: absolute; top: 26px; display: grid; gap: 1px; padding: 4px 7px; border: 1px solid #ffffff2e; background: #0d0d12ee; pointer-events: none;
   span { display: flex; align-items: center; gap: 6px; color: #e6e6ea; font: 600 11px 'Inter', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; }
   b { width: 9px; height: 9px; } }
-.chart-name { position: absolute; right: 4px; bottom: 2px; color: #b3b3b8; font: 700 11px 'Inter', sans-serif; letter-spacing: .03em; pointer-events: none; }
-.chart-xaxis { grid-column: 2; position: relative; display: flex; justify-content: space-between; color: #77777d; font: 600 10px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
+.chart-name { position: absolute; right: 4px; top: 4px; padding: 1px 6px; background: #0d0d12d9; color: #b3b3b8; font: 700 11px 'Inter', sans-serif; letter-spacing: .03em; pointer-events: none; }
+.chart-xaxis { grid-column: 2; position: relative; display: flex; justify-content: space-between; padding-top: 2px; color: #8a8a90; font: 600 11px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
 .chart-xcursor { position: absolute; transform: translateX(-50%); color: #e6e6ea; }
 </style>

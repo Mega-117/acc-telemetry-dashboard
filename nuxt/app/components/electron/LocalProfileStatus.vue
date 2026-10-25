@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 
 const { localProfile, cloudSessionReady, authSessionStatus, login, resetPassword } = useFirebaseAuth()
+// The development server (Nuxt dev) is never prepared for an offline restart: the notice
+// would always show there and say nothing new. Installed builds keep it, where it is a real warning.
+const offlineWarning = computed(() => !import.meta.dev && localProfile.value?.offlineReady === false)
 const busy = ref(false)
 const message = ref('')
 async function reconnect(credentials: { email: string; password: string }) {
@@ -21,12 +24,12 @@ async function reset() {
 </script>
 
 <template>
-  <aside v-if="localProfile && (!cloudSessionReady || !localProfile.offlineReady)" class="local-profile-status" aria-label="Stato locale e cloud">
+  <aside v-if="localProfile && (!cloudSessionReady || offlineWarning)" class="local-profile-status" aria-label="Stato locale e cloud">
     <p v-if="!cloudSessionReady" role="status">
       <strong>Funzioni locali disponibili.</strong> Sincronizzazione in attesa.
       Lo storico mostra le sessioni disponibili su questo computer; le funzioni condivise richiedono il cloud.
     </p>
-    <p v-if="!localProfile.offlineReady">
+    <p v-if="offlineWarning">
       Questa versione di sviluppo non è preparata per il riavvio offline.
     </p>
     <details v-if="!cloudSessionReady && authSessionStatus !== 'initializing'">

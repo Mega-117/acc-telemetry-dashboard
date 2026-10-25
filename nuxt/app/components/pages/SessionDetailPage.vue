@@ -2421,7 +2421,7 @@ const gripZones = computed(() => {
     <template v-else>
 
     <!-- HEADER SESSIONE -->
-    <header class="session-header">
+    <header class="session-header" :class="{ 'session-header--compact': detailTab === 'avanzata' }">
       <div class="header-row">
         <h1 class="track-name">{{ session.track.toUpperCase() }}</h1>
         <span :class="['type-badge', `type-badge--${session.type}`]">{{ getTypeLabel(session.type) }}</span>
@@ -3209,6 +3209,9 @@ const gripZones = computed(() => {
 
 // HEADER
 .session-header { margin-bottom: 20px; }
+// PIP-618: in Avanzata the analysis needs the height, the header shrinks to one line.
+.session-header--compact { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin: -24px 0 8px;
+  .header-row { margin-bottom: 0; } .track-name { font-size: 20px; letter-spacing: 1px; } .header-meta { margin-bottom: 0; font-size: 12px; } }
 .header-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
 .track-name { font-family: 'Outfit', $font-primary; font-size: 28px; font-weight: 800; color: #fff; letter-spacing: 2px; margin: 0; }
 .type-badge {
