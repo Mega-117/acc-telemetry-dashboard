@@ -18,8 +18,8 @@ const props = defineProps<{
 
 type Layout = 'pilota' | 'tracce'
 const LAYOUTS: { id: Layout, label: string, hint: string }[] = [
-  { id: 'tracce', label: 'Tracce', hint: 'Tutti i canali sul giro intero, un cursore condiviso' },
-  { id: 'pilota', label: 'Pilota', hint: 'La mappa colorata e le tre curve dove migliorare, in parole semplici' },
+  { id: 'tracce', label: 'Avanzata', hint: 'Tutti i canali sul giro, settori e curve: per capire perché' },
+  { id: 'pilota', label: 'Semplice', hint: 'La mappa colorata e le tre curve dove migliorare, in parole semplici' },
 ]
 // Per-viewer preferences: remembered, never required.
 function remembered<T extends string>(key: string, values: readonly T[], fallback: T) {
@@ -30,7 +30,6 @@ function remembered<T extends string>(key: string, values: readonly T[], fallbac
 }
 // Tracce is the main view (Garage 61 + Track Titan + VRS); Pilota and Curve stay as alternatives.
 const layout = remembered<Layout>('rc:analysis:layout', ['pilota', 'tracce'], 'tracce')
-const mapMode = remembered<'intera' | 'zoom'>('rc:analysis:map', ['intera', 'zoom'], 'intera')
 const allChannels = ref(false)
 
 interface Entry { id: string, lapNumber: number, lapTimeMs: number, valid: boolean, complete: boolean }
@@ -243,6 +242,8 @@ const extraRows = computed<ChartRow[]>(() => [
 ] as ChartRow[])
 const WHEEL_NAME = { fl: 'ant. sx', fr: 'ant. dx', rl: 'post. sx', rr: 'post. dx' } as const
 const pilotRows = computed(() => [...deltaRow.value, speedRow, ...pedalRows])
+// Semplice: the four corner charts share the window under the three tips, never below 80 px.
+const pilotRowHeight = computed(() => Math.max(80, Math.floor((traceHeight.value - 230) / 4) - 40))
 // Garage 61: the delta sits under the map; the channels on the right are speed, pedals, steering, gear.
 const traceRows = computed(() => [speedRow, ...pedalRows, steerRow, gearRow, ...(allChannels.value ? extraRows.value : [])])
 
@@ -273,25 +274,31 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
     <p v-else-if="error" class="analysis-empty">{{ error }}</p>
     <p v-else-if="lapId === refId && entries.length > 1" class="analysis-empty">Scegli un riferimento diverso dal tuo giro per vedere il confronto.</p>
 
-    <!-- PILOTA (VRS): the coloured map and the three corners to work on, in plain words. -->
-    <div v-if="lap && layout === 'pilota'" class="layout-pilota">
-      <div class="panel">
-        <div class="panel-head">
-          <span v-if="reference" class="map-legend"><i class="g" />il {{ short(lapEntry).split(' · ')[0] }} guadagna <i class="r" />perde <i class="n" />uguale, sul {{ short(refEntry).split(' · ')[0] }}</span>
-          <span class="seg seg--small"><button type="button" :class="{ active: mapMode === 'intera' }" @click="mapMode = 'intera'">Pista intera</button><button type="button" :class="{ active: mapMode === 'zoom' }" :disabled="selectedCorner === null" @click="mapMode = 'zoom'">Zoom curva</button></span>
+    <!-- SEMPLICE (VRS): the coloured map and the three corners to work on, in plain words,
+         with the same frame as Avanzata: it fills the window and each column scrolls on its own. -->
+    <div v-if="lap && layout === 'pilota'" ref="traceRoot" class="layout-pilota" :style="{ height: `${traceHeight}px` }">
+      <div class="pilota-left">
+        <div class="panel">
+          <span v-if="reference" class="map-legend"><i class="g" />guadagni <i class="r" />perdi <i class="n" />uguale</span>
+          <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" zoom-controls :size="440" @hover="cursor = $event" @select="selectedCorner = $event" />
         </div>
-        <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="mapMode === 'zoom'" :size="460" @hover="cursor = $event" @select="selectedCorner = $event" />
         <AnalysisCar :lap="lap" :reference="reference" :cursor="cursor" :ref-cursor="refCursor" />
       </div>
-      <div class="pilota-side">
-        <h3>Dove migliorare</h3>
-        <p v-if="!reference" class="analysis-note">Scegli un riferimento per vedere dove migliorare.</p>
-        <p v-else-if="!worst.length" class="analysis-note">Nessuna curva sotto il riferimento di oltre 3 centesimi.</p>
-        <button v-for="(c, i) in worst" :key="c.corner.number" type="button" class="pilota-card" :class="{ active: selectedCorner === c.corner.number }" @click="selectedCorner = c.corner.number">
-          <span class="pilota-rank">{{ i + 1 }}</span>
-          <span class="pilota-body"><strong>Curva {{ c.corner.number }} <em class="loss">{{ formatDelta(c.timeLostS) }} s</em></strong>{{ cornerAdvice(c) }}</span>
-        </button>
-        <AnalysisCharts v-if="selectedCorner !== null" :lap="lap" :reference="reference" :rows="pilotRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" @hover="cursor = $event" />
+      <div class="pilota-right">
+        <section class="side-box">
+          <h4>Dove migliorare</h4>
+          <p v-if="!reference" class="analysis-note">Scegli un riferimento per vedere dove migliorare.</p>
+          <p v-else-if="!worst.length" class="analysis-note">Nessuna curva sotto il riferimento di oltre 3 centesimi.</p>
+          <div v-else class="tip-list">
+            <button v-for="(c, i) in worst" :key="c.corner.number" type="button" class="tip-row" :class="{ active: selectedCorner === c.corner.number }" @click="selectedCorner = c.corner.number">
+              <span class="tip-rank">{{ i + 1 }}</span>
+              <span class="tip-corner">Curva {{ c.corner.number }}</span>
+              <span class="tip-gap" :style="{ background: heat(c.timeLostS) }">{{ formatDelta(c.timeLostS) }}</span>
+              <span class="tip-text">{{ cornerAdvice(c) }}</span>
+            </button>
+          </div>
+        </section>
+        <AnalysisCharts v-if="selectedCorner !== null" :lap="lap" :reference="reference" :rows="pilotRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="pilotRowHeight" zoomable @hover="cursor = $event" @zoom="zoomRange = $event" />
       </div>
     </div>
 
@@ -392,14 +399,17 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .map-legend { display: flex; gap: 5px; align-items: center; color: #8a8a90; font-size: 11px;
   i { width: 14px; height: 3px; margin-left: 6px; &.g { background: #3ddc5a; } &.r { background: #ff5a6e; } &.n { background: #8a8a90; } } }
 
-.layout-pilota { display: grid; grid-template-columns: minmax(0, 460px) minmax(0, 1fr); gap: 12px; align-items: start; }
-.pilota-side { display: grid; gap: 8px;
-  h3 { margin: 0; font: italic 700 15px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; color: #fff; } }
-.pilota-card { display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border: 1px solid #ffffff1f; background: #ffffff08; color: #e6e6ea; font-size: 13px; text-align: left; cursor: pointer;
-  &.active { border-color: #ff0024; background: #ff002414; }
-  strong { display: block; margin-bottom: 2px; font-size: 14px; em { font-style: normal; margin-left: 6px; } } }
-.pilota-rank { display: grid; place-items: center; width: 26px; height: 26px; flex: 0 0 26px; background: #ff0024; color: #fff; font: italic 700 14px 'Racer Display', sans-serif; }
-.pilota-body { display: block; }
+.layout-pilota { display: grid; grid-template-columns: 440px minmax(0, 1fr); gap: 10px; overflow: hidden; }
+.pilota-left, .pilota-right { display: grid; gap: 10px; align-content: start; min-width: 0; height: 100%; overflow-y: auto; overflow-x: hidden; }
+.tip-list { display: grid; gap: 3px; }
+// One tip per row as the corner list of Avanzata: rank, corner, time lost on the red/green scale, the advice.
+.tip-row { display: grid; grid-template-columns: 26px 74px 64px minmax(0, 1fr); gap: 3px; padding: 0; border: 0; background: none; color: #e6e6ea; text-align: left; cursor: pointer;
+  &.active .tip-corner { background: #ff0024; color: #fff; }
+  &.active .tip-text { box-shadow: inset 0 0 0 1px #ff0024; } }
+.tip-rank { display: grid; place-items: center; background: #ffffff0d; color: #b3b3b8; font: 700 12px 'Inter', sans-serif; }
+.tip-corner { display: grid; place-items: center; padding: 6px 0; background: #ffffff0d; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; }
+.tip-gap { display: grid; place-items: center; color: #fff; font: 700 12px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
+.tip-text { display: flex; align-items: center; padding: 4px 10px; background: #ffffff08; font-size: 13px; }
 
 // Garage 61 analyzer: left bar, map + delta in the middle, channels on the right, sector strip on top of the charts.
 .layout-tracce { display: grid; grid-template-columns: 210px 320px minmax(0, 1fr); grid-template-areas: 'left center right';

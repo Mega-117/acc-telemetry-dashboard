@@ -2440,7 +2440,7 @@ const gripZones = computed(() => {
       </div>
     <div v-if="!isEvoSession" class="detail-tabs" role="tablist" aria-label="Vista della sessione">
       <button type="button" role="tab" :aria-selected="detailTab === 'sessione'" :class="{ active: detailTab === 'sessione' }" @click="detailTab = 'sessione'">Sessione</button>
-      <button type="button" role="tab" :aria-selected="detailTab === 'avanzata'" :class="{ active: detailTab === 'avanzata' }" title="Il giro contro un riferimento: delta, curve, traiettorie e telemetria" @click="detailTab = 'avanzata'">Avanzata</button>
+      <button type="button" role="tab" :aria-selected="detailTab === 'avanzata'" :class="{ active: detailTab === 'avanzata' }" title="Il giro contro un riferimento: delta, curve, traiettorie e telemetria" @click="detailTab = 'avanzata'">Telemetria</button>
     </div>
     </header>
 
