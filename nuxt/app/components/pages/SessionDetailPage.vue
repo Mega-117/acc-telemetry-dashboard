@@ -76,6 +76,7 @@ import type {
 } from '~/services/telemetry/theoreticalTimesCalculator'
 import type { SessionDetailLap, SessionDetailStint } from '~/types/sessionDetailViewModel'
 import SessionDetailPanel from '~/components/session-detail/SessionDetailPanel.vue'
+import SessionAnalysisPanel from '~/components/session-detail/analysis/SessionAnalysisPanel.vue'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler, zoomPlugin)
 
@@ -182,6 +183,15 @@ const commonSession = ref<FullSession | null>(null)
 const originalSession = ref<FullSession | null>(null)
 const fullSession = ref<FullSession | null>(null)
 const isEvoSession = computed(() => recordingGame(originalSession.value) === 'evo')
+// PIP-618: "Avanzata" tab, the lap analysis (our Track Titan) from the logger's lap files.
+// Lap files carry the session id of the logger (YYYYMMDD_HHMMSS); other sessions have none.
+const detailTab = ref<'sessione' | 'avanzata'>('sessione')
+const analysisToken = computed(() => {
+  const id = (originalSession.value as { session_id?: unknown } | null)?.session_id ?? props.sessionId
+  return typeof id === 'string' && /^\d{8}_\d{6}$/.test(id) ? id : null
+})
+const analysisLaps = computed(() => (fullSession.value?.stints ?? []).flatMap(stint => stint.laps ?? [])
+  .map(lap => ({ lap_number: lap.lap_number, lap_time_ms: lap.lap_time_ms ?? null, is_valid: lap.is_valid ?? null })))
 
 const isLoading = ref(true)
 const loadError = ref<string | null>(null)
@@ -2428,10 +2438,17 @@ const gripZones = computed(() => {
       </div>
     </header>
 
+    <div v-if="!isEvoSession" class="detail-tabs" role="tablist" aria-label="Vista della sessione">
+      <button type="button" role="tab" :aria-selected="detailTab === 'sessione'" :class="{ active: detailTab === 'sessione' }" @click="detailTab = 'sessione'">Sessione</button>
+      <button type="button" role="tab" :aria-selected="detailTab === 'avanzata'" :class="{ active: detailTab === 'avanzata' }" title="Il giro contro un riferimento: delta, curve, traiettorie e telemetria" @click="detailTab = 'avanzata'">Avanzata</button>
+    </div>
+    <SessionAnalysisPanel v-if="detailTab === 'avanzata' && !isEvoSession" :session-token="analysisToken" :laps="analysisLaps" />
+
     <!-- ========================================== -->
     <!-- MASTER / DETAIL LAYOUT -->
     <!-- ========================================== -->
     <div
+      v-else
       class="master-detail"
       :class="{ 'master-detail--comparing': comparisonOpen }"
     >
@@ -4268,6 +4285,10 @@ const gripZones = computed(() => {
 
 // A|B TABS
 .laps-tabs { display: flex; gap: 4px; }
+// PIP-618: Sessione / Avanzata, the same segmented switch as the Dati page.
+.detail-tabs { display: flex; gap: 3px; width: max-content; margin: 0 0 12px; padding: 3px; border: 1px solid #ffffff1f; background: #0a0a0feb;
+  button { height: 30px; padding: 0 18px; border: 0; background: transparent; color: #b3b3b8; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; cursor: pointer;
+    &.active { background: #ffffff14; color: #fff; box-shadow: inset 0 -2px #ff0024; } } }
 .lap-tab {
   padding: 6px 12px;
   background: rgba(255,255,255,0.03);
