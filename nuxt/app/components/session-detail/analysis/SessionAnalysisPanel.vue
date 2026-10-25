@@ -140,8 +140,18 @@ function measureDelta() {
 }
 function measureTrace() {
   const el = traceRoot.value
-  if (el) traceHeight.value = Math.max(420, Math.floor(window.innerHeight - el.getBoundingClientRect().top - 12))
-  nextTick(measureDelta)
+  if (!el) return
+  traceHeight.value = Math.max(420, Math.floor(window.innerHeight - el.getBoundingClientRect().top - 12))
+  nextTick(() => {
+    // Padding and margins below the panel (page, layout) can still push the page a few
+    // pixels past the window: take them off, so the page itself never scrolls.
+    let page: Element | null = el.parentElement
+    while (page && page !== document.documentElement && !/(auto|scroll)/.test(getComputedStyle(page).overflowY)) page = page.parentElement
+    page ??= document.scrollingElement
+    const extra = page ? page.scrollHeight - page.clientHeight : 0
+    if (extra > 0) traceHeight.value = Math.max(420, traceHeight.value - extra)
+    nextTick(measureDelta)
+  })
 }
 onMounted(() => window.addEventListener("resize", measureTrace))
 onBeforeUnmount(() => window.removeEventListener("resize", measureTrace))

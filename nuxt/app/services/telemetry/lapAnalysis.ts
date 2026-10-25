@@ -142,15 +142,16 @@ export function compareCorners(lap: LapTraceView, reference: LapTraceView, corne
 
 /**
  * One plain sentence per corner, in the VRS order: exit first, then entry,
- * then the middle of the corner. Only where time is actually lost.
+ * then the middle of the corner. Only where time is actually lost. The fact first,
+ * against the reference, then what to try: never an order followed by a number alone.
  */
 export function cornerAdvice(c: CornerComparison): string {
   if (c.timeLostS < 0.03) return c.timeLostS <= -0.03 ? 'Qui sei più veloce del riferimento' : 'Come il riferimento'
-  if (c.exitDeltaKmh !== null && c.exitDeltaKmh <= -3) return `Esci più forte: in uscita sei ${Math.round(-c.exitDeltaKmh)} km/h più lento`
-  if (c.brakeDeltaM !== null && c.brakeDeltaM <= -10) return `Frena più tardi: freni ${Math.round(-c.brakeDeltaM)} m prima`
-  if (c.brakeDeltaM !== null && c.brakeDeltaM >= 10) return `Frena prima: freni ${Math.round(c.brakeDeltaM)} m dopo e arrivi lungo`
-  if (c.lapMinKmh !== null && c.refMinKmh !== null && c.refMinKmh - c.lapMinKmh >= 3) return `Porta più velocità in centro curva: ${Math.round(c.refMinKmh - c.lapMinKmh)} km/h in meno`
-  return 'Perdi tempo in modo diffuso: guarda la traiettoria'
+  if (c.exitDeltaKmh !== null && c.exitDeltaKmh <= -3) return `In uscita vai ${Math.round(-c.exitDeltaKmh)} km/h più piano del riferimento: cerca un'uscita più veloce`
+  if (c.brakeDeltaM !== null && c.brakeDeltaM <= -10) return `Freni ${Math.round(-c.brakeDeltaM)} m prima del riferimento: prova a frenare più tardi`
+  if (c.brakeDeltaM !== null && c.brakeDeltaM >= 10) return `Freni ${Math.round(c.brakeDeltaM)} m dopo il riferimento e arrivi lungo: frena un po' prima`
+  if (c.lapMinKmh !== null && c.refMinKmh !== null && c.refMinKmh - c.lapMinKmh >= 3) return `A centro curva vai ${Math.round(c.refMinKmh - c.lapMinKmh)} km/h più piano del riferimento: porta più velocità`
+  return "Perdi un po' in tutta la curva: confronta le due traiettorie sulla mappa"
 }
 
 export interface MapPoint { x: number, y: number }

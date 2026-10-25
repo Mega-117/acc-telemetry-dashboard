@@ -82,10 +82,10 @@ describe('lap analysis (our Track Titan)', () => {
     const base = { corner: { number: 1, start: 0, apex: 0.5, end: 1, minSpeedKmh: 80 }, lapMinKmh: 80, refMinKmh: 80, brakeDeltaM: 0, exitDeltaKmh: 0 }
     expect(cornerAdvice({ ...base, timeLostS: 0 })).toBe('Come il riferimento')
     expect(cornerAdvice({ ...base, timeLostS: -0.1 })).toBe('Qui sei più veloce del riferimento')
-    expect(cornerAdvice({ ...base, timeLostS: 0.2, exitDeltaKmh: -6, brakeDeltaM: -30 })).toBe('Esci più forte: in uscita sei 6 km/h più lento')
-    expect(cornerAdvice({ ...base, timeLostS: 0.2, brakeDeltaM: -30 })).toBe('Frena più tardi: freni 30 m prima')
-    expect(cornerAdvice({ ...base, timeLostS: 0.2, brakeDeltaM: 25 })).toBe('Frena prima: freni 25 m dopo e arrivi lungo')
-    expect(cornerAdvice({ ...base, timeLostS: 0.2, lapMinKmh: 72 })).toBe('Porta più velocità in centro curva: 8 km/h in meno')
+    expect(cornerAdvice({ ...base, timeLostS: 0.2, exitDeltaKmh: -6, brakeDeltaM: -30 })).toBe("In uscita vai 6 km/h più piano del riferimento: cerca un'uscita più veloce")
+    expect(cornerAdvice({ ...base, timeLostS: 0.2, brakeDeltaM: -30 })).toBe('Freni 30 m prima del riferimento: prova a frenare più tardi')
+    expect(cornerAdvice({ ...base, timeLostS: 0.2, brakeDeltaM: 25 })).toBe("Freni 25 m dopo il riferimento e arrivi lungo: frena un po' prima")
+    expect(cornerAdvice({ ...base, timeLostS: 0.2, lapMinKmh: 72 })).toBe('A centro curva vai 8 km/h più piano del riferimento: porta più velocità')
   })
 
   it('map keeps the aspect ratio inside the box, null without coordinates', () => {
