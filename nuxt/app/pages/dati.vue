@@ -51,8 +51,8 @@ type WheelKey = 'high' | 'avg' | 'low' | 'loss'
 // Label, key and the one-line explanation shown on hover.
 const wheelColumns: { title: string, unit: string, kind: WheelKind, hint: string, rows: [string, WheelKey, string][] }[] = [
   { title: 'Pressioni', unit: 'psi', kind: 'pressure', hint: 'Pressione delle gomme a caldo nel giro. Verde: nella finestra di Correggi pressioni.',
-    rows: [['Massima', 'high', 'La pressione più alta raggiunta nel giro'], ['Media', 'avg', 'La pressione media del giro: è quella da guardare'], ['Calo', 'loss', 'Quanto è scesa la pressione dall’inizio dello stint (foratura lenta, urti)']] },
-  { title: 'Temp. gomme', unit: '°C', kind: 'tyre', hint: 'Temperatura del nucleo delle gomme. Colori come ACC Drive: blu fredda, verde giusta, giallo/arancio calda, rosso troppo calda.',
+    rows: [['Massima', 'high', 'La pressione più alta raggiunta nel giro'], ['Media', 'avg', 'La pressione media del giro: è quella da guardare'], ['Calo', 'loss', 'Quanto è scesa la pressione in questo giro (foratura lenta, urti)']] },
+  { title: 'Temp. gomme', unit: '°C', kind: 'tyre', hint: 'Temperatura delle gomme, presa lungo tutto il giro. Colori come ACC Drive: blu fredda, verde giusta, giallo/arancio calda, rosso troppo calda.',
     rows: [['Massima', 'high', 'La temperatura più alta nel giro'], ['Media', 'avg', 'La temperatura media del giro'], ['Minima', 'low', 'La temperatura più bassa nel giro']] },
   { title: 'Temp. freni', unit: '°C', kind: 'brake', hint: 'Temperatura dei dischi. Le fasce di colore cambiano con le pastiglie e tra anteriore e posteriore.',
     rows: [['Massima', 'high', 'La temperatura più alta nel giro, in frenata'], ['Media', 'avg', 'La temperatura media del giro'], ['Minima', 'low', 'La temperatura più bassa, sui rettilinei']] },
@@ -68,8 +68,8 @@ const sectorsReliable = computed(() => lap.value?.sectors_reliable !== false)
 const lapRows: { label: string, hint: string, value: (data?: SectorTelemetry) => string }[] = [
   { label: 'Vel. max', hint: 'Velocità più alta raggiunta', value: d => kmh(d?.top_kmh) },
   { label: 'Vel. media', hint: 'Velocità media', value: d => kmh(d?.avg_kmh) },
-  { label: 'Interventi TC', hint: 'Quante volte il traction control è entrato', value: d => count(d?.tc) },
-  { label: 'Interventi ABS', hint: 'Quante volte l’ABS è entrato', value: d => count(d?.abs) },
+  { label: 'Interventi TC', hint: 'Quanto ha lavorato il traction control: decimi di secondo in cui era attivo', value: d => count(d?.tc) },
+  { label: 'Interventi ABS', hint: 'Quanto ha lavorato l’ABS: decimi di secondo in cui era attivo', value: d => count(d?.abs) },
 ]
 const assists = computed(() => {
   const a = tel.value?.assists
@@ -95,7 +95,8 @@ function wheelCells(kind: WheelKind, key: WheelKey) {
   })
 }
 const percent = (values?: (number | null)[]) => (values ?? [null, null, null, null]).map(v => typeof v === 'number' ? `${v.toFixed(1)}%` : '--')
-const tyreType = computed(() => tel.value?.tyre?.compound ?? (tel.value?.tyre ? (tel.value.tyre.wet ? 'Bagnato' : 'Asciutto') : '--'))
+// ACC's compound string is "dry_compound"/"wet_compound": the wet flag says the same, readably.
+const tyreType = computed(() => tel.value?.tyre ? (tel.value.tyre.wet ? 'Bagnato' : 'Asciutto') : '--')
 const brakeType = computed(() => {
   const b = tel.value?.brakes
   if (!b?.front_pad) return '--'
@@ -206,6 +207,12 @@ onMounted(() => { void load(); timer = setInterval(() => { void refreshLocal() }
 onBeforeUnmount(() => { revision++; clearInterval(timer); window.removeEventListener('keydown', onKey) })
 const time = (value: number | null | undefined) => value && value > 0 ? formatLapTime(value) : '--'
 const number = (value: number | null | undefined, digits = 1) => typeof value === 'number' && Number.isFinite(value) ? value.toFixed(digits) : '--'
+// Damage is the repair time in the pit (ms), as the ACC menu shows it.
+const repair = (value: number | null | undefined) => typeof value !== 'number' ? '--' : value > 0 ? formatLapTime(value) : 'Nessuno'
+const repairTotal = computed(() => {
+  const d = tel.value?.damage
+  return typeof d?.body === 'number' && typeof d?.suspension === 'number' ? d.body + d.suspension : null
+})
 </script>
 
 
@@ -313,7 +320,11 @@ const number = (value: number | null | undefined, digits = 1) => typeof value ==
           </section>
           <section class="tele-card">
             <h3>Danni</h3>
-            <dl><div><dt>Carrozzeria</dt><dd>{{ number(tel?.damage?.body, 1) }}</dd></div><div><dt>Sospensioni</dt><dd>{{ number(tel?.damage?.suspension, 1) }}</dd></div></dl>
+            <dl title="Tempo di riparazione ai box, a fine giro">
+              <div><dt>Carrozzeria</dt><dd>{{ repair(tel?.damage?.body) }}</dd></div>
+              <div><dt>Sospensioni</dt><dd>{{ repair(tel?.damage?.suspension) }}</dd></div>
+              <div><dt>Totale</dt><dd>{{ repair(repairTotal) }}</dd></div>
+            </dl>
           </section>
           <section class="tele-card">
             <h3>Aria</h3>
@@ -331,7 +342,7 @@ const number = (value: number | null | undefined, digits = 1) => typeof value ==
           </section>
         </div>
         <p v-if="lapColumns.some(c => c.unreliable)" class="tele-note">* Settori non affidabili in questo giro (uscita dai box): non contano per i migliori.</p>
-        <p v-if="lap && !tel" class="tele-note">-- = non registrato per questo giro (gomme, freni, velocità, TC/ABS, danni): arriva con il prossimo aggiornamento del logger.</p>
+        <p v-if="lap && !tel" class="tele-note">-- = giro registrato prima della versione che salva gomme, freni, velocità, TC/ABS e danni.</p>
       </div>
     </div>
   </LayoutPageContainer>

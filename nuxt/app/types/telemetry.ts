@@ -91,6 +91,11 @@ export interface LapData {
 export type WheelValues = [number | null, number | null, number | null, number | null]
 export interface WheelSpread { high: WheelValues; avg: WheelValues; low: WheelValues }
 export interface SectorTelemetry { top_kmh?: number | null; avg_kmh?: number | null; tc?: number | null; abs?: number | null }
+/**
+ * Written by logger_core/lap_telemetry.py (PIP-616). Pressures in psi, `loss` is the drop
+ * within this lap; temperatures in °C over the whole lap; pad/disc life in % left;
+ * damage is the pit repair time in ms; sector/lap `tc`/`abs` count 10 Hz samples active.
+ */
 export interface LapTelemetry {
   pressure?: { high: WheelValues; avg: WheelValues; loss: WheelValues }
   tyre_temp?: WheelSpread
