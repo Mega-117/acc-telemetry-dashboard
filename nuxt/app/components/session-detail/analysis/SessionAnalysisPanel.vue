@@ -332,9 +332,11 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
             <h4>Dove perdi di più</h4>
             <button v-if="viewLabel !== 'Giro intero'" type="button" class="strip-reset" title="Torna al giro intero (anche Esc)" @click="wholeLap">⟲ Giro intero</button>
           </div>
+          <!-- Column heads as in the Curve table: the rows are corners, the cell the time lost there. -->
+          <div class="corner-row corner-row--head" aria-hidden="true"><span>Curva</span><span>Tempo perso</span></div>
           <div class="corner-list">
             <button v-for="(c, i) in cornersByLoss" :key="c.corner.number" type="button" class="corner-row" :class="{ active: selectedCorner === c.corner.number }" :title="`Curva ${c.corner.number}`" @click="selectCorner(c.corner.number)">
-              <span class="corner-num"><i v-if="i < 3 && c.timeLostS >= 0.03" class="corner-rank">{{ i + 1 }}°</i>{{ c.corner.number }}</span><span class="corner-cell" :style="{ background: heat(c.timeLostS) }">{{ formatDelta(c.timeLostS) }}</span>
+              <span class="corner-num"><i v-if="i < 3 && c.timeLostS >= 0.03" class="corner-rank">{{ i + 1 }}°</i>Curva {{ c.corner.number }}</span><span class="corner-cell" :style="{ background: heat(c.timeLostS) }">{{ formatDelta(c.timeLostS) }}</span>
             </button>
           </div>
         </section>
@@ -431,7 +433,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
     small { color: #77777d; font: 500 10px 'Inter', sans-serif; text-transform: none; margin-left: 4px; } }
   // The corner list reaches the bottom of the column, level with the delta; on a very tall
   // window it stops at a maximum height and scrolls inside.
-  &--corners { flex: 1 1 auto; min-height: 160px; max-height: 760px; grid-template-rows: auto minmax(0, 1fr); } }
+  &--corners { flex: 1 1 auto; min-height: 160px; max-height: 760px; grid-template-rows: auto auto minmax(0, 1fr); } }
 .side-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; h4 { margin: 0; } }
 .sector-rows { display: grid; gap: 3px; }
 .sector-row { display: grid; grid-template-columns: 30px 1fr 1fr; gap: 3px; padding: 0; border: 0; background: none; cursor: pointer; font-variant-numeric: tabular-nums;
@@ -439,10 +441,11 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .sector-name { display: grid; place-items: center; padding: 5px 0; background: #ffffff0d; color: #e6e6ea; font: italic 700 13px 'Racer Display', 'Arial Narrow', sans-serif; }
 .sector-time { display: grid; place-items: center; background: #ffffff08; color: #b3b3b8; font: 600 12px 'Inter', sans-serif; }
 .sector-gap { display: grid; place-items: center; color: #fff; font: 700 12px 'Inter', sans-serif; }
+.corner-row--head { cursor: default; color: #8a8a90; font: 700 10px 'Inter', sans-serif; text-transform: uppercase; letter-spacing: .04em; }
 .corner-rank { position: absolute; top: 1px; left: 2px; color: #ffd43b; font: 700 8px 'Inter', sans-serif; font-style: normal; }
 // One corner per row, the section scrolls on its own when the list is longer than the column.
 .corner-list { display: grid; gap: 3px; align-content: start; min-height: 0; overflow-y: auto; padding-right: 2px; }
-.corner-row { display: grid; grid-template-columns: 40px 1fr; gap: 3px; padding: 0; border: 0; background: none; cursor: pointer; text-align: center;
+.corner-row { display: grid; grid-template-columns: 76px 1fr; gap: 3px; padding: 0; border: 0; background: none; cursor: pointer; text-align: center;
   &.active .corner-num { background: #ff0024; color: #fff; }
   &.active .corner-cell { box-shadow: inset 0 0 0 1px #ff0024; } }
 .corner-num { position: relative; display: grid; place-items: center; padding: 3px 0; background: #ffffff0d; color: #e6e6ea; font: italic 700 15px 'Racer Display', 'Arial Narrow', sans-serif; }
