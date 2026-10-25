@@ -78,7 +78,14 @@ const charts = computed(() => props.rows.map(row => {
       { points: line(lapSeries[i]!), color: LAP, ref: false },
     ])
   const area = row.delta ? `0,${y(0)} ${delta.map((v, i) => `${(i / (SAMPLES - 1) * WIDTH).toFixed(1)},${y(v).toFixed(1)}`).join(' ')} ${WIDTH},${y(0)}` : ''
-  return { row, height, lines, area, zero: row.delta ? y(0) : null, origin, y }
+  // Axis: where the bottom and the top of the chart are (0-100% for pedals, the
+  // stretch's own minimum and maximum elsewhere), with a thin guide line each.
+  const digits = row.delta ? 2 : (row.digits ?? 0)
+  const ticks = (row.delta ? [max, 0, min] : [max, min]).map(value => ({
+    y: y(value),
+    label: `${row.delta && value > 0 ? '+' : ''}${value.toFixed(digits)}${row.unit === '%' ? '%' : ''}`,
+  }))
+  return { row, height, lines, area, zero: row.delta ? y(0) : null, origin, y, ticks }
 }))
 
 // Dots at the cursor, apart from the lines: moving the mouse never resamples the traces.
@@ -188,10 +195,14 @@ function onDouble() {
           <polygon :points="chart.area" fill="#3ddc5a40" :clip-path="`url(#below-${uid}-${chart.row.key})`" />
           <line x1="0" :x2="WIDTH" :y1="chart.zero!" :y2="chart.zero!" class="chart-zero" />
         </template>
+        <line v-for="(t, i) in chart.ticks" :key="`g${i}`" x1="0" :x2="WIDTH" :y1="t.y" :y2="t.y" class="chart-grid" />
         <polyline v-for="(line, i) in chart.lines" :key="i" :points="line.points" :stroke="line.color" :class="['chart-line', { 'chart-line--ref': line.ref }]" />
         <line v-if="inRange(cursor)" :x1="xOf(cursor!)" :x2="xOf(cursor!)" y1="0" :y2="chart.height" class="chart-cursor" />
         <rect v-if="brush" :x="brush.x" y="0" :width="brush.width" :height="chart.height" class="chart-brush" />
       </svg>
+      <div class="chart-axis" :style="{ height: `${chart.height}px` }">
+        <span v-for="(t, i) in chart.ticks" :key="i" :style="{ top: `${t.y}px` }">{{ t.label }}</span>
+      </div>
       <!-- Dots in an overlay without aspect distortion: round whatever the chart width. -->
       <div class="chart-dots" :style="{ height: `${chart.height}px` }">
         <i v-for="(d, i) in dots[index]" :key="i" :class="{ ref: d.ref }" :style="{ left: `${d.x / WIDTH * 100}%`, top: `${d.y}px`, '--c': d.color }" />
@@ -214,6 +225,10 @@ svg { display: block; width: 100%; touch-action: none; cursor: crosshair; }
 .chart-brush { fill: #ffffff1f; stroke: #ffffff59; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .chart-zero { stroke: #ffffff40; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .chart-cursor { stroke: #fff; stroke-width: 1; vector-effect: non-scaling-stroke; opacity: .6; }
+.chart-grid { stroke: #ffffff17; stroke-width: 1; vector-effect: non-scaling-stroke; }
+// Axis values on the left, inside the chart, over the guide lines.
+.chart-axis { position: absolute; left: 8px; bottom: 2px; width: 0; pointer-events: none;
+  span { position: absolute; left: 0; transform: translateY(-50%); padding: 0 4px; background: #0d0d12cc; color: #8a8a90; font: 600 10px "Inter", sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; } }
 .chart-dots { position: absolute; left: 8px; right: 8px; bottom: 2px; pointer-events: none;
   i { position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--c); border: 1.5px solid #fff;
     &.ref { background: #0a0a0f; border: 2px solid var(--c); } } }
