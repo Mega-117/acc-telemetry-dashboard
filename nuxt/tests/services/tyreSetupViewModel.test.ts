@@ -59,6 +59,9 @@ describe('tyreSetupViewModel', () => {
         session_id: 'session-a',
         stint_number: 2,
         source_completed_laps: 8,
+        target_psi: 27.1,
+        live_completed_laps: 1,
+        wheels: { FL: { clicks: 3 }, FR: { clicks: 0 }, RL: { clicks: -2 }, RR: { clicks: 1 } },
       },
     })
 
@@ -82,6 +85,10 @@ describe('tyreSetupViewModel', () => {
       sessionId: 'session-a',
       stintNumber: 2,
       sourceCompletedLaps: 8,
+      // PIP-616 Box: target, per-wheel clicks (tenths of psi) and the live stint counter.
+      targetPsi: 27.1,
+      clicks: { FL: 3, FR: 0, RL: -2, RR: 1 },
+      liveCompletedLaps: 1,
     })
   })
 

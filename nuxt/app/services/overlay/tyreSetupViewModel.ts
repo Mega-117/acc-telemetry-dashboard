@@ -21,6 +21,8 @@ export interface PressureRecommendationViewModel {
   /** PIP-616 Box: target and per-wheel correction in tenths of psi (one click = 0.1 psi). */
   targetPsi?: number | null
   clicks?: TyreWheelValues | null
+  /** Laps of the stint being driven; `completedLaps` can belong to a plan retained from the previous one. */
+  liveCompletedLaps?: number | null
 }
 
 export interface TyreSetupViewModel {
@@ -122,6 +124,7 @@ function normalizePressureRecommendation(raw: any): PressureRecommendationViewMo
     clicks: raw.wheels && typeof raw.wheels === 'object'
       ? { FL: toNumber(raw.wheels.FL?.clicks), FR: toNumber(raw.wheels.FR?.clicks), RL: toNumber(raw.wheels.RL?.clicks), RR: toNumber(raw.wheels.RR?.clicks) }
       : null,
+    liveCompletedLaps: toNumber(raw.live_completed_laps),
   }
 }
 

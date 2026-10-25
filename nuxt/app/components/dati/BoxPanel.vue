@@ -35,7 +35,8 @@ const reference = computed(() => info.value?.fuelLeftReferenceLapMs ?? null)
 const fuelPerMin = computed(() => fuelPerMinute(fs.value.fuelPerLapL, reference.value))
 const lapsLeftValue = computed(() => lapsLeft(fs.value.sessionTimeLeftMs, reference.value, fs.value.sessionLapsRemaining))
 const recommendation = computed(() => fs.value.tyreSetup?.pressureRecommendation ?? null)
-const stintLaps = computed(() => recommendation.value?.completedLaps ?? null)
+// The live counter: the plan's own count can be the one retained from the previous stint.
+const stintLaps = computed(() => recommendation.value?.liveCompletedLaps ?? recommendation.value?.completedLaps ?? null)
 const note = computed(() => correctionNote(recommendation.value))
 // 0 grey, + yellow (add air), - red (remove air), as ACC Drive.
 const TONE: Record<CorrectionTone, string | undefined> = { none: undefined, ok: '#8a8a90', add: '#ffd43b', remove: '#ff5a6e' }
