@@ -315,7 +315,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
       <aside v-if="leftOpen" class="tracce-left">
         <!-- Who is faster is already in the coloured pickers above: here only where. -->
         <section class="side-box">
-          <h4>Settori <small>il tuo distacco</small></h4>
+          <h4>Settori</h4>
           <div v-if="sectorGaps.length" class="sector-rows">
             <button v-for="(g, i) in sectorGaps" :key="i" type="button" class="sector-row" :class="{ active: selectedSector === i }" :title="`Riferimento ${(g.ref / 1000).toFixed(3)} s · clic per ingrandire`" @click="selectSector(i)">
               <span class="sector-name">S{{ i + 1 }}</span>
@@ -326,12 +326,13 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
           <p v-else class="analysis-note">Tempi dei settori non disponibili per questi giri.</p>
         </section>
         <!-- VRS: corners from the costliest; the first three carry their rank. -->
-        <section v-if="comparison.length" class="side-box">
-          <h4>Dove perdi di più</h4>
+        <!-- Only corners here; the way back to the whole lap is a real button, as on the strip. -->
+        <section v-if="comparison.length" class="side-box side-box--corners">
+          <div class="side-head">
+            <h4>Dove perdi di più</h4>
+            <button v-if="viewLabel !== 'Giro intero'" type="button" class="strip-reset" title="Torna al giro intero (anche Esc)" @click="wholeLap">⟲ Giro intero</button>
+          </div>
           <div class="corner-list">
-            <button type="button" class="corner-row" :class="{ active: selectedCorner === null && selectedSector === null }" @click="wholeLap">
-              <span class="corner-num corner-num--all">Pista intera</span><span class="corner-cell" :style="{ background: heat(totalDelta ?? 0) }">{{ formatDelta(totalDelta ?? 0) }}</span>
-            </button>
             <button v-for="(c, i) in cornersByLoss" :key="c.corner.number" type="button" class="corner-row" :class="{ active: selectedCorner === c.corner.number }" :title="`Curva ${c.corner.number}`" @click="selectCorner(c.corner.number)">
               <span class="corner-num"><i v-if="i < 3 && c.timeLostS >= 0.03" class="corner-rank">{{ i + 1 }}°</i>{{ c.corner.number }}</span><span class="corner-cell" :style="{ background: heat(c.timeLostS) }">{{ formatDelta(c.timeLostS) }}</span>
             </button>
@@ -424,10 +425,14 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
   &--narrow { grid-template-columns: 320px minmax(0, 1fr); grid-template-areas: 'center right'; } gap: 10px; align-items: stretch; overflow: hidden; }
 // Left column: three boxes with air between them (Garage 61 Laps/Gaps, VRS corners).
 // Tracce fills the window: the page does not scroll, each column scrolls on its own.
-.tracce-left { grid-area: left; display: grid; gap: 10px; align-content: start; height: 100%; overflow-y: auto; overflow-x: hidden; }
+.tracce-left { grid-area: left; display: flex; flex-direction: column; gap: 10px; height: 100%; overflow-y: auto; overflow-x: hidden; }
 .side-box { display: grid; gap: 8px; padding: 10px; border: 1px solid #ffffff1f; background: #ffffff06;
   h4 { margin: 0 0 2px; color: #fff; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; letter-spacing: .02em;
-    small { color: #77777d; font: 500 10px 'Inter', sans-serif; text-transform: none; margin-left: 4px; } } }
+    small { color: #77777d; font: 500 10px 'Inter', sans-serif; text-transform: none; margin-left: 4px; } }
+  // The corner list reaches the bottom of the column, level with the delta; on a very tall
+  // window it stops at a maximum height and scrolls inside.
+  &--corners { flex: 1 1 auto; min-height: 160px; max-height: 760px; grid-template-rows: auto minmax(0, 1fr); } }
+.side-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; h4 { margin: 0; } }
 .sector-rows { display: grid; gap: 3px; }
 .sector-row { display: grid; grid-template-columns: 30px 1fr 1fr; gap: 3px; padding: 0; border: 0; background: none; cursor: pointer; font-variant-numeric: tabular-nums;
   &.active .sector-name { background: #ff0024; color: #fff; } }
@@ -435,14 +440,12 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .sector-time { display: grid; place-items: center; background: #ffffff08; color: #b3b3b8; font: 600 12px 'Inter', sans-serif; }
 .sector-gap { display: grid; place-items: center; color: #fff; font: 700 12px 'Inter', sans-serif; }
 .corner-rank { position: absolute; top: 1px; left: 2px; color: #ffd43b; font: 700 8px 'Inter', sans-serif; font-style: normal; }
-// Two columns: the list takes half the height.
 // One corner per row, the section scrolls on its own when the list is longer than the column.
-.corner-list { display: grid; gap: 3px; max-height: 46vh; overflow-y: auto; padding-right: 2px; > .corner-row:first-child { grid-template-columns: 74px 1fr; } }
+.corner-list { display: grid; gap: 3px; align-content: start; min-height: 0; overflow-y: auto; padding-right: 2px; }
 .corner-row { display: grid; grid-template-columns: 40px 1fr; gap: 3px; padding: 0; border: 0; background: none; cursor: pointer; text-align: center;
   &.active .corner-num { background: #ff0024; color: #fff; }
   &.active .corner-cell { box-shadow: inset 0 0 0 1px #ff0024; } }
-.corner-num { position: relative; display: grid; place-items: center; padding: 3px 0; background: #ffffff0d; color: #e6e6ea; font: italic 700 15px 'Racer Display', 'Arial Narrow', sans-serif;
-  &--all { grid-column: 1; padding: 3px 4px; font-size: 9px; font-style: normal; font-family: 'Inter', sans-serif; text-transform: uppercase; line-height: 1.1; } }
+.corner-num { position: relative; display: grid; place-items: center; padding: 3px 0; background: #ffffff0d; color: #e6e6ea; font: italic 700 15px 'Racer Display', 'Arial Narrow', sans-serif; }
 .corner-cell { display: grid; place-items: center; color: #fff; font: 700 12px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
 .tracce-center { grid-area: center; display: grid; gap: 8px; align-content: start; height: 100%; overflow-y: auto; overflow-x: hidden; }
 .tracce-toggle { justify-self: start; padding: 0 10px; }
