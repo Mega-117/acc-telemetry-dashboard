@@ -207,12 +207,13 @@ const visibleCorners = computed(() => corners.value.flatMap(c => {
 }))
 // VRS: corners from the costliest; heat from green (gaining) through yellow to red (losing).
 const cornersByLoss = computed(() => [...comparison.value].sort((a, b) => b.timeLostS - a.timeLostS))
+// Diverging scale as VRS: red where you lose, green where you gain, the same red and green as
+// the map and the delta. The strength follows the seconds on a fixed scale (full at 0.15 s), so
+// a 2-hundredths corner never looks like a disaster and a bad lap can be red all over.
 function heat(seconds: number) {
-  if (seconds <= -0.01) return `rgba(61, 220, 90, ${Math.min(0.2 + -seconds * 2, 0.6)})`
-  if (seconds < 0.01) return 'rgba(255, 255, 255, 0.06)'
-  // 0.01 s yellow → 0.15 s and more red, more opaque as it grows.
-  const t = Math.min((seconds - 0.01) / 0.14, 1)
-  return `rgba(255, ${Math.round(200 - 140 * t)}, ${Math.round(60 - 20 * t)}, ${(0.28 + 0.37 * t).toFixed(2)})`
+  if (Math.abs(seconds) < 0.01) return 'rgba(255, 255, 255, 0.06)'
+  const strength = (0.18 + 0.5 * Math.min((Math.abs(seconds) - 0.01) / 0.14, 1)).toFixed(2)
+  return seconds > 0 ? `rgba(255, 90, 110, ${strength})` : `rgba(61, 220, 90, ${strength})`
 }
 function selectFirst() {
   if (!corners.value.length) { selectedCorner.value = null; return }
