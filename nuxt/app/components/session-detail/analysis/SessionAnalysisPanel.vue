@@ -161,6 +161,15 @@ const visibleCorners = computed(() => corners.value.flatMap(c => {
   const p = onAxis(c.start, c.end)
   return p ? [{ number: c.number, lost: comparison.value[c.number - 1]?.timeLostS ?? 0, ...p }] : []
 }))
+// VRS: corners from the costliest; heat from green (gaining) through yellow to red (losing).
+const cornersByLoss = computed(() => [...comparison.value].sort((a, b) => b.timeLostS - a.timeLostS))
+function heat(seconds: number) {
+  if (seconds <= -0.01) return `rgba(61, 220, 90, ${Math.min(0.2 + -seconds * 2, 0.6)})`
+  if (seconds < 0.01) return 'rgba(255, 255, 255, 0.06)'
+  // 0.01 s yellow → 0.15 s and more red, more opaque as it grows.
+  const t = Math.min((seconds - 0.01) / 0.14, 1)
+  return `rgba(255, ${Math.round(200 - 140 * t)}, ${Math.round(60 - 20 * t)}, ${(0.28 + 0.37 * t).toFixed(2)})`
+}
 function selectFirst() {
   if (!corners.value.length) { selectedCorner.value = null; return }
   if (selectedCorner.value === null || selectedCorner.value > corners.value.length) selectedCorner.value = worst.value[0]?.corner.number ?? 1
@@ -273,33 +282,44 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
     <!-- TRACCE, as the Garage 61 analyzer: laps and gaps on the left, the map with the
          lap lines and the delta in the middle, the channels on the right, sectors and corners on top of the charts. -->
     <div v-else-if="lap && layout === 'tracce'" class="layout-tracce" :class="{ 'layout-tracce--narrow': !leftOpen }">
-      <aside v-if="leftOpen" class="panel tracce-left">
-        <h4>Giri</h4>
-        <ul class="tracce-laps">
-          <li><b class="sq sq--ref" /><span><strong>{{ refEntry ? formatLapTime(refEntry.lapTimeMs) : '--' }}</strong> Riferimento · Giro {{ refEntry?.lapNumber ?? '--' }}</span></li>
-          <li><b class="sq sq--lap" /><span><strong>{{ lapEntry ? formatLapTime(lapEntry.lapTimeMs) : '--' }}</strong> <em v-if="totalDelta !== null" :class="{ gain: totalDelta < 0, loss: totalDelta > 0 }">({{ formatDelta(totalDelta) }}s)</em> Tu · Giro {{ lapEntry?.lapNumber ?? '--' }}</span></li>
-        </ul>
-        <h4>Gap</h4>
-        <table v-if="sectorGaps.length" class="tracce-gaps">
-          <thead><tr><th /><th><b class="sq sq--ref" /></th><th><b class="sq sq--lap" /></th></tr></thead>
-          <tbody>
-            <tr v-for="(g, i) in sectorGaps" :key="i" :class="{ active: selectedSector === i }" @click="selectSector(i)">
-              <th>S{{ i + 1 }}</th>
-              <td>{{ (g.ref / 1000).toFixed(3) }}</td>
-              <td :style="{ background: g.gap > 0 ? `rgba(255, 90, 110, ${Math.min(0.15 + g.gap / 1000, 0.7)})` : g.gap < 0 ? `rgba(61, 220, 90, ${Math.min(0.15 - g.gap / 1000, 0.7)})` : undefined }">{{ formatDelta(g.gap / 1000) }}s</td>
-            </tr>
-          </tbody>
-        </table>
-        <p v-else class="analysis-note">Tempi dei settori non disponibili per questi giri.</p>
-        <h4>Curve</h4>
-        <table v-if="comparison.length" class="curve-table tracce-corners">
-          <tbody>
-            <tr v-for="c in comparison" :key="c.corner.number" :class="{ active: selectedCorner === c.corner.number }" @click="selectCorner(c.corner.number)">
-              <td>{{ c.corner.number }}</td>
-              <td :class="{ gain: c.timeLostS <= -0.01, loss: c.timeLostS >= 0.01 }">{{ formatDelta(c.timeLostS) }}</td>
-            </tr>
-          </tbody>
-        </table>
+      <aside v-if="leftOpen" class="tracce-left">
+        <!-- Giri, as Garage 61's "Laps": one card per lap, its colour on the side. -->
+        <section class="side-box">
+          <h4>Giri</h4>
+          <div class="lap-card lap-card--ref">
+            <span class="lap-card-time">{{ refEntry ? formatLapTime(refEntry.lapTimeMs) : '--' }}</span>
+            <span class="lap-card-who">Riferimento · Giro {{ refEntry?.lapNumber ?? '--' }}</span>
+          </div>
+          <div class="lap-card lap-card--lap">
+            <span class="lap-card-time">{{ lapEntry ? formatLapTime(lapEntry.lapTimeMs) : '--' }}<em v-if="totalDelta !== null" class="pill" :class="{ gain: totalDelta < 0, loss: totalDelta > 0 }">{{ formatDelta(totalDelta) }}s</em></span>
+            <span class="lap-card-who">Tu · Giro {{ lapEntry?.lapNumber ?? '--' }}</span>
+          </div>
+        </section>
+        <!-- Gap per settore, as Garage 61's "Gaps": a heat map of the sector times. -->
+        <section class="side-box">
+          <h4>Gap per settore</h4>
+          <div v-if="sectorGaps.length" class="gap-grid">
+            <span class="gap-head" /><span class="gap-head"><b class="sq sq--ref" />Rif.</span><span class="gap-head"><b class="sq sq--lap" />Tu</span>
+            <template v-for="(g, i) in sectorGaps" :key="i">
+              <button type="button" class="gap-name" :class="{ active: selectedSector === i }" @click="selectSector(i)">S{{ i + 1 }}</button>
+              <span class="gap-ref">{{ (g.ref / 1000).toFixed(3) }}</span>
+              <span class="gap-cell" :style="{ background: heat(g.gap / 1000) }">{{ formatDelta(g.gap / 1000) }}</span>
+            </template>
+          </div>
+          <p v-else class="analysis-note">Tempi dei settori non disponibili per questi giri.</p>
+        </section>
+        <!-- Curve, as VRS: the costliest first, the number big and a heat cell for the time. -->
+        <section v-if="comparison.length" class="side-box">
+          <h4>Curve <small>dalla più costosa</small></h4>
+          <div class="corner-list">
+            <button type="button" class="corner-row" :class="{ active: selectedCorner === null && selectedSector === null }" @click="selectedCorner = null; selectedSector = null; zoomRange = null">
+              <span class="corner-num corner-num--all">Pista intera</span><span class="corner-cell" :style="{ background: heat(totalDelta ?? 0) }">{{ formatDelta(totalDelta ?? 0) }}</span>
+            </button>
+            <button v-for="c in cornersByLoss" :key="c.corner.number" type="button" class="corner-row" :class="{ active: selectedCorner === c.corner.number }" @click="selectCorner(c.corner.number)">
+              <span class="corner-num">{{ c.corner.number }}</span><span class="corner-cell" :style="{ background: heat(c.timeLostS) }">{{ formatDelta(c.timeLostS) }}</span>
+            </button>
+          </div>
+        </section>
         <button type="button" class="tracce-btn" :class="{ active: allChannels }" @click="allChannels = !allChannels">{{ allChannels ? 'Solo l’essenziale' : 'Altri canali' }}</button>
       </aside>
       <div class="tracce-center">
@@ -372,8 +392,28 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 // Garage 61 analyzer: left bar, map + delta in the middle, channels on the right, sector strip on top of the charts.
 .layout-tracce { display: grid; grid-template-columns: 210px 320px minmax(0, 1fr); grid-template-areas: 'left center right';
   &--narrow { grid-template-columns: 320px minmax(0, 1fr); grid-template-areas: 'center right'; } gap: 10px; align-items: start; }
-.tracce-left { grid-area: left; position: sticky; top: 56px;
-  h4 { margin: 4px 0 0; color: #fff; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; } }
+// Left column: three boxes with air between them (Garage 61 Laps/Gaps, VRS corners).
+.tracce-left { grid-area: left; position: sticky; top: 56px; display: grid; gap: 10px; align-content: start; max-height: calc(100vh - 70px); overflow-y: auto; }
+.side-box { display: grid; gap: 8px; padding: 10px; border: 1px solid #ffffff1f; background: #ffffff06;
+  h4 { margin: 0 0 2px; color: #fff; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; letter-spacing: .02em;
+    small { color: #77777d; font: 500 10px 'Inter', sans-serif; text-transform: none; margin-left: 4px; } } }
+.lap-card { --c: #38bdf8; display: grid; gap: 2px; padding: 6px 8px 6px 10px; border-left: 4px solid var(--c); background: color-mix(in srgb, var(--c) 8%, transparent);
+  &--ref { --c: #fbbf24; } }
+.lap-card-time { display: flex; align-items: center; gap: 8px; color: #fff; font: 700 16px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
+.lap-card-who { color: #8a8a90; font-size: 11px; }
+.pill { padding: 1px 6px; border-radius: 9px; background: #ffffff14; font: 700 11px 'Inter', sans-serif; font-style: normal; &.gain { background: #3ddc5a26; color: #3ddc5a; } &.loss { background: #ff5a6e26; color: #ff5a6e; } }
+.gap-grid { display: grid; grid-template-columns: 34px 1fr 1fr; gap: 3px; align-items: stretch; font-variant-numeric: tabular-nums; }
+.gap-head { display: flex; align-items: center; justify-content: center; gap: 4px; color: #8a8a90; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.gap-name { border: 0; background: #ffffff0d; color: #b3b3b8; font: 700 12px 'Inter', sans-serif; cursor: pointer; &.active { background: #ff002433; color: #fff; } }
+.gap-ref, .gap-cell { padding: 6px 4px; text-align: center; color: #e6e6ea; font: 600 12px 'Inter', sans-serif; }
+.gap-ref { background: #ffffff08; }
+.corner-list { display: grid; gap: 3px; }
+.corner-row { display: grid; grid-template-columns: 44px 1fr; gap: 3px; padding: 0; border: 0; background: none; cursor: pointer; text-align: center;
+  &.active .corner-num { background: #ff0024; color: #fff; }
+  &.active .corner-cell { box-shadow: inset 0 0 0 1px #ff0024; } }
+.corner-num { display: grid; place-items: center; padding: 4px 0; background: #ffffff0d; color: #e6e6ea; font: italic 700 18px 'Racer Display', 'Arial Narrow', sans-serif;
+  &--all { grid-column: 1; font-size: 10px; font-style: normal; font-family: 'Inter', sans-serif; text-transform: uppercase; line-height: 1.1; } }
+.corner-cell { display: grid; place-items: center; color: #fff; font: 700 13px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
 .tracce-center { grid-area: center; display: grid; gap: 8px; position: sticky; top: 56px; }
 .tracce-toggle { justify-self: start; padding: 0 10px; }
 .tracce-right { grid-area: right; min-width: 0; }
@@ -386,16 +426,6 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
   &--corners { height: 18px;
     button { background: #ffffff0a; color: #b3b3b8; font-size: 10px; &.gain { color: #3ddc5a; } &.loss { color: #ff5a6e; } } } }
 .sq { display: inline-block; width: 10px; height: 10px; flex: 0 0 10px; &--lap { background: #38bdf8; } &--ref { background: #fbbf24; } }
-.tracce-laps { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none;
-  li { display: flex; gap: 8px; align-items: flex-start; color: #b3b3b8; font-size: 12px; }
-  strong { display: block; color: #fff; font: 700 14px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
-  em { font-style: normal; } }
-.tracce-gaps { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums;
-  th, td { padding: 4px 6px; text-align: right; color: #e6e6ea; }
-  thead th { text-align: center; }
-  tbody th { text-align: left; color: #b3b3b8; }
-  tr { cursor: pointer; } tr.active th { box-shadow: inset 3px 0 #ff0024; } }
-.tracce-corners { max-height: 220px; }
 .tracce-btn { height: 28px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font-size: 12px; cursor: pointer; &.active { border-color: #ff0024; } }
 
 @media (max-width: 1100px) {
