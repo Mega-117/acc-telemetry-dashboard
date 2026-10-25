@@ -33,7 +33,6 @@ const layout = remembered<Layout>('rc:analysis:layout', ['pilota', 'curve', 'tra
 /** Reference dot: at the same point of the track, or where it was at the same time (Track Titan time-sync). */
 const sync = remembered<'punto' | 'tempo'>('rc:analysis:sync', ['punto', 'tempo'], 'punto')
 const mapMode = remembered<'intera' | 'zoom'>('rc:analysis:map', ['intera', 'zoom'], 'intera')
-const pedals = remembered<'separati' | 'sovrapposti'>('rc:analysis:pedals', ['separati', 'sovrapposti'], 'separati')
 const allChannels = ref(false)
 
 interface Entry { id: string, lapNumber: number, lapTimeMs: number, valid: boolean, complete: boolean }
@@ -108,10 +107,14 @@ const worst = computed(() => [...comparison.value].sort((a, b) => b.timeLostS - 
 const totalDelta = computed(() => lap.value && reference.value ? lap.value.lapTimeS - reference.value.lapTimeS : null)
 const refCursor = computed(() => cursor.value === null || !lap.value || !reference.value ? null
   : sync.value === 'tempo' ? timeSyncedFraction(lap.value, reference.value, cursor.value) : cursor.value)
+// Tracce: a stretch zoomed with the mouse (drag, wheel) wins over the corner.
+const zoomRange = ref<[number, number] | null>(null)
 const range = computed<[number, number]>(() => {
+  if (layout.value === 'tracce' && zoomRange.value) return zoomRange.value
   const corner = selectedCorner.value !== null ? corners.value[selectedCorner.value - 1] : null
   return corner ? [corner.start, corner.end] : [0, 1]
 })
+watch(selectedCorner, () => { zoomRange.value = null })
 function selectFirst() {
   if (!corners.value.length) { selectedCorner.value = null; return }
   if (selectedCorner.value === null || selectedCorner.value > corners.value.length) selectedCorner.value = worst.value[0]?.corner.number ?? 1
@@ -125,21 +128,24 @@ function emptyTrace(): LapTraceView {
 const has = (name: string) => !!lap.value?.channels[name]
 const deltaRow = computed<ChartRow[]>(() => reference.value ? [{ key: 'delta', title: 'Delta', unit: 's', channels: [], delta: true, height: 70 }] : [])
 const speedRow: ChartRow = { key: 'speed', title: 'Velocità', unit: 'km/h', channels: [{ name: 'speed_kmh' }], height: 100 }
-const pedalRows = computed<ChartRow[]>(() => pedals.value === 'sovrapposti'
-  ? [{ key: 'pedals', title: 'Gas e freno', unit: '%', channels: [{ name: 'throttle_pct', color: '#3ddc5a', label: 'Gas' }, { name: 'brake_pct', color: '#ff5a6e', label: 'Freno' }], height: 80, min: 0, max: 100 }]
-  : [{ key: 'gas', title: 'Gas', unit: '%', channels: [{ name: 'throttle_pct', color: '#3ddc5a' }], height: 60, min: 0, max: 100 },
-     { key: 'brake', title: 'Freno', unit: '%', channels: [{ name: 'brake_pct', color: '#ff5a6e' }], height: 60, min: 0, max: 100 }])
-const steerRow: ChartRow = { key: 'steer', title: 'Sterzo', channels: [{ name: 'steer_deg', color: '#ffd43b' }], height: 60, digits: 2 }
-const gearRow: ChartRow = { key: 'gear', title: 'Marcia', channels: [{ name: 'gear', color: '#74c0fc' }], height: 46 }
+// One channel per chart: every chart shows only your line and the reference's.
+const pedalRows: ChartRow[] = [
+  { key: 'gas', title: 'Gas', unit: '%', channels: [{ name: 'throttle_pct' }], height: 60, min: 0, max: 100 },
+  { key: 'brake', title: 'Freno', unit: '%', channels: [{ name: 'brake_pct' }], height: 60, min: 0, max: 100 },
+]
+const steerRow: ChartRow = { key: 'steer', title: 'Sterzo', channels: [{ name: 'steer_deg' }], height: 60, digits: 2 }
+const gearRow: ChartRow = { key: 'gear', title: 'Marcia', channels: [{ name: 'gear' }], height: 46 }
+const DEG = 57.2958
 const extraRows = computed<ChartRow[]>(() => [
-  ...(has('acc_lat_g') ? [{ key: 'latg', title: 'G laterale', unit: 'G', channels: [{ name: 'acc_lat_g', color: '#b197fc' }], height: 60, digits: 2 } as ChartRow] : []),
-  ...(has('slip_angle_fl') ? [{ key: 'slip', title: 'Deriva gomme anteriori', unit: '°', channels: [{ name: 'slip_angle_fl', color: '#ffa94d', label: 'Sx', scale: 57.2958 }, { name: 'slip_angle_fr', color: '#ff8787', label: 'Dx', scale: 57.2958 }], height: 60, digits: 1 } as ChartRow] : []),
-  ...(has('susp_travel_mm_fl') ? [{ key: 'susp', title: 'Sospensioni anteriori', unit: 'mm', channels: [{ name: 'susp_travel_mm_fl', color: '#63e6be', label: 'Sx' }, { name: 'susp_travel_mm_fr', color: '#4dabf7', label: 'Dx' }], height: 60 } as ChartRow] : []),
-  { key: 'rpm', title: 'Giri motore', channels: [{ name: 'rpm', color: '#ced4da' }], height: 50 },
-])
-const pilotRows = computed(() => [...deltaRow.value, speedRow, ...pedalRows.value])
-const cornerRows = computed(() => [...deltaRow.value, speedRow, ...pedalRows.value, steerRow, gearRow])
-const traceRows = computed(() => [...deltaRow.value, speedRow, ...pedalRows.value, gearRow, ...(allChannels.value ? [steerRow, ...extraRows.value.filter(r => r.key !== 'rpm' || has('rpm'))] : [])])
+  ...(has('acc_lat_g') ? [{ key: 'latg', title: 'G laterale', unit: 'G', channels: [{ name: 'acc_lat_g' }], digits: 2 }, { key: 'longg', title: 'G longitudinale', unit: 'G', channels: [{ name: 'acc_long_g' }], digits: 2 }] : []),
+  ...(has('slip_angle_fl') ? (['fl', 'fr', 'rl', 'rr'] as const).map(w => ({ key: `slip-${w}`, title: `Deriva gomma ${WHEEL_NAME[w]}`, unit: '°', channels: [{ name: `slip_angle_${w}`, scale: DEG }], digits: 1 })) : []),
+  ...(has('susp_travel_mm_fl') ? (['fl', 'fr', 'rl', 'rr'] as const).map(w => ({ key: `susp-${w}`, title: `Sospensione ${WHEEL_NAME[w]}`, unit: 'mm', channels: [{ name: `susp_travel_mm_${w}` }] })) : []),
+  ...(has('rpm') ? [{ key: 'rpm', title: 'Giri motore', channels: [{ name: 'rpm' }] }] : []),
+] as ChartRow[])
+const WHEEL_NAME = { fl: 'ant. sx', fr: 'ant. dx', rl: 'post. sx', rr: 'post. dx' } as const
+const pilotRows = computed(() => [...deltaRow.value, speedRow, ...pedalRows])
+const cornerRows = computed(() => [...deltaRow.value, speedRow, ...pedalRows, steerRow, gearRow])
+const traceRows = computed(() => [...deltaRow.value, speedRow, ...pedalRows, gearRow, ...(allChannels.value ? [steerRow, ...extraRows.value] : [])])
 
 const lapLabel = (e: Entry) => `Giro ${e.lapNumber} · ${formatLapTime(e.lapTimeMs)}${e.complete ? '' : ' · parziale'}${e.valid ? '' : ' · invalido'}`
 const short = (e: Entry | null) => e ? `Giro ${e.lapNumber} · ${formatLapTime(e.lapTimeMs)}` : '--'
@@ -163,16 +169,12 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 
     <!-- Who is who, in words: the first thing a new driver asks. -->
     <div v-if="lap" class="analysis-legend">
-      <span><i class="line line--lap" /><b>Tu</b> · {{ short(lapEntry) }} · linea continua, pallino pieno</span>
-      <span v-if="reference"><i class="line line--ref" /><b>Riferimento</b> · {{ short(refEntry) }} · linea tratteggiata, pallino vuoto</span>
+      <span><i class="line line--lap" /><b>Tu</b> · {{ short(lapEntry) }} · linea azzurra, pallino pieno</span>
+      <span v-if="reference"><i class="line line--ref" /><b>Riferimento</b> · {{ short(refEntry) }} · linea ambra, pallino vuoto</span>
       <span class="analysis-switches">
         <span class="seg seg--small" role="radiogroup" aria-label="Pallino del riferimento" title="Stesso punto: confronti velocità e pedali. Stesso tempo: vedi il distacco come distanza in pista.">
           <button type="button" :class="{ active: sync === 'punto' }" @click="sync = 'punto'">Stesso punto</button>
           <button type="button" :class="{ active: sync === 'tempo' }" @click="sync = 'tempo'">Stesso tempo</button>
-        </span>
-        <span v-if="layout !== 'tracce'" class="seg seg--small" role="radiogroup" aria-label="Gas e freno">
-          <button type="button" :class="{ active: pedals === 'separati' }" @click="pedals = 'separati'">Pedali separati</button>
-          <button type="button" :class="{ active: pedals === 'sovrapposti' }" @click="pedals = 'sovrapposti'">Sovrapposti</button>
         </span>
       </span>
     </div>
@@ -244,7 +246,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
           <div><dt>Lunghezza</dt><dd>{{ (lap.lengthM / 1000).toFixed(2) }} km</dd></div>
         </dl>
       </aside>
-      <AnalysisCharts :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :corners="selectedCorner === null ? corners : []" @hover="cursor = $event" @select="selectedCorner = $event" />
+      <AnalysisCharts :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :corners="selectedCorner === null ? corners : []" :row-height="64" zoomable @hover="cursor = $event" @select="selectedCorner = $event" @zoom="zoomRange = $event" />
     </div>
   </section>
 </template>
@@ -260,11 +262,11 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
   &--small button { height: 24px; padding: 0 10px; font: 600 11px 'Inter', sans-serif; text-transform: none; } }
 .analysis-pick { display: flex; align-items: center; gap: 6px; color: #b3b3b8; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
   select { min-width: 210px; height: 32px; padding: 0 8px; border: 1px solid #ffffff2e; background: #0d0d12; color: #e6e6ea; font: 500 13px 'Inter', sans-serif; text-transform: none; } }
-.key { width: 12px; height: 12px; border-radius: 50%; &--lap { background: #ff3b4f; border: 1.5px solid #fff; } &--ref { background: #0a0a0f; border: 2px solid #fff; } }
+.key { width: 12px; height: 12px; border-radius: 50%; &--lap { background: #38bdf8; border: 1.5px solid #fff; } &--ref { background: #0a0a0f; border: 2px solid #fbbf24; } }
 .analysis-total { margin: 0 0 0 auto; font: 700 20px 'Inter', sans-serif; font-variant-numeric: tabular-nums; color: #e6e6ea; &.gain { color: #3ddc5a; } &.loss { color: #ff5a6e; } }
 .analysis-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; padding: 6px 10px; border: 1px solid #ffffff1f; background: #ffffff06; color: #b3b3b8; font-size: 12px;
   b { color: #fff; }
-  .line { display: inline-block; width: 22px; height: 0; margin-right: 6px; vertical-align: middle; border-top: 2px solid #ff3b4f; &--ref { border-top: 2px dashed #c9c9cf; } } }
+  .line { display: inline-block; width: 22px; height: 0; margin-right: 6px; vertical-align: middle; border-top: 2px solid #38bdf8; &--ref { border-top: 2px solid #fbbf24; } } }
 .analysis-switches { display: flex; gap: 8px; margin-left: auto; }
 .analysis-hint { margin: -4px 0 0; color: #77777d; font-size: 11px; }
 .analysis-empty { padding: 30px 0; color: #aaa; }

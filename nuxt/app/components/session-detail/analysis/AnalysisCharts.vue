@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // PIP-618: stacked channel charts on the lap distance, one shared cursor (MoTeC,
-// Garage 61, Track Titan). You: solid line and filled dot. Reference: dashed line
+// Garage 61, Track Titan). You: blue line and filled dot. Reference: amber line
 // and hollow dot. The delta row is red where you lose and green where you gain.
-import { computed, useId } from 'vue'
+import { computed, ref, useId } from 'vue'
 import { channelAt, formatDelta, type Corner } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
@@ -30,14 +30,20 @@ const props = withDefaults(defineProps<{
   refCursor?: number | null
   /** Corner bands with their number along the lap (Tracce). */
   corners?: Corner[]
-}>(), { range: () => [0, 1], refCursor: null, corners: () => [] })
-const emit = defineEmits<{ hover: [fraction: number | null], select: [corner: number] }>()
+  /** Same height for every row (Tracce). */
+  rowHeight?: number | null
+  /** Garage 61 zoom: drag to zoom a stretch, wheel in and out, double click for the lap. */
+  zoomable?: boolean
+}>(), { range: () => [0, 1], refCursor: null, corners: () => [], rowHeight: null, zoomable: false })
+const emit = defineEmits<{ hover: [fraction: number | null], select: [corner: number], zoom: [range: [number, number] | null] }>()
 
 const uid = useId()
 const WIDTH = 1000
 const SAMPLES = 500
-const LAP = '#ff3b4f'
-const REF = '#c9c9cf'
+// One colour per lap: you sky blue, the reference amber. Blue/orange stays readable on
+// dark and for colour-blind drivers, and never clashes with green/red gain and loss.
+const LAP = '#38bdf8'
+const REF = '#fbbf24'
 const at = computed(() => {
   const [start, end] = props.range
   return Array.from({ length: SAMPLES }, (_, i) => start + (end - start) * i / (SAMPLES - 1))
@@ -51,7 +57,7 @@ const valueAt = (trace: LapTraceView, channel: ChartChannel, fraction: number) =
 const deltaAt = (fraction: number) => props.reference ? (channelAt(props.lap, 'time_s', fraction) ?? 0) - (channelAt(props.reference, 'time_s', fraction) ?? 0) : 0
 
 const charts = computed(() => props.rows.map(row => {
-  const height = row.height ?? 90
+  const height = props.rowHeight ?? row.height ?? 90
   // Delta relative to the start of the range: a zoomed corner shows its own loss.
   const origin = row.delta ? deltaAt(props.range[0]) : 0
   const lapSeries = row.channels.map(c => at.value.map(f => valueAt(props.lap, c, f)))
@@ -64,11 +70,12 @@ const charts = computed(() => props.rows.map(row => {
   const pad = (max - min) * 0.08 || 1
   const y = (v: number) => height - 4 - ((v - (min - pad)) / (max - min + 2 * pad)) * (height - 8)
   const line = (list: (number | null)[]) => list.map((v, i) => v === null ? '' : `${(i / (SAMPLES - 1) * WIDTH).toFixed(1)},${y(v).toFixed(1)}`).filter(Boolean).join(' ')
+  // One colour per lap in every chart.
   const lines = row.delta
-    ? [{ points: line(delta), color: '#e6e6ea', dashed: false }]
-    : row.channels.flatMap((c, i) => [
-      ...(props.reference ? [{ points: line(refSeries[i]!), color: c.color ? `${c.color}aa` : REF, dashed: true }] : []),
-      { points: line(lapSeries[i]!), color: c.color ?? LAP, dashed: false },
+    ? [{ points: line(delta), color: '#e6e6ea', ref: false }]
+    : row.channels.flatMap((_, i) => [
+      ...(props.reference ? [{ points: line(refSeries[i]!), color: REF, ref: true }] : []),
+      { points: line(lapSeries[i]!), color: LAP, ref: false },
     ])
   const area = row.delta ? `0,${y(0)} ${delta.map((v, i) => `${(i / (SAMPLES - 1) * WIDTH).toFixed(1)},${y(v).toFixed(1)}`).join(' ')} ${WIDTH},${y(0)}` : ''
   return { row, height, lines, area, zero: row.delta ? y(0) : null, origin, y }
@@ -80,9 +87,9 @@ const dots = computed(() => charts.value.map(chart => {
   const list: { x: number, y: number, color: string, ref: boolean }[] = []
   if (!chart.row.delta) {
     chart.row.channels.forEach(c => {
-      if (inRange(props.cursor)) { const v = valueAt(props.lap, c, props.cursor); if (v !== null) list.push({ x: xOf(props.cursor), y: chart.y(v), color: c.color ?? LAP, ref: false }) }
+      if (inRange(props.cursor)) { const v = valueAt(props.lap, c, props.cursor); if (v !== null) list.push({ x: xOf(props.cursor), y: chart.y(v), color: LAP, ref: false }) }
       const refAt = props.refCursor ?? props.cursor
-      if (props.reference && inRange(refAt)) { const v = valueAt(props.reference, c, refAt); if (v !== null) list.push({ x: xOf(refAt), y: chart.y(v), color: c.color ?? REF, ref: true }) }
+      if (props.reference && inRange(refAt)) { const v = valueAt(props.reference, c, refAt); if (v !== null) list.push({ x: xOf(refAt), y: chart.y(v), color: REF, ref: true }) }
     })
   } else if (inRange(props.cursor)) {
     list.push({ x: xOf(props.cursor), y: chart.y(deltaAt(props.cursor) - chart.origin), color: '#e6e6ea', ref: false })
@@ -107,10 +114,52 @@ function readout(chart: (typeof charts.value)[number]) {
   }).join(' · ')
 }
 
-function onMove(event: PointerEvent) {
+function fractionOf(event: PointerEvent | WheelEvent | MouseEvent) {
   const rect = (event.currentTarget as SVGElement).getBoundingClientRect()
   const ratio = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1)
-  emit('hover', props.range[0] + (props.range[1] - props.range[0]) * ratio)
+  return props.range[0] + (props.range[1] - props.range[0]) * ratio
+}
+// Garage 61 zoom: drag across a stretch to zoom it, wheel to zoom around the
+// pointer, double click for the whole lap. 20 m is the smallest stretch.
+const dragFrom = ref<number | null>(null)
+const dragTo = ref<number | null>(null)
+const brush = computed(() => dragFrom.value === null || dragTo.value === null ? null
+  : { x: xOf(Math.min(dragFrom.value, dragTo.value)), width: Math.abs(xOf(dragTo.value) - xOf(dragFrom.value)) })
+const minSpan = computed(() => 20 / Math.max(props.lap.lengthM, 1))
+function zoomTo(start: number, end: number) {
+  const span = Math.max(end - start, minSpan.value)
+  const s = Math.min(Math.max(start, 0), 1 - span)
+  emit('zoom', s <= 0 && span >= 1 ? null : [Math.max(s, 0), Math.min(s + span, 1)])
+}
+function onMove(event: PointerEvent) {
+  const f = fractionOf(event)
+  if (dragFrom.value !== null) dragTo.value = f
+  emit('hover', f)
+}
+function onDown(event: PointerEvent) {
+  if (!props.zoomable || event.button !== 0) return
+  dragFrom.value = dragTo.value = fractionOf(event)
+  ;(event.currentTarget as SVGElement).setPointerCapture?.(event.pointerId)
+}
+function onUp() {
+  if (dragFrom.value !== null && dragTo.value !== null && Math.abs(dragTo.value - dragFrom.value) > minSpan.value / 2) {
+    zoomTo(Math.min(dragFrom.value, dragTo.value), Math.max(dragFrom.value, dragTo.value))
+  }
+  dragFrom.value = dragTo.value = null
+}
+function onWheel(event: WheelEvent) {
+  if (!props.zoomable) return
+  event.preventDefault()
+  const f = fractionOf(event)
+  const [start, end] = props.range
+  const factor = event.deltaY > 0 ? 1.25 : 0.8
+  const span = Math.min((end - start) * factor, 1)
+  // Keep the point under the pointer where it is.
+  const ratio = (f - start) / Math.max(end - start, 1e-9)
+  zoomTo(f - span * ratio, f - span * ratio + span)
+}
+function onDouble() {
+  if (props.zoomable) emit('zoom', null)
 }
 </script>
 
@@ -127,7 +176,7 @@ function onMove(event: PointerEvent) {
         <span class="chart-title">{{ chart.row.title }} <small v-if="chart.row.unit">{{ chart.row.unit }}</small></span>
         <span class="chart-value" :class="{ gain: chart.row.delta && readout(chart).startsWith('−'), loss: chart.row.delta && readout(chart).startsWith('+') }">{{ readout(chart) }}</span>
       </div>
-      <svg :viewBox="`0 0 ${WIDTH} ${chart.height}`" preserveAspectRatio="none" :style="{ height: `${chart.height}px` }" @pointermove="onMove" @pointerleave="emit('hover', null)">
+      <svg :viewBox="`0 0 ${WIDTH} ${chart.height}`" preserveAspectRatio="none" :style="{ height: `${chart.height}px` }" @pointermove="onMove" @pointerleave="emit('hover', null)" @pointerdown="onDown" @pointerup="onUp" @pointercancel="onUp" @wheel="onWheel" @dblclick="onDouble">
         <rect v-for="b in bands" :key="b.number" :x="b.x" y="0" :width="Math.max(b.width, 1)" :height="chart.height" class="chart-band" />
         <defs v-if="chart.row.delta">
           <clipPath :id="`above-${uid}-${chart.row.key}`"><rect x="0" y="0" :width="WIDTH" :height="chart.zero!" /></clipPath>
@@ -139,8 +188,9 @@ function onMove(event: PointerEvent) {
           <polygon :points="chart.area" fill="#3ddc5a40" :clip-path="`url(#below-${uid}-${chart.row.key})`" />
           <line x1="0" :x2="WIDTH" :y1="chart.zero!" :y2="chart.zero!" class="chart-zero" />
         </template>
-        <polyline v-for="(line, i) in chart.lines" :key="i" :points="line.points" :stroke="line.color" :stroke-dasharray="line.dashed ? '6 4' : undefined" class="chart-line" />
+        <polyline v-for="(line, i) in chart.lines" :key="i" :points="line.points" :stroke="line.color" :class="['chart-line', { 'chart-line--ref': line.ref }]" />
         <line v-if="inRange(cursor)" :x1="xOf(cursor!)" :x2="xOf(cursor!)" y1="0" :y2="chart.height" class="chart-cursor" />
+        <rect v-if="brush" :x="brush.x" y="0" :width="brush.width" :height="chart.height" class="chart-brush" />
       </svg>
       <!-- Dots in an overlay without aspect distortion: round whatever the chart width. -->
       <div class="chart-dots" :style="{ height: `${chart.height}px` }">
@@ -160,7 +210,8 @@ function onMove(event: PointerEvent) {
 .chart-value { color: #e6e6ea; font-variant-numeric: tabular-nums; &.gain { color: #3ddc5a; } &.loss { color: #ff5a6e; } }
 svg { display: block; width: 100%; touch-action: none; cursor: crosshair; }
 .chart-band { fill: #ffffff06; }
-.chart-line { fill: none; stroke-width: 1.6; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.chart-line { fill: none; stroke-width: 1.8; vector-effect: non-scaling-stroke; stroke-linejoin: round; &--ref { stroke-width: 1.5; } }
+.chart-brush { fill: #ffffff1f; stroke: #ffffff59; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .chart-zero { stroke: #ffffff40; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .chart-cursor { stroke: #fff; stroke-width: 1; vector-effect: non-scaling-stroke; opacity: .6; }
 .chart-dots { position: absolute; left: 8px; right: 8px; bottom: 2px; pointer-events: none;

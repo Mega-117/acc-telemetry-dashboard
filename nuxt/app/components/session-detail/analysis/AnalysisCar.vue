@@ -91,8 +91,8 @@ const gDot = (v: { lat: number, long: number } | null) => v ? { x: 50 + (v.lat /
 .car-load { fill: #e6e6ea; }
 .g-ring { fill: none; stroke: #ffffff1f; stroke-width: 1; }
 .g-axis { stroke: #ffffff14; stroke-width: 1; }
-.g-lap { fill: #ff3b4f; stroke: #fff; stroke-width: 1.2; }
-.g-ref { fill: #0a0a0f; stroke: #fff; stroke-width: 1.5; }
+.g-lap { fill: #38bdf8; stroke: #fff; stroke-width: 1.2; }
+.g-ref { fill: #0a0a0f; stroke: #fbbf24; stroke-width: 1.5; }
 .car-fact { margin: 0; color: #8a8a90; font-size: 11px; b { color: #e6e6ea; font-variant-numeric: tabular-nums; } }
 .car-legend { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin: 0; color: #77777d; font-size: 10px;
   i { width: 8px; height: 8px; margin-left: 4px; } }

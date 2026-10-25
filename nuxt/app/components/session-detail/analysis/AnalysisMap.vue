@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // PIP-618: track map of the analysis, oriented as ACC and the minimap HUD.
 // Whole track: your lap coloured by gain (green) or loss (red) against the reference.
-// Corner zoom: the two racing lines, yours solid red and the reference dashed white.
-// Two dots follow the cursor: you (red) and the reference (white).
+// Corner zoom: the two racing lines, yours blue and the reference amber.
+// Two dots follow the cursor: you (blue, filled) and the reference (amber, hollow).
 import { computed } from 'vue'
 import { deltaTrend, finishLine, fractions, lapDelta, mapPoints, type Corner, type MapPoint } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
@@ -39,7 +39,7 @@ const segments = computed(() => {
   return points.slice(1).map((p, i) => {
     const change = trend.value?.[i] ?? 0
     // Your lap against the reference: gaining green, losing red, even grey.
-    const color = !trend.value ? '#ff3b4f' : change < -0.002 ? '#3ddc5a' : change > 0.002 ? '#ff5a6e' : '#8a8a90'
+    const color = !trend.value ? '#38bdf8' : change < -0.002 ? '#3ddc5a' : change > 0.002 ? '#ff5a6e' : '#8a8a90'
     const inside = !corner || (at[i]! >= corner.start && at[i]! <= corner.end)
     return { x1: points[i]!.x, y1: points[i]!.y, x2: p.x, y2: p.y, color, opacity: inside ? 1 : 0.3 }
   })
@@ -101,8 +101,8 @@ function onMove(event: PointerEvent) {
 .map { display: block; width: 100%; height: auto; touch-action: none; }
 // Strokes scale with the zoom (--z), so a zoomed corner keeps thin lines.
 .map-track { fill: none; stroke: #ffffff14; stroke-width: calc(9px * var(--z, 1)); stroke-linejoin: round; stroke-linecap: round; }
-.map-ref { fill: none; stroke: #ffffffcc; stroke-width: calc(1.5px * var(--z, 1)); stroke-dasharray: calc(4px * var(--z, 1)) calc(3px * var(--z, 1)); }
-.map-lap-line { fill: none; stroke: #ff3b4f; stroke-width: calc(2px * var(--z, 1)); stroke-linejoin: round; }
+.map-ref { fill: none; stroke: #fbbf24; stroke-width: calc(1.8px * var(--z, 1)); }
+.map-lap-line { fill: none; stroke: #38bdf8; stroke-width: calc(2px * var(--z, 1)); stroke-linejoin: round; }
 .map-lap { stroke-width: calc(3px * var(--z, 1)); stroke-linecap: round; }
 .map-finish-white { stroke: #fff; stroke-width: calc(4px * var(--z, 1)); }
 .map-finish-black { stroke: #000; stroke-width: calc(4px * var(--z, 1)); stroke-dasharray: calc(2px * var(--z, 1)) calc(2px * var(--z, 1)); }
@@ -110,7 +110,7 @@ function onMove(event: PointerEvent) {
   circle { fill: #0a0a0f; stroke: #ffffff59; stroke-width: calc(1px * var(--z, 1)); }
   text { fill: #e6e6ea; font-family: 'Inter', sans-serif; font-weight: 700; text-anchor: middle; }
   &.active circle { stroke: #ff0024; stroke-width: calc(2px * var(--z, 1)); } }
-.map-dot-lap { fill: #ff3b4f; stroke: #fff; stroke-width: calc(1.5px * var(--z, 1)); }
-.map-dot-ref { fill: #0a0a0f; stroke: #fff; stroke-width: calc(2px * var(--z, 1)); }
+.map-dot-lap { fill: #38bdf8; stroke: #fff; stroke-width: calc(1.5px * var(--z, 1)); }
+.map-dot-ref { fill: #0a0a0f; stroke: #fbbf24; stroke-width: calc(2px * var(--z, 1)); }
 .map-none { color: #8a8a90; font-size: 12px; }
 </style>
