@@ -162,3 +162,15 @@ describe('lap analysis (our Track Titan)', () => {
     expect(formatDelta(-0.1)).toBe('−0.100')
   })
 })
+
+describe('Garage 61 sectors', () => {
+  it('places the official sector times on the trace', async () => {
+    const { sectorBounds, fractionAtTime } = await import('~/services/telemetry/lapAnalysis')
+    const steady = { gameId: 'acc', variant: null, sessionId: 's', track: 't', car: 'c', lapTimeS: 100, source: 'logger', complete: true, valid: true, fuelL: null, gridStepM: 2, lengthM: 200,
+      channels: { time_s: Array.from({ length: 101 }, (_, i) => i), speed_kmh: Array.from({ length: 101 }, () => 7.2) } }
+    expect(fractionAtTime(steady, 25)).toBeCloseTo(0.25, 6)
+    expect(sectorBounds(steady, [30000, 30000, 40000])).toEqual([0, expect.closeTo(0.3, 6), expect.closeTo(0.6, 6), 1])
+    expect(sectorBounds(steady, [30000, null, 40000])).toBeNull()
+    expect(sectorBounds(steady, undefined)).toBeNull()
+  })
+})

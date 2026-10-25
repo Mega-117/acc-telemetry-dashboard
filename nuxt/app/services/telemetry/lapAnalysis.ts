@@ -209,6 +209,36 @@ function increasing(values: number[]): boolean {
   return known
 }
 
+/** Lap fraction where the trace reaches `seconds`; null on a time axis that goes back. */
+export function fractionAtTime(trace: LapTraceView, seconds: number): number | null {
+  const times = trace.channels.time_s
+  if (!times?.length || !increasing(times)) return null
+  if (seconds <= times[0]!) return 0
+  if (seconds >= times[times.length - 1]!) return 1
+  let low = 0, high = times.length - 1
+  while (high - low > 1) { const mid = (low + high) >> 1; if (times[mid]! <= seconds) low = mid; else high = mid }
+  const span = times[high]! - times[low]! || 1
+  return (low + (seconds - times[low]!) / span) / (times.length - 1)
+}
+
+/**
+ * Sector boundaries on the lap (Garage 61's S1/S2/S3 bar): from the official
+ * sector times of the lap, placed where its trace reached them. Null without them.
+ */
+export function sectorBounds(trace: LapTraceView, sectorTimesMs: (number | null)[] | undefined): number[] | null {
+  if (!sectorTimesMs?.length || sectorTimesMs.some(t => typeof t !== 'number' || t <= 0)) return null
+  const bounds = [0]
+  let elapsed = 0
+  for (const t of sectorTimesMs.slice(0, -1)) {
+    elapsed += t as number
+    const f = fractionAtTime(trace, elapsed / 1000)
+    if (f === null) return null
+    bounds.push(f)
+  }
+  bounds.push(1)
+  return bounds
+}
+
 export function timeSyncedFraction(lap: LapTraceView, reference: LapTraceView, fraction: number): number {
   const time = channelAt(lap, 'time_s', fraction)
   const times = reference.channels.time_s

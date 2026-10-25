@@ -7,13 +7,13 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AnalysisMap from './AnalysisMap.vue'
 import AnalysisCar from './AnalysisCar.vue'
 import AnalysisCharts, { type ChartRow } from './AnalysisCharts.vue'
-import { compareCorners, cornerAdvice, detectCorners, formatDelta } from '~/services/telemetry/lapAnalysis'
+import { compareCorners, cornerAdvice, detectCorners, formatDelta, sectorBounds } from '~/services/telemetry/lapAnalysis'
 import { normalizeLapTrace, type LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { formatLapTime } from '~/utils/telemetryFormat'
 
 const props = defineProps<{
   sessionToken: string | null
-  laps: { lap_number: number, lap_time_ms: number | null, is_valid: boolean | null }[]
+  laps: { lap_number: number, lap_time_ms: number | null, is_valid: boolean | null, sector_times_ms?: (number | null)[] | null }[]
 }>()
 
 type Layout = 'pilota' | 'curve' | 'tracce'
@@ -110,14 +110,39 @@ const viewportHeight = ref(900)
 function measure() { viewportHeight.value = window.innerHeight }
 onMounted(() => { measure(); window.addEventListener('resize', measure) })
 onBeforeUnmount(() => window.removeEventListener('resize', measure))
-const traceRowHeight = computed(() => Math.max(110, Math.floor((viewportHeight.value - 230) / Math.max(traceRows.value.length, 1)) - 26))
-// Tracce: a stretch zoomed with the mouse (drag, wheel) wins over the corner.
+const traceRowHeight = computed(() => Math.max(100, Math.floor((viewportHeight.value - 250) / Math.max(traceRows.value.length, 1)) - 30))
+// Garage 61 sectors: the official sector times of the reference, placed on its trace.
+const sectorTimes = (e: Entry | null) => e ? props.laps.find(l => l.lap_number === e.lapNumber)?.sector_times_ms ?? null : null
+const sectorList = computed(() => {
+  const frame = reference.value ?? lap.value
+  const bounds = frame ? sectorBounds(frame, (sectorTimes(refEntry.value ?? lapEntry.value) ?? undefined) as number[] | undefined) : null
+  return bounds ? bounds.slice(0, -1).map((start, index) => ({ index, start, end: bounds[index + 1]! })) : []
+})
+const sectorGaps = computed(() => {
+  const ref = sectorTimes(refEntry.value), mine = sectorTimes(lapEntry.value)
+  if (!ref || !mine || ref.length !== mine.length) return []
+  return ref.map((t, i) => ({ ref: t as number, gap: (mine[i] as number) - (t as number) }))
+})
+const selectedSector = ref<number | null>(null)
+// Tracce: a stretch zoomed with the mouse (drag, wheel) wins over the sector or the corner.
 const zoomRange = ref<[number, number] | null>(null)
 const range = computed<[number, number]>(() => {
   if (layout.value === 'tracce' && zoomRange.value) return zoomRange.value
+  const sector = layout.value === 'tracce' && selectedSector.value !== null ? sectorList.value[selectedSector.value] : null
+  if (sector) return [sector.start, sector.end]
   const corner = selectedCorner.value !== null ? corners.value[selectedCorner.value - 1] : null
   return corner ? [corner.start, corner.end] : [0, 1]
 })
+function selectSector(index: number) {
+  selectedCorner.value = null
+  selectedSector.value = selectedSector.value === index ? null : index
+  zoomRange.value = null
+}
+function selectCorner(number: number) {
+  selectedSector.value = null
+  selectedCorner.value = selectedCorner.value === number && layout.value === 'tracce' ? null : number
+  zoomRange.value = null
+}
 watch(selectedCorner, () => { zoomRange.value = null })
 function selectFirst() {
   if (!corners.value.length) { selectedCorner.value = null; return }
@@ -149,8 +174,8 @@ const extraRows = computed<ChartRow[]>(() => [
 const WHEEL_NAME = { fl: 'ant. sx', fr: 'ant. dx', rl: 'post. sx', rr: 'post. dx' } as const
 const pilotRows = computed(() => [...deltaRow.value, speedRow, ...pedalRows])
 const cornerRows = computed(() => [...deltaRow.value, speedRow, ...pedalRows, steerRow, gearRow])
-// Garage 61 order: the delta first ("where the line is steepest you lose most"), then speed, pedals, steering, gear.
-const traceRows = computed(() => [...deltaRow.value, speedRow, ...pedalRows, steerRow, gearRow, ...(allChannels.value ? extraRows.value : [])])
+// Garage 61: the delta sits under the map; the channels on the right are speed, pedals, steering, gear.
+const traceRows = computed(() => [speedRow, ...pedalRows, steerRow, gearRow, ...(allChannels.value ? extraRows.value : [])])
 
 const lapLabel = (e: Entry) => `Giro ${e.lapNumber} · ${formatLapTime(e.lapTimeMs)}${e.complete ? '' : ' · parziale'}${e.valid ? '' : ' · invalido'}`
 const short = (e: Entry | null) => e ? `Giro ${e.lapNumber} · ${formatLapTime(e.lapTimeMs)}` : '--'
@@ -228,30 +253,49 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
       </div>
     </div>
 
-    <!-- TRACCE (MoTeC / Garage 61): the essential channels over the lap, more on request. -->
+    <!-- TRACCE, as the Garage 61 analyzer: laps and gaps on the left, the map with the
+         lap lines and the delta in the middle, the channels on the right, sectors below. -->
     <div v-else-if="lap && layout === 'tracce'" class="layout-tracce">
-      <aside class="panel tracce-side">
-        <AnalysisMap :lap="lap" :reference="reference" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null" :size="240" @hover="cursor = $event" @select="selectedCorner = selectedCorner === $event ? null : $event" />
-        <button type="button" class="tracce-btn" :disabled="selectedCorner === null" @click="selectedCorner = null">Giro intero</button>
-        <button type="button" class="tracce-btn" :class="{ active: allChannels }" @click="allChannels = !allChannels">{{ allChannels ? 'Solo l’essenziale' : 'Altri canali' }}</button>
-        <p class="analysis-note">Clic su una curva (mappa o fascia sopra i grafici) per ingrandirla.</p>
-        <!-- Garage 61: the left bar lists where you gain or lose time; a click zooms there. -->
-        <table v-if="comparison.length" class="curve-table tracce-corners">
-          <thead><tr><th>Curva</th><th>Tempo</th></tr></thead>
+      <aside class="panel tracce-left">
+        <h4>Giri</h4>
+        <ul class="tracce-laps">
+          <li><b class="sq sq--ref" /><span><strong>{{ refEntry ? formatLapTime(refEntry.lapTimeMs) : '--' }}</strong> Riferimento · Giro {{ refEntry?.lapNumber ?? '--' }}</span></li>
+          <li><b class="sq sq--lap" /><span><strong>{{ lapEntry ? formatLapTime(lapEntry.lapTimeMs) : '--' }}</strong> <em v-if="totalDelta !== null" :class="{ gain: totalDelta < 0, loss: totalDelta > 0 }">({{ formatDelta(totalDelta) }}s)</em> Tu · Giro {{ lapEntry?.lapNumber ?? '--' }}</span></li>
+        </ul>
+        <h4>Gap</h4>
+        <table v-if="sectorGaps.length" class="tracce-gaps">
+          <thead><tr><th /><th><b class="sq sq--ref" /></th><th><b class="sq sq--lap" /></th></tr></thead>
           <tbody>
-            <tr v-for="c in comparison" :key="c.corner.number" :class="{ active: selectedCorner === c.corner.number }" @click="selectedCorner = selectedCorner === c.corner.number ? null : c.corner.number">
+            <tr v-for="(g, i) in sectorGaps" :key="i" :class="{ active: selectedSector === i }" @click="selectSector(i)">
+              <th>S{{ i + 1 }}</th>
+              <td>{{ (g.ref / 1000).toFixed(3) }}</td>
+              <td :style="{ background: g.gap > 0 ? `rgba(255, 90, 110, ${Math.min(0.15 + g.gap / 1000, 0.7)})` : g.gap < 0 ? `rgba(61, 220, 90, ${Math.min(0.15 - g.gap / 1000, 0.7)})` : undefined }">{{ formatDelta(g.gap / 1000) }}s</td>
+            </tr>
+          </tbody>
+        </table>
+        <p v-else class="analysis-note">Tempi dei settori non disponibili per questi giri.</p>
+        <h4>Curve</h4>
+        <table v-if="comparison.length" class="curve-table tracce-corners">
+          <tbody>
+            <tr v-for="c in comparison" :key="c.corner.number" :class="{ active: selectedCorner === c.corner.number }" @click="selectCorner(c.corner.number)">
               <td>{{ c.corner.number }}</td>
               <td :class="{ gain: c.timeLostS <= -0.01, loss: c.timeLostS >= 0.01 }">{{ formatDelta(c.timeLostS) }}</td>
             </tr>
           </tbody>
         </table>
-        <dl class="tracce-facts">
-          <div><dt>Tu</dt><dd>{{ ms(lap.lapTimeS) }}</dd></div>
-          <div v-if="reference"><dt>Riferimento</dt><dd>{{ ms(reference.lapTimeS) }}</dd></div>
-          <div><dt>Lunghezza</dt><dd>{{ (lap.lengthM / 1000).toFixed(2) }} km</dd></div>
-        </dl>
+        <button type="button" class="tracce-btn" :class="{ active: allChannels }" @click="allChannels = !allChannels">{{ allChannels ? 'Solo l’essenziale' : 'Altri canali' }}</button>
       </aside>
-      <AnalysisCharts :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :corners="selectedCorner === null ? corners : []" :row-height="traceRowHeight" zoomable @hover="cursor = $event" @select="selectedCorner = $event" @zoom="zoomRange = $event" />
+      <div class="tracce-center">
+        <div class="panel">
+          <AnalysisMap :lap="lap" :reference="reference" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null" :focus="selectedSector !== null ? range : null" color-mode="laps" zoom-controls :size="520" @hover="cursor = $event" @select="selectCorner($event)" />
+        </div>
+        <AnalysisCharts v-if="reference" :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="120" zoomable @hover="cursor = $event" @zoom="zoomRange = $event" />
+      </div>
+      <AnalysisCharts class="tracce-right" :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="traceRowHeight" zoomable @hover="cursor = $event" @zoom="zoomRange = $event" />
+      <!-- Garage 61's sector bar: a click zooms every view on the sector. -->
+      <div v-if="sectorList.length" class="tracce-sectors">
+        <button v-for="s in sectorList" :key="s.index" type="button" :class="{ active: selectedSector === s.index }" :style="{ flex: `${s.end - s.start} 0 0` }" @click="selectSector(s.index)">S{{ s.index + 1 }}</button>
+      </div>
     </div>
   </section>
 </template>
@@ -298,15 +342,30 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .curve-grid { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 8px; align-items: start; }
 .curve-advice { margin: 0; padding: 8px 12px; border: 1px solid #ffffff1f; background: #ffffff08; color: #e6e6ea; font-size: 13px; font-weight: 600; }
 
-.layout-tracce { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 12px; align-items: start; }
-.tracce-side { position: sticky; top: 8px; }
-.tracce-btn { height: 28px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font-size: 12px; cursor: pointer; &:disabled { opacity: .4; cursor: default; } &.active { border-color: #ff0024; } }
-.tracce-facts { display: grid; gap: 2px; margin: 4px 0 0; font-size: 12px;
-  > div { display: flex; justify-content: space-between; }
-  dt { color: #8a8a90; } dd { margin: 0; color: #e6e6ea; font-variant-numeric: tabular-nums; } }
+// Garage 61 analyzer: left bar, map + delta in the middle, channels on the right, sectors below.
+.layout-tracce { display: grid; grid-template-columns: 220px minmax(320px, 0.9fr) minmax(0, 1.4fr); grid-template-areas: 'left center right' 'left sectors sectors'; gap: 10px; align-items: start; }
+.tracce-left { grid-area: left; position: sticky; top: 8px;
+  h4 { margin: 4px 0 0; color: #fff; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; } }
+.tracce-center { grid-area: center; display: grid; gap: 8px; position: sticky; top: 8px; }
+.tracce-right { grid-area: right; }
+.sq { display: inline-block; width: 10px; height: 10px; flex: 0 0 10px; &--lap { background: #38bdf8; } &--ref { background: #fbbf24; } }
+.tracce-laps { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none;
+  li { display: flex; gap: 8px; align-items: flex-start; color: #b3b3b8; font-size: 12px; }
+  strong { display: block; color: #fff; font: 700 14px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
+  em { font-style: normal; } }
+.tracce-gaps { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums;
+  th, td { padding: 4px 6px; text-align: right; color: #e6e6ea; }
+  thead th { text-align: center; }
+  tbody th { text-align: left; color: #b3b3b8; }
+  tr { cursor: pointer; } tr.active th { box-shadow: inset 3px 0 #ff0024; } }
+.tracce-corners { max-height: 220px; }
+.tracce-btn { height: 28px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font-size: 12px; cursor: pointer; &.active { border-color: #ff0024; } }
+.tracce-sectors { grid-area: sectors; display: flex; gap: 3px;
+  button { height: 30px; border: 0; background: #ffffff12; color: #b3b3b8; font: 700 13px 'Inter', sans-serif; cursor: pointer; &:hover { background: #ffffff1f; } &.active { background: #ffffff2e; color: #fff; box-shadow: inset 0 -2px #ff0024; } } }
 
 @media (max-width: 1100px) {
   .layout-curve, .layout-tracce, .layout-pilota, .curve-grid { grid-template-columns: 1fr; }
-  .tracce-side { position: static; }
+  .layout-tracce { grid-template-areas: "left" "center" "right" "sectors"; }
+  .tracce-left, .tracce-center { position: static; }
 }
 </style>

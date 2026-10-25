@@ -3,7 +3,7 @@
 // Whole track: your lap coloured by gain (green) or loss (red) against the reference.
 // Corner zoom: the two racing lines, yours blue and the reference amber.
 // Two dots follow the cursor: you (blue, filled) and the reference (amber, hollow).
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { deltaTrend, finishLine, fractions, lapDelta, mapPoints, type Corner, type MapPoint } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
@@ -18,7 +18,13 @@ const props = withDefaults(defineProps<{
   size?: number
   /** Zoom on the selected corner: the racing lines become readable. */
   zoom?: boolean
-}>(), { refCursor: null, selected: null, size: 320, zoom: false })
+  /** 'delta': your line green/red by gain and loss. 'laps' (Garage 61): each lap in its own colour. */
+  colorMode?: 'delta' | 'laps'
+  /** Stretch to frame (a sector), when no corner is zoomed. */
+  focus?: [number, number] | null
+  /** Garage 61's + / − buttons. */
+  zoomControls?: boolean
+}>(), { refCursor: null, selected: null, size: 320, zoom: false, colorMode: 'delta', focus: null, zoomControls: false })
 const emit = defineEmits<{ hover: [fraction: number | null], select: [corner: number] }>()
 
 const POINTS = 600
@@ -30,11 +36,19 @@ const frame = computed(() => props.reference ?? props.lap)
 const base = computed(() => mapPoints(frame.value, at, W.value, H.value, 18))
 const lapPoints = computed(() => props.reference ? mapPoints(props.lap, at, W.value, H.value, 18, props.reference) : base.value)
 const zoomed = computed(() => props.zoom && props.selected !== null && !!props.corners[props.selected - 1])
+const lapsMode = computed(() => props.colorMode === 'laps')
+const manualZoom = ref(1)
+const focusRange = computed<[number, number] | null>(() => {
+  const corner = props.selected !== null ? props.corners[props.selected - 1] : null
+  if (zoomed.value && corner) return [corner.start, corner.end]
+  return props.focus && (props.focus[0] > 0 || props.focus[1] < 1) ? props.focus : null
+})
+watch(focusRange, () => { manualZoom.value = 1 })
 const trend = computed(() => props.reference ? deltaTrend(lapDelta(props.lap, props.reference, at)) : null)
 const path = (points: MapPoint[] | null) => points?.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ') ?? ''
 const segments = computed(() => {
   const points = lapPoints.value
-  if (!points || zoomed.value) return []
+  if (!points || zoomed.value || lapsMode.value) return []
   const corner = props.selected !== null ? props.corners[props.selected - 1] : null
   return points.slice(1).map((p, i) => {
     const change = trend.value?.[i] ?? 0
@@ -58,13 +72,20 @@ const refDot = computed(() => props.reference ? dot(base.value, props.refCursor 
 const labels = computed(() => base.value ? props.corners.map(c => ({ number: c.number, point: base.value![Math.round(c.apex * (POINTS - 1))]! })) : [])
 const finish = computed(() => base.value ? finishLine(base.value, 10) : null)
 const viewBox = computed(() => {
-  const corner = props.selected !== null ? props.corners[props.selected - 1] : null
-  if (!zoomed.value || !corner || !base.value) return `0 0 ${W.value} ${H.value}`
-  const inside = base.value.filter((_, i) => at[i]! >= corner.start && at[i]! <= corner.end)
-  if (inside.length < 2) return `0 0 ${W.value} ${H.value}`
-  const xs = inside.map(p => p.x), ys = inside.map(p => p.y)
-  const span = Math.max(Math.max(...xs) - Math.min(...xs), (Math.max(...ys) - Math.min(...ys)) / 0.8, 16) * 1.25
-  const cx = (Math.max(...xs) + Math.min(...xs)) / 2, cy = (Math.max(...ys) + Math.min(...ys)) / 2
+  // Frame: the focused stretch (corner or sector) or the whole track, then the + / − zoom.
+  let cx = W.value / 2, cy = H.value / 2, span = W.value
+  const range = focusRange.value
+  const inside = range && base.value ? base.value.filter((_, i) => at[i]! >= range[0] && at[i]! <= range[1]) : []
+  if (inside.length >= 2) {
+    const xs = inside.map(p => p.x), ys = inside.map(p => p.y)
+    span = Math.max(Math.max(...xs) - Math.min(...xs), (Math.max(...ys) - Math.min(...ys)) / 0.8, 16) * 1.25
+    cx = (Math.max(...xs) + Math.min(...xs)) / 2; cy = (Math.max(...ys) + Math.min(...ys)) / 2
+  }
+  if (manualZoom.value > 1) {
+    // Zoom around your car when the cursor is on the track, else around the frame centre.
+    if (lapDot.value) { cx = lapDot.value.x; cy = lapDot.value.y }
+    span /= manualZoom.value
+  }
   return `${cx - span / 2} ${cy - span * 0.4} ${span} ${span * 0.8}`
 })
 const zoomScale = computed(() => Number(viewBox.value.split(' ')[2]) / W.value)
@@ -83,9 +104,14 @@ function onMove(event: PointerEvent) {
 </script>
 
 <template>
-  <svg v-if="base" class="map" :viewBox="viewBox" :style="{ '--z': zoomScale }" role="img" aria-label="Mappa della pista" @pointermove="onMove" @pointerleave="emit('hover', null)">
+  <div v-if="base" class="map-wrap">
+  <div v-if="zoomControls" class="map-zoom">
+    <button type="button" aria-label="Avvicina la mappa" :disabled="manualZoom >= 8" @click="manualZoom = Math.min(manualZoom * 1.6, 8)">+</button>
+    <button type="button" aria-label="Allontana la mappa" :disabled="manualZoom <= 1" @click="manualZoom = Math.max(manualZoom / 1.6, 1)">−</button>
+  </div>
+  <svg class="map" :viewBox="viewBox" :style="{ '--z': zoomScale }" role="img" aria-label="Mappa della pista" @pointermove="onMove" @pointerleave="emit('hover', null)">
     <polyline :points="path(base)" class="map-track" />
-    <template v-if="zoomed">
+    <template v-if="zoomed || lapsMode">
       <polyline v-if="reference" :points="path(base)" class="map-ref" />
       <polyline :points="path(lapPoints)" class="map-lap-line" />
     </template>
@@ -102,10 +128,14 @@ function onMove(event: PointerEvent) {
     <circle v-if="refDot" :cx="refDot.x" :cy="refDot.y" :r="5 * zoomScale" class="map-dot-ref" />
     <path v-if="lapArrow" :transform="`translate(${lapArrow.x} ${lapArrow.y}) rotate(${lapArrow.angle}) scale(${zoomScale})`" d="M8 0 L-6 -6 L-3 0 L-6 6 Z" class="map-arrow" />
   </svg>
+  </div>
   <p v-else class="map-none">Mappa non disponibile: questo giro non ha le coordinate.</p>
 </template>
 
 <style scoped lang="scss">
+.map-wrap { position: relative; }
+.map-zoom { position: absolute; top: 4px; left: 4px; display: grid; gap: 3px; z-index: 1;
+  button { width: 24px; height: 24px; border: 1px solid #ffffff2e; background: #0d0d12e6; color: #e6e6ea; font: 700 14px/1 "Inter", sans-serif; cursor: pointer; &:disabled { opacity: .35; cursor: default; } } }
 .map { display: block; width: 100%; height: auto; touch-action: none; }
 // Strokes scale with the zoom (--z), so a zoomed corner keeps thin lines.
 .map-track { fill: none; stroke: #ffffff14; stroke-width: calc(9px * var(--z, 1)); stroke-linejoin: round; stroke-linecap: round; }
