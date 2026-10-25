@@ -166,11 +166,8 @@ onMounted(() => window.addEventListener("resize", measureTrace))
 onBeforeUnmount(() => window.removeEventListener("resize", measureTrace))
 // Same tall plots as before the window fit (user choice): the charts column scrolls on its own.
 const traceRowHeight = computed(() => Math.max(80, Math.floor((viewportHeight.value - 170) / ESSENTIAL_ROWS) - 30))
-// Garage 61 keeps the lap bar on the left; on a 1400 px window it would squeeze the charts,
-// so it opens by default only on wide windows and folds away with a button.
-const leftOpen = ref(false)
-onMounted(() => { leftOpen.value = window.innerWidth >= 1700 })
-watch([traceRoot, layout, leftOpen, reference], () => nextTick(measureTrace))
+// Garage 61 keeps the lap bar on the left, always open: sectors and corners say where to look.
+watch([traceRoot, layout, reference], () => nextTick(measureTrace))
 // What the charts show now, and the way back to the whole lap (Garage 61 reset, Esc, double click).
 const viewLabel = computed(() => zoomRange.value ? "Zoom" : selectedSector.value !== null ? `Settore ${selectedSector.value + 1}` : selectedCorner.value !== null ? `Curva ${selectedCorner.value}` : "Giro intero")
 function wholeLap() { selectedCorner.value = null; selectedSector.value = null; zoomRange.value = null }
@@ -274,9 +271,6 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 <template>
   <section class="analysis">
     <div class="analysis-bar">
-      <div class="seg" role="tablist" aria-label="Layout dell’analisi">
-        <button v-for="l in LAYOUTS" :key="l.id" type="button" role="tab" :aria-selected="layout === l.id" :class="{ active: layout === l.id }" :title="l.hint" @click="layout = l.id">{{ l.label }}</button>
-      </div>
       <!-- Track Titan: each lap's select wears its colour, so a colour tells which lap it is. -->
       <label class="pick pick--lap" title="Il tuo giro: azzurro in grafici e mappa"><span class="pick-name">Tu</span>
         <select v-model="lapId" :disabled="!entries.length"><option v-for="e in entries" :key="e.id" :value="e.id" :disabled="!e.complete">{{ lapLabel(e) }}</option></select>
@@ -286,6 +280,11 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
       </label>
       <!-- The lap gap next to the pickers, in words: who is faster and by how much. -->
       <p v-if="totalDelta !== null" class="delta-badge" :class="{ gain: totalDelta < 0, loss: totalDelta > 0 }" title="Il tuo giro contro il riferimento"><span>Tu</span><strong>{{ formatDelta(totalDelta) }} s</strong><em>{{ totalDelta < 0 ? "più veloce" : totalDelta > 0 ? "più lento" : "pari" }}</em></p>
+      <!-- What you look at on the left (laps and gap), how you look at it on the right,
+           under the Sessione / Telemetria switch: page, then view. -->
+      <div class="seg seg--views" role="tablist" aria-label="Layout dell’analisi">
+        <button v-for="l in LAYOUTS" :key="l.id" type="button" role="tab" :aria-selected="layout === l.id" :class="{ active: layout === l.id }" :title="l.hint" @click="layout = l.id">{{ l.label }}</button>
+      </div>
     </div>
 
     <p v-if="skipped" class="analysis-note">{{ skipped }} giri non leggibili esclusi.</p>
@@ -323,8 +322,8 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 
     <!-- TRACCE, as the Garage 61 analyzer: laps and gaps on the left, the map with the
          lap lines and the delta in the middle, the channels on the right, sectors and corners on top of the charts. -->
-    <div v-else-if="lap && layout === 'tracce'" ref="traceRoot" class="layout-tracce" :class="{ 'layout-tracce--narrow': !leftOpen }" :style="{ height: `${traceHeight}px` }">
-      <aside v-if="leftOpen" class="tracce-left">
+    <div v-else-if="lap && layout === 'tracce'" ref="traceRoot" class="layout-tracce" :style="{ height: `${traceHeight}px` }">
+      <aside class="tracce-left">
         <!-- Who is faster is already in the coloured pickers above: here only where. -->
         <section class="side-box">
           <h4>Settori</h4>
@@ -354,7 +353,6 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
         </section>
       </aside>
       <div class="tracce-center">
-        <button type="button" class="tracce-btn tracce-toggle" @click="leftOpen = !leftOpen">{{ leftOpen ? "‹ Chiudi giri e gap" : "Giri, gap e curve ›" }}</button>
         <div class="panel">
           <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null" :focus="selectedSector !== null ? range : null" color-mode="laps" zoom-controls :size="320" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>
@@ -393,6 +391,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .analysis { display: grid; gap: 10px; }
 // Sticky: lap pickers and layout stay in sight while the charts scroll under them.
 .analysis-bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 6px 0; background: #0b0b10f2; box-shadow: 0 8px 12px -10px #000; }
+.seg--views { margin-left: auto; }
 .seg { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid #ffffff1f; background: #0a0a0feb;
   button { height: 30px; padding: 0 16px; border: 0; background: transparent; color: #b3b3b8; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; cursor: pointer;
     &.active { background: #ffffff14; color: #fff; box-shadow: inset 0 -2px #ff0024; }
@@ -431,8 +430,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .tip-text { display: flex; align-items: center; padding: 4px 10px; background: #ffffff08; font-size: 13px; }
 
 // Garage 61 analyzer: left bar, map + delta in the middle, channels on the right, sector strip on top of the charts.
-.layout-tracce { display: grid; grid-template-columns: 210px 320px minmax(0, 1fr); grid-template-areas: 'left center right';
-  &--narrow { grid-template-columns: 320px minmax(0, 1fr); grid-template-areas: 'center right'; } gap: 10px; align-items: stretch; overflow: hidden; }
+.layout-tracce { display: grid; grid-template-columns: 210px 320px minmax(0, 1fr); grid-template-areas: 'left center right'; gap: 10px; align-items: stretch; overflow: hidden; }
 // Left column: three boxes with air between them (Garage 61 Laps/Gaps, VRS corners).
 // Tracce fills the window: the page does not scroll, each column scrolls on its own.
 .tracce-left { grid-area: left; display: flex; flex-direction: column; gap: 10px; height: 100%; overflow-y: auto; overflow-x: hidden; }
@@ -458,7 +456,6 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .corner-num { position: relative; display: grid; place-items: center; padding: 3px 0; background: #ffffff0d; color: #e6e6ea; font: italic 700 15px 'Racer Display', 'Arial Narrow', sans-serif; }
 .corner-cell { display: grid; place-items: center; color: #fff; font: 700 12px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
 .tracce-center { grid-area: center; display: grid; gap: 8px; align-content: start; height: 100%; overflow-y: auto; overflow-x: hidden; }
-.tracce-toggle { justify-self: start; padding: 0 10px; }
 .tracce-right { grid-area: right; min-width: 0; height: 100%; overflow-y: auto; overflow-x: hidden; }
 // Sector and corner strip: sticky under the lap bar, aligned to the plot area (42 px axis, 8 px right).
 .strip-head { display: flex; align-items: center; gap: 10px; height: 20px; margin-left: -34px; color: #b3b3b8; font: 700 11px "Inter", sans-serif; text-transform: uppercase; letter-spacing: .04em; }
@@ -478,7 +475,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 
 @media (max-width: 1100px) {
   .layout-tracce, .layout-pilota { grid-template-columns: 1fr; }
-  .layout-tracce, .layout-tracce--narrow { grid-template-areas: "left" "center" "right"; }
+  .layout-tracce { grid-template-areas: "left" "center" "right"; }
   .tracce-left, .tracce-center { position: static; }
 }
 </style>
