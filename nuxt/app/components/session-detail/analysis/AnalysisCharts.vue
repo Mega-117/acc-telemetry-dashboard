@@ -159,7 +159,7 @@ function fractionOf(event: PointerEvent | WheelEvent | MouseEvent) {
   const ratio = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1)
   return props.range[0] + (props.range[1] - props.range[0]) * ratio
 }
-// Garage 61 zoom: drag across a stretch to zoom it, wheel to zoom around the
+// Garage 61 zoom: drag across a stretch to zoom it, Ctrl + wheel to zoom around the
 // pointer, double click for the whole lap. 20 m is the smallest stretch.
 const dragFrom = ref<number | null>(null)
 const dragTo = ref<number | null>(null)
@@ -188,7 +188,8 @@ function onUp() {
   dragFrom.value = dragTo.value = null
 }
 function onWheel(event: WheelEvent) {
-  if (!props.zoomable) return
+  // Plain wheel scrolls the page; Ctrl + wheel zooms (as Google Maps), never both.
+  if (!props.zoomable || !event.ctrlKey) return
   event.preventDefault()
   const f = fractionOf(event)
   const [start, end] = props.range
