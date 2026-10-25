@@ -123,8 +123,8 @@ function measureTrace() {
 }
 onMounted(() => window.addEventListener("resize", measureTrace))
 onBeforeUnmount(() => window.removeEventListener("resize", measureTrace))
-// Each chart adds about 50 px of header, distance axis and gaps around its plot.
-const traceRowHeight = computed(() => Math.max(70, Math.floor((traceHeight.value - 80) / ESSENTIAL_ROWS) - 50))
+// Same tall plots as before the window fit (user choice): the charts column scrolls on its own.
+const traceRowHeight = computed(() => Math.max(80, Math.floor((viewportHeight.value - 170) / ESSENTIAL_ROWS) - 30))
 // Garage 61 keeps the lap bar on the left; on a 1400 px window it would squeeze the charts,
 // so it opens by default only on wide windows and folds away with a button.
 const leftOpen = ref(false)
