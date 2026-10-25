@@ -149,6 +149,18 @@ function selectCorner(number: number) {
   zoomRange.value = null
 }
 watch(selectedCorner, () => { zoomRange.value = null })
+// The strip follows the charts' distance axis: only what is inside the shown range, in %.
+function onAxis(start: number, end: number) {
+  const [r0, r1] = range.value
+  const span = Math.max(r1 - r0, 1e-9)
+  const a = Math.max(start, r0), b = Math.min(end, r1)
+  return b <= a ? null : { left: (a - r0) / span * 100, width: (b - a) / span * 100 }
+}
+const visibleSectors = computed(() => sectorList.value.flatMap(s => { const p = onAxis(s.start, s.end); return p ? [{ ...s, ...p }] : [] }))
+const visibleCorners = computed(() => corners.value.flatMap(c => {
+  const p = onAxis(c.start, c.end)
+  return p ? [{ number: c.number, lost: comparison.value[c.number - 1]?.timeLostS ?? 0, ...p }] : []
+}))
 function selectFirst() {
   if (!corners.value.length) { selectedCorner.value = null; return }
   if (selectedCorner.value === null || selectedCorner.value > corners.value.length) selectedCorner.value = worst.value[0]?.corner.number ?? 1
@@ -259,7 +271,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
     </div>
 
     <!-- TRACCE, as the Garage 61 analyzer: laps and gaps on the left, the map with the
-         lap lines and the delta in the middle, the channels on the right, sectors below. -->
+         lap lines and the delta in the middle, the channels on the right, sectors and corners on top of the charts. -->
     <div v-else-if="lap && layout === 'tracce'" class="layout-tracce" :class="{ 'layout-tracce--narrow': !leftOpen }">
       <aside v-if="leftOpen" class="panel tracce-left">
         <h4>Giri</h4>
@@ -297,10 +309,18 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
         </div>
         <AnalysisCharts v-if="reference" :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="120" zoomable @hover="cursor = $event" @zoom="zoomRange = $event" />
       </div>
-      <AnalysisCharts class="tracce-right" :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="traceRowHeight" zoomable @hover="cursor = $event" @zoom="zoomRange = $event" />
-      <!-- Garage 61's sector bar: a click zooms every view on the sector. -->
-      <div v-if="sectorList.length" class="tracce-sectors">
-        <button v-for="s in sectorList" :key="s.index" type="button" :class="{ active: selectedSector === s.index }" :style="{ flex: `${s.end - s.start} 0 0` }" @click="selectSector(s.index)">S{{ s.index + 1 }}</button>
+      <div class="tracce-right">
+        <!-- Sectors and corners on top of the charts, aligned to their distance axis and
+             sticky under the lap bar (Track Titan's segment strip, MoTeC's section bar). -->
+        <div class="tracce-strip">
+          <div v-if="sectorList.length" class="strip-row">
+            <button v-for="s in visibleSectors" :key="s.index" type="button" :class="{ active: selectedSector === s.index }" :style="{ left: `${s.left}%`, width: `${s.width}%` }" :title="`Settore ${s.index + 1}: clic per ingrandire, di nuovo per il giro intero`" @click="selectSector(s.index)">S{{ s.index + 1 }}</button>
+          </div>
+          <div class="strip-row strip-row--corners">
+            <button v-for="c in visibleCorners" :key="c.number" type="button" :class="{ active: selectedCorner === c.number, gain: c.lost <= -0.01, loss: c.lost >= 0.01 }" :style="{ left: `${c.left}%`, width: `${c.width}%` }" :title="`Curva ${c.number}: ${formatDelta(c.lost)} s`" @click="selectCorner(c.number)">{{ c.number }}</button>
+          </div>
+        </div>
+        <AnalysisCharts :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="traceRowHeight" zoomable @hover="cursor = $event" @zoom="zoomRange = $event" />
       </div>
     </div>
   </section>
@@ -349,14 +369,22 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .curve-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-items: start; }
 .curve-advice { margin: 0; padding: 8px 12px; border: 1px solid #ffffff1f; background: #ffffff08; color: #e6e6ea; font-size: 13px; font-weight: 600; }
 
-// Garage 61 analyzer: left bar, map + delta in the middle, channels on the right, sectors below.
-.layout-tracce { display: grid; grid-template-columns: 210px 320px minmax(0, 1fr); grid-template-areas: 'left center right' 'left sectors sectors';
-  &--narrow { grid-template-columns: 320px minmax(0, 1fr); grid-template-areas: 'center right' 'sectors sectors'; } gap: 10px; align-items: start; }
+// Garage 61 analyzer: left bar, map + delta in the middle, channels on the right, sector strip on top of the charts.
+.layout-tracce { display: grid; grid-template-columns: 210px 320px minmax(0, 1fr); grid-template-areas: 'left center right';
+  &--narrow { grid-template-columns: 320px minmax(0, 1fr); grid-template-areas: 'center right'; } gap: 10px; align-items: start; }
 .tracce-left { grid-area: left; position: sticky; top: 56px;
   h4 { margin: 4px 0 0; color: #fff; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; } }
 .tracce-center { grid-area: center; display: grid; gap: 8px; position: sticky; top: 56px; }
 .tracce-toggle { justify-self: start; padding: 0 10px; }
-.tracce-right { grid-area: right; }
+.tracce-right { grid-area: right; min-width: 0; }
+// Sector and corner strip: sticky under the lap bar, aligned to the plot area (42 px axis, 8 px right).
+.tracce-strip { position: sticky; top: 50px; z-index: 4; display: grid; gap: 2px; margin-bottom: 6px; padding: 4px 9px 4px 43px; background: #0b0b10f2; box-shadow: 0 8px 10px -10px #000; }
+.strip-row { position: relative; height: 24px;
+  button { position: absolute; top: 0; height: 100%; padding: 0; border: 1px solid #0b0b10; background: #ffffff14; color: #e6e6ea; font: 700 12px 'Inter', sans-serif; cursor: pointer; overflow: hidden;
+    &:hover { background: #ffffff26; }
+    &.active { background: #ffffff33; color: #fff; box-shadow: inset 0 -2px #ff0024; } }
+  &--corners { height: 18px;
+    button { background: #ffffff0a; color: #b3b3b8; font-size: 10px; &.gain { color: #3ddc5a; } &.loss { color: #ff5a6e; } } } }
 .sq { display: inline-block; width: 10px; height: 10px; flex: 0 0 10px; &--lap { background: #38bdf8; } &--ref { background: #fbbf24; } }
 .tracce-laps { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none;
   li { display: flex; gap: 8px; align-items: flex-start; color: #b3b3b8; font-size: 12px; }
@@ -369,12 +397,10 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
   tr { cursor: pointer; } tr.active th { box-shadow: inset 3px 0 #ff0024; } }
 .tracce-corners { max-height: 220px; }
 .tracce-btn { height: 28px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font-size: 12px; cursor: pointer; &.active { border-color: #ff0024; } }
-.tracce-sectors { grid-area: sectors; display: flex; gap: 3px;
-  button { height: 30px; border: 0; background: #ffffff12; color: #b3b3b8; font: 700 13px 'Inter', sans-serif; cursor: pointer; &:hover { background: #ffffff1f; } &.active { background: #ffffff2e; color: #fff; box-shadow: inset 0 -2px #ff0024; } } }
 
 @media (max-width: 1100px) {
   .layout-curve, .layout-tracce, .layout-pilota, .curve-grid { grid-template-columns: 1fr; }
-  .layout-tracce { grid-template-areas: "left" "center" "right" "sectors"; }
+  .layout-tracce, .layout-tracce--narrow { grid-template-areas: "left" "center" "right"; }
   .tracce-left, .tracce-center { position: static; }
 }
 </style>
