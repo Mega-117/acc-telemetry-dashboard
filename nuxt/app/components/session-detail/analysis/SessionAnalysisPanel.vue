@@ -146,7 +146,24 @@ function measureDelta() {
   // Header, distance axis and padding around the plot stay as they are: only the plot grows.
   const chrome = box.height - deltaHeight.value
   deltaHeight.value = Math.max(120, Math.floor(bottom - box.top - chrome) - 1)
+  // Safety net: if the column still overflows (layout not settled at the first measure),
+  // take the excess off the plot, so the centre column never needs its scrollbar.
+  nextTick(() => {
+    const column = deltaWrap.value?.parentElement
+    const over = column ? column.scrollHeight - column.clientHeight : 0
+    if (over > 0) deltaHeight.value = Math.max(120, deltaHeight.value - over)
+  })
 }
+// The left column settles after the laps load (sectors, corner list): measure again when
+// it or the frame changes size, not only on window resize.
+let resizeObserver: ResizeObserver | null = null
+watch([traceRoot, cornersBox], elements => {
+  resizeObserver?.disconnect()
+  if (typeof ResizeObserver === 'undefined') return
+  resizeObserver = new ResizeObserver(() => measureDelta())
+  elements.forEach(el => { if (el) resizeObserver!.observe(el) })
+})
+onBeforeUnmount(() => resizeObserver?.disconnect())
 function measureTrace() {
   const el = traceRoot.value
   if (!el) return
@@ -398,11 +415,11 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
     &:disabled { opacity: .4; cursor: default; } }
   &--small button { height: 24px; padding: 0 10px; font: 600 11px 'Inter', sans-serif; text-transform: none; } }
 // The lap pickers wear the lap colour (Track Titan): blue for you, amber for the reference.
-.pick { --c: #38bdf8; display: flex; align-items: stretch; height: 34px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 14%, #0a0a0f);
+.pick { --c: #38bdf8; display: flex; align-items: stretch; height: 38px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 14%, #0a0a0f);
   &--ref { --c: #fbbf24; }
   .pick-name { display: grid; place-items: center; padding: 0 10px; background: var(--c); color: #0a0a0f; font: italic 700 13px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; }
   select { min-width: 220px; height: 100%; padding: 0 8px; border: 0; background: transparent; color: #fff; font: 600 13px 'Inter', sans-serif; option { background: #0d0d12; color: #e6e6ea; } } }
-.delta-badge { display: flex; align-items: baseline; gap: 6px; height: 34px; margin: 0; padding: 0 10px; border: 1px solid #ffffff2e; background: #ffffff08; line-height: 34px; color: #e6e6ea;
+.delta-badge { display: flex; align-items: baseline; gap: 6px; height: 38px; margin: 0; padding: 0 10px; border: 1px solid #ffffff2e; background: #ffffff08; line-height: 38px; color: #e6e6ea;
   span { color: #8a8a90; font: 700 11px 'Inter', sans-serif; text-transform: uppercase; }
   strong { font: 700 17px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
   em { font-style: normal; font-size: 12px; color: #b3b3b8; }

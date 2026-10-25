@@ -3238,7 +3238,7 @@ const gripZones = computed(() => {
   &:hover { color: #fff; svg { opacity: 1; transform: translateX(2px); } } }
 .laps-table tr.lap-row--link { cursor: pointer; &:hover td { background: #ffffff0a; } }
 .type-badge {
-  padding: 5px 12px; border-radius: 5px; font-size: 10px; font-weight: 700;
+  display: inline-grid; place-items: center; height: 22px; padding: 0 10px; border-radius: 0; font-size: 10px; font-weight: 700; letter-spacing: .06em; line-height: 1;
   &--practice { background: rgba($accent-info,0.15); border: 1px solid rgba($accent-info,0.4); color: $accent-info; }
   &--qualify { background: rgba($accent-warning,0.15); border: 1px solid rgba($accent-warning,0.4); color: $accent-warning; }
   &--race { background: rgba(255,100,100,0.15); border: 1px solid rgba(255,100,100,0.4); color: rgb(255,100,100); }
@@ -3348,7 +3348,7 @@ const gripZones = computed(() => {
   position: sticky; top: 20px; // Resta visibile durante scroll
   max-height: calc(100vh - 140px); // Evita overflow su schermi piccoli
 }
-.master-title { font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; margin: 0 0 12px 0; }
+.master-title { font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; color: #fff; text-transform: uppercase; letter-spacing: .02em; margin: 0 0 12px 0; }
 
 // 1) STINT HEADER LEGENDA
 .stint-header {
@@ -4306,13 +4306,13 @@ const gripZones = computed(() => {
 
 // CHART - IMPROVED CONTRAST
 .chart-section { margin-bottom: 20px; }
-.chart-title { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.7); text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 10px 0; }
+.chart-title { font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; color: #fff; text-transform: uppercase; letter-spacing: .02em; margin: 0 0 10px 0; }
 .chart-wrap { height: 400px; background: rgba(0,0,0,0.25); border-radius: 8px; padding: 12px; }
 
 // LAPS TABLE - IMPROVED CONTRAST
 .laps-section { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .laps-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 12px; }
-.laps-title { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.7); text-transform: uppercase; margin: 0; }
+.laps-title { font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; color: #fff; text-transform: uppercase; letter-spacing: .02em; margin: 0; }
 
 // A|B TABS
 .laps-tabs { display: flex; gap: 4px; }

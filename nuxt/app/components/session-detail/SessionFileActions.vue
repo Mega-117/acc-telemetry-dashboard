@@ -15,7 +15,7 @@ defineEmits<{ share: [] }>()
 <style scoped>
 /* Same square buttons as the Telemetria bar. */
 .session-file-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-button { height: 28px; padding: 0 12px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font: 700 12px 'Inter', sans-serif; cursor: pointer; }
+button { height: 38px; padding: 0 14px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font: 700 12px 'Inter', sans-serif; cursor: pointer; }
 button:hover:not(:disabled) { border-color: #ff0024; }
 button:disabled { opacity: .5; cursor: wait; }
 [role="status"] { color: #3ddc5a; font-size: 12px; }
