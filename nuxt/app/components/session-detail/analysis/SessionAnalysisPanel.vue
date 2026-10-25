@@ -14,6 +14,8 @@ import { formatLapTime } from '~/utils/telemetryFormat'
 const props = defineProps<{
   sessionToken: string | null
   laps: { lap_number: number, lap_time_ms: number | null, is_valid: boolean | null, sector_times_ms?: (number | null)[] | null }[]
+  /** Lap to open as "Tu", when the driver picked it in the Sessione table. */
+  initialLap?: number | null
 }>()
 
 type Layout = 'pilota' | 'tracce'
@@ -84,6 +86,13 @@ async function load() {
     // Default as Track Titan: your best valid lap is the reference, the last lap the one to study.
     const best = [...usable].filter(e => e.valid).sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0] ?? usable[0]!
     const other = [...usable].reverse().find(e => e.id !== best.id) ?? best
+    // A lap picked in the Sessione table is "Tu"; the reference stays the best (or the next one).
+    const picked = props.initialLap ? usable.find(e => e.lapNumber === props.initialLap) : undefined
+    if (picked) {
+      lapId.value = picked.id
+      refId.value = picked.id !== best.id ? best.id : ([...usable].filter(e => e.valid && e.id !== picked.id).sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0] ?? usable.find(e => e.id !== picked.id) ?? best).id
+      return
+    }
     refId.value = best.id
     lapId.value = other.id
   } catch {

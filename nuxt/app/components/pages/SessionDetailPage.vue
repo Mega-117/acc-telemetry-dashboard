@@ -42,8 +42,10 @@ import { runSessionValidation } from '~/composables/useDebugValidator'
 import { usePilotContext } from '~/composables/usePilotContext'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { shareSessionLink } from '~/services/session-detail/sessionShareService'
-import { canShareOwnedSession, downloadSession } from '~/services/session-detail/sessionFileService'
+import { canShareOwnedSession } from '~/services/session-detail/sessionFileService'
 import SessionFileActions from '~/components/session-detail/SessionFileActions.vue'
+import { standingsManufacturerFromModel, standingsManufacturerLogo } from '~/services/overlay/standingsManufacturer'
+import { usePublicPath } from '~/composables/usePublicPath'
 import { autoSelectComparisonStints } from '~/services/session-detail/sessionCompareService'
 import { recordingGame } from '~/services/telemetry/gameIdentity'
 import { recordedSessionForDetail, sessionDetailTrackId, formatRecordedNumber, compatibleRecordedSession } from '~/services/session-detail/recordedSessionAdapter'
@@ -187,6 +189,13 @@ const isEvoSession = computed(() => recordingGame(originalSession.value) === 'ev
 // PIP-618: "Avanzata" tab, the lap analysis (our Track Titan) from the logger's lap files.
 // Lap files carry the session id of the logger (YYYYMMDD_HHMMSS); other sessions have none.
 const detailTab = ref<'sessione' | 'avanzata'>('sessione')
+// A lap clicked in the Sessione table opens Telemetria with that lap as "Tu" (Garage 61's lap list).
+const analysisLap = ref<number | null>(null)
+function openLapTelemetry(lap: { lap?: number, lapNumber?: number }) {
+  if (isEvoSession.value) return
+  analysisLap.value = Number(lap.lap ?? lap.lapNumber) || null
+  detailTab.value = 'avanzata'
+}
 const analysisToken = computed(() => analysisSessionToken(
   (originalSession.value as { session_id?: unknown } | null)?.session_id,
   props.sessionId,
@@ -205,11 +214,6 @@ const isSharing = ref(false)
 const shareSuccess = ref(false)
 const fileActionError = ref<string | null>(null)
 const canShare = computed(() => canShareOwnedSession(comparisonCurrentUser.value?.uid, props.externalUserId || targetUserId.value))
-function exportSession() {
-  fileActionError.value = null
-  try { downloadSession(originalSession.value || commonSession.value || fullSession.value, props.sessionId) }
-  catch (error) { fileActionError.value = error instanceof Error ? error.message : 'Esportazione non riuscita' }
-}
 const showAutoSelectToast = ref(false)
 let autoSelectToastTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -962,6 +966,12 @@ function toDisplayModel(fullSession: FullSession | null, sessionId: string) {
   })
 }
 const session = computed(() => toDisplayModel(fullSession.value, props.sessionId))
+// Header: the maker's badge beside the car (the standings HUD set), only for a known maker.
+const { getPublicPath } = usePublicPath()
+const carLogo = computed(() => {
+  const key = standingsManufacturerFromModel(session.value?.car ?? null)
+  return key ? standingsManufacturerLogo(key, getPublicPath) : null
+})
 const secondarySession = computed(() => toDisplayModel(crossSessionData.value, crossSessionId.value || ''))
 
 // ========================================
@@ -2112,7 +2122,8 @@ const chartOptions = {
 // HELPERS
 // ========================================
 function getTypeLabel(t: string) { return { practice: 'LIBERE', qualify: 'QUALIFICA', race: 'GARA', unknown: 'SESSIONE' }[t] || t.toUpperCase() }
-// Delta color scheme: green=on-target/faster, yellow=close, orange=margin, red=far
+// Delta bands: faster/on target green; slower close, margin and far in three strengths of the
+// same red as Telemetria (no yellow or orange, user decision 2026-10-25).
 function getDeltaClass(d: string | undefined) {
   if (!d || d === '-') return 'far'
   const v = parseFloat(d)
@@ -2372,7 +2383,7 @@ const gripZones = computed(() => {
 <template>
   <CommonSessionDetail v-if="commonSession" :session="commonSession" :owner-id="externalUserId">
     <template #actions>
-      <SessionFileActions :can-share="canShare" :sharing="isSharing" :success="shareSuccess" :error="fileActionError" @share="shareSession" @export="exportSession" />
+      <SessionFileActions :can-share="canShare" :sharing="isSharing" :success="shareSuccess" :error="fileActionError" @share="shareSession" />
     </template>
   </CommonSessionDetail>
   <div v-else class="session-detail-wrapper">
@@ -2421,22 +2432,17 @@ const gripZones = computed(() => {
     <template v-else>
 
     <!-- HEADER SESSIONE -->
-    <header class="session-header" :class="{ 'session-header--compact': detailTab === 'avanzata' }">
+    <header class="session-header session-header--compact">
       <div class="header-row">
-        <h1 class="track-name">{{ session.track.toUpperCase() }}</h1>
+        <!-- The track name opens the track page (the old "Apri pista" button). -->
+        <h1 class="track-name"><button type="button" class="track-link" title="Apri la pagina della pista" @click="emit('go-to-track', session.trackId)">{{ session.track.toUpperCase() }}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button></h1>
         <span :class="['type-badge', `type-badge--${session.type}`]">{{ getTypeLabel(session.type) }}</span>
-      <button class="nav-btn nav-btn--accent" @click="emit('go-to-track', session.trackId)">
-        Apri pista
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-      </button>
-        <SessionFileActions :can-share="canShare" :sharing="isSharing" :success="shareSuccess" :error="fileActionError" @share="shareSession" @export="exportSession" />
+        <SessionFileActions :can-share="canShare" :sharing="isSharing" :success="shareSuccess" :error="fileActionError" @share="shareSession" />
       </div>
+      <!-- When and with what, readable at a glance: date and time, then the car with its maker's badge. -->
       <div class="header-meta">
-        <span>{{ session.date }}</span>
-        <span class="sep">•</span>
-        <span>{{ session.time }}</span>
-        <span class="sep">•</span>
-        <span class="car">{{ session.car }}</span>
+        <span class="meta-when">{{ session.date }} <span class="sep">•</span> {{ session.time }}</span>
+        <span class="meta-car"><img v-if="carLogo" :src="carLogo.src" :alt="carLogo.name" class="car-logo">{{ session.car }}</span>
       </div>
     <div v-if="!isEvoSession" class="detail-tabs" role="tablist" aria-label="Vista della sessione">
       <button type="button" role="tab" :aria-selected="detailTab === 'sessione'" :class="{ active: detailTab === 'sessione' }" @click="detailTab = 'sessione'">Sessione</button>
@@ -2444,7 +2450,7 @@ const gripZones = computed(() => {
     </div>
     </header>
 
-    <SessionAnalysisPanel v-if="detailTab === 'avanzata' && !isEvoSession" :session-token="analysisToken" :laps="analysisLaps" />
+    <SessionAnalysisPanel v-if="detailTab === 'avanzata' && !isEvoSession" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" />
 
     <!-- ========================================== -->
     <!-- MASTER / DETAIL LAYOUT -->
@@ -2905,11 +2911,11 @@ const gripZones = computed(() => {
               </div>
               <div class="ssc-table-row">
                 <div class="ssc-td ssc-td--label">BEST</div>
-                <div class="ssc-td ssc-td--value">{{ selectedStint?.best ?? '—:—.---' }}</div>
+                <div class="ssc-td ssc-td--value">{{ selectedStint?.best ?? '--' }}</div>
                 <div class="ssc-td ssc-td--value ssc-td--theo">
                   {{ selectedStint?.type === 'Q'
-                     ? (theoreticalTimes.theoQualy ? formatLapTime(theoreticalTimes.theoQualy) : '—:—.---')
-                     : (theoreticalTimes.theoRace ? formatLapTime(theoreticalTimes.theoRace) : '—:—.---')
+                     ? (theoreticalTimes.theoQualy ? formatLapTime(theoreticalTimes.theoQualy) : '--')
+                     : (theoreticalTimes.theoRace ? formatLapTime(theoreticalTimes.theoRace) : '--')
                   }}
                 </div>
                 <div class="ssc-td">
@@ -2918,9 +2924,9 @@ const gripZones = computed(() => {
               </div>
               <div class="ssc-table-row">
                 <div class="ssc-td ssc-td--label">MEDIA</div>
-                <div class="ssc-td ssc-td--value" :class="{ 'ssc-value--note': selectedStint?.avg?.includes('min') }">{{ selectedStint?.avg ?? '—:—.---' }}</div>
+                <div class="ssc-td ssc-td--value" :class="{ 'ssc-value--note': selectedStint?.avg?.includes('min') }">{{ selectedStint?.avg ?? '--' }}</div>
                 <div class="ssc-td ssc-td--value ssc-td--theo">
-                  {{ selectedStint?.type === 'Q' ? '—' : (theoreticalTimes.theoAvgRace ? formatLapTime(theoreticalTimes.theoAvgRace) : '—:—.---') }}
+                  {{ selectedStint?.type === 'Q' ? '—' : (theoreticalTimes.theoAvgRace ? formatLapTime(theoreticalTimes.theoAvgRace) : '--') }}
                 </div>
                 <div class="ssc-td">
                   <span v-if="selectedStint?.type !== 'Q'" :class="['ssc-delta', deltaAvg.class]">{{ deltaAvg.value }}</span>
@@ -3126,8 +3132,11 @@ const gripZones = computed(() => {
                     'lap-pit': lap.pit,
                     'lap-invalid': !lap.valid,
                     'lap-excluded': isLapExcludedInCurrentTable(lap),
-                    'lap-best': isBestLap(lap)
+                    'lap-best': isBestLap(lap),
+                    'lap-row--link': !isEvoSession
                   }"
+                  :title="isEvoSession ? undefined : 'Apri questo giro in Telemetria'"
+                  @click="openLapTelemetry(lap)"
                 >
                   <td class="lap-number-cell">{{ lap.lap || lap.lapNumber }}<span v-if="isLapExcludedInCurrentTable(lap)" class="lap-state lap-state--excluded" title="Escluso dai calcoli del passo; il giro rimane nei dati" aria-label="Escluso dai calcoli del passo">Escluso</span><span v-if="lap.pit" class="lap-state lap-state--pit" title="Giro con passaggio ai box">PIT</span></td>
                   <td class="time">{{ lap.time || lap.lapTime }}</td>
@@ -3211,11 +3220,15 @@ const gripZones = computed(() => {
 .session-header { margin-bottom: 20px; }
 // PIP-618: in Avanzata the analysis needs the height, the header shrinks to one line.
 .session-header--compact { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin: -24px 0 8px;
-  .header-row { margin-bottom: 0; } .track-name { font-size: 20px; letter-spacing: 1px; } .header-meta { margin-bottom: 0; font-size: 12px; }
+  .header-row { margin-bottom: 0; } .track-name { font-size: 20px; letter-spacing: 1px; } .header-meta { margin-bottom: 0; align-self: center; align-items: center; gap: 14px; font-size: 14px; }
   // The Sessione / Avanzata switch on the same line: one row less above the analysis.
   .detail-tabs { margin: 0 0 0 auto; align-self: center; } }
 .header-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
 .track-name { font-family: 'Outfit', $font-primary; font-size: 28px; font-weight: 800; color: #fff; letter-spacing: 2px; margin: 0; }
+.track-link { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; cursor: pointer;
+  svg { width: .7em; height: .7em; opacity: .35; transition: opacity .15s, transform .15s; }
+  &:hover { color: #fff; svg { opacity: 1; transform: translateX(2px); } } }
+.laps-table tr.lap-row--link { cursor: pointer; &:hover td { background: #ffffff0a; } }
 .type-badge {
   padding: 5px 12px; border-radius: 5px; font-size: 10px; font-weight: 700;
   &--practice { background: rgba($accent-info,0.15); border: 1px solid rgba($accent-info,0.4); color: $accent-info; }
@@ -3242,6 +3255,9 @@ const gripZones = computed(() => {
   }
 }
 .header-meta { display: flex; gap: 8px; font-size: 13px; color: rgba(255,255,255,0.6); margin-bottom: 10px; .sep { color: rgba(255,255,255,0.2); } .car { color: rgba(255,255,255,0.5); } }
+.meta-when { color: #e6e6ea; font-weight: 600; font-variant-numeric: tabular-nums; }
+.meta-car { display: inline-flex; align-items: center; gap: 8px; padding: 2px 10px 2px 4px; border: 1px solid #ffffff1f; background: #ffffff08; color: #fff; font-weight: 700; }
+.car-logo { width: 24px; height: 24px; object-fit: contain; }
 .start-cond { display: flex; gap: 14px; font-size: 12px; color: rgba(255,255,255,0.7); }
 .cond-label { font-size: 9px; font-weight: 700; letter-spacing: 1px; color: rgba(255,255,255,0.5); padding: 3px 8px; background: rgba(255,255,255,0.05); border-radius: 4px; }
 
@@ -3668,11 +3684,11 @@ const gripZones = computed(() => {
 .stint-delta { display: flex; align-items: center; gap: 6px; justify-self: end; padding: 4px 8px; border-radius: 4px; }
 .delta-val { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; }
 .delta-lbl { font-size: 8px; font-weight: 700; opacity: 0.8; }
-.delta--faster { background: rgba($accent-success,0.12); color: $accent-success; .delta-val, .delta-lbl { color: $accent-success; } }
-.delta--ontarget { background: rgba($accent-success,0.12); color: $accent-success; .delta-val, .delta-lbl { color: $accent-success; } }
-.delta--close { background: rgba($accent-warning,0.12); color: $accent-warning; .delta-val, .delta-lbl { color: $accent-warning; } }
-.delta--margin { background: rgba(#f97316,0.1); color: #f97316; .delta-val, .delta-lbl { color: #f97316; } }
-.delta--far { background: rgba(255,100,100,0.1); color: rgb(255,100,100); .delta-val, .delta-lbl { color: rgb(255,100,100); } }
+.delta--faster { background: rgba(61, 220, 90, 0.12); color: #3ddc5a; .delta-val, .delta-lbl { color: #3ddc5a; } }
+.delta--ontarget { background: rgba(61, 220, 90, 0.12); color: #3ddc5a; .delta-val, .delta-lbl { color: #3ddc5a; } }
+.delta--close { background: rgba(255, 90, 110, 0.07); color: #ffa3ae; .delta-val, .delta-lbl { color: #ffa3ae; } }
+.delta--margin { background: rgba(255, 90, 110, 0.08); color: #ff7d8e; .delta-val, .delta-lbl { color: #ff7d8e; } }
+.delta--far { background: rgba(255, 90, 110, 0.1); color: #ff5a6e; .delta-val, .delta-lbl { color: #ff5a6e; } }
 
 // DETAIL
 .detail {
@@ -3886,47 +3902,47 @@ const gripZones = computed(() => {
 
     // Green - B is faster (negative delta)
     &.delta--faster, &.delta--ontarget {
-      background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%);
-      color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.35);
-      box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);
+      background: linear-gradient(135deg, rgba(61, 220, 90, 0.2) 0%, rgba(61, 220, 90, 0.1) 100%);
+      color: #3ddc5a;
+      border: 1px solid rgba(61, 220, 90, 0.35);
+      box-shadow: 0 0 12px rgba(61, 220, 90, 0.15);
     }
 
     // Yellow - close
     &.delta--close {
-      background: linear-gradient(135deg, rgba(234, 179, 8, 0.2) 0%, rgba(234, 179, 8, 0.1) 100%);
-      color: #fbbf24;
-      border: 1px solid rgba(234, 179, 8, 0.35);
-      box-shadow: 0 0 12px rgba(234, 179, 8, 0.15);
+      background: linear-gradient(135deg, rgba(255, 90, 110, 0.12) 0%, rgba(255, 90, 110, 0.06) 100%);
+      color: #ffa3ae;
+      border: 1px solid rgba(255, 90, 110, 0.21);
+      box-shadow: 0 0 12px rgba(255, 90, 110, 0.09);
     }
 
     // Orange - margin
     &.delta--margin {
-      background: linear-gradient(135deg, rgba(249, 115, 22, 0.2) 0%, rgba(249, 115, 22, 0.1) 100%);
-      color: #fb923c;
-      border: 1px solid rgba(249, 115, 22, 0.35);
-      box-shadow: 0 0 12px rgba(249, 115, 22, 0.15);
+      background: linear-gradient(135deg, rgba(255, 90, 110, 0.16) 0%, rgba(255, 90, 110, 0.08) 100%);
+      color: #ff7d8e;
+      border: 1px solid rgba(255, 90, 110, 0.28);
+      box-shadow: 0 0 12px rgba(255, 90, 110, 0.12);
     }
 
     // Red - far (B much slower)
     &.delta--far {
-      background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%);
-      color: #f87171;
-      border: 1px solid rgba(239, 68, 68, 0.35);
-      box-shadow: 0 0 12px rgba(239, 68, 68, 0.15);
+      background: linear-gradient(135deg, rgba(255, 90, 110, 0.2) 0%, rgba(255, 90, 110, 0.1) 100%);
+      color: #ff5a6e;
+      border: 1px solid rgba(255, 90, 110, 0.35);
+      box-shadow: 0 0 12px rgba(255, 90, 110, 0.15);
     }
 
     // For strategy duration comparison
     &.delta--negative {
-      background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%);
-      color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.35);
+      background: linear-gradient(135deg, rgba(61, 220, 90, 0.2) 0%, rgba(61, 220, 90, 0.1) 100%);
+      color: #3ddc5a;
+      border: 1px solid rgba(61, 220, 90, 0.35);
     }
 
     &.delta--positive {
-      background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%);
-      color: #f87171;
-      border: 1px solid rgba(239, 68, 68, 0.35);
+      background: linear-gradient(135deg, rgba(255, 90, 110, 0.2) 0%, rgba(255, 90, 110, 0.1) 100%);
+      color: #ff5a6e;
+      border: 1px solid rgba(255, 90, 110, 0.35);
     }
   }
 
@@ -4335,30 +4351,30 @@ const gripZones = computed(() => {
 
   // Green: faster than target
   &.delta--faster, &.delta--ontarget {
-    background: rgba(16, 185, 129, 0.15);
-    color: #10b981;
-    border: 1px solid rgba(16, 185, 129, 0.25);
+    background: rgba(61, 220, 90, 0.15);
+    color: #3ddc5a;
+    border: 1px solid rgba(61, 220, 90, 0.25);
   }
 
   // Yellow: close to target
   &.delta--close {
-    background: rgba(234, 179, 8, 0.15);
-    color: #eab308;
-    border: 1px solid rgba(234, 179, 8, 0.25);
+    background: rgba(255, 90, 110, 0.09);
+    color: #ffa3ae;
+    border: 1px solid rgba(255, 90, 110, 0.15);
   }
 
   // Orange: within margin
   &.delta--margin {
-    background: rgba(249, 115, 22, 0.15);
-    color: #f97316;
-    border: 1px solid rgba(249, 115, 22, 0.25);
+    background: rgba(255, 90, 110, 0.12);
+    color: #ff7d8e;
+    border: 1px solid rgba(255, 90, 110, 0.20);
   }
 
   // Red: far from target
   &.delta--far {
-    background: rgba(239, 68, 68, 0.15);
-    color: #ef4444;
-    border: 1px solid rgba(239, 68, 68, 0.25);
+    background: rgba(255, 90, 110, 0.15);
+    color: #ff5a6e;
+    border: 1px solid rgba(255, 90, 110, 0.25);
   }
 }
 .laps-table .sector { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(255,255,255,0.8); }
@@ -6313,26 +6329,26 @@ const gripZones = computed(() => {
 
   // Green: on target (perfect)
   &.delta--ontarget {
-    background: rgba(16, 185, 129, 0.15);
-    color: #10b981;
+    background: rgba(61, 220, 90, 0.15);
+    color: #3ddc5a;
   }
 
   // Yellow/Gold: close to target
   &.delta--close {
-    background: rgba(234, 179, 8, 0.15);
-    color: #eab308;
+    background: rgba(255, 90, 110, 0.09);
+    color: #ffa3ae;
   }
 
   // Orange: margin (mid range)
   &.delta--margin {
-    background: rgba(249, 115, 22, 0.15);
-    color: #f97316;
+    background: rgba(255, 90, 110, 0.12);
+    color: #ff7d8e;
   }
 
   // Red: far from target
   &.delta--far {
-    background: rgba(239, 68, 68, 0.15);
-    color: #ef4444;
+    background: rgba(255, 90, 110, 0.15);
+    color: #ff5a6e;
   }
 }
 
