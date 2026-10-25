@@ -2431,22 +2431,28 @@ const gripZones = computed(() => {
     <template v-else>
 
     <!-- HEADER SESSIONE -->
+    <!-- Identity on the left (what: track and type, then when and with what), actions and
+         the Sessione / Telemetria switch on the right. -->
     <header class="session-header session-header--compact">
-      <div class="header-row">
-        <!-- The track name opens the track page (the old "Apri pista" button). -->
-        <h1 class="track-name"><button type="button" class="track-link" title="Apri la pagina della pista" @click="emit('go-to-track', session.trackId)">{{ session.track.toUpperCase() }}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button></h1>
-        <span :class="['type-badge', `type-badge--${session.type}`]">{{ getTypeLabel(session.type) }}</span>
+      <div class="header-id">
+        <div class="header-row">
+          <!-- The track name opens the track page (the old "Apri pista" button). -->
+          <h1 class="track-name"><button type="button" class="track-link" title="Apri la pagina della pista" @click="emit('go-to-track', session.trackId)">{{ session.track.toUpperCase() }}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button></h1>
+          <span :class="['type-badge', `type-badge--${session.type}`]">{{ getTypeLabel(session.type) }}</span>
+        </div>
+        <!-- When and with what, readable at a glance: date and time, then the car with its maker's badge. -->
+        <div class="header-meta">
+          <span class="meta-when">{{ session.date }} <span class="sep">•</span> {{ session.time }}</span>
+          <span class="meta-car"><img v-if="carLogo" :src="carLogo.src" :alt="carLogo.name" class="car-logo">{{ session.car }}</span>
+        </div>
+      </div>
+      <div class="header-actions">
         <SessionFileActions :can-share="canShare" :sharing="isSharing" :success="shareSuccess" :error="fileActionError" @share="shareSession" />
+        <div v-if="!isEvoSession" class="detail-tabs" role="tablist" aria-label="Vista della sessione">
+          <button type="button" role="tab" :aria-selected="detailTab === 'sessione'" :class="{ active: detailTab === 'sessione' }" @click="detailTab = 'sessione'">Sessione</button>
+          <button type="button" role="tab" :aria-selected="detailTab === 'avanzata'" :class="{ active: detailTab === 'avanzata' }" title="Il giro contro un riferimento: delta, curve, traiettorie e telemetria" @click="detailTab = 'avanzata'">Telemetria</button>
+        </div>
       </div>
-      <!-- When and with what, readable at a glance: date and time, then the car with its maker's badge. -->
-      <div class="header-meta">
-        <span class="meta-when">{{ session.date }} <span class="sep">•</span> {{ session.time }}</span>
-        <span class="meta-car"><img v-if="carLogo" :src="carLogo.src" :alt="carLogo.name" class="car-logo">{{ session.car }}</span>
-      </div>
-    <div v-if="!isEvoSession" class="detail-tabs" role="tablist" aria-label="Vista della sessione">
-      <button type="button" role="tab" :aria-selected="detailTab === 'sessione'" :class="{ active: detailTab === 'sessione' }" @click="detailTab = 'sessione'">Sessione</button>
-      <button type="button" role="tab" :aria-selected="detailTab === 'avanzata'" :class="{ active: detailTab === 'avanzata' }" title="Il giro contro un riferimento: delta, curve, traiettorie e telemetria" @click="detailTab = 'avanzata'">Telemetria</button>
-    </div>
     </header>
 
     <SessionAnalysisPanel v-if="detailTab === 'avanzata' && !isEvoSession" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" />
@@ -3218,10 +3224,13 @@ const gripZones = computed(() => {
 // HEADER
 .session-header { margin-bottom: 20px; }
 // PIP-618: in Avanzata the analysis needs the height, the header shrinks to one line.
-.session-header--compact { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin: -24px 0 8px;
-  .header-row { margin-bottom: 0; } .track-name { font-size: 20px; letter-spacing: 1px; } .header-meta { margin-bottom: 0; align-self: center; align-items: center; gap: 14px; font-size: 14px; }
-  // The Sessione / Avanzata switch on the same line: one row less above the analysis.
-  .detail-tabs { margin: 0 0 0 auto; align-self: center; } }
+// Breathing room under the navbar and before the content; two short lines on the left
+// (track, then date and car), actions and the switch on the right.
+.session-header--compact { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin: 4px 0 16px;
+  .header-id { display: grid; gap: 8px; min-width: 0; }
+  .header-row { margin-bottom: 0; } .track-name { font-size: 24px; letter-spacing: 1px; } .header-meta { margin-bottom: 0; align-items: center; gap: 14px; font-size: 14px; }
+  .header-actions { display: flex; align-items: center; gap: 12px; }
+  .detail-tabs { margin: 0; } }
 .header-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
 .track-name { font-family: 'Outfit', $font-primary; font-size: 28px; font-weight: 800; color: #fff; letter-spacing: 2px; margin: 0; }
 .track-link { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; cursor: pointer;
