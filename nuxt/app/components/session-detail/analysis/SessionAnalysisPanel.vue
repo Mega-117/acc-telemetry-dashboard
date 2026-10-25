@@ -126,9 +126,24 @@ const ESSENTIAL_ROWS = 5
 // Tracce fills the window under the lap bar; the five essential charts fill the right column.
 const traceRoot = ref<HTMLElement | null>(null)
 const traceHeight = ref(600)
+// The delta under the map grows down to the same bottom as the corner list on the left
+// (or the bottom of Tracce when that column is closed), so the three columns end level.
+const cornersBox = ref<HTMLElement | null>(null)
+const deltaWrap = ref<HTMLElement | null>(null)
+const deltaHeight = ref(200)
+function measureDelta() {
+  const wrap = deltaWrap.value, root = traceRoot.value
+  if (!wrap || !root) return
+  const bottom = cornersBox.value?.getBoundingClientRect().bottom ?? root.getBoundingClientRect().top + traceHeight.value
+  const box = wrap.getBoundingClientRect()
+  // Header, distance axis and padding around the plot stay as they are: only the plot grows.
+  const chrome = box.height - deltaHeight.value
+  deltaHeight.value = Math.max(120, Math.floor(bottom - box.top - chrome) - 1)
+}
 function measureTrace() {
   const el = traceRoot.value
   if (el) traceHeight.value = Math.max(420, Math.floor(window.innerHeight - el.getBoundingClientRect().top - 12))
+  nextTick(measureDelta)
 }
 onMounted(() => window.addEventListener("resize", measureTrace))
 onBeforeUnmount(() => window.removeEventListener("resize", measureTrace))
@@ -138,7 +153,7 @@ const traceRowHeight = computed(() => Math.max(80, Math.floor((viewportHeight.va
 // so it opens by default only on wide windows and folds away with a button.
 const leftOpen = ref(false)
 onMounted(() => { leftOpen.value = window.innerWidth >= 1700 })
-watch([traceRoot, layout, leftOpen], () => nextTick(measureTrace))
+watch([traceRoot, layout, leftOpen, reference], () => nextTick(measureTrace))
 // What the charts show now, and the way back to the whole lap (Garage 61 reset, Esc, double click).
 const viewLabel = computed(() => zoomRange.value ? "Zoom" : selectedSector.value !== null ? `Settore ${selectedSector.value + 1}` : selectedCorner.value !== null ? `Curva ${selectedCorner.value}` : "Giro intero")
 function wholeLap() { selectedCorner.value = null; selectedSector.value = null; zoomRange.value = null }
@@ -327,7 +342,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
         </section>
         <!-- VRS: corners from the costliest; the first three carry their rank. -->
         <!-- Only corners here; the way back to the whole lap is a real button, as on the strip. -->
-        <section v-if="comparison.length" class="side-box side-box--corners">
+        <section v-if="comparison.length" ref="cornersBox" class="side-box side-box--corners">
           <div class="side-head">
             <h4>Dove perdi di più</h4>
             <button v-if="viewLabel !== 'Giro intero'" type="button" class="strip-reset" title="Torna al giro intero (anche Esc)" @click="wholeLap">⟲ Giro intero</button>
@@ -346,7 +361,9 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
         <div class="panel">
           <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null" :focus="selectedSector !== null ? range : null" color-mode="laps" zoom-controls :size="320" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>
-        <AnalysisCharts v-if="reference" :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="200" zoomable @hover="cursor = $event" @zoom="zoomRange = $event" />
+        <div v-if="reference" ref="deltaWrap">
+          <AnalysisCharts :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaHeight" zoomable @hover="cursor = $event" @zoom="zoomRange = $event" />
+        </div>
       </div>
       <div class="tracce-right">
         <!-- Sectors and corners on top of the charts, aligned to their distance axis and
