@@ -2,12 +2,12 @@
 // PIP-618: the session "Avanzata" tab, our Track Titan. One lap ("Tu") against a
 // reference from the logger's lap files (laps of this session only, read through
 // Electron), in three layouts: Pilota (VRS, default), Curve (Track Titan), Tracce
-// (MoTeC / Garage 61). Shared: legend, cursor, time/point sync, corner zoom.
-import { computed, onMounted, ref, watch } from 'vue'
+// (MoTeC / Garage 61). Shared: coloured lap pickers, cursor, corner zoom.
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AnalysisMap from './AnalysisMap.vue'
 import AnalysisCar from './AnalysisCar.vue'
 import AnalysisCharts, { type ChartRow } from './AnalysisCharts.vue'
-import { compareCorners, cornerAdvice, detectCorners, formatDelta, timeSyncedFraction } from '~/services/telemetry/lapAnalysis'
+import { compareCorners, cornerAdvice, detectCorners, formatDelta } from '~/services/telemetry/lapAnalysis'
 import { normalizeLapTrace, type LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { formatLapTime } from '~/utils/telemetryFormat'
 
@@ -30,8 +30,6 @@ function remembered<T extends string>(key: string, values: readonly T[], fallbac
   return value
 }
 const layout = remembered<Layout>('rc:analysis:layout', ['pilota', 'curve', 'tracce'], 'pilota')
-/** Reference dot: at the same point of the track, or where it was at the same time (Track Titan time-sync). */
-const sync = remembered<'punto' | 'tempo'>('rc:analysis:sync', ['punto', 'tempo'], 'punto')
 const mapMode = remembered<'intera' | 'zoom'>('rc:analysis:map', ['intera', 'zoom'], 'intera')
 const allChannels = ref(false)
 
@@ -105,8 +103,14 @@ const corners = computed(() => detectCorners(reference.value ?? lap.value ?? emp
 const comparison = computed(() => lap.value && reference.value ? compareCorners(lap.value, reference.value, corners.value) : [])
 const worst = computed(() => [...comparison.value].sort((a, b) => b.timeLostS - a.timeLostS).filter(c => c.timeLostS >= 0.03).slice(0, 3))
 const totalDelta = computed(() => lap.value && reference.value ? lap.value.lapTimeS - reference.value.lapTimeS : null)
-const refCursor = computed(() => cursor.value === null || !lap.value || !reference.value ? null
-  : sync.value === 'tempo' ? timeSyncedFraction(lap.value, reference.value, cursor.value) : cursor.value)
+// Charts aligned by track position, as MoTeC and Garage 61: the reference dot sits at the same point.
+const refCursor = computed(() => cursor.value)
+// Tracce: the charts fill the window height, taller when there are fewer of them.
+const viewportHeight = ref(900)
+function measure() { viewportHeight.value = window.innerHeight }
+onMounted(() => { measure(); window.addEventListener('resize', measure) })
+onBeforeUnmount(() => window.removeEventListener('resize', measure))
+const traceRowHeight = computed(() => Math.max(110, Math.floor((viewportHeight.value - 230) / Math.max(traceRows.value.length, 1)) - 26))
 // Tracce: a stretch zoomed with the mouse (drag, wheel) wins over the corner.
 const zoomRange = ref<[number, number] | null>(null)
 const range = computed<[number, number]>(() => {
@@ -158,27 +162,17 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
       <div class="seg" role="tablist" aria-label="Layout dell’analisi">
         <button v-for="l in LAYOUTS" :key="l.id" type="button" role="tab" :aria-selected="layout === l.id" :class="{ active: layout === l.id }" :title="l.hint" @click="layout = l.id">{{ l.label }}</button>
       </div>
-      <label class="analysis-pick"><span class="key key--lap" />Tu
+      <!-- Track Titan: each lap's select wears its colour, so a colour tells which lap it is. -->
+      <label class="pick pick--lap" title="Il tuo giro: azzurro in grafici e mappa"><span class="pick-name">Tu</span>
         <select v-model="lapId" :disabled="!entries.length"><option v-for="e in entries" :key="e.id" :value="e.id" :disabled="!e.complete">{{ lapLabel(e) }}</option></select>
       </label>
-      <label class="analysis-pick"><span class="key key--ref" />Riferimento
+      <label class="pick pick--ref" title="Il giro di riferimento: ambra in grafici e mappa"><span class="pick-name">Riferimento</span>
         <select v-model="refId" :disabled="!entries.length"><option v-for="e in entries" :key="e.id" :value="e.id" :disabled="!e.complete">{{ lapLabel(e) }}</option></select>
       </label>
       <p v-if="totalDelta !== null" class="analysis-total" :class="{ gain: totalDelta < 0, loss: totalDelta > 0 }" title="Il tuo giro contro il riferimento">{{ formatDelta(totalDelta) }} s</p>
     </div>
 
-    <!-- Who is who, in words: the first thing a new driver asks. -->
-    <div v-if="lap" class="analysis-legend">
-      <span><i class="line line--lap" /><b>Tu</b> · {{ short(lapEntry) }} · linea azzurra, pallino pieno</span>
-      <span v-if="reference"><i class="line line--ref" /><b>Riferimento</b> · {{ short(refEntry) }} · linea ambra, pallino vuoto</span>
-      <span class="analysis-switches">
-        <span class="seg seg--small" role="radiogroup" aria-label="Pallino del riferimento" title="Stesso punto: confronti velocità e pedali. Stesso tempo: vedi il distacco come distanza in pista.">
-          <button type="button" :class="{ active: sync === 'punto' }" @click="sync = 'punto'">Stesso punto</button>
-          <button type="button" :class="{ active: sync === 'tempo' }" @click="sync = 'tempo'">Stesso tempo</button>
-        </span>
-      </span>
-    </div>
-    <p class="analysis-hint">{{ LAYOUTS.find(l => l.id === layout)?.hint }}<template v-if="skipped"> · {{ skipped }} giri non leggibili esclusi</template></p>
+    <p v-if="skipped" class="analysis-note">{{ skipped }} giri non leggibili esclusi.</p>
     <p v-if="loading" class="analysis-empty" role="status">Caricamento dei giri…</p>
     <p v-else-if="error" class="analysis-empty">{{ error }}</p>
     <p v-else-if="lapId === refId && entries.length > 1" class="analysis-empty">Scegli un riferimento diverso dal tuo giro per vedere il confronto.</p>
@@ -236,7 +230,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
     <!-- TRACCE (MoTeC / Garage 61): the essential channels over the lap, more on request. -->
     <div v-else-if="lap && layout === 'tracce'" class="layout-tracce">
       <aside class="panel tracce-side">
-        <AnalysisMap :lap="lap" :reference="reference" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :size="240" @hover="cursor = $event" @select="selectedCorner = selectedCorner === $event ? null : $event" />
+        <AnalysisMap :lap="lap" :reference="reference" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null" :size="240" @hover="cursor = $event" @select="selectedCorner = selectedCorner === $event ? null : $event" />
         <button type="button" class="tracce-btn" :disabled="selectedCorner === null" @click="selectedCorner = null">Giro intero</button>
         <button type="button" class="tracce-btn" :class="{ active: allChannels }" @click="allChannels = !allChannels">{{ allChannels ? 'Solo l’essenziale' : 'Altri canali' }}</button>
         <p class="analysis-note">Clic su una curva (mappa o fascia sopra i grafici) per ingrandirla.</p>
@@ -246,7 +240,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
           <div><dt>Lunghezza</dt><dd>{{ (lap.lengthM / 1000).toFixed(2) }} km</dd></div>
         </dl>
       </aside>
-      <AnalysisCharts :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :corners="selectedCorner === null ? corners : []" :row-height="64" zoomable @hover="cursor = $event" @select="selectedCorner = $event" @zoom="zoomRange = $event" />
+      <AnalysisCharts :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :corners="selectedCorner === null ? corners : []" :row-height="traceRowHeight" zoomable @hover="cursor = $event" @select="selectedCorner = $event" @zoom="zoomRange = $event" />
     </div>
   </section>
 </template>
@@ -260,15 +254,12 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
     &.active { background: #ffffff14; color: #fff; box-shadow: inset 0 -2px #ff0024; }
     &:disabled { opacity: .4; cursor: default; } }
   &--small button { height: 24px; padding: 0 10px; font: 600 11px 'Inter', sans-serif; text-transform: none; } }
-.analysis-pick { display: flex; align-items: center; gap: 6px; color: #b3b3b8; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
-  select { min-width: 210px; height: 32px; padding: 0 8px; border: 1px solid #ffffff2e; background: #0d0d12; color: #e6e6ea; font: 500 13px 'Inter', sans-serif; text-transform: none; } }
-.key { width: 12px; height: 12px; border-radius: 50%; &--lap { background: #38bdf8; border: 1.5px solid #fff; } &--ref { background: #0a0a0f; border: 2px solid #fbbf24; } }
+// The lap pickers wear the lap colour (Track Titan): blue for you, amber for the reference.
+.pick { --c: #38bdf8; display: flex; align-items: stretch; height: 34px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 14%, #0a0a0f);
+  &--ref { --c: #fbbf24; }
+  .pick-name { display: grid; place-items: center; padding: 0 10px; background: var(--c); color: #0a0a0f; font: italic 700 13px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; }
+  select { min-width: 220px; height: 100%; padding: 0 8px; border: 0; background: transparent; color: #fff; font: 600 13px 'Inter', sans-serif; option { background: #0d0d12; color: #e6e6ea; } } }
 .analysis-total { margin: 0 0 0 auto; font: 700 20px 'Inter', sans-serif; font-variant-numeric: tabular-nums; color: #e6e6ea; &.gain { color: #3ddc5a; } &.loss { color: #ff5a6e; } }
-.analysis-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; padding: 6px 10px; border: 1px solid #ffffff1f; background: #ffffff06; color: #b3b3b8; font-size: 12px;
-  b { color: #fff; }
-  .line { display: inline-block; width: 22px; height: 0; margin-right: 6px; vertical-align: middle; border-top: 2px solid #38bdf8; &--ref { border-top: 2px solid #fbbf24; } } }
-.analysis-switches { display: flex; gap: 8px; margin-left: auto; }
-.analysis-hint { margin: -4px 0 0; color: #77777d; font-size: 11px; }
 .analysis-empty { padding: 30px 0; color: #aaa; }
 .analysis-note { margin: 4px 0 0; color: #77777d; font-size: 11px; }
 .gain { color: #3ddc5a; }
