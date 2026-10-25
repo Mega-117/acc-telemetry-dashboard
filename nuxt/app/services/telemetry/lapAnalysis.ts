@@ -185,6 +185,24 @@ export function mapPoints(trace: LapTraceView, at: number[], width: number, heig
   return raw.map(p => ({ x: offsetX + (p.x - minX) * scale, y: offsetY + (p.y - minY) * scale }))
 }
 
+/**
+ * The same world → map transform as `mapPoints` with this frame, for geometry that is
+ * not a lap (track edges): one transform for laps and edges, never fitted separately.
+ */
+export function worldToMap(frame: LapTraceView, at: number[], width: number, height: number, padding = 10, rotationDeg = ACC_MAP_ROTATION_DEG): ((x: number, z: number) => MapPoint) | null {
+  if (!frame.channels.pos_x || !frame.channels.pos_z) return null
+  const bounds = at.map(f => turn(channelAt(frame, 'pos_x', f)!, channelAt(frame, 'pos_z', f)!, rotationDeg))
+  const xs = bounds.map(p => p.x), ys = bounds.map(p => p.y)
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys)
+  const scale = Math.min((width - 2 * padding) / Math.max(maxX - minX, 1e-6), (height - 2 * padding) / Math.max(maxY - minY, 1e-6))
+  const offsetX = (width - (maxX - minX) * scale) / 2
+  const offsetY = (height - (maxY - minY) * scale) / 2
+  return (x, z) => {
+    const p = turn(x, z, rotationDeg)
+    return { x: offsetX + (p.x - minX) * scale, y: offsetY + (p.y - minY) * scale }
+  }
+}
+
 /** Finish line: a short tick across the track at the start of the lap. */
 export function finishLine(points: MapPoint[], halfLength = 9): { x1: number, y1: number, x2: number, y2: number } | null {
   if (points.length < 2) return null

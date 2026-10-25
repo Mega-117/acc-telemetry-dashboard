@@ -46,6 +46,7 @@ const skipped = ref(0)
 interface LapTraceApi {
   listLapTraces?: (filter?: { sessionToken: string }) => Promise<{ id: string }[] | null>
   readLapTrace?: (id: string) => Promise<unknown>
+  hudOverlayGetTrackEdges?: (track: string, sim: string, variant: string | null) => Promise<{ left: [number, number][], right: [number, number][] } | null>
 }
 function api(): LapTraceApi | null {
   return typeof window === 'undefined' ? null : (window as Window & { electronAPI?: LapTraceApi }).electronAPI ?? null
@@ -97,6 +98,14 @@ watch(() => props.sessionToken, () => { void load() })
 onMounted(() => { void load() })
 
 const lap = computed(() => traces.value[lapId.value] ?? null)
+// Track edges (ACC Drive _L/_R) for the maps; null on tracks without them, the map then draws the plain line.
+const edges = ref<{ left: [number, number][], right: [number, number][] } | null>(null)
+watch(() => lap.value ? `${lap.value.gameId}/${lap.value.track}/${lap.value.variant ?? ''}` : '', async () => {
+  edges.value = null
+  const current = lap.value
+  if (!current) return
+  try { edges.value = (await api()?.hudOverlayGetTrackEdges?.(current.track, current.gameId, current.variant)) ?? null } catch { edges.value = null }
+}, { immediate: true })
 const reference = computed(() => refId.value && refId.value !== lapId.value ? traces.value[refId.value] ?? null : null)
 const lapEntry = computed(() => entries.value.find(e => e.id === lapId.value) ?? null)
 const refEntry = computed(() => reference.value ? entries.value.find(e => e.id === refId.value) ?? null : null)
@@ -257,7 +266,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
           <span v-if="reference" class="map-legend"><i class="g" />il {{ short(lapEntry).split(' · ')[0] }} guadagna <i class="r" />perde <i class="n" />uguale, sul {{ short(refEntry).split(' · ')[0] }}</span>
           <span class="seg seg--small"><button type="button" :class="{ active: mapMode === 'intera' }" @click="mapMode = 'intera'">Pista intera</button><button type="button" :class="{ active: mapMode === 'zoom' }" :disabled="selectedCorner === null" @click="mapMode = 'zoom'">Zoom curva</button></span>
         </div>
-        <AnalysisMap :lap="lap" :reference="reference" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="mapMode === 'zoom'" :size="460" @hover="cursor = $event" @select="selectedCorner = $event" />
+        <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="mapMode === 'zoom'" :size="460" @hover="cursor = $event" @select="selectedCorner = $event" />
         <AnalysisCar :lap="lap" :reference="reference" :cursor="cursor" :ref-cursor="refCursor" />
       </div>
       <div class="pilota-side">
@@ -278,7 +287,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
         <div class="panel-head">
           <span class="seg seg--small"><button type="button" :class="{ active: mapMode === 'intera' }" @click="mapMode = 'intera'">Pista intera</button><button type="button" :class="{ active: mapMode === 'zoom' }" @click="mapMode = 'zoom'">Zoom curva</button></span>
         </div>
-        <AnalysisMap :lap="lap" :reference="reference" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="mapMode === 'zoom'" :size="300" @hover="cursor = $event" @select="selectedCorner = $event" />
+        <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="mapMode === 'zoom'" :size="300" @hover="cursor = $event" @select="selectedCorner = $event" />
         <table class="curve-table">
           <thead><tr><th>Curva</th><th>Tempo</th><th title="Tu / riferimento">V. min</th></tr></thead>
           <tbody>
@@ -332,7 +341,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
       <div class="tracce-center">
         <button type="button" class="tracce-btn tracce-toggle" @click="leftOpen = !leftOpen">{{ leftOpen ? "‹ Chiudi giri e gap" : "Giri, gap e curve ›" }}</button>
         <div class="panel">
-          <AnalysisMap :lap="lap" :reference="reference" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null" :focus="selectedSector !== null ? range : null" color-mode="laps" zoom-controls :size="320" @hover="cursor = $event" @select="selectCorner($event)" />
+          <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null" :focus="selectedSector !== null ? range : null" color-mode="laps" zoom-controls :size="320" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>
         <AnalysisCharts v-if="reference" :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="200" zoomable @hover="cursor = $event" @zoom="zoomRange = $event" />
       </div>

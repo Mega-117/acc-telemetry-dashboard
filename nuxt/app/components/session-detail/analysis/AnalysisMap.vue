@@ -4,7 +4,7 @@
 // Corner zoom: the two racing lines, yours blue and the reference amber.
 // Two dots follow the cursor: you (blue, filled) and the reference (amber, hollow).
 import { computed, ref, watch } from 'vue'
-import { deltaTrend, finishLine, fractions, lapDelta, mapPoints, type Corner, type MapPoint } from '~/services/telemetry/lapAnalysis'
+import { deltaTrend, finishLine, fractions, lapDelta, mapPoints, worldToMap, type Corner, type MapPoint } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
 const props = withDefaults(defineProps<{
@@ -24,7 +24,9 @@ const props = withDefaults(defineProps<{
   focus?: [number, number] | null
   /** Garage 61's + / − buttons. */
   zoomControls?: boolean
-}>(), { refCursor: null, selected: null, size: 320, zoom: false, colorMode: 'delta', focus: null, zoomControls: false })
+  /** Track edges in world coordinates (ACC Drive _L/_R): drawn as the track surface when present. */
+  edges?: { left: [number, number][], right: [number, number][] } | null
+}>(), { refCursor: null, selected: null, size: 320, zoom: false, colorMode: 'delta', focus: null, zoomControls: false, edges: null })
 const emit = defineEmits<{ hover: [fraction: number | null], select: [corner: number] }>()
 
 const POINTS = 600
@@ -34,6 +36,15 @@ const H = computed(() => Math.round(props.size * 0.8))
 // The reference draws the frame when present: both lines share scale and offset.
 const frame = computed(() => props.reference ?? props.lap)
 const base = computed(() => mapPoints(frame.value, at, W.value, H.value, 18))
+// Edges through the same transform as the laps: they line up with no adjustment of their own.
+const edgePaths = computed(() => {
+  if (!props.edges) return null
+  const project = worldToMap(frame.value, at, W.value, H.value, 18)
+  if (!project) return null
+  const left = props.edges.left.map(([x, z]) => project(x, z))
+  const right = props.edges.right.map(([x, z]) => project(x, z))
+  return { left: path(left), right: path(right), surface: path([...left, ...[...right].reverse()]) }
+})
 const lapPoints = computed(() => props.reference ? mapPoints(props.lap, at, W.value, H.value, 18, props.reference) : base.value)
 const zoomed = computed(() => props.zoom && props.selected !== null && !!props.corners[props.selected - 1])
 const lapsMode = computed(() => props.colorMode === 'laps')
@@ -112,7 +123,12 @@ function onMove(event: PointerEvent) {
     <button type="button" aria-label="Allontana la mappa" :disabled="manualZoom <= 1" @click="manualZoom = Math.max(manualZoom / 1.6, 1)">−</button>
   </div>
   <svg class="map" :viewBox="viewBox" :style="{ '--z': zoomScale }" role="img" aria-label="Mappa della pista" @pointermove="onMove" @pointerleave="emit('hover', null)">
-    <polyline :points="path(base)" class="map-track" />
+    <template v-if="edgePaths">
+      <polygon :points="edgePaths.surface" class="map-surface" fill-rule="evenodd" />
+      <polyline :points="edgePaths.left" class="map-edge" />
+      <polyline :points="edgePaths.right" class="map-edge" />
+    </template>
+    <polyline v-else :points="path(base)" class="map-track" />
     <template v-if="zoomed || lapsMode">
       <polyline v-if="reference" :points="path(base)" class="map-ref" />
       <polyline :points="path(lapPoints)" class="map-lap-line" />
@@ -140,6 +156,8 @@ function onMove(event: PointerEvent) {
   button { width: 24px; height: 24px; border: 1px solid #ffffff2e; background: #0d0d12e6; color: #e6e6ea; font: 700 14px/1 "Inter", sans-serif; cursor: pointer; &:disabled { opacity: .35; cursor: default; } } }
 .map { display: block; width: 100%; height: auto; touch-action: none; }
 // Strokes scale with the zoom (--z), so a zoomed corner keeps thin lines.
+.map-surface { fill: #ffffff0d; stroke: none; }
+.map-edge { fill: none; stroke: #ffffff59; stroke-width: calc(1px * var(--z, 1)); stroke-linejoin: round; }
 .map-track { fill: none; stroke: #ffffff14; stroke-width: calc(9px * var(--z, 1)); stroke-linejoin: round; stroke-linecap: round; }
 .map-ref { fill: none; stroke: #fbbf24; stroke-width: calc(1.8px * var(--z, 1)); }
 .map-lap-line { fill: none; stroke: #38bdf8; stroke-width: calc(2px * var(--z, 1)); stroke-linejoin: round; }
