@@ -111,11 +111,19 @@ function measure() { viewportHeight.value = window.innerHeight }
 onMounted(() => { measure(); window.addEventListener('resize', measure) })
 onBeforeUnmount(() => window.removeEventListener('resize', measure))
 // Tracce: under the sticky bar the charts fill one screen (about 150 px for bar and margins).
-const traceRowHeight = computed(() => Math.max(80, Math.floor((viewportHeight.value - 150) / Math.max(traceRows.value.length, 1)) - 30))
+// Heights from the five essential channels only: "Altri canali" adds rows below, never shrinks these.
+const ESSENTIAL_ROWS = 5
+const traceRowHeight = computed(() => Math.max(80, Math.floor((viewportHeight.value - 170) / ESSENTIAL_ROWS) - 30))
 // Garage 61 keeps the lap bar on the left; on a 1400 px window it would squeeze the charts,
 // so it opens by default only on wide windows and folds away with a button.
 const leftOpen = ref(false)
 onMounted(() => { leftOpen.value = window.innerWidth >= 1700 })
+// What the charts show now, and the way back to the whole lap (Garage 61 reset, Esc, double click).
+const viewLabel = computed(() => zoomRange.value ? "Zoom" : selectedSector.value !== null ? `Settore ${selectedSector.value + 1}` : selectedCorner.value !== null ? `Curva ${selectedCorner.value}` : "Giro intero")
+function wholeLap() { selectedCorner.value = null; selectedSector.value = null; zoomRange.value = null }
+function onEscape(event: KeyboardEvent) { if (event.key === "Escape" && layout.value === "tracce") wholeLap() }
+onMounted(() => window.addEventListener("keydown", onEscape))
+onBeforeUnmount(() => window.removeEventListener("keydown", onEscape))
 // Garage 61 sectors: the official sector times of the reference, placed on its trace.
 const sectorTimes = (e: Entry | null) => e ? props.laps.find(l => l.lap_number === e.lapNumber)?.sector_times_ms ?? null : null
 const sectorList = computed(() => {
@@ -312,7 +320,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
         <section v-if="comparison.length" class="side-box">
           <h4>Curve <small>dalla più costosa</small></h4>
           <div class="corner-list">
-            <button type="button" class="corner-row" :class="{ active: selectedCorner === null && selectedSector === null }" @click="selectedCorner = null; selectedSector = null; zoomRange = null">
+            <button type="button" class="corner-row" :class="{ active: selectedCorner === null && selectedSector === null }" @click="wholeLap">
               <span class="corner-num corner-num--all">Pista intera</span><span class="corner-cell" :style="{ background: heat(totalDelta ?? 0) }">{{ formatDelta(totalDelta ?? 0) }}</span>
             </button>
             <button v-for="c in cornersByLoss" :key="c.corner.number" type="button" class="corner-row" :class="{ active: selectedCorner === c.corner.number }" @click="selectCorner(c.corner.number)">
@@ -333,6 +341,10 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
         <!-- Sectors and corners on top of the charts, aligned to their distance axis and
              sticky under the lap bar (Track Titan's segment strip, MoTeC's section bar). -->
         <div class="tracce-strip">
+          <div class="strip-head">
+            <span>{{ viewLabel }}</span>
+            <button v-if="viewLabel !== 'Giro intero'" type="button" class="strip-reset" title="Torna al giro intero (anche Esc o doppio clic sul grafico)" @click="wholeLap">⟲ Giro intero</button>
+          </div>
           <div v-if="sectorList.length" class="strip-row">
             <button v-for="s in visibleSectors" :key="s.index" type="button" :class="{ active: selectedSector === s.index }" :style="{ left: `${s.left}%`, width: `${s.width}%` }" :title="`Settore ${s.index + 1}: clic per ingrandire, di nuovo per il giro intero`" @click="selectSector(s.index)">S{{ s.index + 1 }}</button>
           </div>
@@ -397,9 +409,9 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .side-box { display: grid; gap: 8px; padding: 10px; border: 1px solid #ffffff1f; background: #ffffff06;
   h4 { margin: 0 0 2px; color: #fff; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; letter-spacing: .02em;
     small { color: #77777d; font: 500 10px 'Inter', sans-serif; text-transform: none; margin-left: 4px; } } }
-.lap-card { --c: #38bdf8; display: grid; gap: 2px; padding: 6px 8px 6px 10px; border-left: 4px solid var(--c); background: color-mix(in srgb, var(--c) 8%, transparent);
+.lap-card { --c: #38bdf8; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 5px 8px 5px 10px; border-left: 4px solid var(--c); background: color-mix(in srgb, var(--c) 8%, transparent);
   &--ref { --c: #fbbf24; } }
-.lap-card-time { display: flex; align-items: center; gap: 8px; color: #fff; font: 700 16px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
+.lap-card-time { display: flex; align-items: center; gap: 8px; color: #fff; font: 700 15px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
 .lap-card-who { color: #8a8a90; font-size: 11px; }
 .pill { padding: 1px 6px; border-radius: 9px; background: #ffffff14; font: 700 11px 'Inter', sans-serif; font-style: normal; &.gain { background: #3ddc5a26; color: #3ddc5a; } &.loss { background: #ff5a6e26; color: #ff5a6e; } }
 .gap-grid { display: grid; grid-template-columns: 34px 1fr 1fr; gap: 3px; align-items: stretch; font-variant-numeric: tabular-nums; }
@@ -407,17 +419,20 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .gap-name { border: 0; background: #ffffff0d; color: #b3b3b8; font: 700 12px 'Inter', sans-serif; cursor: pointer; &.active { background: #ff002433; color: #fff; } }
 .gap-ref, .gap-cell { padding: 6px 4px; text-align: center; color: #e6e6ea; font: 600 12px 'Inter', sans-serif; }
 .gap-ref { background: #ffffff08; }
-.corner-list { display: grid; gap: 3px; }
-.corner-row { display: grid; grid-template-columns: 44px 1fr; gap: 3px; padding: 0; border: 0; background: none; cursor: pointer; text-align: center;
+// Two columns: the list takes half the height.
+.corner-list { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; > .corner-row:first-child { grid-column: 1 / -1; grid-template-columns: 74px 1fr; } }
+.corner-row { display: grid; grid-template-columns: 28px 1fr; gap: 3px; padding: 0; border: 0; background: none; cursor: pointer; text-align: center;
   &.active .corner-num { background: #ff0024; color: #fff; }
   &.active .corner-cell { box-shadow: inset 0 0 0 1px #ff0024; } }
-.corner-num { display: grid; place-items: center; padding: 4px 0; background: #ffffff0d; color: #e6e6ea; font: italic 700 18px 'Racer Display', 'Arial Narrow', sans-serif;
-  &--all { grid-column: 1; font-size: 10px; font-style: normal; font-family: 'Inter', sans-serif; text-transform: uppercase; line-height: 1.1; } }
-.corner-cell { display: grid; place-items: center; color: #fff; font: 700 13px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
+.corner-num { display: grid; place-items: center; padding: 3px 0; background: #ffffff0d; color: #e6e6ea; font: italic 700 15px 'Racer Display', 'Arial Narrow', sans-serif;
+  &--all { grid-column: 1; padding: 3px 4px; font-size: 9px; font-style: normal; font-family: 'Inter', sans-serif; text-transform: uppercase; line-height: 1.1; } }
+.corner-cell { display: grid; place-items: center; color: #fff; font: 700 12px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
 .tracce-center { grid-area: center; display: grid; gap: 8px; position: sticky; top: 56px; }
 .tracce-toggle { justify-self: start; padding: 0 10px; }
 .tracce-right { grid-area: right; min-width: 0; }
 // Sector and corner strip: sticky under the lap bar, aligned to the plot area (42 px axis, 8 px right).
+.strip-head { display: flex; align-items: center; gap: 10px; height: 20px; margin-left: -34px; color: #b3b3b8; font: 700 11px "Inter", sans-serif; text-transform: uppercase; letter-spacing: .04em; }
+.strip-reset { height: 20px; padding: 0 8px; border: 1px solid #ff0024; background: #ff00241f; color: #fff; font: 700 11px "Inter", sans-serif; text-transform: none; cursor: pointer; }
 .tracce-strip { position: sticky; top: 50px; z-index: 4; display: grid; gap: 2px; margin-bottom: 6px; padding: 4px 9px 4px 43px; background: #0b0b10f2; box-shadow: 0 8px 10px -10px #000; }
 .strip-row { position: relative; height: 24px;
   button { position: absolute; top: 0; height: 100%; padding: 0; border: 1px solid #0b0b10; background: #ffffff14; color: #e6e6ea; font: 700 12px 'Inter', sans-serif; cursor: pointer; overflow: hidden;
