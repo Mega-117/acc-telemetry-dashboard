@@ -124,34 +124,38 @@ const bands = computed(() => props.corners
   .filter(c => c.end >= props.range[0] && c.start <= props.range[1])
   .map(c => ({ number: c.number, x: xOf(Math.max(c.start, props.range[0])), width: xOf(Math.min(c.end, props.range[1])) - xOf(Math.max(c.start, props.range[0])), apex: xOf(c.apex) })))
 
-// Garage 61's value box at the cursor: one line per lap, with its colour square.
-const tooltip = computed(() => {
+// Track Titan header per chart: the values at the cursor, you and the reference, and the difference.
+const headerValues = computed(() => charts.value.map(chart => {
   const f = props.cursor
   if (!inRange(f)) return null
-  const refAt = props.refCursor ?? f
-  const left = xOf(f) / WIDTH * 100
+  if (chart.row.delta) return props.reference ? { lap: `${formatDelta(deltaAt(f) - chart.origin)} s`, ref: null, diff: null } : null
+  const c = chart.row.channels[0]
+  if (!c) return null
+  const digits = chart.row.digits ?? 0
+  const unit = chart.row.unit ? ` ${chart.row.unit}` : ''
+  const lap = valueAt(props.lap, c, f)
+  const ref = props.reference ? valueAt(props.reference, c, props.refCursor ?? f) : null
+  const diff = lap !== null && ref !== null ? lap - ref : null
   return {
-    left: left > 70 ? null : `calc(${left}% + 12px)`,
-    right: left > 70 ? `calc(${100 - left}% + 12px)` : null,
-    rows: charts.value.map(chart => {
-      const unit = chart.row.unit ? ` ${chart.row.unit}` : ''
-      if (chart.row.delta) return props.reference ? [{ color: LAP, text: `${formatDelta(deltaAt(f) - chart.origin)} s` }] : []
-      const digits = chart.row.digits ?? 0
-      return chart.row.channels.flatMap(c => {
-        const lap = valueAt(props.lap, c, f)
-        const ref = props.reference ? valueAt(props.reference, c, refAt) : null
-        return [
-          { color: LAP, text: `${lap === null ? '--' : lap.toFixed(digits)}${unit}` },
-          ...(props.reference ? [{ color: REF, text: `${ref === null ? '--' : ref.toFixed(digits)}${unit}` }] : []),
-        ]
-      })
-    }),
+    lap: `${lap === null ? '--' : lap.toFixed(digits)}${unit}`,
+    ref: props.reference ? `${ref === null ? '--' : ref.toFixed(digits)}${unit}` : null,
+    diff: diff === null ? null : `${diff > 0 ? '+' : diff < 0 ? '−' : '±'}${Math.abs(diff).toFixed(digits)}`,
   }
-})
+}))
 const km = (fraction: number) => {
   const metres = fraction * props.lap.lengthM
-  return metres >= 1000 ? `${(metres / 1000).toFixed(metres % 1000 === 0 ? 0 : 1)} km` : `${Math.round(metres)} m`
+  return metres >= 1000 ? `${(metres / 1000).toFixed(1)} km` : `${Math.round(metres)} m`
 }
+// Distance axis: round steps in metres along the shown range, with a faint vertical line each.
+const xTicks = computed(() => {
+  const [r0, r1] = props.range
+  const length = Math.max(props.lap.lengthM, 1)
+  const from = r0 * length, to = r1 * length
+  const step = niceStep(from, to, 6)
+  const ticks: { x: number, label: string }[] = []
+  for (let m = Math.ceil(from / step) * step; m <= to + 1e-6; m += step) ticks.push({ x: xOf(m / length), label: km(m / length) })
+  return ticks
+})
 
 
 function fractionOf(event: PointerEvent | WheelEvent | MouseEvent) {
@@ -215,6 +219,15 @@ function onDouble() {
     <!-- Garage 61 layout per chart: graduated Y axis on the left, distance below,
          channel name bottom right, value box at the cursor. -->
     <div v-for="(chart, index) in charts" :key="chart.row.key" class="chart">
+      <!-- Track Titan header: the channel name, readable, and the values at the cursor. -->
+      <div class="chart-head">
+        <span class="chart-title">{{ chart.row.title }}<small v-if="chart.row.unit"> {{ chart.row.unit }}</small></span>
+        <span v-if="headerValues[index]" class="chart-values">
+          <span class="v v--lap">Tu <b>{{ headerValues[index]!.lap }}</b></span>
+          <span v-if="headerValues[index]!.ref" class="v v--ref">Rif. <b>{{ headerValues[index]!.ref }}</b></span>
+          <span v-if="headerValues[index]!.diff" class="v v--diff">Δ <b>{{ headerValues[index]!.diff }}</b></span>
+        </span>
+      </div>
       <div class="chart-yaxis" :style="{ height: `${chart.height}px` }">
         <span v-for="(t, i) in chart.ticks" :key="i" :style="{ top: `${t.y}px` }">{{ t.label }}</span>
       </div>
@@ -222,6 +235,7 @@ function onDouble() {
         <svg :viewBox="`0 0 ${WIDTH} ${chart.height}`" preserveAspectRatio="none" :style="{ height: `${chart.height}px` }" @pointermove="onMove" @pointerleave="emit('hover', null)" @pointerdown="onDown" @pointerup="onUp" @pointercancel="onUp" @wheel="onWheel" @dblclick="onDouble">
           <rect v-for="b in bands" :key="b.number" :x="b.x" y="0" :width="Math.max(b.width, 1)" :height="chart.height" class="chart-band" />
           <line v-for="(t, i) in chart.ticks" :key="`g${i}`" x1="0" :x2="WIDTH" :y1="t.y" :y2="t.y" class="chart-grid" />
+          <line v-for="(t, i) in xTicks" :key="`x${i}`" :x1="t.x" :x2="t.x" y1="0" :y2="chart.height" class="chart-grid chart-grid--x" />
           <defs v-if="chart.row.delta">
             <clipPath :id="`above-${uid}-${chart.row.key}`"><rect x="0" y="0" :width="WIDTH" :height="chart.zero!" /></clipPath>
             <clipPath :id="`below-${uid}-${chart.row.key}`"><rect x="0" :y="chart.zero!" :width="WIDTH" :height="chart.height" /></clipPath>
@@ -238,15 +252,10 @@ function onDouble() {
         </svg>
         <!-- Dots in an overlay without aspect distortion: round whatever the chart width. -->
         <i v-for="(d, i) in dots[index]" :key="i" class="chart-dot" :class="{ ref: d.ref }" :style="{ left: `${d.x / WIDTH * 100}%`, top: `${d.y}px`, '--c': d.color }" />
-        <div v-if="tooltip && tooltip.rows[index]?.length" class="chart-tip" :style="{ left: tooltip.left ?? undefined, right: tooltip.right ?? undefined }">
-          <span v-for="(r, i) in tooltip.rows[index]" :key="i"><b :style="{ background: r.color }" />{{ r.text }}</span>
-        </div>
-        <span class="chart-name">{{ chart.row.title }}</span>
       </div>
       <div class="chart-xaxis">
-        <span>{{ km(range[0]) }}</span>
+        <span v-for="(t, i) in xTicks" :key="i" class="chart-xtick" :style="{ left: `${t.x / WIDTH * 100}%` }">{{ t.label }}</span>
         <span v-if="inRange(cursor)" class="chart-xcursor" :style="{ left: `${xOf(cursor!) / WIDTH * 100}%` }">{{ km(cursor!) }}</span>
-        <span>{{ km(range[1]) }}</span>
       </div>
     </div>
   </div>
@@ -256,7 +265,7 @@ function onDouble() {
 .charts { display: grid; gap: 6px; min-width: 0; }
 .bands { display: block; width: calc(100% - 51px); margin-left: 43px; height: 18px;
   .band { cursor: pointer; rect { fill: #ffffff0d; stroke: #ffffff1f; stroke-width: 1; vector-effect: non-scaling-stroke; } text { fill: #b3b3b8; font: 700 11px 'Inter', sans-serif; text-anchor: middle; } &:hover rect { fill: #ff002426; } } }
-.chart { display: grid; grid-template-columns: 42px minmax(0, 1fr); grid-template-rows: auto 14px; border: 1px solid #ffffff1f; background: #ffffff06; padding: 6px 8px 2px 0; }
+.chart { display: grid; grid-template-columns: 42px minmax(0, 1fr); grid-template-rows: auto auto 16px; border: 1px solid #ffffff1f; background: #ffffff06; padding: 6px 8px 2px 0; }
 .chart-yaxis { position: relative;
   span { position: absolute; right: 6px; transform: translateY(-50%); color: #8a8a90; font: 600 10px 'Inter', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; } }
 .chart-plot { position: relative; min-width: 0; }
@@ -269,10 +278,15 @@ svg { display: block; width: 100%; touch-action: none; cursor: crosshair; }
 .chart-grid { stroke: #ffffff14; stroke-width: 1; stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
 .chart-dot { position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--c); border: 1.5px solid #fff; pointer-events: none;
   &.ref { background: #0a0a0f; border: 2px solid var(--c); } }
-.chart-tip { position: absolute; top: 26px; display: grid; gap: 1px; padding: 4px 7px; border: 1px solid #ffffff2e; background: #0d0d12ee; pointer-events: none;
-  span { display: flex; align-items: center; gap: 6px; color: #e6e6ea; font: 600 11px 'Inter', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  b { width: 9px; height: 9px; } }
-.chart-name { position: absolute; right: 4px; top: 4px; padding: 1px 6px; background: #0d0d12d9; color: #b3b3b8; font: 700 11px 'Inter', sans-serif; letter-spacing: .03em; pointer-events: none; }
-.chart-xaxis { grid-column: 2; position: relative; display: flex; justify-content: space-between; padding-top: 2px; color: #8a8a90; font: 600 11px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
-.chart-xcursor { position: absolute; transform: translateX(-50%); color: #e6e6ea; }
+// Track Titan header: name on the left in white, live values on the right in the lap colours.
+.chart-head { grid-column: 1 / -1; display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 0 0 4px 12px; }
+.chart-title { color: #fff; font: italic 700 13px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; letter-spacing: .03em;
+  small { color: #8a8a90; font: 500 11px 'Inter', sans-serif; text-transform: none; } }
+.chart-values { display: flex; gap: 12px; font: 600 11px 'Inter', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap;
+  .v { color: #8a8a90; b { font-weight: 700; font-size: 12px; } }
+  .v--lap b { color: #38bdf8; } .v--ref b { color: #fbbf24; } .v--diff b { color: #e6e6ea; } }
+.chart-grid--x { stroke-dasharray: none; stroke: #ffffff0d; }
+.chart-xaxis { grid-column: 2; position: relative; height: 16px; color: #8a8a90; font: 600 10px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
+.chart-xtick { position: absolute; top: 2px; transform: translateX(-50%); white-space: nowrap; }
+.chart-xcursor { position: absolute; top: 1px; transform: translateX(-50%); padding: 0 4px; background: #e6e6ea; color: #0b0b10; font-weight: 700; white-space: nowrap; }
 </style>
