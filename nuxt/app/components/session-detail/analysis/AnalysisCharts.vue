@@ -1,17 +1,18 @@
 <script setup lang="ts">
 // PIP-618: stacked channel charts on the lap distance, one shared cursor (MoTeC,
-// Garage 61, Track Titan). Lap in red, reference in grey dashed; the delta row is
-// green where the lap gains and red where it loses.
+// Garage 61, Track Titan). You: solid line and filled dot. Reference: dashed line
+// and hollow dot. The delta row is red where you lose and green where you gain.
 import { computed, useId } from 'vue'
-import { channelAt, formatDelta } from '~/services/telemetry/lapAnalysis'
+import { channelAt, formatDelta, type Corner } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
+export interface ChartChannel { name: string, color?: string, label?: string, scale?: number }
 export interface ChartRow {
   key: string
   title: string
   unit?: string
-  /** One channel per line; several lines (gas and brake, four tyres) share a row. */
-  channels: { name: string, color?: string, label?: string, scale?: number }[]
+  /** One channel per line; several lines (gas and brake, two tyres) can share a row. */
+  channels: ChartChannel[]
   delta?: boolean
   height?: number
   digits?: number
@@ -25,8 +26,12 @@ const props = withDefaults(defineProps<{
   rows: ChartRow[]
   range?: [number, number]
   cursor: number | null
-}>(), { range: () => [0, 1] })
-const emit = defineEmits<{ hover: [fraction: number | null] }>()
+  /** Reference dot position: the same point, or where it was at the same time. */
+  refCursor?: number | null
+  /** Corner bands with their number along the lap (Tracce). */
+  corners?: Corner[]
+}>(), { range: () => [0, 1], refCursor: null, corners: () => [] })
+const emit = defineEmits<{ hover: [fraction: number | null], select: [corner: number] }>()
 
 const uid = useId()
 const WIDTH = 1000
@@ -37,116 +42,123 @@ const at = computed(() => {
   const [start, end] = props.range
   return Array.from({ length: SAMPLES }, (_, i) => start + (end - start) * i / (SAMPLES - 1))
 })
-const x = (i: number) => (i / (SAMPLES - 1)) * WIDTH
-
-function series(trace: LapTraceView, channel: string, scale = 1) {
-  return at.value.map(f => { const v = channelAt(trace, channel, f); return v === null ? null : v * scale })
+const xOf = (fraction: number) => ((fraction - props.range[0]) / Math.max(props.range[1] - props.range[0], 1e-9)) * WIDTH
+const inRange = (fraction: number | null): fraction is number => fraction !== null && fraction >= props.range[0] && fraction <= props.range[1]
+const valueAt = (trace: LapTraceView, channel: ChartChannel, fraction: number) => {
+  const v = channelAt(trace, channel.name, fraction)
+  return v === null ? null : v * (channel.scale ?? 1)
 }
-function deltaSeries() {
-  if (!props.reference) return []
-  return at.value.map(f => (channelAt(props.lap, 'time_s', f) ?? 0) - (channelAt(props.reference!, 'time_s', f) ?? 0))
-}
+const deltaAt = (fraction: number) => props.reference ? (channelAt(props.lap, 'time_s', fraction) ?? 0) - (channelAt(props.reference, 'time_s', fraction) ?? 0) : 0
 
 const charts = computed(() => props.rows.map(row => {
   const height = row.height ?? 90
-  const lines: { points: string, color: string, dashed: boolean }[] = []
-  let values: number[] = []
-  if (row.delta) {
-    const delta = deltaSeries()
-    // Delta relative to the start of the range: the corner's own loss, not the lap's so far.
-    const origin = delta[0] ?? 0
-    values = delta.map(v => v - origin)
-  } else {
-    for (const channel of row.channels) {
-      values.push(...series(props.lap, channel.name, channel.scale).filter((v): v is number => v !== null))
-      if (props.reference) values.push(...series(props.reference, channel.name, channel.scale).filter((v): v is number => v !== null))
-    }
-  }
-  let min = row.min ?? Math.min(...values, row.delta ? 0 : Infinity)
-  let max = row.max ?? Math.max(...values, row.delta ? 0 : -Infinity)
+  // Delta relative to the start of the range: a zoomed corner shows its own loss.
+  const origin = row.delta ? deltaAt(props.range[0]) : 0
+  const lapSeries = row.channels.map(c => at.value.map(f => valueAt(props.lap, c, f)))
+  const refSeries = props.reference ? row.channels.map(c => at.value.map(f => valueAt(props.reference!, c, f))) : []
+  const delta = row.delta ? at.value.map(f => deltaAt(f) - origin) : []
+  const values = (row.delta ? delta : [...lapSeries.flat(), ...refSeries.flat()]).filter((v): v is number => v !== null)
+  let min = row.min ?? Math.min(...values), max = row.max ?? Math.max(...values)
   if (!Number.isFinite(min) || !Number.isFinite(max)) { min = 0; max = 1 }
   if (row.delta) { const m = Math.max(Math.abs(min), Math.abs(max), 0.05); min = -m; max = m }
   const pad = (max - min) * 0.08 || 1
   const y = (v: number) => height - 4 - ((v - (min - pad)) / (max - min + 2 * pad)) * (height - 8)
-  const path = (list: (number | null)[]) => list.map((v, i) => v === null ? '' : `${x(i).toFixed(1)},${y(v).toFixed(1)}`).filter(Boolean).join(' ')
-  let area = ''
-  if (row.delta) {
-    area = `0,${y(0)} ${values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')} ${WIDTH},${y(0)}`
-    lines.push({ points: path(values), color: '#e6e6ea', dashed: false })
-  } else {
-    for (const channel of row.channels) {
-      if (props.reference) lines.push({ points: path(series(props.reference, channel.name, channel.scale)), color: channel.color ? `${channel.color}99` : REF, dashed: true })
-      lines.push({ points: path(series(props.lap, channel.name, channel.scale)), color: channel.color ?? LAP, dashed: false })
-    }
+  const line = (list: (number | null)[]) => list.map((v, i) => v === null ? '' : `${(i / (SAMPLES - 1) * WIDTH).toFixed(1)},${y(v).toFixed(1)}`).filter(Boolean).join(' ')
+  const lines = row.delta
+    ? [{ points: line(delta), color: '#e6e6ea', dashed: false }]
+    : row.channels.flatMap((c, i) => [
+      ...(props.reference ? [{ points: line(refSeries[i]!), color: c.color ? `${c.color}aa` : REF, dashed: true }] : []),
+      { points: line(lapSeries[i]!), color: c.color ?? LAP, dashed: false },
+    ])
+  const area = row.delta ? `0,${y(0)} ${delta.map((v, i) => `${(i / (SAMPLES - 1) * WIDTH).toFixed(1)},${y(v).toFixed(1)}`).join(' ')} ${WIDTH},${y(0)}` : ''
+  // Dots at the cursor: yours on your line, the reference's on its line at its own position.
+  const dots: { x: number, y: number, color: string, ref: boolean }[] = []
+  if (!row.delta) {
+    row.channels.forEach(c => {
+      if (inRange(props.cursor)) { const v = valueAt(props.lap, c, props.cursor); if (v !== null) dots.push({ x: xOf(props.cursor), y: y(v), color: c.color ?? LAP, ref: false }) }
+      const refAt = props.refCursor ?? props.cursor
+      if (props.reference && inRange(refAt)) { const v = valueAt(props.reference, c, refAt); if (v !== null) dots.push({ x: xOf(refAt), y: y(v), color: c.color ?? REF, ref: true }) }
+    })
+  } else if (inRange(props.cursor)) {
+    dots.push({ x: xOf(props.cursor), y: y(deltaAt(props.cursor) - origin), color: '#e6e6ea', ref: false })
   }
-  return { row, height, lines, area, zero: row.delta ? y(0) : null, deltaOrigin: row.delta ? (deltaSeries()[0] ?? 0) : 0 }
+  return { row, height, lines, area, zero: row.delta ? y(0) : null, origin, dots }
 }))
 
-const cursorX = computed(() => {
-  if (props.cursor === null) return null
-  const [start, end] = props.range
-  if (props.cursor < start || props.cursor > end) return null
-  return ((props.cursor - start) / Math.max(end - start, 1e-9)) * WIDTH
-})
+const bands = computed(() => props.corners
+  .filter(c => c.end >= props.range[0] && c.start <= props.range[1])
+  .map(c => ({ number: c.number, x: xOf(Math.max(c.start, props.range[0])), width: xOf(Math.min(c.end, props.range[1])) - xOf(Math.max(c.start, props.range[0])), apex: xOf(c.apex) })))
 
 function readout(chart: (typeof charts.value)[number]) {
   const f = props.cursor
   if (f === null) return ''
-  if (chart.row.delta) {
-    if (!props.reference) return ''
-    const d = (channelAt(props.lap, 'time_s', f) ?? 0) - (channelAt(props.reference, 'time_s', f) ?? 0) - chart.deltaOrigin
-    return formatDelta(d)
-  }
+  if (chart.row.delta) return props.reference ? formatDelta(deltaAt(f) - chart.origin) : ''
   const digits = chart.row.digits ?? 0
+  const refAt = props.refCursor ?? f
   return chart.row.channels.map(c => {
-    const rawLap = channelAt(props.lap, c.name, f); const lap = rawLap === null ? null : rawLap * (c.scale ?? 1)
-    const rawRef = props.reference ? channelAt(props.reference, c.name, f) : null; const ref = rawRef === null ? null : rawRef * (c.scale ?? 1)
-    const label = c.label ? `${c.label} ` : ''
-    return `${label}${lap === null ? '--' : lap.toFixed(digits)}${ref === null ? '' : ` / ${ref.toFixed(digits)}`}`
+    const lap = valueAt(props.lap, c, f)
+    const ref = props.reference ? valueAt(props.reference, c, refAt) : null
+    return `${c.label ? `${c.label} ` : ''}${lap === null ? '--' : lap.toFixed(digits)}${ref === null ? '' : ` / ${ref.toFixed(digits)}`}`
   }).join(' · ')
 }
 
 function onMove(event: PointerEvent) {
   const rect = (event.currentTarget as SVGElement).getBoundingClientRect()
   const ratio = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1)
-  const [start, end] = props.range
-  emit('hover', start + (end - start) * ratio)
+  emit('hover', props.range[0] + (props.range[1] - props.range[0]) * ratio)
 }
 </script>
 
 <template>
   <div class="charts">
+    <svg v-if="bands.length" class="bands" :viewBox="`0 0 ${WIDTH} 18`" preserveAspectRatio="none">
+      <g v-for="b in bands" :key="b.number" class="band" @click="emit('select', b.number)">
+        <rect :x="b.x" y="0" :width="Math.max(b.width, 1)" height="18" />
+        <text :x="b.apex" y="13">{{ b.number }}</text>
+      </g>
+    </svg>
     <div v-for="chart in charts" :key="chart.row.key" class="chart">
       <div class="chart-head">
         <span class="chart-title">{{ chart.row.title }} <small v-if="chart.row.unit">{{ chart.row.unit }}</small></span>
         <span class="chart-value" :class="{ gain: chart.row.delta && readout(chart).startsWith('−'), loss: chart.row.delta && readout(chart).startsWith('+') }">{{ readout(chart) }}</span>
       </div>
       <svg :viewBox="`0 0 ${WIDTH} ${chart.height}`" preserveAspectRatio="none" :style="{ height: `${chart.height}px` }" @pointermove="onMove" @pointerleave="emit('hover', null)">
+        <rect v-for="b in bands" :key="b.number" :x="b.x" y="0" :width="Math.max(b.width, 1)" :height="chart.height" class="chart-band" />
         <defs v-if="chart.row.delta">
           <clipPath :id="`above-${uid}-${chart.row.key}`"><rect x="0" y="0" :width="WIDTH" :height="chart.zero!" /></clipPath>
           <clipPath :id="`below-${uid}-${chart.row.key}`"><rect x="0" :y="chart.zero!" :width="WIDTH" :height="chart.height" /></clipPath>
         </defs>
         <template v-if="chart.row.delta">
-          <!-- Above zero the lap is behind (red), below it is ahead (green). -->
+          <!-- Above zero you are behind (red), below you are ahead (green). -->
           <polygon :points="chart.area" fill="#ff5a6e40" :clip-path="`url(#above-${uid}-${chart.row.key})`" />
           <polygon :points="chart.area" fill="#3ddc5a40" :clip-path="`url(#below-${uid}-${chart.row.key})`" />
           <line x1="0" :x2="WIDTH" :y1="chart.zero!" :y2="chart.zero!" class="chart-zero" />
         </template>
         <polyline v-for="(line, i) in chart.lines" :key="i" :points="line.points" :stroke="line.color" :stroke-dasharray="line.dashed ? '6 4' : undefined" class="chart-line" />
-        <line v-if="cursorX !== null" :x1="cursorX" :x2="cursorX" y1="0" :y2="chart.height" class="chart-cursor" />
+        <line v-if="inRange(cursor)" :x1="xOf(cursor!)" :x2="xOf(cursor!)" y1="0" :y2="chart.height" class="chart-cursor" />
       </svg>
+      <!-- Dots in an overlay without aspect distortion: round whatever the chart width. -->
+      <div class="chart-dots" :style="{ height: `${chart.height}px` }">
+        <i v-for="(d, i) in chart.dots" :key="i" :class="{ ref: d.ref }" :style="{ left: `${d.x / WIDTH * 100}%`, top: `${d.y}px`, '--c': d.color }" />
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped lang="scss">
 .charts { display: grid; gap: 6px; min-width: 0; }
-.chart { border: 1px solid #ffffff1f; background: #ffffff06; padding: 4px 8px 2px; }
+.bands { display: block; width: 100%; height: 18px;
+  .band { cursor: pointer; rect { fill: #ffffff0d; stroke: #ffffff1f; stroke-width: 1; vector-effect: non-scaling-stroke; } text { fill: #b3b3b8; font: 700 11px 'Inter', sans-serif; text-anchor: middle; } &:hover rect { fill: #ff002426; } } }
+.chart { position: relative; border: 1px solid #ffffff1f; background: #ffffff06; padding: 4px 8px 2px; }
 .chart-head { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; }
 .chart-title { color: #b3b3b8; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; small { color: #77777d; font-weight: 500; text-transform: none; } }
 .chart-value { color: #e6e6ea; font-variant-numeric: tabular-nums; &.gain { color: #3ddc5a; } &.loss { color: #ff5a6e; } }
 svg { display: block; width: 100%; touch-action: none; cursor: crosshair; }
+.chart-band { fill: #ffffff06; }
 .chart-line { fill: none; stroke-width: 1.6; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 .chart-zero { stroke: #ffffff40; stroke-width: 1; vector-effect: non-scaling-stroke; }
-.chart-cursor { stroke: #fff; stroke-width: 1; vector-effect: non-scaling-stroke; opacity: .7; }
+.chart-cursor { stroke: #fff; stroke-width: 1; vector-effect: non-scaling-stroke; opacity: .6; }
+.chart-dots { position: absolute; left: 8px; right: 8px; bottom: 2px; pointer-events: none;
+  i { position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--c); border: 1.5px solid #fff;
+    &.ref { background: #0a0a0f; border: 2px solid var(--c); } } }
 </style>

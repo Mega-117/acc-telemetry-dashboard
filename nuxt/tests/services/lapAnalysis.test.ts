@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { analysisSessionToken, channelAt, compareCorners, cornerAdvice, deltaTrend, detectCorners, formatDelta, fractions, lapDelta, mapPoints } from '~/services/telemetry/lapAnalysis'
+import { analysisSessionToken, bodySlipDeg, channelAt, compareCorners, finishLine, timeSyncedFraction, cornerAdvice, deltaTrend, detectCorners, formatDelta, fractions, lapDelta, mapPoints } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
 const STEP = 2
@@ -89,12 +89,50 @@ describe('lap analysis (our Track Titan)', () => {
   })
 
   it('map keeps the aspect ratio inside the box, null without coordinates', () => {
-    const points = mapPoints(lap(() => 200), fractions(101), 300, 300, 10)!
+    const points = mapPoints(lap(() => 200), fractions(101), 300, 300, 10, undefined, 0)!
     const xs = points.map(p => p.x), ys = points.map(p => p.y)
     expect(Math.min(...xs)).toBeCloseTo(10, 0)
     expect(Math.max(...xs)).toBeCloseTo(290, 0)
     expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(140, 0) // 400 x 200 m track: half as tall
     expect(mapPoints(lap(() => 200, [], 60, 3000, false), fractions(11), 300, 300)).toBeNull()
+  })
+
+  it('ACC orientation as the minimap: world Z down, then 270° clockwise (world +X up)', () => {
+    // The fixture starts at world x = +400, z = 0: the easternmost point goes to the top.
+    const points = mapPoints(lap(() => 200), fractions(101), 300, 300, 10)!
+    const ys = points.map(p => p.y)
+    expect(points[0]!.y).toBeCloseTo(Math.min(...ys), 0)
+    // A 400 x 200 m track turned by 270°: now twice as tall as wide.
+    const xs = points.map(p => p.x)
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(280, 0)
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(140, 0)
+  })
+
+  it('finish line crosses the track at the start', () => {
+    const line = finishLine([{ x: 0, y: 0 }, { x: 10, y: 0 }], 5)!
+    expect(line).toEqual({ x1: 0, y1: -5, x2: 0, y2: 5 })
+    expect(finishLine([{ x: 0, y: 0 }])).toBeNull()
+  })
+
+  it('time-sync finds where the reference was at the same time', () => {
+    const reference = lap(() => 200)
+    const slower = lap(() => 100) // half the speed: at the end of its first half the reference had finished
+    expect(timeSyncedFraction(slower, reference, 0.25)).toBeCloseTo(0.5, 3)
+    expect(timeSyncedFraction(slower, reference, 0.6)).toBe(1)
+    expect(timeSyncedFraction(reference, slower, 1)).toBeCloseTo(0.5, 3)
+  })
+
+  it('body slip: zero when the car points where it goes, the angle when it does not', () => {
+    const t = lap(() => 200, [], 60, 400)
+    const n = t.channels.time_s!.length
+    t.channels.pos_x = Array.from({ length: n }, (_, i) => i * 2) // driving along world +X
+    t.channels.pos_z = Array.from({ length: n }, () => 0)
+    t.channels.heading_rad = Array.from({ length: n }, () => -Math.PI / 2) // ACC heading for +X travel
+    expect(bodySlipDeg(t, 0.5)).toBeCloseTo(0, 6)
+    t.channels.heading_rad = Array.from({ length: n }, () => -Math.PI / 2 + 0.1)
+    expect(bodySlipDeg(t, 0.5)).toBeCloseTo(5.73, 1)
+    delete t.channels.heading_rad
+    expect(bodySlipDeg(t, 0.5)).toBeNull()
   })
 
   it('trend and delta format', () => {

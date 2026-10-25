@@ -156,21 +156,74 @@ export function cornerAdvice(c: CornerComparison): string {
 export interface MapPoint { x: number, y: number }
 
 /**
+ * ACC map orientation, as the minimap HUD (desktop-app/runtime/trackMaps.js, from
+ * ACC Drive's TrackMapWindow): world X right, world Z down, then the whole map
+ * turned 270° clockwise. This is the shape ACC itself shows.
+ */
+export const ACC_MAP_ROTATION_DEG = 270
+
+function turn(x: number, z: number, degrees: number): MapPoint {
+  const r = (degrees * Math.PI) / 180
+  // Screen coordinates (y down): a positive angle turns clockwise.
+  return { x: x * Math.cos(r) - z * Math.sin(r), y: x * Math.sin(r) + z * Math.cos(r) }
+}
+
+/**
  * Track map from the world coordinates (pos_x, pos_z), fitted in a box with the
  * same scale on both axes. Null when the lap has no coordinates.
  */
-export function mapPoints(trace: LapTraceView, at: number[], width: number, height: number, padding = 10, frame: LapTraceView = trace): MapPoint[] | null {
+export function mapPoints(trace: LapTraceView, at: number[], width: number, height: number, padding = 10, frame: LapTraceView = trace, rotationDeg = ACC_MAP_ROTATION_DEG): MapPoint[] | null {
   if (!trace.channels.pos_x || !trace.channels.pos_z || !frame.channels.pos_x || !frame.channels.pos_z) return null
-  const raw = at.map(f => ({ x: channelAt(trace, 'pos_x', f)!, z: channelAt(trace, 'pos_z', f)! }))
+  const raw = at.map(f => turn(channelAt(trace, 'pos_x', f)!, channelAt(trace, 'pos_z', f)!, rotationDeg))
   // The frame (usually the reference) fixes scale and offset, so two laps overlay exactly.
-  const bounds = frame === trace ? raw : at.map(f => ({ x: channelAt(frame, 'pos_x', f)!, z: channelAt(frame, 'pos_z', f)! }))
-  const xs = bounds.map(p => p.x), zs = bounds.map(p => p.z)
-  const minX = Math.min(...xs), maxX = Math.max(...xs), minZ = Math.min(...zs), maxZ = Math.max(...zs)
-  const scale = Math.min((width - 2 * padding) / Math.max(maxX - minX, 1e-6), (height - 2 * padding) / Math.max(maxZ - minZ, 1e-6))
+  const bounds = frame === trace ? raw : at.map(f => turn(channelAt(frame, 'pos_x', f)!, channelAt(frame, 'pos_z', f)!, rotationDeg))
+  const xs = bounds.map(p => p.x), ys = bounds.map(p => p.y)
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys)
+  const scale = Math.min((width - 2 * padding) / Math.max(maxX - minX, 1e-6), (height - 2 * padding) / Math.max(maxY - minY, 1e-6))
   const offsetX = (width - (maxX - minX) * scale) / 2
-  const offsetY = (height - (maxZ - minZ) * scale) / 2
-  // Screen y grows downwards: north (larger z) at the top.
-  return raw.map(p => ({ x: offsetX + (p.x - minX) * scale, y: offsetY + (maxZ - p.z) * scale }))
+  const offsetY = (height - (maxY - minY) * scale) / 2
+  return raw.map(p => ({ x: offsetX + (p.x - minX) * scale, y: offsetY + (p.y - minY) * scale }))
+}
+
+/** Finish line: a short tick across the track at the start of the lap. */
+export function finishLine(points: MapPoint[], halfLength = 9): { x1: number, y1: number, x2: number, y2: number } | null {
+  if (points.length < 2) return null
+  const [a, b] = [points[0]!, points[1]!]
+  const length = Math.hypot(b.x - a.x, b.y - a.y) || 1
+  const nx = -(b.y - a.y) / length, ny = (b.x - a.x) / length
+  return { x1: a.x - nx * halfLength, y1: a.y - ny * halfLength, x2: a.x + nx * halfLength, y2: a.y + ny * halfLength }
+}
+
+/**
+ * Time-sync, as Track Titan's replay: where the reference car was when the lap
+ * reached `fraction`. The gap shows as distance on track. Same fraction if the
+ * reference has no time channel.
+ */
+export function timeSyncedFraction(lap: LapTraceView, reference: LapTraceView, fraction: number): number {
+  const time = channelAt(lap, 'time_s', fraction)
+  const times = reference.channels.time_s
+  if (time === null || !times?.length) return fraction
+  if (time <= times[0]!) return 0
+  if (time >= times[times.length - 1]!) return 1
+  let low = 0, high = times.length - 1
+  while (high - low > 1) { const mid = (low + high) >> 1; if (times[mid]! <= time) low = mid; else high = mid }
+  const span = times[high]! - times[low]! || 1
+  return (low + (time - times[low]!) / span) / (times.length - 1)
+}
+
+/**
+ * Where the car points against where it goes (degrees, positive = nose inside to
+ * the right on screen). ACC heading = -atan2(dx, dz) of the path (checked on real
+ * laps: 2° spread on straights). Null without heading or coordinates.
+ */
+export function bodySlipDeg(trace: LapTraceView, fraction: number): number | null {
+  const x = trace.channels.pos_x, z = trace.channels.pos_z, h = trace.channels.heading_rad
+  if (!x || !z || !h) return null
+  const last = x.length - 1
+  const i = Math.min(Math.max(Math.round(fraction * last), 1), last - 1)
+  const travel = -Math.atan2(x[i + 1]! - x[i - 1]!, z[i + 1]! - z[i - 1]!)
+  const diff = Math.atan2(Math.sin(h[i]! - travel), Math.cos(h[i]! - travel))
+  return (diff * 180) / Math.PI
 }
 
 /** Gain/loss of each map segment: the change of the delta along it (negative = gaining). */
