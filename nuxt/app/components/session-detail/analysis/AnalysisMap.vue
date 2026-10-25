@@ -46,6 +46,14 @@ const segments = computed(() => {
 })
 const dot = (points: MapPoint[] | null, fraction: number | null) => fraction === null || !points ? null : points[Math.round(fraction * (POINTS - 1))] ?? null
 const lapDot = computed(() => dot(lapPoints.value, props.cursor))
+// Garage 61: an arrow shows which way the car goes at the cursor.
+const lapArrow = computed(() => {
+  const points = lapPoints.value
+  if (!points || props.cursor === null) return null
+  const i = Math.min(Math.round(props.cursor * (POINTS - 1)), POINTS - 2)
+  const a = points[i]!, b = points[i + 1]!
+  return { x: a.x, y: a.y, angle: (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI }
+})
 const refDot = computed(() => props.reference ? dot(base.value, props.refCursor ?? props.cursor) : null)
 const labels = computed(() => base.value ? props.corners.map(c => ({ number: c.number, point: base.value![Math.round(c.apex * (POINTS - 1))]! })) : [])
 const finish = computed(() => base.value ? finishLine(base.value, 10) : null)
@@ -92,7 +100,7 @@ function onMove(event: PointerEvent) {
       <text :x="l.point.x" :y="l.point.y + 3.5 * zoomScale" :font-size="9 * zoomScale">{{ l.number }}</text>
     </g>
     <circle v-if="refDot" :cx="refDot.x" :cy="refDot.y" :r="5 * zoomScale" class="map-dot-ref" />
-    <circle v-if="lapDot" :cx="lapDot.x" :cy="lapDot.y" :r="5 * zoomScale" class="map-dot-lap" />
+    <path v-if="lapArrow" :transform="`translate(${lapArrow.x} ${lapArrow.y}) rotate(${lapArrow.angle}) scale(${zoomScale})`" d="M8 0 L-6 -6 L-3 0 L-6 6 Z" class="map-arrow" />
   </svg>
   <p v-else class="map-none">Mappa non disponibile: questo giro non ha le coordinate.</p>
 </template>
@@ -110,6 +118,7 @@ function onMove(event: PointerEvent) {
   circle { fill: #0a0a0f; stroke: #ffffff59; stroke-width: calc(1px * var(--z, 1)); }
   text { fill: #e6e6ea; font-family: 'Inter', sans-serif; font-weight: 700; text-anchor: middle; }
   &.active circle { stroke: #ff0024; stroke-width: calc(2px * var(--z, 1)); } }
+.map-arrow { fill: #38bdf8; stroke: #fff; stroke-width: 1.2px; vector-effect: non-scaling-stroke; }
 .map-dot-lap { fill: #38bdf8; stroke: #fff; stroke-width: calc(1.5px * var(--z, 1)); }
 .map-dot-ref { fill: #0a0a0f; stroke: #fbbf24; stroke-width: calc(2px * var(--z, 1)); }
 .map-none { color: #8a8a90; font-size: 12px; }

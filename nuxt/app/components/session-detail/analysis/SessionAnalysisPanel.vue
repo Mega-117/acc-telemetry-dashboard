@@ -149,7 +149,8 @@ const extraRows = computed<ChartRow[]>(() => [
 const WHEEL_NAME = { fl: 'ant. sx', fr: 'ant. dx', rl: 'post. sx', rr: 'post. dx' } as const
 const pilotRows = computed(() => [...deltaRow.value, speedRow, ...pedalRows])
 const cornerRows = computed(() => [...deltaRow.value, speedRow, ...pedalRows, steerRow, gearRow])
-const traceRows = computed(() => [...deltaRow.value, speedRow, ...pedalRows, gearRow, ...(allChannels.value ? [steerRow, ...extraRows.value] : [])])
+// Garage 61 order: the delta first ("where the line is steepest you lose most"), then speed, pedals, steering, gear.
+const traceRows = computed(() => [...deltaRow.value, speedRow, ...pedalRows, steerRow, gearRow, ...(allChannels.value ? extraRows.value : [])])
 
 const lapLabel = (e: Entry) => `Giro ${e.lapNumber} · ${formatLapTime(e.lapTimeMs)}${e.complete ? '' : ' · parziale'}${e.valid ? '' : ' · invalido'}`
 const short = (e: Entry | null) => e ? `Giro ${e.lapNumber} · ${formatLapTime(e.lapTimeMs)}` : '--'
@@ -234,6 +235,16 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
         <button type="button" class="tracce-btn" :disabled="selectedCorner === null" @click="selectedCorner = null">Giro intero</button>
         <button type="button" class="tracce-btn" :class="{ active: allChannels }" @click="allChannels = !allChannels">{{ allChannels ? 'Solo l’essenziale' : 'Altri canali' }}</button>
         <p class="analysis-note">Clic su una curva (mappa o fascia sopra i grafici) per ingrandirla.</p>
+        <!-- Garage 61: the left bar lists where you gain or lose time; a click zooms there. -->
+        <table v-if="comparison.length" class="curve-table tracce-corners">
+          <thead><tr><th>Curva</th><th>Tempo</th></tr></thead>
+          <tbody>
+            <tr v-for="c in comparison" :key="c.corner.number" :class="{ active: selectedCorner === c.corner.number }" @click="selectedCorner = selectedCorner === c.corner.number ? null : c.corner.number">
+              <td>{{ c.corner.number }}</td>
+              <td :class="{ gain: c.timeLostS <= -0.01, loss: c.timeLostS >= 0.01 }">{{ formatDelta(c.timeLostS) }}</td>
+            </tr>
+          </tbody>
+        </table>
         <dl class="tracce-facts">
           <div><dt>Tu</dt><dd>{{ ms(lap.lapTimeS) }}</dd></div>
           <div v-if="reference"><dt>Riferimento</dt><dd>{{ ms(reference.lapTimeS) }}</dd></div>
