@@ -120,6 +120,13 @@ export interface CornerComparison {
   /** Metres: positive = the lap brakes later than the reference. */
   brakeDeltaM: number | null
   exitDeltaKmh: number | null
+  /** Seconds lost in each part of the corner: entry (braking), middle (apex), exit (to the next straight). */
+  phaseLossS: { entry: number, mid: number, exit: number }
+}
+
+/** Entry ends a quarter before the apex, the middle a quarter after it: the rest is braking and exit. */
+function phaseBounds(corner: Corner): [number, number] {
+  return [corner.apex - (corner.apex - corner.start) * 0.25, corner.apex + (corner.end - corner.apex) * 0.25]
 }
 
 export function compareCorners(lap: LapTraceView, reference: LapTraceView, corners: Corner[]): CornerComparison[] {
@@ -136,22 +143,38 @@ export function compareCorners(lap: LapTraceView, reference: LapTraceView, corne
       refMinKmh: minIn(reference, 'speed_kmh', corner.start, corner.end),
       brakeDeltaM: lapBrake !== null && refBrake !== null ? (lapBrake - refBrake) * reference.lengthM : null,
       exitDeltaKmh: lapExit !== null && refExit !== null ? lapExit - refExit : null,
+      phaseLossS: (() => {
+        const [entryEnd, midEnd] = phaseBounds(corner)
+        return { entry: delta(entryEnd) - delta(corner.start), mid: delta(midEnd) - delta(entryEnd), exit: delta(corner.end) - delta(midEnd) }
+      })(),
     }
   })
 }
 
 /**
- * One plain sentence per corner, in the VRS order: exit first, then entry,
- * then the middle of the corner. Only where time is actually lost. The fact first,
- * against the reference, then what to try: never an order followed by a number alone.
+ * One plain sentence per corner, from the part where the time goes (Track Titan's root
+ * cause): entry, middle or exit, read on the delta. A slow exit caused by a slow apex
+ * is lost in the middle, so it is told as the middle. The fact first, against the
+ * reference, then what to try. Only where time is actually lost.
  */
 export function cornerAdvice(c: CornerComparison): string {
   if (c.timeLostS < 0.03) return c.timeLostS <= -0.03 ? 'Qui sei più veloce del riferimento' : 'Come il riferimento'
+  const loss = c.phaseLossS
+  const main = (['entry', 'mid', 'exit'] as const).reduce((best, phase) => loss[phase] > loss[best] + 0.005 ? phase : best, 'entry' as 'entry' | 'mid' | 'exit')
+  // No part holds even 40% of the loss: the time goes everywhere, not in one place.
+  if (loss[main] < c.timeLostS * 0.4) return "Perdi un po' in tutta la curva: confronta le due traiettorie sulla mappa"
+  const seconds = loss[main].toFixed(2)
+  if (main === 'entry') {
+    if (c.brakeDeltaM !== null && c.brakeDeltaM <= -10) return `Freni ${Math.round(-c.brakeDeltaM)} m prima del riferimento: prova a frenare più tardi`
+    if (c.brakeDeltaM !== null && c.brakeDeltaM >= 10) return `Freni ${Math.round(c.brakeDeltaM)} m dopo il riferimento e arrivi lungo: frena un po' prima`
+    return `In frenata perdi ${seconds} s: confronta quanto forte freni e quanta velocità porti dentro`
+  }
+  if (main === 'mid') {
+    if (c.lapMinKmh !== null && c.refMinKmh !== null && c.refMinKmh - c.lapMinKmh >= 3) return `A centro curva vai ${Math.round(c.refMinKmh - c.lapMinKmh)} km/h più piano del riferimento: porta più velocità`
+    return `A centro curva perdi ${seconds} s: confronta le due traiettorie sulla mappa`
+  }
   if (c.exitDeltaKmh !== null && c.exitDeltaKmh <= -3) return `In uscita vai ${Math.round(-c.exitDeltaKmh)} km/h più piano del riferimento: cerca un'uscita più veloce`
-  if (c.brakeDeltaM !== null && c.brakeDeltaM <= -10) return `Freni ${Math.round(-c.brakeDeltaM)} m prima del riferimento: prova a frenare più tardi`
-  if (c.brakeDeltaM !== null && c.brakeDeltaM >= 10) return `Freni ${Math.round(c.brakeDeltaM)} m dopo il riferimento e arrivi lungo: frena un po' prima`
-  if (c.lapMinKmh !== null && c.refMinKmh !== null && c.refMinKmh - c.lapMinKmh >= 3) return `A centro curva vai ${Math.round(c.refMinKmh - c.lapMinKmh)} km/h più piano del riferimento: porta più velocità`
-  return "Perdi un po' in tutta la curva: confronta le due traiettorie sulla mappa"
+  return `In uscita perdi ${seconds} s: confronta quando riapri il gas`
 }
 
 export interface MapPoint { x: number, y: number }
