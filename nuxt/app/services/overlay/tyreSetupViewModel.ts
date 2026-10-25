@@ -18,6 +18,9 @@ export interface PressureRecommendationViewModel {
   sessionId?: string | null
   stintNumber?: number | null
   sourceCompletedLaps?: number | null
+  /** PIP-616 Box: target and per-wheel correction in tenths of psi (one click = 0.1 psi). */
+  targetPsi?: number | null
+  clicks?: TyreWheelValues | null
 }
 
 export interface TyreSetupViewModel {
@@ -115,6 +118,10 @@ function normalizePressureRecommendation(raw: any): PressureRecommendationViewMo
     sessionId: typeof raw.session_id === 'string' && raw.session_id ? raw.session_id : null,
     stintNumber: toNumber(raw.stint_number),
     sourceCompletedLaps: toNumber(raw.source_completed_laps),
+    targetPsi: toNumber(raw.target_psi),
+    clicks: raw.wheels && typeof raw.wheels === 'object'
+      ? { FL: toNumber(raw.wheels.FL?.clicks), FR: toNumber(raw.wheels.FR?.clicks), RL: toNumber(raw.wheels.RL?.clicks), RR: toNumber(raw.wheels.RR?.clicks) }
+      : null,
   }
 }
 

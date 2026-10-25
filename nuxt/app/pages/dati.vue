@@ -22,6 +22,17 @@ let revision = 0, timer: ReturnType<typeof setInterval> | undefined
 let refreshing = false
 type Selection = { sessionId?: string; latestId?: string; stint?: number; lap?: number }
 const storageKey = () => `rc:dati:${profileUser.value?.uid ?? ''}`
+// PIP-616: two tabs, Giro (the recorded lap, ACC Drive TELEMETRY) and Box (live, ACC Drive ENGINEER).
+type DataTab = 'giro' | 'box'
+const TAB_KEY = 'rc:dati:tab'
+function rememberedTab(): DataTab {
+  try { return localStorage.getItem(TAB_KEY) === 'box' ? 'box' : 'giro' } catch { return 'giro' }
+}
+const tab = ref<DataTab>('giro')
+function selectTab(value: DataTab) {
+  tab.value = value
+  try { localStorage.setItem(TAB_KEY, value) } catch { /* Storage can be disabled. */ }
+}
 function remembered(): Selection {
   try { return JSON.parse(localStorage.getItem(storageKey()) || '{}') } catch { return {} }
 }
@@ -117,7 +128,7 @@ function stepLap(direction: -1 | 1) {
   if (next) lapNumber.value = next.lap_number
 }
 function onKey(event: KeyboardEvent) {
-  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+  if (tab.value !== 'giro' || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) return
   if ((event.target as HTMLElement | null)?.closest?.('select, input, textarea')) return
   event.preventDefault()
   stepLap(event.key === 'ArrowUp' ? -1 : 1)
@@ -203,7 +214,7 @@ watch(stintNumber, () => { reconcileSelection(); saveSelection() })
 watch(lapNumber, saveSelection)
 watch(() => profileUser.value?.uid, () => { void load() })
 watch(cloudSessionReady, () => { void load() })
-onMounted(() => { void load(); timer = setInterval(() => { void refreshLocal() }, 10000); window.addEventListener('keydown', onKey) })
+onMounted(() => { tab.value = rememberedTab(); void load(); timer = setInterval(() => { void refreshLocal() }, 10000); window.addEventListener('keydown', onKey) })
 onBeforeUnmount(() => { revision++; clearInterval(timer); window.removeEventListener('keydown', onKey) })
 const time = (value: number | null | undefined) => value && value > 0 ? formatLapTime(value) : '--'
 const number = (value: number | null | undefined, digits = 1) => typeof value === 'number' && Number.isFinite(value) ? value.toFixed(digits) : '--'
@@ -218,6 +229,12 @@ const repairTotal = computed(() => {
 
 <template>
   <LayoutPageContainer class="data-page">
+    <div class="data-tabs" role="tablist" aria-label="Vista dati">
+      <button type="button" role="tab" :aria-selected="tab === 'giro'" :class="{ active: tab === 'giro' }" title="I dati del giro registrato" @click="selectTab('giro')">Giro</button>
+      <button type="button" role="tab" :aria-selected="tab === 'box'" :class="{ active: tab === 'box' }" title="Il box in diretta mentre guidi" @click="selectTab('box')">Box</button>
+    </div>
+    <DatiBoxPanel v-if="tab === 'box'" />
+    <template v-else>
     <!-- One bar: session, latest, stint, refresh; the context line under it. -->
     <div class="data-bar">
       <select class="data-session" :value="sessionId" :disabled="busy || !sessions.length" aria-label="Sessione" @change="selectSession(($event.target as HTMLSelectElement).value)">
@@ -345,6 +362,7 @@ const repairTotal = computed(() => {
         <p v-if="lap && !tel" class="tele-note">-- = giro registrato prima della versione che salva gomme, freni, velocità, TC/ABS e danni.</p>
       </div>
     </div>
+    </template>
   </LayoutPageContainer>
 </template>
 
@@ -359,6 +377,11 @@ h2, h3 { margin: 0; font-family: 'Racer Display', 'Arial Narrow', sans-serif; fo
 button { @include controls.action; }
 select { @include controls.select; }
 
+// Giro / Box: the segmented switch of the Pit Wall views.
+.data-tabs { display: flex; gap: 3px; width: max-content; margin-bottom: 12px; padding: 3px; border: 1px solid #ffffff1f; background: #0a0a0feb;
+  button { height: 30px; padding: 0 18px; border: 0; background: transparent; clip-path: none; color: #b3b3b8; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; cursor: pointer;
+    &::after { display: none; }
+    &.active { background: #ffffff14; color: #fff; box-shadow: inset 0 -2px #ff0024; } } }
 .data-bar { display: flex; gap: 10px; align-items: center; }
 .data-session { flex: 1; min-width: 0; }
 .data-stint { flex: 0 0 170px; }
