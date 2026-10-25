@@ -7,12 +7,16 @@
  */
 import type { LapTraceView } from './lapTraceChart'
 
-/** Value of a channel at a lap fraction, linearly interpolated; null without the channel. */
+/** Levels have no values in between: the logger stores them as steps (PIP-617). */
+const DISCRETE = new Set(['gear', 'engine_map', 'traction_control', 'traction_control_2', 'abs'])
+
+/** Value of a channel at a lap fraction, linearly interpolated (levels: previous sample); null without the channel. */
 export function channelAt(trace: LapTraceView, channel: string, fraction: number): number | null {
   const values = trace.channels[channel]
   if (!values?.length) return null
   const position = Math.min(Math.max(fraction, 0), 1) * (values.length - 1)
   const low = Math.floor(position)
+  if (DISCRETE.has(channel)) return values[low]!
   const high = Math.min(low + 1, values.length - 1)
   return values[low]! + (values[high]! - values[low]!) * (position - low)
 }
@@ -62,8 +66,10 @@ export function detectCorners(reference: LapTraceView, dropKmh = 12, smoothSampl
       else if (speed[i]! - speed[candidate]! >= dropKmh) { extremes.push({ index: candidate, kind: 'valley' }); kind = 'peak'; candidate = i }
     }
   }
-  extremes.push({ index: candidate, kind })
   const last = speed.length - 1
+  // A slowdown that never climbs back before the line is not a corner of this lap:
+  // the lap ends on the peak it was leaving.
+  extremes.push(kind === 'peak' ? { index: candidate, kind } : { index: last, kind: 'peak' })
   const corners: Corner[] = []
   extremes.forEach((point, i) => {
     if (point.kind !== 'valley') return
@@ -86,15 +92,24 @@ function minIn(trace: LapTraceView, channel: string, start: number, end: number)
   return min
 }
 
-/** First point between start and apex with the brake above 10%; null if never braking. */
+const BRAKE_ON = 10
+const BRAKE_LOOKBACK_M = 300
+
+/**
+ * Where the braking for this corner starts: the last braking before the apex,
+ * followed back to its first sample. The search may go before the corner start
+ * (up to 300 m), so braking earlier than the reference is measured in full.
+ */
 function brakePoint(trace: LapTraceView, start: number, apex: number): number | null {
   const values = trace.channels.brake_pct
   if (!values?.length) return null
   const last = values.length - 1
-  for (let i = Math.floor(start * last); i <= Math.ceil(apex * last); i++) {
-    if ((values[i] ?? 0) > 10) return i / last
-  }
-  return null
+  const floor = Math.max(0, Math.floor((start - BRAKE_LOOKBACK_M / Math.max(trace.lengthM, 1)) * last))
+  let i = Math.ceil(apex * last)
+  while (i >= floor && (values[i] ?? 0) <= BRAKE_ON) i--
+  if (i < floor) return null
+  while (i > floor && (values[i - 1] ?? 0) > BRAKE_ON) i--
+  return i / last
 }
 
 export interface CornerComparison {
@@ -161,6 +176,19 @@ export function mapPoints(trace: LapTraceView, at: number[], width: number, heig
 /** Gain/loss of each map segment: the change of the delta along it (negative = gaining). */
 export function deltaTrend(delta: number[]): number[] {
   return delta.slice(1).map((value, i) => value - delta[i]!)
+}
+
+const TOKEN = /^\d{8}_\d{6}$/
+
+/**
+ * The logger's session id (YYYYMMDD_HHMMSS) that names the lap files. Newer
+ * sessions carry it; older ones only have it in their start time, written by
+ * the same logger clock (date_start "2026-10-25T17:52:40.72" -> 20261025_175240).
+ */
+export function analysisSessionToken(sessionId: unknown, pageId: unknown, dateStart: unknown): string | null {
+  for (const id of [sessionId, pageId]) if (typeof id === 'string' && TOKEN.test(id)) return id
+  const match = typeof dateStart === 'string' ? /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/.exec(dateStart) : null
+  return match ? `${match[1]}${match[2]}${match[3]}_${match[4]}${match[5]}${match[6]}` : null
 }
 
 export function formatDelta(seconds: number): string {

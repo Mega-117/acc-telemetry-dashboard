@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { channelAt, compareCorners, cornerAdvice, deltaTrend, detectCorners, formatDelta, fractions, lapDelta, mapPoints } from '~/services/telemetry/lapAnalysis'
+import { analysisSessionToken, channelAt, compareCorners, cornerAdvice, deltaTrend, detectCorners, formatDelta, fractions, lapDelta, mapPoints } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
 const STEP = 2
@@ -22,11 +22,33 @@ const dip = (m: number, at: number, min: number) => Math.min(1, Math.abs(m - at)
 const profile = (c2min = 70) => (m: number) => Math.min(dip(m, 1000, 90), dip(m, 2200, c2min))
 
 describe('lap analysis (our Track Titan)', () => {
-  it('interpolates a channel on the lap fraction', () => {
+  it('interpolates a channel on the lap fraction; levels take the previous sample', () => {
     const t = lap(() => 180)
-    expect(channelAt(t, 'speed_kmh', 0.5)).toBe(180)
+    t.channels.speed_kmh = [100, 200, 300]
+    t.channels.gear = [2, 4, 4]
+    expect(channelAt(t, 'speed_kmh', 0.25)).toBe(150)
+    expect(channelAt(t, 'speed_kmh', 0.75)).toBe(250)
+    expect(channelAt(t, 'gear', 0.25)).toBe(2) // never a third gear that was not recorded
     expect(channelAt(t, 'missing', 0.5)).toBeNull()
     expect(fractions(3)).toEqual([0, 0.5, 1])
+  })
+
+  it('a slowdown that never climbs back before the line is not a corner', () => {
+    const corners = detectCorners(lap(m => m < 2700 ? 250 : 250 - (m - 2700) / 3))
+    expect(corners).toEqual([])
+  })
+
+  it('braking earlier than the reference is measured in full, even before the corner start', () => {
+    const reference = lap(profile(), [800, 2000])
+    const early = lap(profile(), [640, 2000], 220) // corner 1: from 640 m instead of 800 m, still braking at 800
+    const [c1] = compareCorners(early, reference, detectCorners(reference))
+    expect(c1!.brakeDeltaM).toBeCloseTo(-160, 6)
+  })
+
+  it('finds the logger session id for the lap files, also on older sessions', () => {
+    expect(analysisSessionToken('20261025_175240', 'x', null)).toBe('20261025_175240')
+    expect(analysisSessionToken(undefined, '2026_08_17T20_00_00_spa', '2026-08-17T20:00:00.123')).toBe('20260817_200000')
+    expect(analysisSessionToken(undefined, 'cloud-id', undefined)).toBeNull()
   })
 
   it('finds one corner per slowdown on the reference', () => {

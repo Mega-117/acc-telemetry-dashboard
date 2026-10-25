@@ -77,6 +77,7 @@ import type {
 import type { SessionDetailLap, SessionDetailStint } from '~/types/sessionDetailViewModel'
 import SessionDetailPanel from '~/components/session-detail/SessionDetailPanel.vue'
 import SessionAnalysisPanel from '~/components/session-detail/analysis/SessionAnalysisPanel.vue'
+import { analysisSessionToken } from '~/services/telemetry/lapAnalysis'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler, zoomPlugin)
 
@@ -186,10 +187,11 @@ const isEvoSession = computed(() => recordingGame(originalSession.value) === 'ev
 // PIP-618: "Avanzata" tab, the lap analysis (our Track Titan) from the logger's lap files.
 // Lap files carry the session id of the logger (YYYYMMDD_HHMMSS); other sessions have none.
 const detailTab = ref<'sessione' | 'avanzata'>('sessione')
-const analysisToken = computed(() => {
-  const id = (originalSession.value as { session_id?: unknown } | null)?.session_id ?? props.sessionId
-  return typeof id === 'string' && /^\d{8}_\d{6}$/.test(id) ? id : null
-})
+const analysisToken = computed(() => analysisSessionToken(
+  (originalSession.value as { session_id?: unknown } | null)?.session_id,
+  props.sessionId,
+  originalSession.value?.session_info?.date_start ?? fullSession.value?.session_info?.date_start,
+))
 const analysisLaps = computed(() => (fullSession.value?.stints ?? []).flatMap(stint => stint.laps ?? [])
   .map(lap => ({ lap_number: lap.lap_number, lap_time_ms: lap.lap_time_ms ?? null, is_valid: lap.is_valid ?? null })))
 

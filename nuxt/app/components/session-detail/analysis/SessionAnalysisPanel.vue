@@ -27,7 +27,7 @@ function setLayout(value: Layout) {
   try { localStorage.setItem(LAYOUT_KEY, value) } catch { /* Storage can be disabled. */ }
 }
 
-interface Entry { id: string, lapNumber: number, lapTimeMs: number, valid: boolean }
+interface Entry { id: string, lapNumber: number, lapTimeMs: number, valid: boolean, complete: boolean }
 const entries = ref<Entry[]>([])
 const traces = ref<Record<string, LapTraceView>>({})
 const lapId = ref(''), refId = ref('')
@@ -42,39 +42,50 @@ interface LapTraceApi {
 function api(): LapTraceApi | null {
   return typeof window === 'undefined' ? null : (window as Window & { electronAPI?: LapTraceApi }).electronAPI ?? null
 }
-async function readTrace(id: string) {
-  if (!id || traces.value[id]) return
-  const trace = normalizeLapTrace(await api()?.readLapTrace?.(id))
-  if (trace) traces.value = { ...traces.value, [id]: trace }
-}
+const skipped = ref(0)
 async function load() {
+  const token = props.sessionToken
   error.value = ''
   entries.value = []
-  if (!props.sessionToken) { error.value = 'Questa sessione non ha giri registrati sul computer.'; return }
-  if (typeof api()?.listLapTraces !== 'function') { error.value = 'L’analisi dei giri è disponibile nel programma Racer Core.'; return }
+  traces.value = {}
+  skipped.value = 0
+  if (!token) { error.value = 'Questa sessione non ha giri registrati sul computer.'; return }
+  const bridge = api()
+  if (typeof bridge?.listLapTraces !== 'function' || typeof bridge.readLapTrace !== 'function') { error.value = 'L’analisi dei giri è disponibile nel programma Racer Core.'; return }
   loading.value = true
   try {
-    const list = (await api()?.listLapTraces?.({ sessionToken: props.sessionToken })) ?? []
+    const list = (await bridge.listLapTraces({ sessionToken: token })) ?? []
     const valid = new Map(props.laps.map(l => [l.lap_number, l.is_valid === true]))
-    entries.value = list.map(item => {
+    // All laps of the session at once (about 120 KB each): a lap that cannot be read
+    // (pruned meanwhile, damaged) is left out here, never on a later click.
+    const read = await Promise.all(list.map(async item => {
       const match = /_L(\d{3})_(\d+)ms\.json\.gz$/.exec(item.id)
-      return match ? { id: item.id, lapNumber: Number(match[1]), lapTimeMs: Number(match[2]), valid: valid.get(Number(match[1])) ?? false } : null
-    }).filter((e): e is Entry => e !== null).sort((a, b) => a.lapNumber - b.lapNumber)
-    if (!entries.value.length) { error.value = 'Nessun giro registrato per questa sessione: le analisi arrivano dai giri guidati con Racer Core attivo.'; return }
+      if (!match) return null
+      try {
+        const trace = normalizeLapTrace(await bridge.readLapTrace!(item.id))
+        return trace ? { trace, entry: { id: item.id, lapNumber: Number(match[1]), lapTimeMs: Number(match[2]), valid: valid.get(Number(match[1])) ?? false, complete: trace.complete } } : null
+      } catch { return null }
+    }))
+    if (token !== props.sessionToken) return
+    const ok = read.filter((r): r is { trace: LapTraceView, entry: Entry } => r !== null)
+    skipped.value = list.length - ok.length
+    traces.value = Object.fromEntries(ok.map(r => [r.entry.id, r.trace]))
+    entries.value = ok.map(r => r.entry).sort((a, b) => a.lapNumber - b.lapNumber)
+    // A partial lap (logger started mid-lap, out-lap) covers only part of the track:
+    // stretched on the whole lap it would compare different places. Listed, not usable.
+    const usable = entries.value.filter(e => e.complete)
+    if (!usable.length) { error.value = entries.value.length ? 'Ci sono solo giri parziali in questa sessione: servono giri completi, partiti dal traguardo.' : 'Nessun giro registrato per questa sessione: le analisi arrivano dai giri guidati con Racer Core attivo.'; return }
     // Default as Track Titan: your best valid lap is the reference, the last lap the one to study.
-    const best = [...entries.value].filter(e => e.valid).sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0] ?? entries.value[0]!
-    const other = [...entries.value].reverse().find(e => e.id !== best.id) ?? best
+    const best = [...usable].filter(e => e.valid).sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0] ?? usable[0]!
+    const other = [...usable].reverse().find(e => e.id !== best.id) ?? best
     refId.value = best.id
     lapId.value = other.id
-    await Promise.all([readTrace(lapId.value), readTrace(refId.value)])
   } catch {
     error.value = 'Impossibile leggere i giri di questa sessione.'
   } finally {
     loading.value = false
   }
 }
-watch(lapId, id => { void readTrace(id) })
-watch(refId, id => { void readTrace(id) })
 watch(() => props.sessionToken, () => { void load() })
 onMounted(() => {
   try { const saved = localStorage.getItem(LAYOUT_KEY) as Layout | null; if (saved && LAYOUTS.some(l => l.id === saved)) layout.value = saved } catch { /* default */ }
@@ -116,7 +127,7 @@ const cornerRows = computed(() => baseRows.value)
 const traceRows = computed(() => [...baseRows.value, ...extraRows.value])
 const pilotRows = computed<ChartRow[]>(() => baseRows.value.filter(r => r.key === 'speed' || r.key === 'pedals').map(r => ({ ...r, height: 80 })))
 
-const lapLabel = (e: Entry) => `Giro ${e.lapNumber} · ${formatLapTime(e.lapTimeMs)}${e.valid ? '' : ' · invalido'}`
+const lapLabel = (e: Entry) => `Giro ${e.lapNumber} · ${formatLapTime(e.lapTimeMs)}${e.complete ? '' : ' · parziale'}${e.valid ? '' : ' · invalido'}`
 const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTime(s * 1000) : '--'
 </script>
 
@@ -127,14 +138,14 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
         <button v-for="l in LAYOUTS" :key="l.id" type="button" role="tab" :aria-selected="layout === l.id" :class="{ active: layout === l.id }" :title="l.hint" @click="setLayout(l.id)">{{ l.label }}</button>
       </div>
       <label class="analysis-pick"><span class="dot dot--lap" />Giro
-        <select v-model="lapId" :disabled="!entries.length"><option v-for="e in entries" :key="e.id" :value="e.id">{{ lapLabel(e) }}</option></select>
+        <select v-model="lapId" :disabled="!entries.length"><option v-for="e in entries" :key="e.id" :value="e.id" :disabled="!e.complete">{{ lapLabel(e) }}</option></select>
       </label>
       <label class="analysis-pick"><span class="dot dot--ref" />Riferimento
-        <select v-model="refId" :disabled="!entries.length"><option v-for="e in entries" :key="e.id" :value="e.id">{{ lapLabel(e) }}</option></select>
+        <select v-model="refId" :disabled="!entries.length"><option v-for="e in entries" :key="e.id" :value="e.id" :disabled="!e.complete">{{ lapLabel(e) }}</option></select>
       </label>
       <p v-if="totalDelta !== null" class="analysis-total" :class="{ gain: totalDelta < 0, loss: totalDelta > 0 }">{{ formatDelta(totalDelta) }} s</p>
     </div>
-    <p class="analysis-hint">{{ LAYOUTS.find(l => l.id === layout)?.hint }}</p>
+    <p class="analysis-hint">{{ LAYOUTS.find(l => l.id === layout)?.hint }}<template v-if="skipped"> · {{ skipped }} giri non leggibili esclusi</template></p>
     <p v-if="loading" class="analysis-empty" role="status">Caricamento dei giri…</p>
     <p v-else-if="error" class="analysis-empty">{{ error }}</p>
     <p v-else-if="lapId === refId && entries.length > 1" class="analysis-empty">Scegli un riferimento diverso dal giro per vedere il confronto.</p>
