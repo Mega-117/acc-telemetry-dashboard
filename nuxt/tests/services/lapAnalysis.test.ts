@@ -106,6 +106,8 @@ describe('lap analysis (our Track Titan)', () => {
     const xs = points.map(p => p.x)
     expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(280, 0)
     expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(140, 0)
+    // World +Z (a quarter lap in, z = +200) goes to the right: a mirrored map would put it left.
+    expect(points[25]!.x).toBeCloseTo(Math.max(...xs), 0)
   })
 
   it('finish line crosses the track at the start', () => {
@@ -120,6 +122,25 @@ describe('lap analysis (our Track Titan)', () => {
     expect(timeSyncedFraction(slower, reference, 0.25)).toBeCloseTo(0.5, 3)
     expect(timeSyncedFraction(slower, reference, 0.6)).toBe(1)
     expect(timeSyncedFraction(reference, slower, 1)).toBeCloseTo(0.5, 3)
+  })
+
+  it('time-sync follows a real speed profile, not the ratio of lap times', () => {
+    const reference = lap(profile(), [800, 2000]) // slow in the corners, fast on the straights
+    const steady = lap(() => 150)
+    for (const f of [0.1, 0.3, 0.45, 0.7]) {
+      const at = timeSyncedFraction(steady, reference, f)
+      expect(channelAt(reference, 'time_s', at)!).toBeCloseTo(channelAt(steady, 'time_s', f)!, 2)
+      expect(Math.abs(at - f * steady.lapTimeS / reference.lapTimeS)).toBeGreaterThan(0.001)
+    }
+  })
+
+  it('a time axis that goes back falls back to the same point; two samples give no body angle', () => {
+    const broken = lap(() => 200)
+    broken.channels.time_s = broken.channels.time_s!.map((v, i, all) => i === all.length - 1 ? 0 : v)
+    expect(timeSyncedFraction(lap(() => 100), broken, 0.3)).toBe(0.3)
+    const tiny = lap(() => 200, [], 60, 2)
+    tiny.channels.heading_rad = [0, 0]
+    expect(bodySlipDeg(tiny, 0.5)).toBeNull()
   })
 
   it('body slip: zero when the car points where it goes, the angle when it does not', () => {

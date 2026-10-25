@@ -199,10 +199,21 @@ export function finishLine(points: MapPoint[], halfLength = 9): { x1: number, y1
  * reached `fraction`. The gap shows as distance on track. Same fraction if the
  * reference has no time channel.
  */
+const monotonic = new WeakMap<number[], boolean>()
+function increasing(values: number[]): boolean {
+  let known = monotonic.get(values)
+  if (known === undefined) {
+    known = values.every((v, i) => i === 0 || v >= values[i - 1]!)
+    monotonic.set(values, known)
+  }
+  return known
+}
+
 export function timeSyncedFraction(lap: LapTraceView, reference: LapTraceView, fraction: number): number {
   const time = channelAt(lap, 'time_s', fraction)
   const times = reference.channels.time_s
-  if (time === null || !times?.length) return fraction
+  // A time axis that goes back (damaged file) cannot be searched: same point instead.
+  if (time === null || !times?.length || !increasing(times)) return fraction
   if (time <= times[0]!) return 0
   if (time >= times[times.length - 1]!) return 1
   let low = 0, high = times.length - 1
@@ -218,7 +229,7 @@ export function timeSyncedFraction(lap: LapTraceView, reference: LapTraceView, f
  */
 export function bodySlipDeg(trace: LapTraceView, fraction: number): number | null {
   const x = trace.channels.pos_x, z = trace.channels.pos_z, h = trace.channels.heading_rad
-  if (!x || !z || !h) return null
+  if (!x || !z || !h || x.length < 3) return null
   const last = x.length - 1
   const i = Math.min(Math.max(Math.round(fraction * last), 1), last - 1)
   const travel = -Math.atan2(x[i + 1]! - x[i - 1]!, z[i + 1]! - z[i - 1]!)

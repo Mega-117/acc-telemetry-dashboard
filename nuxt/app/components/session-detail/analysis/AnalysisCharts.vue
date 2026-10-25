@@ -71,18 +71,23 @@ const charts = computed(() => props.rows.map(row => {
       { points: line(lapSeries[i]!), color: c.color ?? LAP, dashed: false },
     ])
   const area = row.delta ? `0,${y(0)} ${delta.map((v, i) => `${(i / (SAMPLES - 1) * WIDTH).toFixed(1)},${y(v).toFixed(1)}`).join(' ')} ${WIDTH},${y(0)}` : ''
-  // Dots at the cursor: yours on your line, the reference's on its line at its own position.
-  const dots: { x: number, y: number, color: string, ref: boolean }[] = []
-  if (!row.delta) {
-    row.channels.forEach(c => {
-      if (inRange(props.cursor)) { const v = valueAt(props.lap, c, props.cursor); if (v !== null) dots.push({ x: xOf(props.cursor), y: y(v), color: c.color ?? LAP, ref: false }) }
+  return { row, height, lines, area, zero: row.delta ? y(0) : null, origin, y }
+}))
+
+// Dots at the cursor, apart from the lines: moving the mouse never resamples the traces.
+// Yours on your line, the reference's on its line at its own position.
+const dots = computed(() => charts.value.map(chart => {
+  const list: { x: number, y: number, color: string, ref: boolean }[] = []
+  if (!chart.row.delta) {
+    chart.row.channels.forEach(c => {
+      if (inRange(props.cursor)) { const v = valueAt(props.lap, c, props.cursor); if (v !== null) list.push({ x: xOf(props.cursor), y: chart.y(v), color: c.color ?? LAP, ref: false }) }
       const refAt = props.refCursor ?? props.cursor
-      if (props.reference && inRange(refAt)) { const v = valueAt(props.reference, c, refAt); if (v !== null) dots.push({ x: xOf(refAt), y: y(v), color: c.color ?? REF, ref: true }) }
+      if (props.reference && inRange(refAt)) { const v = valueAt(props.reference, c, refAt); if (v !== null) list.push({ x: xOf(refAt), y: chart.y(v), color: c.color ?? REF, ref: true }) }
     })
   } else if (inRange(props.cursor)) {
-    dots.push({ x: xOf(props.cursor), y: y(deltaAt(props.cursor) - origin), color: '#e6e6ea', ref: false })
+    list.push({ x: xOf(props.cursor), y: chart.y(deltaAt(props.cursor) - chart.origin), color: '#e6e6ea', ref: false })
   }
-  return { row, height, lines, area, zero: row.delta ? y(0) : null, origin, dots }
+  return list
 }))
 
 const bands = computed(() => props.corners
@@ -117,7 +122,7 @@ function onMove(event: PointerEvent) {
         <text :x="b.apex" y="13">{{ b.number }}</text>
       </g>
     </svg>
-    <div v-for="chart in charts" :key="chart.row.key" class="chart">
+    <div v-for="(chart, index) in charts" :key="chart.row.key" class="chart">
       <div class="chart-head">
         <span class="chart-title">{{ chart.row.title }} <small v-if="chart.row.unit">{{ chart.row.unit }}</small></span>
         <span class="chart-value" :class="{ gain: chart.row.delta && readout(chart).startsWith('−'), loss: chart.row.delta && readout(chart).startsWith('+') }">{{ readout(chart) }}</span>
@@ -139,7 +144,7 @@ function onMove(event: PointerEvent) {
       </svg>
       <!-- Dots in an overlay without aspect distortion: round whatever the chart width. -->
       <div class="chart-dots" :style="{ height: `${chart.height}px` }">
-        <i v-for="(d, i) in chart.dots" :key="i" :class="{ ref: d.ref }" :style="{ left: `${d.x / WIDTH * 100}%`, top: `${d.y}px`, '--c': d.color }" />
+        <i v-for="(d, i) in dots[index]" :key="i" :class="{ ref: d.ref }" :style="{ left: `${d.x / WIDTH * 100}%`, top: `${d.y}px`, '--c': d.color }" />
       </div>
     </div>
   </div>
