@@ -2122,8 +2122,7 @@ const chartOptions = {
 // HELPERS
 // ========================================
 function getTypeLabel(t: string) { return { practice: 'LIBERE', qualify: 'QUALIFICA', race: 'GARA', unknown: 'SESSIONE' }[t] || t.toUpperCase() }
-// Delta bands: faster/on target green; slower close, margin and far in three strengths of the
-// same red as Telemetria (no yellow or orange, user decision 2026-10-25).
+// Delta color scheme: green=on-target/faster, yellow=close, orange=margin, red=far
 function getDeltaClass(d: string | undefined) {
   if (!d || d === '-') return 'far'
   const v = parseFloat(d)
@@ -3684,11 +3683,11 @@ const gripZones = computed(() => {
 .stint-delta { display: flex; align-items: center; gap: 6px; justify-self: end; padding: 4px 8px; border-radius: 4px; }
 .delta-val { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; }
 .delta-lbl { font-size: 8px; font-weight: 700; opacity: 0.8; }
-.delta--faster { background: rgba(61, 220, 90, 0.12); color: #3ddc5a; .delta-val, .delta-lbl { color: #3ddc5a; } }
-.delta--ontarget { background: rgba(61, 220, 90, 0.12); color: #3ddc5a; .delta-val, .delta-lbl { color: #3ddc5a; } }
-.delta--close { background: rgba(255, 90, 110, 0.07); color: #ffa3ae; .delta-val, .delta-lbl { color: #ffa3ae; } }
-.delta--margin { background: rgba(255, 90, 110, 0.08); color: #ff7d8e; .delta-val, .delta-lbl { color: #ff7d8e; } }
-.delta--far { background: rgba(255, 90, 110, 0.1); color: #ff5a6e; .delta-val, .delta-lbl { color: #ff5a6e; } }
+.delta--faster { background: rgba($accent-success,0.12); color: $accent-success; .delta-val, .delta-lbl { color: $accent-success; } }
+.delta--ontarget { background: rgba($accent-success,0.12); color: $accent-success; .delta-val, .delta-lbl { color: $accent-success; } }
+.delta--close { background: rgba($accent-warning,0.12); color: $accent-warning; .delta-val, .delta-lbl { color: $accent-warning; } }
+.delta--margin { background: rgba(#f97316,0.1); color: #f97316; .delta-val, .delta-lbl { color: #f97316; } }
+.delta--far { background: rgba(255,100,100,0.1); color: rgb(255,100,100); .delta-val, .delta-lbl { color: rgb(255,100,100); } }
 
 // DETAIL
 .detail {
@@ -3902,47 +3901,47 @@ const gripZones = computed(() => {
 
     // Green - B is faster (negative delta)
     &.delta--faster, &.delta--ontarget {
-      background: linear-gradient(135deg, rgba(61, 220, 90, 0.2) 0%, rgba(61, 220, 90, 0.1) 100%);
-      color: #3ddc5a;
-      border: 1px solid rgba(61, 220, 90, 0.35);
-      box-shadow: 0 0 12px rgba(61, 220, 90, 0.15);
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);
     }
 
     // Yellow - close
     &.delta--close {
-      background: linear-gradient(135deg, rgba(255, 90, 110, 0.12) 0%, rgba(255, 90, 110, 0.06) 100%);
-      color: #ffa3ae;
-      border: 1px solid rgba(255, 90, 110, 0.21);
-      box-shadow: 0 0 12px rgba(255, 90, 110, 0.09);
+      background: linear-gradient(135deg, rgba(234, 179, 8, 0.2) 0%, rgba(234, 179, 8, 0.1) 100%);
+      color: #fbbf24;
+      border: 1px solid rgba(234, 179, 8, 0.35);
+      box-shadow: 0 0 12px rgba(234, 179, 8, 0.15);
     }
 
     // Orange - margin
     &.delta--margin {
-      background: linear-gradient(135deg, rgba(255, 90, 110, 0.16) 0%, rgba(255, 90, 110, 0.08) 100%);
-      color: #ff7d8e;
-      border: 1px solid rgba(255, 90, 110, 0.28);
-      box-shadow: 0 0 12px rgba(255, 90, 110, 0.12);
+      background: linear-gradient(135deg, rgba(249, 115, 22, 0.2) 0%, rgba(249, 115, 22, 0.1) 100%);
+      color: #fb923c;
+      border: 1px solid rgba(249, 115, 22, 0.35);
+      box-shadow: 0 0 12px rgba(249, 115, 22, 0.15);
     }
 
     // Red - far (B much slower)
     &.delta--far {
-      background: linear-gradient(135deg, rgba(255, 90, 110, 0.2) 0%, rgba(255, 90, 110, 0.1) 100%);
-      color: #ff5a6e;
-      border: 1px solid rgba(255, 90, 110, 0.35);
-      box-shadow: 0 0 12px rgba(255, 90, 110, 0.15);
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.15);
     }
 
     // For strategy duration comparison
     &.delta--negative {
-      background: linear-gradient(135deg, rgba(61, 220, 90, 0.2) 0%, rgba(61, 220, 90, 0.1) 100%);
-      color: #3ddc5a;
-      border: 1px solid rgba(61, 220, 90, 0.35);
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.35);
     }
 
     &.delta--positive {
-      background: linear-gradient(135deg, rgba(255, 90, 110, 0.2) 0%, rgba(255, 90, 110, 0.1) 100%);
-      color: #ff5a6e;
-      border: 1px solid rgba(255, 90, 110, 0.35);
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.35);
     }
   }
 
@@ -4351,30 +4350,30 @@ const gripZones = computed(() => {
 
   // Green: faster than target
   &.delta--faster, &.delta--ontarget {
-    background: rgba(61, 220, 90, 0.15);
-    color: #3ddc5a;
-    border: 1px solid rgba(61, 220, 90, 0.25);
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.25);
   }
 
   // Yellow: close to target
   &.delta--close {
-    background: rgba(255, 90, 110, 0.09);
-    color: #ffa3ae;
-    border: 1px solid rgba(255, 90, 110, 0.15);
+    background: rgba(234, 179, 8, 0.15);
+    color: #eab308;
+    border: 1px solid rgba(234, 179, 8, 0.25);
   }
 
   // Orange: within margin
   &.delta--margin {
-    background: rgba(255, 90, 110, 0.12);
-    color: #ff7d8e;
-    border: 1px solid rgba(255, 90, 110, 0.20);
+    background: rgba(249, 115, 22, 0.15);
+    color: #f97316;
+    border: 1px solid rgba(249, 115, 22, 0.25);
   }
 
   // Red: far from target
   &.delta--far {
-    background: rgba(255, 90, 110, 0.15);
-    color: #ff5a6e;
-    border: 1px solid rgba(255, 90, 110, 0.25);
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.25);
   }
 }
 .laps-table .sector { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(255,255,255,0.8); }
@@ -6329,26 +6328,26 @@ const gripZones = computed(() => {
 
   // Green: on target (perfect)
   &.delta--ontarget {
-    background: rgba(61, 220, 90, 0.15);
-    color: #3ddc5a;
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
   }
 
   // Yellow/Gold: close to target
   &.delta--close {
-    background: rgba(255, 90, 110, 0.09);
-    color: #ffa3ae;
+    background: rgba(234, 179, 8, 0.15);
+    color: #eab308;
   }
 
   // Orange: margin (mid range)
   &.delta--margin {
-    background: rgba(255, 90, 110, 0.12);
-    color: #ff7d8e;
+    background: rgba(249, 115, 22, 0.15);
+    color: #f97316;
   }
 
   // Red: far from target
   &.delta--far {
-    background: rgba(255, 90, 110, 0.15);
-    color: #ff5a6e;
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
   }
 }
 
