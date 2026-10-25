@@ -424,7 +424,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
   &--narrow { grid-template-columns: 320px minmax(0, 1fr); grid-template-areas: 'center right'; } gap: 10px; align-items: stretch; overflow: hidden; }
 // Left column: three boxes with air between them (Garage 61 Laps/Gaps, VRS corners).
 // Tracce fills the window: the page does not scroll, each column scrolls on its own.
-.tracce-left { grid-area: left; display: grid; gap: 10px; align-content: start; height: 100%; overflow-y: auto; }
+.tracce-left { grid-area: left; display: grid; gap: 10px; align-content: start; height: 100%; overflow-y: auto; overflow-x: hidden; }
 .side-box { display: grid; gap: 8px; padding: 10px; border: 1px solid #ffffff1f; background: #ffffff06;
   h4 { margin: 0 0 2px; color: #fff; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; letter-spacing: .02em;
     small { color: #77777d; font: 500 10px 'Inter', sans-serif; text-transform: none; margin-left: 4px; } } }
@@ -444,9 +444,9 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .corner-num { position: relative; display: grid; place-items: center; padding: 3px 0; background: #ffffff0d; color: #e6e6ea; font: italic 700 15px 'Racer Display', 'Arial Narrow', sans-serif;
   &--all { grid-column: 1; padding: 3px 4px; font-size: 9px; font-style: normal; font-family: 'Inter', sans-serif; text-transform: uppercase; line-height: 1.1; } }
 .corner-cell { display: grid; place-items: center; color: #fff; font: 700 12px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
-.tracce-center { grid-area: center; display: grid; gap: 8px; align-content: start; height: 100%; overflow-y: auto; }
+.tracce-center { grid-area: center; display: grid; gap: 8px; align-content: start; height: 100%; overflow-y: auto; overflow-x: hidden; }
 .tracce-toggle { justify-self: start; padding: 0 10px; }
-.tracce-right { grid-area: right; min-width: 0; height: 100%; overflow-y: auto; }
+.tracce-right { grid-area: right; min-width: 0; height: 100%; overflow-y: auto; overflow-x: hidden; }
 // Sector and corner strip: sticky under the lap bar, aligned to the plot area (42 px axis, 8 px right).
 .strip-head { display: flex; align-items: center; gap: 10px; height: 20px; margin-left: -34px; color: #b3b3b8; font: 700 11px "Inter", sans-serif; text-transform: uppercase; letter-spacing: .04em; }
 .strip-nav { display: flex; gap: 3px;

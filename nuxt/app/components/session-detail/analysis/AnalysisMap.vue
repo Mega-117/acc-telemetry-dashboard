@@ -48,14 +48,16 @@ const edgePaths = computed(() => {
 const lapPoints = computed(() => props.reference ? mapPoints(props.lap, at, W.value, H.value, 18, props.reference) : base.value)
 const zoomed = computed(() => props.zoom && props.selected !== null && !!props.corners[props.selected - 1])
 const lapsMode = computed(() => props.colorMode === 'laps')
-const manualZoom = ref(1)
 const focusRange = computed<[number, number] | null>(() => {
   const corner = props.selected !== null ? props.corners[props.selected - 1] : null
   // Corner zoom on the apex area, about 2.5x closer than the whole peak-to-peak stretch.
   if (zoomed.value && corner) return [corner.apex - (corner.apex - corner.start) * 0.4, corner.apex + (corner.end - corner.apex) * 0.4]
   return props.focus && (props.focus[0] > 0 || props.focus[1] < 1) ? props.focus : null
 })
-watch(focusRange, () => { manualZoom.value = 1 })
+// Your own framing (wheel, drag, + / −), as Track Titan and Garage 61: it stays put while
+// the cursor moves on the charts. Null follows the corner, the sector or the whole track.
+const view = ref<{ cx: number, cy: number, span: number } | null>(null)
+watch(focusRange, () => { view.value = null })
 const trend = computed(() => props.reference ? deltaTrend(lapDelta(props.lap, props.reference, at)) : null)
 const path = (points: MapPoint[] | null) => points?.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ') ?? ''
 const segments = computed(() => {
@@ -83,8 +85,8 @@ const lapArrow = computed(() => {
 const refDot = computed(() => props.reference ? dot(base.value, props.refCursor ?? props.cursor) : null)
 const labels = computed(() => base.value ? props.corners.map(c => ({ number: c.number, point: base.value![Math.round(c.apex * (POINTS - 1))]! })) : [])
 const finish = computed(() => base.value ? finishLine(base.value, 10) : null)
-const viewBox = computed(() => {
-  // Frame: the focused stretch (corner or sector) or the whole track, then the + / − zoom.
+const autoFrame = computed(() => {
+  // Frame: the focused stretch (corner or sector) or the whole track.
   let cx = W.value / 2, cy = H.value / 2, span = W.value
   const range = focusRange.value
   const inside = range && base.value ? base.value.filter((_, i) => at[i]! >= range[0] && at[i]! <= range[1]) : []
@@ -94,22 +96,75 @@ const viewBox = computed(() => {
     span = Math.max(Math.max(...xs) - Math.min(...xs), (Math.max(...ys) - Math.min(...ys)) / 0.8, 16) * 1.6
     cx = (Math.max(...xs) + Math.min(...xs)) / 2; cy = (Math.max(...ys) + Math.min(...ys)) / 2
   }
-  if (manualZoom.value > 1) {
-    // Zoom around your car when the cursor is on the track, else around the frame centre.
-    if (lapDot.value) { cx = lapDot.value.x; cy = lapDot.value.y }
-    span /= manualZoom.value
-  }
+  return { cx, cy, span }
+})
+const frameNow = computed(() => view.value ?? autoFrame.value)
+const viewBox = computed(() => {
+  const { cx, cy, span } = frameNow.value
   return `${cx - span / 2} ${cy - span * 0.4} ${span} ${span * 0.8}`
 })
-const zoomScale = computed(() => Number(viewBox.value.split(' ')[2]) / W.value)
+const zoomScale = computed(() => frameNow.value.span / W.value)
+// Closest: about 20 m of track across the map; farthest: a little more than the whole track.
+const minSpan = computed(() => W.value / 40)
+const maxSpan = computed(() => W.value * 1.2)
+
+/** Map coordinates under the pointer. */
+function mapPoint(event: PointerEvent | WheelEvent | MouseEvent, svg: SVGSVGElement) {
+  const rect = svg.getBoundingClientRect()
+  const [vx, vy, vw, vh] = viewBox.value.split(' ').map(Number) as [number, number, number, number]
+  return { x: vx + (event.clientX - rect.left) * (vw / rect.width), y: vy + (event.clientY - rect.top) * (vh / rect.height), perPixel: vw / rect.width }
+}
+/** Zoom by `factor` keeping the point (x, y) where it is on screen. */
+function zoomAround(factor: number, x: number, y: number) {
+  const { cx, cy, span } = frameNow.value
+  const next = Math.min(Math.max(span * factor, minSpan.value), maxSpan.value)
+  const k = next / span
+  view.value = { cx: x + (cx - x) * k, cy: y + (cy - y) * k, span: next }
+}
+function zoomStep(factor: number) {
+  const { cx, cy } = frameNow.value
+  zoomAround(factor, cx, cy)
+}
+function onWheel(event: WheelEvent) {
+  if (!props.zoomControls) return
+  event.preventDefault()
+  const p = mapPoint(event, event.currentTarget as SVGSVGElement)
+  zoomAround(event.deltaY > 0 ? 1.25 : 0.8, p.x, p.y)
+}
+// Drag to move the map; a short press stays a click (corner numbers).
+let drag: { x: number, y: number, cx: number, cy: number, moved: boolean } | null = null
+const dragging = ref(false)
+// Set while a drag ends, so the click that follows it does not pick a corner.
+const dragged = ref(false)
+function onDown(event: PointerEvent) {
+  if (!props.zoomControls || event.button !== 0) return
+  const { cx, cy } = frameNow.value
+  drag = { x: event.clientX, y: event.clientY, cx, cy, moved: false }
+}
+function onUp(event: PointerEvent) {
+  if (drag?.moved) {
+    (event.currentTarget as SVGSVGElement).releasePointerCapture?.(event.pointerId)
+    dragged.value = true
+    setTimeout(() => { dragged.value = false }, 0)
+  }
+  drag = null
+  dragging.value = false
+}
 
 function onMove(event: PointerEvent) {
+  const svg = event.currentTarget as SVGSVGElement
+  if (drag) {
+    const dx = event.clientX - drag.x, dy = event.clientY - drag.y
+    if (!drag.moved && dx * dx + dy * dy > 16) { drag.moved = true; dragging.value = true; svg.setPointerCapture?.(event.pointerId) }
+    if (drag.moved) {
+      const perPixel = frameNow.value.span / svg.getBoundingClientRect().width
+      view.value = { cx: drag.cx - dx * perPixel, cy: drag.cy - dy * perPixel, span: frameNow.value.span }
+      return
+    }
+  }
   const points = base.value
   if (!points) return
-  const rect = (event.currentTarget as SVGSVGElement).getBoundingClientRect()
-  const [vx, vy, vw, vh] = viewBox.value.split(' ').map(Number) as [number, number, number, number]
-  const x = vx + (event.clientX - rect.left) * (vw / rect.width)
-  const y = vy + (event.clientY - rect.top) * (vh / rect.height)
+  const { x, y } = mapPoint(event, svg)
   let best = 0, bestDistance = Infinity
   points.forEach((p, i) => { const d = (p.x - x) ** 2 + (p.y - y) ** 2; if (d < bestDistance) { bestDistance = d; best = i } })
   emit('hover', bestDistance < (30 * zoomScale.value) ** 2 ? at[best]! : null)
@@ -119,10 +174,11 @@ function onMove(event: PointerEvent) {
 <template>
   <div v-if="base" class="map-wrap">
   <div v-if="zoomControls" class="map-zoom">
-    <button type="button" aria-label="Avvicina la mappa" :disabled="manualZoom >= 8" @click="manualZoom = Math.min(manualZoom * 1.6, 8)">+</button>
-    <button type="button" aria-label="Allontana la mappa" :disabled="manualZoom <= 1" @click="manualZoom = Math.max(manualZoom / 1.6, 1)">−</button>
+    <button type="button" aria-label="Avvicina la mappa" title="Avvicina (anche con la rotella)" :disabled="frameNow.span <= minSpan" @click="zoomStep(1 / 1.6)">+</button>
+    <button type="button" aria-label="Allontana la mappa" title="Allontana (anche con la rotella)" :disabled="frameNow.span >= maxSpan" @click="zoomStep(1.6)">−</button>
+    <button v-if="view" type="button" aria-label="Rimetti la mappa com'era" title="Inquadratura iniziale (anche doppio clic)" @click="view = null">⟲</button>
   </div>
-  <svg class="map" :viewBox="viewBox" :style="{ '--z': zoomScale }" role="img" aria-label="Mappa della pista" @pointermove="onMove" @pointerleave="emit('hover', null)">
+  <svg class="map" :class="{ 'map--pan': zoomControls, 'map--dragging': dragging }" :viewBox="viewBox" :style="{ '--z': zoomScale }" role="img" aria-label="Mappa della pista" @pointermove="onMove" @pointerleave="emit('hover', null)" @pointerdown="onDown" @pointerup="onUp" @pointercancel="onUp" @wheel="onWheel" @dblclick="zoomControls && (view = null)">
     <template v-if="edgePaths">
       <polygon :points="edgePaths.surface" class="map-surface" fill-rule="evenodd" />
       <polyline :points="edgePaths.left" class="map-edge" />
@@ -139,7 +195,7 @@ function onMove(event: PointerEvent) {
       <line :x1="finish.x1" :y1="finish.y1" :x2="finish.x2" :y2="finish.y2" class="map-finish-white" />
       <line :x1="finish.x1" :y1="finish.y1" :x2="finish.x2" :y2="finish.y2" class="map-finish-black" />
     </g>
-    <g v-for="l in labels" :key="l.number" class="map-corner" :class="{ active: selected === l.number }" @click="emit('select', l.number)">
+    <g v-for="l in labels" :key="l.number" class="map-corner" :class="{ active: selected === l.number }" @click="!dragged && emit('select', l.number)">
       <circle :cx="l.point.x" :cy="l.point.y" :r="8 * zoomScale" />
       <text :x="l.point.x" :y="l.point.y + 3.5 * zoomScale" :font-size="9 * zoomScale">{{ l.number }}</text>
     </g>
@@ -154,7 +210,8 @@ function onMove(event: PointerEvent) {
 .map-wrap { position: relative; }
 .map-zoom { position: absolute; top: 4px; left: 4px; display: grid; gap: 3px; z-index: 1;
   button { width: 24px; height: 24px; border: 1px solid #ffffff2e; background: #0d0d12e6; color: #e6e6ea; font: 700 14px/1 "Inter", sans-serif; cursor: pointer; &:disabled { opacity: .35; cursor: default; } } }
-.map { display: block; width: 100%; height: auto; touch-action: none; }
+.map { display: block; width: 100%; height: auto; touch-action: none; user-select: none;
+  &--pan { cursor: grab; } &--dragging { cursor: grabbing; } }
 // Strokes scale with the zoom (--z), so a zoomed corner keeps thin lines.
 .map-surface { fill: #ffffff0d; stroke: none; }
 .map-edge { fill: none; stroke: #ffffff59; stroke-width: calc(1px * var(--z, 1)); stroke-linejoin: round; }

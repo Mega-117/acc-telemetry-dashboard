@@ -254,8 +254,8 @@ function onDouble() {
         <i v-for="(d, i) in dots[index]" :key="i" class="chart-dot" :class="{ ref: d.ref }" :style="{ left: `${d.x / WIDTH * 100}%`, top: `${d.y}px`, '--c': d.color }" />
       </div>
       <div class="chart-xaxis">
-        <span v-for="(t, i) in xTicks" :key="i" class="chart-xtick" :style="{ left: `${t.x / WIDTH * 100}%` }">{{ t.label }}</span>
-        <span v-if="inRange(cursor)" class="chart-xcursor" :style="{ left: `${xOf(cursor!) / WIDTH * 100}%` }">{{ km(cursor!) }}</span>
+        <span v-for="(t, i) in xTicks" :key="i" class="chart-xtick" :style="{ left: `${t.x / WIDTH * 100}%`, '--p': `${t.x / WIDTH * 100}%` }">{{ t.label }}</span>
+        <span v-if="inRange(cursor)" class="chart-xcursor" :style="{ left: `${xOf(cursor!) / WIDTH * 100}%`, '--p': `${xOf(cursor!) / WIDTH * 100}%` }">{{ km(cursor!) }}</span>
       </div>
     </div>
   </div>
@@ -286,7 +286,9 @@ svg { display: block; width: 100%; touch-action: none; cursor: crosshair; }
   .v { color: #8a8a90; b { font-weight: 700; font-size: 12px; } }
   .v--lap b { color: #38bdf8; } .v--ref b { color: #fbbf24; } .v--diff b { color: #e6e6ea; } }
 .chart-grid--x { stroke-dasharray: none; stroke: #ffffff0d; }
-.chart-xaxis { grid-column: 2; position: relative; height: 16px; color: #8a8a90; font: 600 10px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
-.chart-xtick { position: absolute; top: 2px; transform: translateX(-50%); white-space: nowrap; }
-.chart-xcursor { position: absolute; top: 1px; transform: translateX(-50%); padding: 0 4px; background: #e6e6ea; color: #0b0b10; font-weight: 700; white-space: nowrap; }
+.chart-xaxis { grid-column: 2; position: relative; overflow: hidden; height: 16px; color: #8a8a90; font: 600 10px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
+// Labels slide from left-aligned at the start to right-aligned at the end (--p), so the
+// one at the cursor never sticks out of the chart: no scrollbar flashing on the far right.
+.chart-xtick { position: absolute; top: 2px; transform: translateX(calc(-1 * var(--p, 50%))); white-space: nowrap; }
+.chart-xcursor { position: absolute; top: 1px; transform: translateX(calc(-1 * var(--p, 50%))); padding: 0 4px; background: #e6e6ea; color: #0b0b10; font-weight: 700; white-space: nowrap; }
 </style>
