@@ -13,8 +13,6 @@ const props = defineProps<{
   reference: LapTraceView | null
   cursor: number | null
   refCursor: number | null
-  /** Your car and the reference's side by side, each at its own point (Tracce). */
-  compare?: boolean
 }>()
 
 const WHEELS = [
@@ -26,27 +24,19 @@ const G_MAX = 3
 
 const available = computed(() => !!props.lap.channels.slip_angle_fl || !!props.lap.channels.acc_lat_g || !!props.lap.channels.heading_rad)
 const at = computed(() => props.cursor ?? 0.5)
+const slip = computed(() => bodySlipDeg(props.lap, at.value))
 /** Tyre work in degrees of slip: under 2° rolling, 2-5 working, 5-8 at the limit, over 8 sliding. */
 function tyreColor(deg: number | null) {
   if (deg === null) return '#3a3a40'
   const a = Math.abs(deg)
   return a < 2 ? '#4dabf7' : a < 5 ? '#3ddc5a' : a < 8 ? '#ffd43b' : '#ff5a6e'
 }
-function carAt(trace: LapTraceView, fraction: number) {
-  const tyres = WHEELS.map(w => {
-    const slipRad = channelAt(trace, `slip_angle_${w.id}`, fraction)
-    const travel = channelAt(trace, `susp_travel_mm_${w.id}`, fraction)
-    const deg = slipRad === null ? null : slipRad * 57.2958
-    return { ...w, deg, color: tyreColor(deg), load: travel === null ? null : Math.min(Math.max(travel / SUSPENSION_MAX_MM, 0), 1), travel }
-  })
-  return { slip: bodySlipDeg(trace, fraction), tyres }
-}
-// One car, or yours and the reference's at the same point of the lap.
-const cars = computed(() => {
-  const mine = { id: 'lap', title: props.compare && props.reference ? 'Tu' : 'Auto', ...carAt(props.lap, at.value) }
-  if (!props.compare || !props.reference) return [mine]
-  return [mine, { id: 'ref', title: 'Rif.', ...carAt(props.reference, props.refCursor ?? at.value) }]
-})
+const tyres = computed(() => WHEELS.map(w => {
+  const slipRad = channelAt(props.lap, `slip_angle_${w.id}`, at.value)
+  const travel = channelAt(props.lap, `susp_travel_mm_${w.id}`, at.value)
+  const deg = slipRad === null ? null : slipRad * 57.2958
+  return { ...w, deg, color: tyreColor(deg), load: travel === null ? null : Math.min(Math.max(travel / SUSPENSION_MAX_MM, 0), 1), travel }
+}))
 const g = (trace: LapTraceView | null, fraction: number | null) => {
   if (!trace || fraction === null) return null
   const lat = channelAt(trace, 'acc_lat_g', fraction), long = channelAt(trace, 'acc_long_g', fraction)
@@ -59,21 +49,21 @@ const gDot = (v: { lat: number, long: number } | null) => v ? { x: 50 + (v.lat /
 </script>
 
 <template>
-  <div v-if="available" class="car" :style="{ gridTemplateColumns: `repeat(${cars.length + 1}, 1fr)` }">
-    <div v-for="car in cars" :key="car.id" class="car-body">
-      <span class="car-title" :class="`car-title--${car.id}`">{{ car.title }}</span>
+  <div v-if="available" class="car">
+    <div class="car-body">
+      <span class="car-title">Auto</span>
       <svg viewBox="0 0 100 124" aria-label="Auto vista dall'alto">
         <line x1="50" y1="4" x2="50" y2="120" class="car-path" />
-        <g :transform="`rotate(${(car.slip ?? 0).toFixed(1)} 50 62)`">
+        <g :transform="`rotate(${(slip ?? 0).toFixed(1)} 50 62)`">
           <rect x="34" y="14" width="32" height="96" rx="12" class="car-shell" />
           <path d="M40 22 L50 14 L60 22" class="car-nose" />
-          <template v-for="t in car.tyres" :key="t.id">
+          <template v-for="t in tyres" :key="t.id">
             <rect :x="t.x - 6" :y="t.y - 11" width="12" height="22" rx="3" :fill="t.color" />
             <rect :x="t.x < 50 ? t.x - 13 : t.x + 9" :y="t.y + 11 - 22 * (t.load ?? 0)" width="4" :height="22 * (t.load ?? 0)" class="car-load" />
           </template>
         </g>
       </svg>
-      <p class="car-fact" title="Quanto il muso punta fuori dalla traiettoria: positivo verso destra">Angolo auto <b>{{ car.slip === null ? '--' : `${car.slip.toFixed(1)}°` }}</b></p>
+      <p class="car-fact" title="Quanto il muso punta fuori dalla traiettoria: positivo verso destra">Angolo auto <b>{{ slip === null ? '--' : `${slip.toFixed(1)}°` }}</b></p>
     </div>
     <div class="car-g">
       <span class="car-title">G</span>
@@ -93,8 +83,7 @@ const gDot = (v: { lat: number, long: number } | null) => v ? { x: 50 + (v.lat /
 
 <style scoped lang="scss">
 .car { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px; border: 1px solid #ffffff1f; background: #ffffff06; }
-.car-title { color: #b3b3b8; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
-  &--lap { color: #38bdf8; } &--ref { color: #fbbf24; } }
+.car-title { color: #b3b3b8; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .car-body, .car-g { display: grid; justify-items: center; gap: 4px; svg { width: 100%; max-width: 120px; } }
 .car-path { stroke: #ffffff26; stroke-width: 1; stroke-dasharray: 3 3; }
 .car-shell { fill: #1c1c22; stroke: #ffffff59; stroke-width: 1; }

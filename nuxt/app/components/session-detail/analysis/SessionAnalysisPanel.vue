@@ -153,8 +153,7 @@ const traceRowHeight = computed(() => Math.max(80, Math.floor((viewportHeight.va
 // so it opens by default only on wide windows and folds away with a button.
 const leftOpen = ref(false)
 onMounted(() => { leftOpen.value = window.innerWidth >= 1700 })
-const centerView = ref<'delta' | 'auto'>('delta')
-watch([traceRoot, layout, leftOpen, reference, centerView], () => nextTick(measureTrace))
+watch([traceRoot, layout, leftOpen, reference], () => nextTick(measureTrace))
 // What the charts show now, and the way back to the whole lap (Garage 61 reset, Esc, double click).
 const viewLabel = computed(() => zoomRange.value ? "Zoom" : selectedSector.value !== null ? `Settore ${selectedSector.value + 1}` : selectedCorner.value !== null ? `Curva ${selectedCorner.value}` : "Giro intero")
 function wholeLap() { selectedCorner.value = null; selectedSector.value = null; zoomRange.value = null }
@@ -362,15 +361,9 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
         <div class="panel">
           <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null" :focus="selectedSector !== null ? range : null" color-mode="laps" zoom-controls :size="320" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>
-        <!-- Under the map: the delta, or the two cars side by side at the cursor (GOFast style). -->
-        <span v-if="reference" class="seg seg--small center-switch">
-          <button type="button" :class="{ active: centerView === 'delta' }" @click="centerView = 'delta'">Delta</button>
-          <button type="button" :class="{ active: centerView === 'auto' }" title="Le due auto viste dall'alto nello stesso punto: gomme, sospensioni, G" @click="centerView = 'auto'">Auto</button>
-        </span>
-        <div v-if="reference && centerView === 'delta'" ref="deltaWrap">
+        <div v-if="reference" ref="deltaWrap">
           <AnalysisCharts :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaHeight" zoomable @hover="cursor = $event" @zoom="zoomRange = $event" />
         </div>
-        <AnalysisCar v-else-if="reference" :lap="lap" :reference="reference" :cursor="cursor" :ref-cursor="refCursor" compare />
       </div>
       <div class="tracce-right">
         <!-- Sectors and corners on top of the charts, aligned to their distance axis and
@@ -473,7 +466,6 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
   &.active .corner-cell { box-shadow: inset 0 0 0 1px #ff0024; } }
 .corner-num { position: relative; display: grid; place-items: center; padding: 3px 0; background: #ffffff0d; color: #e6e6ea; font: italic 700 15px 'Racer Display', 'Arial Narrow', sans-serif; }
 .corner-cell { display: grid; place-items: center; color: #fff; font: 700 12px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
-.center-switch { justify-self: start; }
 .tracce-center { grid-area: center; display: grid; gap: 8px; align-content: start; height: 100%; overflow-y: auto; overflow-x: hidden; }
 .tracce-toggle { justify-self: start; padding: 0 10px; }
 .tracce-right { grid-area: right; min-width: 0; height: 100%; overflow-y: auto; overflow-x: hidden; }

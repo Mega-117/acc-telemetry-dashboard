@@ -3,7 +3,7 @@
 // Whole track: your lap coloured by gain (green) or loss (red) against the reference.
 // Corner zoom: the two racing lines, yours blue and the reference amber.
 // Two dots follow the cursor: you (blue, filled) and the reference (amber, hollow).
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { deltaTrend, finishLine, fractions, lapDelta, mapPoints, worldToMap, type Corner, type MapPoint } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
@@ -146,12 +146,24 @@ function mapPoint(event: PointerEvent | WheelEvent | MouseEvent, svg: SVGSVGElem
   const [vx, vy, vw, vh] = viewBox.value.split(' ').map(Number) as [number, number, number, number]
   return { x: vx + (event.clientX - rect.left) * (vw / rect.width), y: vy + (event.clientY - rect.top) * (vh / rect.height), perPixel: vw / rect.width }
 }
+// The track never leaves the map: the view centre stays inside the track's own bounds,
+// however far the mouse goes while dragging.
+const bounds = computed(() => {
+  const points = base.value
+  if (!points?.length) return { x0: 0, x1: W.value, y0: 0, y1: H.value }
+  const xs = points.map(p => p.x), ys = points.map(p => p.y)
+  return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) }
+})
+function setView(next: { cx: number, cy: number, span: number }) {
+  const b = bounds.value
+  view.value = { cx: Math.min(Math.max(next.cx, b.x0), b.x1), cy: Math.min(Math.max(next.cy, b.y0), b.y1), span: next.span }
+}
 /** Zoom by `factor` keeping the point (x, y) where it is on screen. */
 function zoomAround(factor: number, x: number, y: number) {
   const { cx, cy, span } = frameNow.value
   const next = Math.min(Math.max(span * factor, minSpan.value), maxSpan.value)
   const k = next / span
-  view.value = { cx: x + (cx - x) * k, cy: y + (cy - y) * k, span: next }
+  setView({ cx: x + (cx - x) * k, cy: y + (cy - y) * k, span: next })
 }
 function zoomStep(factor: number) {
   const { cx, cy } = frameNow.value
@@ -168,13 +180,16 @@ let drag: { x: number, y: number, cx: number, cy: number, moved: boolean } | nul
 const dragging = ref(false)
 // Set while a drag ends, so the click that follows it does not pick a corner.
 const dragged = ref(false)
+onBeforeUnmount(() => document.documentElement.classList.remove('map-grabbing'))
 function onDown(event: PointerEvent) {
   if (!props.zoomControls || event.button !== 0) return
   const { cx, cy } = frameNow.value
   drag = { x: event.clientX, y: event.clientY, cx, cy, moved: false }
-  // Closed hand from the press, as in any map; no native image drag or text selection.
+  // Closed hand from the press to the release, as in any map, set on the page so it holds
+  // over every element under the pointer; no text selection meanwhile.
   dragging.value = true
   event.preventDefault()
+  document.documentElement.classList.add('map-grabbing')
 }
 function onUp(event: PointerEvent) {
   if (drag?.moved) {
@@ -184,11 +199,12 @@ function onUp(event: PointerEvent) {
   }
   drag = null
   dragging.value = false
+  document.documentElement.classList.remove('map-grabbing')
 }
 
 // Leaving the map before a drag starts drops the press, so the hand does not stay closed.
 function onLeave() {
-  if (drag && !drag.moved) { drag = null; dragging.value = false }
+  if (drag && !drag.moved) { drag = null; dragging.value = false; document.documentElement.classList.remove('map-grabbing') }
   emit("hover", null)
 }
 function onMove(event: PointerEvent) {
@@ -198,7 +214,7 @@ function onMove(event: PointerEvent) {
     if (!drag.moved && dx * dx + dy * dy > 16) { drag.moved = true; svg.setPointerCapture?.(event.pointerId) }
     if (drag.moved) {
       const perPixel = frameNow.value.span / svg.getBoundingClientRect().width
-      view.value = { cx: drag.cx - dx * perPixel, cy: drag.cy - dy * perPixel, span: frameNow.value.span }
+      setView({ cx: drag.cx - dx * perPixel, cy: drag.cy - dy * perPixel, span: frameNow.value.span })
       return
     }
   }
@@ -218,7 +234,7 @@ function onMove(event: PointerEvent) {
     <button type="button" aria-label="Allontana la mappa" title="Allontana (anche con la rotella)" :disabled="frameNow.span >= maxSpan" @click="zoomStep(1.6)">−</button>
     <button v-if="view" type="button" aria-label="Rimetti la mappa com'era" title="Inquadratura iniziale (anche doppio clic)" @click="view = null">⟲</button>
   </div>
-  <svg class="map" :class="{ 'map--pan': zoomControls, 'map--dragging': dragging }" :viewBox="viewBox" :style="{ '--z': zoomScale }" role="img" aria-label="Mappa della pista" @pointermove="onMove" @pointerleave="onLeave" @pointerdown="onDown" @pointerup="onUp" @pointercancel="onUp" @wheel="onWheel" @dblclick="zoomControls && (view = null)">
+  <svg class="map" :class="{ 'map--pan': zoomControls, 'map--dragging': dragging }" :viewBox="viewBox" :style="{ '--z': zoomScale }" role="img" aria-label="Mappa della pista" @pointermove="onMove" @pointerleave="onLeave" @pointerdown="onDown" @mousedown.prevent @dragstart.prevent @pointerup="onUp" @pointercancel="onUp" @wheel="onWheel" @dblclick="zoomControls && (view = null)">
     <template v-if="edgePaths">
       <polygon :points="edgePaths.surface" class="map-surface" fill-rule="evenodd" />
       <polyline :points="edgePaths.left" class="map-edge" />
@@ -250,6 +266,11 @@ function onMove(event: PointerEvent) {
   </div>
   <p v-else class="map-none">Mappa non disponibile: questo giro non ha le coordinate.</p>
 </template>
+
+<style>
+/* While the map is dragged: the closed hand everywhere and no text selection. */
+html.map-grabbing, html.map-grabbing * { cursor: grabbing !important; user-select: none !important; }
+</style>
 
 <style scoped lang="scss">
 .map-wrap { position: relative; }
