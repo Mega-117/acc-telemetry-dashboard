@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // PIP-618: the session "Avanzata" tab, our Track Titan. One lap ("Tu") against a
 // reference from the logger's lap files (laps of this session only, read through
-// Electron), in three layouts: Pilota (VRS, default), Curve (Track Titan), Tracce
-// (MoTeC / Garage 61). Shared: coloured lap pickers, cursor, corner zoom.
+// Electron), in two layouts: Tracce (MoTeC / Garage 61, default) to see why, Pilota
+// (VRS) to know what to do, in words. Shared: coloured lap pickers, cursor, corner zoom.
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AnalysisMap from './AnalysisMap.vue'
 import AnalysisCar from './AnalysisCar.vue'
@@ -16,11 +16,10 @@ const props = defineProps<{
   laps: { lap_number: number, lap_time_ms: number | null, is_valid: boolean | null, sector_times_ms?: (number | null)[] | null }[]
 }>()
 
-type Layout = 'pilota' | 'curve' | 'tracce'
+type Layout = 'pilota' | 'tracce'
 const LAYOUTS: { id: Layout, label: string, hint: string }[] = [
   { id: 'tracce', label: 'Tracce', hint: 'Tutti i canali sul giro intero, un cursore condiviso' },
   { id: 'pilota', label: 'Pilota', hint: 'La mappa colorata e le tre curve dove migliorare, in parole semplici' },
-  { id: 'curve', label: 'Curve', hint: 'Il giro diviso per curve: dove perdi tempo, la traiettoria e la telemetria della curva scelta' },
 ]
 // Per-viewer preferences: remembered, never required.
 function remembered<T extends string>(key: string, values: readonly T[], fallback: T) {
@@ -30,7 +29,7 @@ function remembered<T extends string>(key: string, values: readonly T[], fallbac
   return value
 }
 // Tracce is the main view (Garage 61 + Track Titan + VRS); Pilota and Curve stay as alternatives.
-const layout = remembered<Layout>('rc:analysis:layout', ['pilota', 'curve', 'tracce'], 'tracce')
+const layout = remembered<Layout>('rc:analysis:layout', ['pilota', 'tracce'], 'tracce')
 const mapMode = remembered<'intera' | 'zoom'>('rc:analysis:map', ['intera', 'zoom'], 'intera')
 const allChannels = ref(false)
 
@@ -244,7 +243,6 @@ const extraRows = computed<ChartRow[]>(() => [
 ] as ChartRow[])
 const WHEEL_NAME = { fl: 'ant. sx', fr: 'ant. dx', rl: 'post. sx', rr: 'post. dx' } as const
 const pilotRows = computed(() => [...deltaRow.value, speedRow, ...pedalRows])
-const cornerRows = computed(() => [...deltaRow.value, speedRow, ...pedalRows, steerRow, gearRow])
 // Garage 61: the delta sits under the map; the channels on the right are speed, pedals, steering, gear.
 const traceRows = computed(() => [speedRow, ...pedalRows, steerRow, gearRow, ...(allChannels.value ? extraRows.value : [])])
 
@@ -297,34 +295,6 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
       </div>
     </div>
 
-    <!-- CURVE (Track Titan): corner list with the time lost, the corner's lines and telemetry. -->
-    <div v-else-if="lap && layout === 'curve'" class="layout-curve">
-      <aside class="panel curve-side">
-        <div class="panel-head">
-          <span class="seg seg--small"><button type="button" :class="{ active: mapMode === 'intera' }" @click="mapMode = 'intera'">Pista intera</button><button type="button" :class="{ active: mapMode === 'zoom' }" @click="mapMode = 'zoom'">Zoom curva</button></span>
-        </div>
-        <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="mapMode === 'zoom'" :size="300" @hover="cursor = $event" @select="selectedCorner = $event" />
-        <table class="curve-table">
-          <thead><tr><th>Curva</th><th>Tempo</th><th title="Tu / riferimento">V. min</th></tr></thead>
-          <tbody>
-            <tr v-for="c in comparison" :key="c.corner.number" :class="{ active: selectedCorner === c.corner.number }" @click="selectedCorner = c.corner.number">
-              <td>{{ c.corner.number }}</td>
-              <td :class="{ gain: c.timeLostS <= -0.01, loss: c.timeLostS >= 0.01 }">{{ formatDelta(c.timeLostS) }}</td>
-              <td>{{ c.lapMinKmh?.toFixed(0) ?? '--' }} <small>/ {{ c.refMinKmh?.toFixed(0) ?? '--' }}</small></td>
-            </tr>
-          </tbody>
-        </table>
-        <p v-if="!reference" class="analysis-note">Senza un riferimento diverso vedi solo le curve del giro.</p>
-        <AnalysisCar :lap="lap" :reference="reference" :cursor="cursor" :ref-cursor="refCursor" />
-      </aside>
-      <div class="curve-main">
-        <p v-if="selectedCorner !== null && comparison[selectedCorner - 1]" class="curve-advice">Curva {{ selectedCorner }} · {{ cornerAdvice(comparison[selectedCorner - 1]!) }}</p>
-        <div class="curve-grid">
-          <AnalysisCharts :lap="lap" :reference="reference" :rows="cornerRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" @hover="cursor = $event" />
-        </div>
-      </div>
-    </div>
-
     <!-- TRACCE, as the Garage 61 analyzer: laps and gaps on the left, the map with the
          lap lines and the delta in the middle, the channels on the right, sectors and corners on top of the charts. -->
     <div v-else-if="lap && layout === 'tracce'" ref="traceRoot" class="layout-tracce" :class="{ 'layout-tracce--narrow': !leftOpen }" :style="{ height: `${traceHeight}px` }">
@@ -351,7 +321,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
           <!-- Column heads as in the Curve table: the rows are corners, the cell the time lost there. -->
           <div class="corner-row corner-row--head" aria-hidden="true"><span>Curva</span><span>Tempo perso</span></div>
           <div class="corner-list">
-            <button v-for="c in cornersByLoss" :key="c.corner.number" type="button" class="corner-row" :class="{ active: selectedCorner === c.corner.number }" :title="`Curva ${c.corner.number}`" @click="selectCorner(c.corner.number)">
+            <button v-for="c in cornersByLoss" :key="c.corner.number" type="button" class="corner-row" :class="{ active: selectedCorner === c.corner.number }" :title="`Curva ${c.corner.number} · velocità minima ${c.lapMinKmh?.toFixed(0) ?? '--'} / ${c.refMinKmh?.toFixed(0) ?? '--'} km/h (tu / rif.) · ${cornerAdvice(c)}`" @click="selectCorner(c.corner.number)">
               <span class="corner-num">{{ c.corner.number }}</span><span class="corner-cell" :style="{ background: heat(c.timeLostS) }">{{ formatDelta(c.timeLostS) }}</span>
             </button>
           </div>
@@ -431,15 +401,6 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .pilota-rank { display: grid; place-items: center; width: 26px; height: 26px; flex: 0 0 26px; background: #ff0024; color: #fff; font: italic 700 14px 'Racer Display', sans-serif; }
 .pilota-body { display: block; }
 
-.layout-curve { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 12px; align-items: start; }
-.curve-table { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums;
-  th { color: #8a8a90; font-weight: 700; font-size: 10px; text-transform: uppercase; text-align: left; padding: 3px 6px; border-bottom: 1px solid #ffffff1f; }
-  td { padding: 4px 6px; color: #e6e6ea; small { color: #77777d; } }
-  tr { cursor: pointer; &:hover td { background: #ffffff0a; } &.active td { background: #ff002426; } &.active td:first-child { box-shadow: inset 3px 0 #ff0024; } } }
-.curve-main { display: grid; gap: 8px; min-width: 0; }
-.curve-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-items: start; }
-.curve-advice { margin: 0; padding: 8px 12px; border: 1px solid #ffffff1f; background: #ffffff08; color: #e6e6ea; font-size: 13px; font-weight: 600; }
-
 // Garage 61 analyzer: left bar, map + delta in the middle, channels on the right, sector strip on top of the charts.
 .layout-tracce { display: grid; grid-template-columns: 210px 320px minmax(0, 1fr); grid-template-areas: 'left center right';
   &--narrow { grid-template-columns: 320px minmax(0, 1fr); grid-template-areas: 'center right'; } gap: 10px; align-items: stretch; overflow: hidden; }
@@ -487,7 +448,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .tracce-btn { height: 28px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font-size: 12px; cursor: pointer; &.active { border-color: #ff0024; } }
 
 @media (max-width: 1100px) {
-  .layout-curve, .layout-tracce, .layout-pilota, .curve-grid { grid-template-columns: 1fr; }
+  .layout-tracce, .layout-pilota { grid-template-columns: 1fr; }
   .layout-tracce, .layout-tracce--narrow { grid-template-areas: "left" "center" "right"; }
   .tracce-left, .tracce-center { position: static; }
 }
