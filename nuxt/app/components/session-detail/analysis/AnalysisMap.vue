@@ -83,7 +83,24 @@ const lapArrow = computed(() => {
   return { x: a.x, y: a.y, angle: (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI }
 })
 const refDot = computed(() => props.reference ? dot(base.value, props.refCursor ?? props.cursor) : null)
-const labels = computed(() => base.value ? props.corners.map(c => ({ number: c.number, point: base.value![Math.round(c.apex * (POINTS - 1))]! })) : [])
+// Corner numbers beside the track on the outside of the bend, not on the apex: zoomed in,
+// they no longer cover the two lines exactly where you look at them.
+const labels = computed(() => {
+  const points = base.value
+  if (!points) return []
+  const n = points.length
+  return props.corners.map(c => {
+    const i = Math.round(c.apex * (POINTS - 1))
+    const a = points[(i - 6 + n) % n]!, p = points[i]!, b = points[(i + 6) % n]!
+    const tx = b.x - a.x, ty = b.y - a.y
+    const length = Math.hypot(tx, ty) || 1
+    // Turn direction from the cross product; the outside is the other side.
+    const turn = Math.sign(tx * (p.y - a.y) - ty * (p.x - a.x)) || 1
+    const nx = (ty / length) * turn, ny = (-tx / length) * turn
+    const offset = 16 * zoomScale.value
+    return { number: c.number, point: { x: p.x + nx * offset, y: p.y + ny * offset } }
+  })
+})
 const finish = computed(() => base.value ? finishLine(base.value, 10) : null)
 const autoFrame = computed(() => {
   // Frame: the focused stretch (corner or sector) or the whole track.
@@ -140,6 +157,9 @@ function onDown(event: PointerEvent) {
   if (!props.zoomControls || event.button !== 0) return
   const { cx, cy } = frameNow.value
   drag = { x: event.clientX, y: event.clientY, cx, cy, moved: false }
+  // Closed hand from the press, as in any map; no native image drag or text selection.
+  dragging.value = true
+  event.preventDefault()
 }
 function onUp(event: PointerEvent) {
   if (drag?.moved) {
@@ -151,11 +171,16 @@ function onUp(event: PointerEvent) {
   dragging.value = false
 }
 
+// Leaving the map before a drag starts drops the press, so the hand does not stay closed.
+function onLeave() {
+  if (drag && !drag.moved) { drag = null; dragging.value = false }
+  emit("hover", null)
+}
 function onMove(event: PointerEvent) {
   const svg = event.currentTarget as SVGSVGElement
   if (drag) {
     const dx = event.clientX - drag.x, dy = event.clientY - drag.y
-    if (!drag.moved && dx * dx + dy * dy > 16) { drag.moved = true; dragging.value = true; svg.setPointerCapture?.(event.pointerId) }
+    if (!drag.moved && dx * dx + dy * dy > 16) { drag.moved = true; svg.setPointerCapture?.(event.pointerId) }
     if (drag.moved) {
       const perPixel = frameNow.value.span / svg.getBoundingClientRect().width
       view.value = { cx: drag.cx - dx * perPixel, cy: drag.cy - dy * perPixel, span: frameNow.value.span }
@@ -178,7 +203,7 @@ function onMove(event: PointerEvent) {
     <button type="button" aria-label="Allontana la mappa" title="Allontana (anche con la rotella)" :disabled="frameNow.span >= maxSpan" @click="zoomStep(1.6)">−</button>
     <button v-if="view" type="button" aria-label="Rimetti la mappa com'era" title="Inquadratura iniziale (anche doppio clic)" @click="view = null">⟲</button>
   </div>
-  <svg class="map" :class="{ 'map--pan': zoomControls, 'map--dragging': dragging }" :viewBox="viewBox" :style="{ '--z': zoomScale }" role="img" aria-label="Mappa della pista" @pointermove="onMove" @pointerleave="emit('hover', null)" @pointerdown="onDown" @pointerup="onUp" @pointercancel="onUp" @wheel="onWheel" @dblclick="zoomControls && (view = null)">
+  <svg class="map" :class="{ 'map--pan': zoomControls, 'map--dragging': dragging }" :viewBox="viewBox" :style="{ '--z': zoomScale }" role="img" aria-label="Mappa della pista" @pointermove="onMove" @pointerleave="onLeave" @pointerdown="onDown" @pointerup="onUp" @pointercancel="onUp" @wheel="onWheel" @dblclick="zoomControls && (view = null)">
     <template v-if="edgePaths">
       <polygon :points="edgePaths.surface" class="map-surface" fill-rule="evenodd" />
       <polyline :points="edgePaths.left" class="map-edge" />
