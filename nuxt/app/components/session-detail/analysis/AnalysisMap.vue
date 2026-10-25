@@ -102,6 +102,21 @@ const labels = computed(() => {
   })
 })
 const finish = computed(() => base.value ? finishLine(base.value, 10) : null)
+// Selected sector on the track: a coloured band under the lines, a mark where it starts and ends.
+const sector = computed(() => {
+  const points = base.value, range = props.focus
+  if (!points || !range || (range[0] <= 0 && range[1] >= 1)) return null
+  const inside = points.filter((_, i) => at[i]! >= range[0] && at[i]! <= range[1])
+  if (inside.length < 2) return null
+  const mark = (fraction: number) => {
+    const i = Math.min(Math.max(Math.round(fraction * (POINTS - 1)), 1), POINTS - 2)
+    const a = points[i - 1]!, p = points[i]!, b = points[i + 1]!
+    const tx = b.x - a.x, ty = b.y - a.y, length = Math.hypot(tx, ty) || 1
+    const half = 9 * zoomScale.value
+    return { x1: p.x - (ty / length) * half, y1: p.y + (tx / length) * half, x2: p.x + (ty / length) * half, y2: p.y - (tx / length) * half }
+  }
+  return { path: path(inside), start: mark(range[0]), end: mark(range[1]) }
+})
 const autoFrame = computed(() => {
   // Frame: the focused stretch (corner or sector) or the whole track.
   let cx = W.value / 2, cy = H.value / 2, span = W.value
@@ -210,6 +225,7 @@ function onMove(event: PointerEvent) {
       <polyline :points="edgePaths.right" class="map-edge" />
     </template>
     <polyline v-else :points="path(base)" class="map-track" />
+    <polyline v-if="sector" :points="sector.path" class="map-sector" />
     <template v-if="zoomed || lapsMode">
       <polyline v-if="reference" :points="path(base)" class="map-ref" />
       <polyline :points="path(lapPoints)" class="map-lap-line" />
@@ -220,6 +236,10 @@ function onMove(event: PointerEvent) {
       <line :x1="finish.x1" :y1="finish.y1" :x2="finish.x2" :y2="finish.y2" class="map-finish-white" />
       <line :x1="finish.x1" :y1="finish.y1" :x2="finish.x2" :y2="finish.y2" class="map-finish-black" />
     </g>
+    <template v-if="sector">
+      <line v-bind="sector.start" class="map-sector-mark" />
+      <line v-bind="sector.end" class="map-sector-mark" />
+    </template>
     <g v-for="l in labels" :key="l.number" class="map-corner" :class="{ active: selected === l.number }" @click="!dragged && emit('select', l.number)">
       <circle :cx="l.point.x" :cy="l.point.y" :r="8 * zoomScale" />
       <text :x="l.point.x" :y="l.point.y + 3.5 * zoomScale" :font-size="9 * zoomScale">{{ l.number }}</text>
@@ -241,6 +261,8 @@ function onMove(event: PointerEvent) {
 .map-surface { fill: #ffffff0d; stroke: none; }
 .map-edge { fill: none; stroke: #ffffff59; stroke-width: calc(1px * var(--z, 1)); stroke-linejoin: round; }
 .map-track { fill: none; stroke: #ffffff14; stroke-width: calc(9px * var(--z, 1)); stroke-linejoin: round; stroke-linecap: round; }
+.map-sector { fill: none; stroke: #ff002459; stroke-width: calc(10px * var(--z, 1)); stroke-linejoin: round; stroke-linecap: butt; }
+.map-sector-mark { stroke: #ff0024; stroke-width: calc(2.5px * var(--z, 1)); stroke-linecap: round; }
 .map-ref { fill: none; stroke: #fbbf24; stroke-width: calc(1.8px * var(--z, 1)); }
 .map-lap-line { fill: none; stroke: #38bdf8; stroke-width: calc(2px * var(--z, 1)); stroke-linejoin: round; }
 .map-lap { stroke-width: calc(3px * var(--z, 1)); stroke-linecap: round; }
