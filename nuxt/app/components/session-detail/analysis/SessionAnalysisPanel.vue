@@ -334,14 +334,14 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
         <div class="panel">
           <AnalysisMap :lap="lap" :reference="reference" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null" :focus="selectedSector !== null ? range : null" color-mode="laps" zoom-controls :size="320" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>
-        <AnalysisCharts v-if="reference" :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="120" zoomable @hover="cursor = $event" @zoom="zoomRange = $event" />
+        <AnalysisCharts v-if="reference" :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="200" zoomable @hover="cursor = $event" @zoom="zoomRange = $event" />
       </div>
       <div class="tracce-right">
         <!-- Sectors and corners on top of the charts, aligned to their distance axis and
              sticky under the lap bar (Track Titan's segment strip, MoTeC's section bar). -->
         <div class="tracce-strip">
           <div class="strip-head">
-            <span>{{ viewLabel }}</span>
+            <span>Settori</span>
             <!-- Navigation as Garage 61 and Track Titan: every sector always there, whatever the zoom. -->
             <span v-if="sectorList.length" class="strip-nav">
               <button v-for="s in sectorList" :key="s.index" type="button" :class="{ active: selectedSector === s.index }" @click="selectSector(s.index)">S{{ s.index + 1 }}</button>
