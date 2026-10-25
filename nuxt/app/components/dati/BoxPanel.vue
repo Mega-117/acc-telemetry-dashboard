@@ -15,14 +15,17 @@ onBeforeUnmount(() => live.stopFastStatePolling())
 
 const fs = computed(() => live.fastState.value)
 const active = computed(() => fs.value.isLive && fs.value.tyres.length === 4)
+// Back in the garage ACC zeroes the car pages (pressures, temperatures, fuel): show --, not 0.
+const carActive = computed(() => active.value && fs.value.tyres.some(t => typeof t.pressurePsi === 'number' && t.pressurePsi > 0))
 const wet = computed(() => fs.value.tyreCompound === 'WET')
 const WHEELS: FastStateTyre['id'][] = ['FL', 'FR', 'RL', 'RR']
-const tyre = (id: FastStateTyre['id']) => fs.value.tyres.find(t => t.id === id)
+const tyre = (id: FastStateTyre['id']) => carActive.value ? fs.value.tyres.find(t => t.id === id) : undefined
 const PADS: BrakePad[] = ['standard', 'endurance', 'wet', 'qualy']
 const PAD_NAMES = ['Standard', 'Endurance', 'Bagnato', 'Qualifica']
 const GRIP: Record<string, string> = { GREEN: 'Verde', FAST: 'Veloce', OPTIMUM: 'Ottimale', GREASY: 'Unta', DAMP: 'Umida', WET: 'Bagnata', FLOODED: 'Allagata' }
 
 const n = (v: number | null | undefined, digits = 1) => typeof v === 'number' && Number.isFinite(v) ? v.toFixed(digits) : '--'
+const unit = (v: number | null | undefined, digits: number, suffix: string) => typeof v === 'number' && Number.isFinite(v) ? `${v.toFixed(digits)}${suffix}` : '--'
 const lapTime = (v: number | null | undefined) => typeof v === 'number' && v > 0 ? formatLapTime(v) : '--'
 function clock(ms: number | null | undefined) {
   if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return '--'
@@ -69,10 +72,11 @@ const pit = computed(() => fs.value.pitPrediction)
       <div><span>Giri stint</span><strong>{{ stintLaps ?? '--' }}</strong></div>
     </div>
     <p v-if="!active" class="box-wait" role="status">In attesa del simulatore: i dati arrivano quando sei in pista.</p>
+    <p v-else-if="!carActive" class="box-wait" role="status">Auto ai box: i dati dell'auto tornano quando sei in macchina.</p>
 
     <p class="box-section">Benzina</p>
     <div class="box-grid">
-      <div class="box-cell"><span class="box-label">Serbatoio</span><strong class="box-value">{{ n(fs.fuelL) }} L</strong></div>
+      <div class="box-cell"><span class="box-label">Serbatoio</span><strong class="box-value">{{ carActive ? `${n(fs.fuelL)} L` : '--' }}</strong></div>
       <div class="box-cell" title="Consumo al giro stimato da ACC"><span class="box-label">Al giro</span><strong class="box-value">{{ n(fs.fuelPerLapL, 2) }} L</strong></div>
       <div class="box-cell" title="Consumo al giro diviso il giro di riferimento"><span class="box-label">Al minuto</span><strong class="box-value">{{ n(fuelPerMin, 2) }} L</strong></div>
       <div class="box-cell" title="Per quanto basta la benzina che hai"><span class="box-label">Autonomia</span><strong class="box-value">{{ clock(info?.fuelLeftTimeMs ?? fs.fuelLeftTimeMs) }} · {{ n(fs.fuelLapsRemaining) }} giri</strong></div>
@@ -96,11 +100,11 @@ const pit = computed(() => fs.value.pitPrediction)
       </div>
       <div class="box-cell" title="Temperatura delle gomme. Blu fredda, verde giusta, giallo/arancio calda, rosso troppo calda">
         <span class="box-label">Temp. gomme <small>°C</small></span>
-        <div class="box-wheels"><b v-for="id in WHEELS" :key="id" :style="{ color: tyreColor(tyre(id)?.coreTempC, wet) ?? undefined }">{{ n(tyre(id)?.coreTempC, 0) }}°</b></div>
+        <div class="box-wheels"><b v-for="id in WHEELS" :key="id" :style="{ color: tyreColor(tyre(id)?.coreTempC, wet) ?? undefined }">{{ unit(tyre(id)?.coreTempC, 0, "°") }}</b></div>
       </div>
       <div class="box-cell" title="Temperatura dei dischi. Le fasce cambiano con le pastiglie">
         <span class="box-label">Temp. freni <small>°C</small></span>
-        <div class="box-wheels"><b v-for="(id, i) in WHEELS" :key="id" :style="{ color: brakeColor(tyre(id)?.brakeTempC, i < 2 ? 'front' : 'rear', pad(id)) ?? undefined }">{{ n(tyre(id)?.brakeTempC, 0) }}°</b></div>
+        <div class="box-wheels"><b v-for="(id, i) in WHEELS" :key="id" :style="{ color: brakeColor(tyre(id)?.brakeTempC, i < 2 ? 'front' : 'rear', pad(id)) ?? undefined }">{{ unit(tyre(id)?.brakeTempC, 0, "°") }}</b></div>
       </div>
     </div>
 
@@ -110,11 +114,11 @@ const pit = computed(() => fs.value.pitPrediction)
       <div class="box-cell"><span class="box-label">Pastiglie</span><strong class="box-value">{{ padNames }}</strong></div>
       <div class="box-cell" title="Vita rimasta delle pastiglie">
         <span class="box-label">Vita pastiglie</span>
-        <div class="box-wheels"><b v-for="id in WHEELS" :key="id">{{ n(tyre(id)?.padLifePct, 0) }}%</b></div>
+        <div class="box-wheels"><b v-for="id in WHEELS" :key="id">{{ unit(tyre(id)?.padLifePct, 0, "%") }}</b></div>
       </div>
       <div class="box-cell" title="Vita rimasta dei dischi">
         <span class="box-label">Vita dischi</span>
-        <div class="box-wheels"><b v-for="id in WHEELS" :key="id">{{ n(tyre(id)?.discLifePct, 0) }}%</b></div>
+        <div class="box-wheels"><b v-for="id in WHEELS" :key="id">{{ unit(tyre(id)?.discLifePct, 1, "%") }}</b></div>
       </div>
       <div class="box-cell" title="Tempo di riparazione ai box">
         <span class="box-label">Danni</span>
