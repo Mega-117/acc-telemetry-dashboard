@@ -42,7 +42,7 @@ export function getRaceCalendarCountdown(
       days,
       value: '1',
       unit: 'giorno',
-      leadingLabel: 'Mancano',
+      leadingLabel: 'Manca',
       trailingLabel: 'alla gara',
       ariaLabel: 'Manca 1 giorno alla prossima gara',
     }

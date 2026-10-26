@@ -31,7 +31,7 @@ describe('getRaceCalendarCountdown', () => {
       days: 1,
       value: '1',
       unit: 'giorno',
-      leadingLabel: 'Mancano',
+      leadingLabel: 'Manca',
       trailingLabel: 'alla gara',
     })
   })

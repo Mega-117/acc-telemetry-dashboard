@@ -98,6 +98,19 @@ function formatEventDate(value: string): string {
   }).format(date)
 }
 
+// Sottotitolo delle gare successive: stesse informazioni, iniziali maiuscole (Gio 03 Dic 2026, 21:00).
+function formatShortDate(value: string): string {
+  return formatEventDate(value).replace(/(^|\s)(\p{Ll})/gu, (_, space: string, letter: string) => space + letter.toUpperCase())
+}
+
+// Quanto manca a una gara successiva, senza contare sulle date: oggi, domani, tra N giorni.
+function countdownText(event: RaceCalendarEvent): string {
+  const countdown = getRaceCalendarCountdown(event.startsAt, new Date(nowMs.value))
+  if (!countdown) return ''
+  if (countdown.days === 0) return 'oggi'
+  return countdown.days === 1 ? 'domani' : `tra ${countdown.days} giorni`
+}
+
 function resetForm() {
   form.value = {
     title: '',
@@ -337,8 +350,8 @@ onBeforeUnmount(() => {
         <div class="race-list" :class="{ 'race-list--multiple': secondaryEvents.length > 1 }" aria-label="Altre gare pianificate">
           <article v-for="event in secondaryEvents" :key="event.id" class="compact-race">
             <div>
-              <strong>{{ event.title }}</strong>
-              <span>{{ formatEventDate(event.startsAt) }} - {{ event.trackName }}</span>
+              <strong>{{ event.title }}<em v-if="countdownText(event)" class="compact-race__in"> · {{ countdownText(event) }}</em></strong>
+              <span>{{ formatShortDate(event.startsAt) }} · {{ event.trackName }}</span>
             </div>
             <details v-if="racing" class="race-options race-options--compact">
               <summary :aria-label="`Opzioni gara ${event.title}`" :title="`Opzioni gara ${event.title}`"><Ellipsis :size="26" aria-hidden="true" /></summary>
@@ -488,8 +501,10 @@ onBeforeUnmount(() => {
   .race-action svg, summary svg { display: block; flex-shrink: 0; }
   .featured-race { position: relative; border: 0; background: transparent; border-radius: 0; padding: 0 0 8px; min-height: 116px;
     grid-template-columns: minmax(86px,.32fr) minmax(0,1fr); grid-template-areas: 'countdown main'; gap: 16px; }
-  .race-countdown { padding-right: 16px; align-items: center; border-color: #ffffff80; }
-  .race-countdown__label { order: 2; }
+  // La linea che separa il conto alla rovescia e' rossa: il colore della gara in tutto il sito.
+  .race-countdown { padding-right: 16px; align-items: center; border-right: 2px solid var(--racing-race); }
+  // Basta il numero con "giorni" sotto: "Mancano" sopra e' superfluo (resta nell'aria-label).
+  .race-countdown__label { display: none; }
   .race-countdown__metric { margin: 0; flex-direction: column; align-items: center; gap: 5px; }
   .race-countdown__value { font: italic 700 76px/.9 'Racer Display', sans-serif; }
   .race-countdown__label, .race-countdown__unit, .race-countdown__suffix { color: #ddd; font-size: 10px; letter-spacing: 2px; font-weight: 500; }
@@ -536,6 +551,9 @@ onBeforeUnmount(() => {
   .race-list { max-height: none; overflow: visible; padding: 0; }
   .compact-race { background: transparent; border: 0; border-radius: 0; padding: 0; min-width: 0; }
   .compact-race > div:first-child { min-width: 0; }
+  // Gare successive: lineetta rossa a sinistra (come le sessioni in Attività) e quanto manca accanto al titolo.
+  .compact-race { border-left: 2px solid var(--racing-race); padding-left: 10px; }
+  .compact-race__in { font-style: normal; font-weight: 500; color: #aaa; font-size: 12px; }
   .race-options--compact { position: relative; bottom: auto; right: auto; }
   .race-options--compact .race-options__menu { top: auto; bottom: calc(100% + 6px); }
   .race-options--compact .race-options__menu span { overflow: visible; font: inherit; color: inherit; }
