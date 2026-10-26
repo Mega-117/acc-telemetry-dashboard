@@ -1,7 +1,7 @@
 // PIP-633: presentazione delle Statistiche.
 import { describe, expect, it } from 'vitest'
 import {
-  airInsight, byIdealMargin, carInsight, compareInsight, gapBarPct, heatLevel, idealInsight, marginLevel, rowBest, statsTotals,
+  airInsight, byIdealMargin, carInsight, compareInsight, gapBarPct, heatLevel, idealInsight, marginLevel, rowBest,
 } from '~/utils/statsPresentation'
 import type { ComboStats } from '~/services/telemetry/activityStats'
 
@@ -11,14 +11,6 @@ const combo = (track: string, sectors: (number | null)[], best: number | null): 
 })
 
 describe('statsPresentation', () => {
-  it('sums the period and computes valid laps percentage', () => {
-    expect(statsTotals([
-      { carKey: 'a', car: 'A', timeMs: 3_600_000, sessions: 2, laps: 30, lapsValid: 24 },
-      { carKey: 'b', car: 'B', timeMs: 600_000, sessions: 1, laps: 10, lapsValid: 6 },
-    ])).toEqual({ timeMs: 4_200_000, sessions: 3, laps: 40, lapsValid: 30, validPct: 75 })
-    expect(statsTotals([]).validPct).toBeNull()
-  })
-
   it('orders combos by margin to gain, combos without data last', () => {
     const rows = byIdealMargin([
       combo('small', [30_000, 30_000, 30_000], 90_100),

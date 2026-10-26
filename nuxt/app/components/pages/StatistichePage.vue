@@ -13,8 +13,9 @@ import {
 import { normalizeSessionListKey } from '~/services/sync/sessionListProjectionService'
 import { formatCarName, formatDriveTime, formatLapTime, formatTrackName } from '~/utils/telemetryFormat'
 import {
-  airInsight, byIdealMargin, carInsight, compareInsight, gapBarPct, heatLevel, idealInsight, marginLevel, rowBest, statsTotals,
+  airInsight, byIdealMargin, carInsight, compareInsight, gapBarPct, heatLevel, idealInsight, marginLevel, rowBest,
 } from '~/utils/statsPresentation'
+import { periodTotals, previousPeriodSessions } from '~/utils/statsJourney'
 import type { SessionDocument } from '~/types/telemetry'
 
 const emit = defineEmits<{ back: [] }>()
@@ -54,13 +55,20 @@ const carOptions = computed(() => options(s => s.meta?.car || '', formatCarName)
 
 const filtered = computed(() => filterSessions(sessions.value, filter.value, Date.now()))
 const cars = computed(() => timeByCar(filtered.value))
-// PIP-633: numeri in testa, barre per auto e per settimana con le etichette.
-const totals = computed(() => statsTotals(cars.value))
+// PIP-633: barre per auto e per settimana con le etichette.
+// Tendenze: lo stesso conteggio sul periodo precedente della stessa durata (con "Tutto" non c'e').
+const nowMs = ref(Date.now())
+const current = computed(() => periodTotals(filtered.value))
+const previous = computed(() => {
+  const prev = previousPeriodSessions(sessions.value, filter.value, nowMs.value)
+  return prev ? periodTotals(prev) : null
+})
+const periodLabel = computed(() => PERIODS.find(p => p.days === periodDays.value)?.label ?? '')
 const carMax = computed(() => Math.max(1, ...cars.value.map(c => c.timeMs)))
 const weeks = computed(() => timeByWeek(filtered.value, Math.min(26, Math.max(4, Math.ceil((periodDays.value || 182) / 7))), Date.now()))
 const weekMax = computed(() => Math.max(1, ...weeks.value.map(w => w.timeMs)))
-// Colori del sito (azzurro prove, giallo qualifica, rosso gara) piu' ciano e viola: un colore per auto.
-const CAR_COLORS = ['#0076ff', '#ffc400', '#00c2d6', '#8b5cf6', '#ff7a1a', '#ff0024']
+// Un colore per auto, diverso dal giallo qualifica e dal rosso gara (che hanno gia' un significato).
+const CAR_COLORS = ['#00c2d6', '#8b5cf6', '#ff7a1a', '#14b8a6', '#ec4899', '#84cc16']
 const weekLabel = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 // "1h50", "2h", "15m": corto, come sopra le colonne del grafico Attivita'.
 const compactHours = (ms: number) => {
@@ -153,14 +161,13 @@ watch(targetUserId, (uid, previous) => { if (uid && uid !== previous) void load(
       <p v-else-if="status === 'error'" class="stats__note" role="status">Dati non disponibili. <button type="button" @click="load">Riprova</button></p>
 
       <template v-else>
-      <dl class="stats-kpis" aria-label="Riepilogo del periodo">
-        <div><dt>Tempo in pista</dt><dd>{{ hours(totals.timeMs) }}</dd></div>
-        <div><dt>Sessioni</dt><dd>{{ totals.sessions }}</dd></div>
-        <div><dt>Giri</dt><dd>{{ totals.laps }}</dd></div>
-        <div><dt>Giri validi</dt><dd>{{ totals.validPct === null ? '–' : `${totals.validPct}%` }}</dd></div>
-      </dl>
+      <!-- PIP-633: prima "come sto andando" (tendenze, calendario, record, progressi), poi i dettagli. -->
+      <StatsTrendCards :current="current" :previous="previous" :period-label="periodLabel" />
+      <StatsDrivingCalendar :sessions="sessions" :now-ms="nowMs" />
+      <StatsPersonalRecords :sessions="sessions" :now-ms="nowMs" />
 
       <div class="stats__grid">
+        <StatsProgressChart :sessions="sessions" :now-ms="nowMs" />
         <section class="stats-panel" aria-labelledby="stats-time">
           <h2 id="stats-time">Tempo in pista per auto</h2>
           <p v-if="insights.cars" class="insight">{{ insights.cars }}</p>
@@ -184,6 +191,7 @@ watch(targetUserId, (uid, previous) => { if (uid && uid !== previous) void load(
           </div>
         </section>
 
+        <h2 class="stats__section">Per approfondire</h2>
         <section class="stats-panel" aria-labelledby="stats-compare">
           <h2 id="stats-compare">Confronto tra due auto</h2>
           <p v-if="cars.length > 1" class="insight">{{ insights.compare }}</p>
@@ -224,7 +232,7 @@ watch(targetUserId, (uid, previous) => { if (uid && uid !== previous) void load(
           </table>
         </section>
 
-        <section class="stats-panel" aria-labelledby="stats-conditions">
+        <section class="stats-panel stats-panel--wide" aria-labelledby="stats-conditions">
           <h2 id="stats-conditions">Tempi per temperatura dell'aria e grip</h2>
           <p v-if="insights.air" class="insight">{{ insights.air }}</p>
           <p class="stats__sub">Il tuo miglior giro valido in ogni condizione. Verde dove vai più forte, rosso dove perdi di più. Su tutto lo storico: periodo e tipo di sessione qui non si applicano.</p>
@@ -268,15 +276,6 @@ select { background: #0b0b0b; color: #f5f5f5; border: 1px solid #ffffff55; paddi
 // La frase-sintesi: si legge prima di tutto il resto.
 .insight { margin: 6px 0 10px; padding: 8px 12px; border-left: 3px solid #0076ff; background: linear-gradient(90deg, #0076ff1f, transparent 70%); font-size: 14px; line-height: 1.4; color: #f5f5f5; }
 .stats__pair { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; color: #bdbdbd; }
-// PIP-633: numeri grandi in testa.
-.stats-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 0; }
-.stats-kpis div { border: 1px solid rgba(255, 255, 255, 0.3960784314); border-left: 3px solid var(--kpi, #3b82f6); padding: 12px 16px; background: linear-gradient(90deg, color-mix(in srgb, var(--kpi, #3b82f6) 14%, transparent), transparent 60%); }
-.stats-kpis div:nth-child(1) { --kpi: #0076ff; }
-.stats-kpis div:nth-child(2) { --kpi: #00c2d6; }
-.stats-kpis div:nth-child(3) { --kpi: #ffc400; }
-.stats-kpis div:nth-child(4) { --kpi: #22c55e; }
-.stats-kpis dt { font: 400 12px/1.2 'Arial Narrow', 'Segoe UI', sans-serif; text-transform: uppercase; color: #cfcfcf; }
-.stats-kpis dd { margin: 4px 0 0; font: italic 700 clamp(24px, 2.2vw, 34px)/1.1 'Racer Display', sans-serif; font-variant-numeric: tabular-nums; }
 // Ore per auto: barra con nome e ore sopra, dettagli sotto.
 .car-bars { list-style: none; margin: 8px 0 14px; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .car-bars__label { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
@@ -321,5 +320,7 @@ select { background: #0b0b0b; color: #f5f5f5; border: 1px solid #ffffff55; paddi
 .better { color: #4ade80; }
 .stats__note { margin: 0; font-size: 12px; color: #bdbdbd; }
 .stats__note button { background: none; border: 1px solid #ffffff55; color: inherit; padding: 2px 8px; cursor: pointer; }
-@media (max-width: 1100px) { .stats__grid { grid-template-columns: 1fr; } .stats-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stats__section { grid-column: 1 / -1; margin: 12px 0 0; font: italic 700 22px/1.2 'Racer Display', sans-serif; text-transform: uppercase; color: #cfcfcf; }
+.stats-panel--wide { grid-column: 1 / -1; }
+@media (max-width: 1100px) { .stats__grid { grid-template-columns: 1fr; } }
 </style>

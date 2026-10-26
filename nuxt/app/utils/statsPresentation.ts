@@ -2,14 +2,6 @@
 // distacco). Logica pura sopra i calcoli di activityStats: i dati non cambiano, cambia la lettura.
 import { idealLapMs, type CarTime, type ComboStats } from '~/services/telemetry/activityStats'
 
-export interface StatsTotals { timeMs: number, sessions: number, laps: number, lapsValid: number, validPct: number | null }
-
-export function statsTotals(cars: CarTime[]): StatsTotals {
-  const t = cars.reduce((acc, c) => ({ timeMs: acc.timeMs + c.timeMs, sessions: acc.sessions + c.sessions, laps: acc.laps + c.laps, lapsValid: acc.lapsValid + c.lapsValid }),
-    { timeMs: 0, sessions: 0, laps: 0, lapsValid: 0 })
-  return { ...t, validPct: t.laps ? Math.round((t.lapsValid / t.laps) * 100) : null }
-}
-
 export type IdealRow<T extends ComboStats> = T & { idealMs: number | null, marginMs: number | null }
 
 /** Giro ideale meno migliore (negativo = tempo da guadagnare): prima dove c'e' piu' margine, poi i casi senza dato. */
