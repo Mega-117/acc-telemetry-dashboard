@@ -40,6 +40,23 @@ const isActive = (tabTo: string) => {
   return route.path.startsWith(tabTo)
 }
 
+// Linea rossa unica che scorre dalla voce precedente a quella nuova e prende la sua larghezza.
+const inner = ref<HTMLElement | null>(null)
+const indicator = ref<{ left: number, width: number } | null>(null)
+function placeIndicator() {
+  const active = inner.value?.querySelector<HTMLElement>('.tab--active')
+  indicator.value = active ? { left: active.offsetLeft, width: active.offsetWidth } : null
+}
+watch([() => route.path, tabs], () => nextTick(placeIndicator))
+let resizeObserver: ResizeObserver | null = null
+onMounted(() => {
+  placeIndicator()
+  // Il font sportivo arriva dopo il primo disegno e cambia la larghezza delle voci.
+  resizeObserver = new ResizeObserver(placeIndicator)
+  if (inner.value) resizeObserver.observe(inner.value)
+})
+onBeforeUnmount(() => resizeObserver?.disconnect())
+
 function onTabClick(tab: { id: string }) {
   if (tab.id === 'pitwall') openPitwallHome()
   if (tab.id !== 'hud') return
@@ -49,11 +66,12 @@ function onTabClick(tab: { id: string }) {
 </script>
 
 <template>
-  <nav class="tabsbar">
+  <nav class="tabsbar" :class="{ 'tabsbar--sliding': indicator }">
     <button v-if="backLabel" class="tabsbar__back" type="button" :aria-label="backLabel" :title="backLabel" @click="emit('back')">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7" /></svg>
     </button>
-    <div class="tabsbar__inner">
+    <div ref="inner" class="tabsbar__inner">
+      <span v-if="indicator" class="tabsbar__indicator" aria-hidden="true" :style="{ transform: `translateX(${indicator.left}px)`, width: `${indicator.width}px` }" />
       <NuxtLink
         v-for="tab in tabs"
         :key="tab.id"
@@ -96,7 +114,19 @@ function onTabClick(tab: { id: string }) {
   &:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 }
 
+.tabsbar__indicator {
+  position: absolute; bottom: 0; left: 0; height: 3px; pointer-events: none;
+  background: var(--racing-accent, #{$racing-red});
+  clip-path: polygon(3px 0, 100% 0, calc(100% - 3px) 100%, 0 100%);
+  // Rapida e senza rimbalzi: velocita' e precisione, non effetto giocoso.
+  transition: transform 260ms cubic-bezier(.2, .8, .2, 1), width 260ms cubic-bezier(.2, .8, .2, 1);
+  @media (prefers-reduced-motion: reduce) { transition: none; }
+}
+// Con la linea che scorre, quella fissa sotto la voce attiva non serve piu'.
+.tabsbar--sliding .tab--active::after { display: none; }
+
 .tabsbar__inner {
+  position: relative;
   display: flex;
   justify-content: center;
   gap: 8px;
