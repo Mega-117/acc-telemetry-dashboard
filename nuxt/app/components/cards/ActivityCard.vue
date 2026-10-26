@@ -105,7 +105,7 @@ const formatYLabel = (minutes: number): string => {
     <div class="card-head">
       <h2 class="card-title">{{ racing ? 'Attività · ultimi 7 giorni' : 'Attività (ultimi 7 giorni)' }}</h2>
       <button v-if="statsLink" type="button" class="rc-btn rc-btn--compact stats-link" title="Apri le statistiche complete" @click="emit('open-stats')">
-        <UiRacingIcon name="telemetry" :size="20" /><span>Statistiche</span><UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" />
+        <UiRacingIcon name="chart" :size="19" /><span>Statistiche</span><UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" />
       </button>
     </div>
 
