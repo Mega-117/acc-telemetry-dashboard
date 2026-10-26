@@ -10,7 +10,8 @@ import {
   type DiagnosticBundleItem,
 } from '~/repositories/diagnosticBundlesRepository'
 import { loadClientDiagnosticsPage } from '~/repositories/clientDiagnosticsRepository'
-import { ACTIVE_WINDOW_DAYS } from '~/utils/adminInstallationScope'
+import { isActiveWithinDays, isTestOwner } from '~/utils/adminInstallationScope'
+import { summarizeByVersion } from '~/utils/adminVersionSummary'
 import { buildStatusSummary, type StatusErrorEvent, type StatusIssue } from '~/utils/adminStatusSummary'
 import { formatItalianDiagnosticDate } from '~/utils/diagnosticsPresentation'
 
@@ -28,6 +29,9 @@ const bundleDeps = { getToken, origin: resolveDiagnosticsOrigin(useRuntimeConfig
 
 const loading = ref(true)
 const nowMs = ref(Date.now())
+// PIP-631: periodo 7, 14 o 30 giorni (30 = scadenza dei pacchetti su R2).
+const PERIODS = [7, 14, 30]
+const periodDays = ref(7)
 const snapshot = ref<AdminCockpitSnapshot | null>(null)
 const bundles = ref<DiagnosticBundleItem[]>([])
 const bundlesComplete = ref(true)
@@ -64,7 +68,21 @@ const summary = computed(() => buildStatusSummary({
   errors: errors.value,
   names: names.value,
   nowMs: nowMs.value,
+  days: periodDays.value,
 }))
+
+// PIP-631: installazioni reali attive nel periodo, pacchetti di anomalia ed errori per versione.
+// Gli account di prova restano fuori anche da pacchetti ed errori (proprietario come nel riepilogo).
+const versionRows = computed(() => {
+  const installations = (snapshot.value?.rows || []).flatMap((row) => (row.installation ? [row.installation] : []))
+  const ownerByInstallation = new Map(installations.map((item) => [item.installationId, item.ownerUid]))
+  const real = (uid: string | null | undefined) => !uid || !isTestOwner(uid)
+  return summarizeByVersion({
+    installations: installations.filter((item) => real(item.ownerUid) && isActiveWithinDays(item, nowMs.value, periodDays.value)),
+    bundles: bundles.value.filter((bundle) => real(bundle.uploaderUid || ownerByInstallation.get(bundle.installationId))),
+    errors: errors.value.filter((event) => real(event.userId)),
+  })
+})
 
 const headline = computed(() => {
   const count = summary.value.issues.length
@@ -84,14 +102,14 @@ async function load() {
   nowMs.value = Date.now()
   const day = 86_400_000
   const filters = {
-    startIso: new Date(nowMs.value - ACTIVE_WINDOW_DAYS * day).toISOString(),
+    startIso: new Date(nowMs.value - periodDays.value * day).toISOString(),
     endExclusiveIso: new Date(nowMs.value + 60_000).toISOString(),
   }
   // Errori e fatali filtrati dal server: avvisi e info non consumano la pagina.
   const loadSeverity = (severity: 'error' | 'fatal') => loadClientDiagnosticsPage({ filters: { ...filters, severity } })
   const [cockpit, recent, diagnostics] = await Promise.allSettled([
     loadAdminCockpitSnapshot(),
-    listRecentDiagnosticBundles(bundleDeps, { days: ACTIVE_WINDOW_DAYS, nowMs: nowMs.value }),
+    listRecentDiagnosticBundles(bundleDeps, { days: periodDays.value, nowMs: nowMs.value }),
     Promise.all([loadSeverity('error'), loadSeverity('fatal')]),
   ])
   if (cockpit.status === 'fulfilled') snapshot.value = cockpit.value
@@ -99,13 +117,21 @@ async function load() {
   if (recent.status === 'fulfilled') {
     bundles.value = recent.value.items
     bundlesComplete.value = recent.value.complete
-  } else missingSources.value.push('pacchetti diagnostici')
+  } else {
+    // Mai i dati di un periodo diverso sotto l'etichetta del periodo nuovo.
+    bundles.value = []
+    missingSources.value.push('pacchetti diagnostici')
+  }
   if (diagnostics.status === 'fulfilled') {
     errorsTruncated.value = diagnostics.value.some((page) => page.nextCursor !== null)
     errors.value = diagnostics.value.flatMap((page) => page.events)
       .filter((event) => event.severity === 'error' || event.severity === 'fatal')
-      .map((event) => ({ userId: event.userId, pilotNickname: event.pilotNickname, code: event.code, severity: event.severity, receivedAt: event.receivedAt }))
-  } else missingSources.value.push('errori segnalati')
+      .map((event) => ({ userId: event.userId, pilotNickname: event.pilotNickname, code: event.code, severity: event.severity, receivedAt: event.receivedAt,
+        version: event.suiteVersion ?? null, channel: event.channel ?? null }))
+  } else {
+    errors.value = []
+    missingSources.value.push('errori segnalati')
+  }
   loading.value = false
 }
 
@@ -133,7 +159,9 @@ onMounted(load)
   <div class="status-page">
     <header class="page-header">
       <div>
-        <p class="context-line">Amministrazione · ultimi {{ ACTIVE_WINDOW_DAYS }} giorni</p>
+        <p class="context-line">Amministrazione · ultimi
+          <select v-model.number="periodDays" class="period" aria-label="Periodo" :disabled="loading" @change="load"><option v-for="d in PERIODS" :key="d" :value="d">{{ d }}</option></select>
+          giorni</p>
         <h1>Stato</h1>
         <p>Cosa si è rotto o va guardato nelle installazioni dei piloti.</p>
       </div>
@@ -159,6 +187,8 @@ onMounted(load)
         </p>
       </div>
     </section>
+
+    <AdminVersionSummaryTable v-if="!loading" :rows="versionRows" :period-days="periodDays" />
 
     <p v-if="!loading && summary.reporting.active > summary.reporting.sendingBundles" class="note">
       {{ summary.reporting.active - summary.reporting.sendingBundles }} installazioni attive non mandano ancora pacchetti
@@ -197,7 +227,7 @@ onMounted(load)
       </li>
     </ul>
     <p v-else-if="!loading" class="empty">
-      {{ incomplete ? 'Nessun problema nei dati letti.' : `Nessun problema negli ultimi ${ACTIVE_WINDOW_DAYS} giorni.` }}
+      {{ incomplete ? 'Nessun problema nei dati letti.' : `Nessun problema negli ultimi ${periodDays} giorni.` }}
     </p>
 
     <section v-if="!loading && summary.testIssues.length" class="tests">
@@ -242,6 +272,7 @@ onMounted(load)
   margin-bottom: $spacing-md;
 }
 
+.period { background: transparent; color: inherit; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 4px; font: inherit; }
 .context-line {
   margin: 0 0 $spacing-xs;
   color: var(--theme-accent-light);

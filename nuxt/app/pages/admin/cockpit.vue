@@ -131,7 +131,8 @@ async function loadOs() {
     const { items } = await listRecentDiagnosticBundles(
       { getToken: async () => (await currentUser.value?.getIdToken()) ?? null,
         origin: resolveDiagnosticsOrigin(useRuntimeConfig().public.diagnosticsIngestUrl) },
-      { days: 30, nowMs: now.value },
+      // PIP-631: 14 giorni bastano per le installazioni attive (erano 30, ~32 elenchi R2 a ogni apertura).
+      { days: 14, nowMs: now.value },
     )
     const map: Record<string, string> = {}
     for (const item of items) if (item.os && !map[item.installationId]) map[item.installationId] = item.os
@@ -184,6 +185,8 @@ onMounted(loadSnapshot)
         {{ loading ? 'Aggiornamento…' : 'Aggiorna fotografia' }}
       </button>
     </header>
+
+    <AdminStabilityWeekCard :now-ms="now" />
 
     <section class="metric-strip" aria-label="Riepilogo fotografia">
       <div class="metric metric--primary">
