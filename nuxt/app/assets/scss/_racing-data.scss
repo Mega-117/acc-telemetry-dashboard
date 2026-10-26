@@ -17,12 +17,6 @@
   :focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
 }
 .racing-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
-.racing-filter-tabs {
-  display: flex; gap: 28px; margin-bottom: 14px;
-  button { position: relative; padding: 10px 0 12px; border: 0; background: transparent; color: var(--racing-data-muted); font: inherit; font-size: var(--racing-filter-text-size); text-transform: uppercase; cursor: pointer; }
-  button:hover, button.is-active { color: #fff; }
-  button.is-active::after { content: ''; position: absolute; inset: auto 0 0; height: 3px; background: var(--racing-data-accent); }
-}
 .racing-filter-selects { display: flex; flex-wrap: wrap; gap: var(--racing-space-control); }
 .racing-table-scroll { overflow-x: auto; }
 .racing-day-table {
@@ -30,12 +24,5 @@
   caption { text-align: left; padding: 0 0 10px; font-size: 14px; line-height: 1.5; letter-spacing: .12em; font-weight: 600; }
   tbody { border-top: 1px solid var(--racing-data-line); border-bottom: 1px solid var(--racing-data-edge); }
   td { height: 38px; padding: 7px 8px; border-bottom: 1px solid var(--racing-data-line); vertical-align: middle; }
-}
-.racing-session-badge {
-  display: inline-flex; justify-content: center; align-items: center; width: 74px; min-height: 24px;
-  border: 1px solid currentColor; border-radius: 2px; font-size: 10px; line-height: 1; font-weight: 500;
-  &--practice { color: var(--racing-practice); }
-  &--qualify { color: var(--racing-qualify); }
-  &--race { color: var(--racing-race); }
 }
 .racing-text-action { border: 1px solid var(--racing-data-edge); background: transparent; color: inherit; font: inherit; padding: 6px 12px; cursor: pointer; }

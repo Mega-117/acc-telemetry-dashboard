@@ -9,6 +9,7 @@ import { gameLabel } from '~/services/telemetry/gameCatalog'
 import GameContextTransition from '~/components/layout/GameContextTransition.vue'
 import { sessionGame, sessionFilterType, sessionCarCategory } from '~/services/telemetry/gameIdentity'
 import RacingSessionList from '~/components/sessions/RacingSessionList.vue'
+import { vRcSwitch } from '~/directives/rcSwitch'
 import { sessionTiming } from '~/services/telemetry/fuelHistorySummary'
 import { ref, computed, onBeforeUnmount, onMounted, watch, nextTick } from 'vue'
 import { 
@@ -357,7 +358,7 @@ function goToSession(id: string) {
 <template>
   <LayoutPageContainer class="sessions-page racing-data">
     <GameContextTransition :game-id="consultedGame" :busy="isLoading">
-    <h1 class="racing-sr-only">
+    <h1 class="sessions-title">
       Sessioni
     </h1>
     <p
@@ -373,7 +374,8 @@ function goToSession(id: string) {
       aria-label="Filtri sessioni"
     >
       <div
-        class="racing-filter-tabs"
+        v-rc-switch
+        class="racing-filter-tabs rc-switch"
         role="group"
         aria-label="Tipo di sessione"
       >
@@ -459,6 +461,7 @@ function goToSession(id: string) {
       </div>
     </section>
 
+    <div class="sessions-frame">
     <UiScrollArea
       class="sessions-scroll"
       label="Elenco sessioni"
@@ -501,6 +504,7 @@ function goToSession(id: string) {
         <RacingSessionList :groups="paginatedSessionsByDay" @go-to-session="goToSession" />
       </div>
     </UiScrollArea>
+    </div>
     <UiPaginationControls
       v-model:current-page="currentPage"
       class="sessions-pagination"
@@ -520,7 +524,12 @@ function goToSession(id: string) {
 @use '@/assets/scss/racing-settings' as controls;
 .sessions-page { width: 100%; padding-top: var(--app-content-top-space); padding-bottom: 0; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .sessions-page :deep(.game-context), .sessions-page :deep(.game-context__content) { flex: 1 1 0%; min-height: 0; }
-.session-filters { margin-bottom: 24px; flex: 0 0 auto; }
+// Come la Panoramica: titolo sportivo, filtri con lo switcher che scorre, elenco dentro una cornice.
+.sessions-title { @include controls.title; margin: 0 0 18px; flex: 0 0 auto; }
+.session-filters { margin-bottom: 20px; flex: 0 0 auto; }
+.racing-filter-tabs { margin-bottom: 14px; }
+// La cornice sta fuori dall'area che scorre: la sfumatura dello scroll non deve mangiarne il bordo.
+.sessions-frame { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 4px 18px 0; border: 1px solid #ffffff65; }
 .sessions-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
   overscroll-behavior-y: contain; scrollbar-gutter: stable;
   padding: var(--app-scroll-fade-size) 0 12px; mask-image: var(--app-scroll-fade-mask); }

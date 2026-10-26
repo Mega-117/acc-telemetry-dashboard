@@ -85,7 +85,7 @@ function openSession(event: MouseEvent, id: string) {
                   @click="emit('go-to-session', session.id)"
                 >
                   <td class="session-type">
-                    <span :class="['racing-session-badge', `racing-session-badge--${session.type}`]">{{ session.type === 'practice' ? 'LIBERE' : getTypeLabel(session.type) }}</span>
+                    <span :class="['session-kind', `session-kind--${session.type}`]">{{ session.type === 'practice' ? 'LIBERE' : getTypeLabel(session.type) }}</span>
                   </td>
                   <td class="session-time">
                     {{ session.time }}
@@ -101,7 +101,6 @@ function openSession(event: MouseEvent, id: string) {
                     >
                       {{ session.track }}
                     </component>
-                    <small class="session-game">{{ session.game || 'ACC' }}</small>
                   </td>
                   <td
                     class="session-car"
@@ -142,7 +141,12 @@ function openSession(event: MouseEvent, id: string) {
 @use '@/assets/scss/racing-settings' as controls;
 .racing-session-list { @include controls.tokens; }
 .session-open { text-decoration: none; }
-.session-game { display: block; color: var(--racing-data-muted); font-size: 10px; margin-top: 4px; }
+// Tipo di sessione come in Panoramica: lineetta nel colore della sessione e nome in chiaro, niente riquadro.
+.session-kind { display: inline-block; padding: 3px 0 3px 10px; border-left: 3px solid currentColor; font: 600 11px/1.2 'Inter', sans-serif; letter-spacing: .5px; text-transform: uppercase; }
+.session-kind--practice { color: var(--racing-practice); } .session-kind--qualify { color: var(--racing-qualify); } .session-kind--race { color: var(--racing-race); } .session-kind--unknown { color: var(--racing-data-muted); }
+// Date come titoli di sezione e tempi nel corsivo sportivo, come in Panoramica.
+.racing-day-table caption { @include controls.section-title; font-size: 15px; letter-spacing: .04em; padding: 0 0 10px; }
+.session-best > span { font: italic 700 15px/1 'Racer Display', sans-serif; letter-spacing: .02em; }
 .racing-session-list--track {
   .racing-day-table { min-width: 720px; }
   .col-type { width: 12%; }
