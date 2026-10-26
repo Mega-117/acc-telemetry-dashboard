@@ -1,13 +1,18 @@
 <script setup lang="ts">
 // PIP-633: un quadretto per giorno (come il calendario di Strava): piu' acceso quanto piu' hai guidato.
-import { calendarWeeks, drivingHabits } from '~/utils/statsJourney'
+import { calendarWeeks, drivingHabits, localDay } from '~/utils/statsJourney'
 import type { SessionDocument } from '~/types/telemetry'
 import { formatDriveTime } from '~/utils/telemetryFormat'
 
 const props = defineProps<{ sessions: SessionDocument[], nowMs: number }>()
 const WEEKS = 52
 const weeks = computed(() => calendarWeeks(props.sessions, WEEKS, props.nowMs))
-const habits = computed(() => drivingHabits(props.sessions, props.nowMs))
+// Riepilogo sullo stesso intervallo della griglia: "Ultimi 12 mesi" vale per tutto il riquadro.
+const firstDay = computed(() => weeks.value[0]![0]!.date)
+const inRange = computed(() => props.sessions.filter(s => { const ms = Date.parse(s.meta?.date_start || ''); return Number.isFinite(ms) && localDay(ms) >= firstDay.value }))
+const habits = computed(() => drivingHabits(inRange.value, props.nowMs))
+// Alternativa testuale ai quadretti per tastiera e lettori di schermo.
+const drivenDays = computed(() => weeks.value.flat().filter(d => d.sessions).reverse())
 const MONTHS = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
 // Etichetta del mese sulla prima settimana che lo contiene.
 const monthLabels = computed(() => weeks.value.map((w, i) => {
@@ -41,6 +46,10 @@ const days = (n: number) => `${n} ${n === 1 ? 'giorno' : 'giorni'}`
         </div>
       </div>
     </div>
+    <details class="calendar__list">
+      <summary>Elenco dei giorni di guida ({{ drivenDays.length }})</summary>
+      <ul><li v-for="d in drivenDays" :key="d.date">{{ dayTitle(d) }}</li></ul>
+    </details>
     <p class="calendar__legend" aria-hidden="true">Meno <span class="calendar__day lvl-0" /><span class="calendar__day lvl-1" /><span class="calendar__day lvl-2" /><span class="calendar__day lvl-3" /><span class="calendar__day lvl-4" /> Di più</p>
   </section>
 </template>
@@ -69,6 +78,9 @@ h2 { margin: 0; font: italic 700 18px/1.2 'Racer Display', sans-serif; text-tran
 .lvl-3 { background: #2b8bff; }
 .lvl-4 { background: #4dd0ff; box-shadow: 0 0 6px #4dd0ff88; }
 .is-future { visibility: hidden; }
+.calendar__list { margin-top: 8px; font-size: 12px; color: #bdbdbd; }
+.calendar__list summary { cursor: pointer; width: max-content; }
+.calendar__list ul { margin: 6px 0 0; padding-left: 18px; columns: 3; }
 .calendar__legend { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin: 8px 0 0; font-size: 11px; color: #a8a8a8; }
 @media (max-width: 1100px) { .habits { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>

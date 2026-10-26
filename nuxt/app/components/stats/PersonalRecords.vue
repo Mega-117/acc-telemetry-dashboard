@@ -2,7 +2,7 @@
 // PIP-633: i tuoi record per pista e auto (come i record personali di Garmin): best qualifica,
 // best gara e best media gara, con il giorno in cui li hai fatti. "Nuovo!" se della settimana.
 import { Trophy } from '@lucide/vue'
-import { personalRecords, type RecordTime } from '~/utils/statsJourney'
+import { personalRecords, shortDate, type RecordTime } from '~/utils/statsJourney'
 import type { SessionDocument } from '~/types/telemetry'
 import { formatCarName, formatLapTime, formatTrackName } from '~/utils/telemetryFormat'
 
@@ -11,7 +11,7 @@ const records = computed(() => personalRecords(props.sessions, props.nowMs))
 const showAll = ref(false)
 const VISIBLE = 6
 const visible = computed(() => (showAll.value ? records.value : records.value.slice(0, VISIBLE)))
-const when = (t: RecordTime | null) => (t ? `${t.date.slice(8, 10)}/${t.date.slice(5, 7)}/${t.date.slice(2, 4)}` : '')
+const when = (t: RecordTime | null) => (t ? shortDate(t.date, true) : '')
 // Stessi nomi e colori del dettaglio pista: qualifica gialla, gara rossa, media gara azzurra.
 const kinds = [
   { id: 'qualy', label: 'Best qualifica', cls: 'k-qualy' },

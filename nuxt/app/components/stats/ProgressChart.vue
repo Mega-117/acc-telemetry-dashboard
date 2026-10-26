@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // PIP-633: "stai migliorando?". Il tempo di ogni sessione nel tempo per una pista e un'auto, con la
 // frase che confronta i tuoi inizi con le sessioni recenti (come le Tendenze di Apple Fitness).
-import { personalRecords, progressDelta, progressSeries, type ProgressMetric } from '~/utils/statsJourney'
+import { personalRecords, progressDelta, progressSeries, shortDate, type ProgressMetric } from '~/utils/statsJourney'
 import type { SessionDocument } from '~/types/telemetry'
 import { formatCarName, formatLapTime, formatTrackName } from '~/utils/telemetryFormat'
 
@@ -57,12 +57,13 @@ const sentence = computed(() => {
   const n = points.value.length
   if (n < 3) return `Servono almeno 3 sessioni con questo tempo per vedere un andamento (ora ${n}).`
   const d = delta.value!
-  const since = `${d.fromDate.slice(8, 10)}/${d.fromDate.slice(5, 7)}`
+  const since = shortDate(d.fromDate)
   const s = (Math.abs(d.deltaMs) / 1000).toFixed(1).replace('.', ',')
   if (Math.abs(d.deltaMs) < 50) return `Stabile rispetto ai tuoi inizi del ${since}: stessi tempi.`
   return d.deltaMs < 0 ? `Stai migliorando: −${s} s rispetto ai tuoi inizi del ${since}.` : `Più lento di ${s} s rispetto ai tuoi inizi del ${since}: condizioni o setup diversi?`
 })
-const dateLabel = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
+const dateLabel = (iso: string) => shortDate(iso)
+const metricLabel = computed(() => METRICS.find(m => m.id === metric.value)?.label ?? '')
 </script>
 
 <template>
@@ -75,8 +76,10 @@ const dateLabel = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
     </div>
     <p v-if="sentence" class="progress__sentence" :class="{ 'is-good': delta && delta.deltaMs < -50 }">{{ sentence }}</p>
     <div v-if="available.length > 1" class="progress__metrics" role="group" aria-label="Quale tempo">
-      <button v-for="m in available" :key="m.id" type="button" :class="{ active: m.id === metric }" :style="{ '--m': m.color }" @click="metric = m.id">{{ m.label }}</button>
+      <button v-for="m in available" :key="m.id" type="button" :class="{ active: m.id === metric }" :aria-pressed="m.id === metric" :style="{ '--m': m.color }" @click="metric = m.id">{{ m.label }}</button>
     </div>
+    <!-- Con un solo tempo disponibile non c'e' da scegliere, ma il nome resta visibile. -->
+    <div v-else-if="available.length === 1" class="progress__metrics"><span class="active" :style="{ '--m': color }">{{ metricLabel }}</span></div>
     <svg v-if="chart" class="progress__chart" :viewBox="`0 0 ${W} ${H}`" role="img" :aria-label="`Tempi per sessione, dal migliore ${formatLapTime(chart.min)} al peggiore ${formatLapTime(chart.max)}`">
       <line :x1="PAD" :x2="W - PAD" :y1="chart.best.y" :y2="chart.best.y" class="progress__best" />
       <g v-for="q in chart.pts" :key="q.v.date">
@@ -102,7 +105,8 @@ select { background: #0b0b0b; color: #f5f5f5; border: 1px solid #ffffff55; paddi
 .progress__sentence.is-good { border-left-color: #22c55e; background: linear-gradient(90deg, #22c55e24, transparent 70%); }
 .progress__metrics { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .progress__metrics button { background: #ffffff10; border: 0; border-left: 3px solid var(--m); color: #d8d8d8; padding: 5px 10px; cursor: pointer; font: 500 12px/1.2 'Arial Narrow', 'Segoe UI', sans-serif; text-transform: uppercase; }
-.progress__metrics button.active { background: #ffffff26; color: #fff; }
+.progress__metrics button.active, .progress__metrics span.active { background: #ffffff26; color: #fff; }
+.progress__metrics span { border-left: 3px solid var(--m); padding: 5px 10px; font: 500 12px/1.2 'Arial Narrow', 'Segoe UI', sans-serif; text-transform: uppercase; }
 .progress__chart { width: 100%; height: auto; display: block; }
 .progress__best { stroke: #ffffff33; stroke-dasharray: 4 4; }
 .progress__label { fill: #fff; font: 600 12px 'Segoe UI', sans-serif; }

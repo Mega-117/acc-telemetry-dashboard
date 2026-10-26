@@ -14,6 +14,13 @@ export const localDay = (ms: number) => {
   const d = new Date(ms)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
+/** "26/10" o "26/10/26" nel calendario locale (un orario UTC di notte puo' essere il giorno dopo). */
+export function shortDate(iso: string, withYear = false): string {
+  const ms = Date.parse(iso)
+  if (!Number.isFinite(ms)) return ''
+  const [y, m, d] = localDay(ms).split('-')
+  return withYear ? `${d}/${m}/${y!.slice(2)}` : `${d}/${m}`
+}
 
 // ---- Tendenze: il periodo scelto contro quello subito prima, della stessa durata ----
 
@@ -121,7 +128,12 @@ export interface RecordRow {
 
 export function personalRecords(sessions: SessionDocument[], nowMs: number): RecordRow[] {
   const rows = new Map<string, RecordRow>()
-  const better = (cur: RecordTime | null, ms: number | null, date: string) => (ms !== null && (!cur || ms < cur.ms) ? { ms, date } : cur)
+  // A parita' di tempo conta la prima volta che l'hai fatto, qualunque sia l'ordine della lista.
+  const better = (cur: RecordTime | null, ms: number | null, date: string) => {
+    if (ms === null) return cur
+    if (!cur || ms < cur.ms || (ms === cur.ms && Date.parse(date) < Date.parse(cur.date))) return { ms, date }
+    return cur
+  }
   for (const s of sessions) {
     const at = startOf(s)
     if (!isAcc(s) || !Number.isFinite(at)) continue

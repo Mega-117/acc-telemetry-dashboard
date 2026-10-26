@@ -53,11 +53,12 @@ const options = (pick: (s: SessionDocument) => string, label: (v: string) => str
 const trackOptions = computed(() => options(s => s.meta?.track || '', formatTrackName))
 const carOptions = computed(() => options(s => s.meta?.car || '', formatCarName))
 
-const filtered = computed(() => filterSessions(sessions.value, filter.value, Date.now()))
+// Un solo "adesso" per periodo, periodo precedente, settimane e calendario: si aggiorna a ogni lettura.
+const nowMs = ref(Date.now())
+const filtered = computed(() => filterSessions(sessions.value, filter.value, nowMs.value))
 const cars = computed(() => timeByCar(filtered.value))
 // PIP-633: barre per auto e per settimana con le etichette.
 // Tendenze: lo stesso conteggio sul periodo precedente della stessa durata (con "Tutto" non c'e').
-const nowMs = ref(Date.now())
 const current = computed(() => periodTotals(filtered.value))
 const previous = computed(() => {
   const prev = previousPeriodSessions(sessions.value, filter.value, nowMs.value)
@@ -65,7 +66,7 @@ const previous = computed(() => {
 })
 const periodLabel = computed(() => PERIODS.find(p => p.days === periodDays.value)?.label ?? '')
 const carMax = computed(() => Math.max(1, ...cars.value.map(c => c.timeMs)))
-const weeks = computed(() => timeByWeek(filtered.value, Math.min(26, Math.max(4, Math.ceil((periodDays.value || 182) / 7))), Date.now()))
+const weeks = computed(() => timeByWeek(filtered.value, Math.min(26, Math.max(4, Math.ceil((periodDays.value || 182) / 7))), nowMs.value))
 const weekMax = computed(() => Math.max(1, ...weeks.value.map(w => w.timeMs)))
 // Un colore per auto, diverso dal giallo qualifica e dal rosso gara (che hanno gia' un significato).
 const CAR_COLORS = ['#00c2d6', '#8b5cf6', '#ff7a1a', '#14b8a6', '#ec4899', '#84cc16']
@@ -118,6 +119,7 @@ async function load() {
   const uid = targetUserId.value
   if (!uid) { status.value = 'error'; return }
   status.value = 'loading'
+  nowMs.value = Date.now()
   try {
     // Lista dal gateway (cache della proiezione + sessioni del PC non ancora caricate), come le altre pagine.
     const [list, stats] = await Promise.all([gateway.getVehicleHistory(uid), loadStatsSummary(uid)])

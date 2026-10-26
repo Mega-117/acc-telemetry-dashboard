@@ -1,7 +1,7 @@
 // PIP-633: tendenze, calendario, record e progressi dalla lista sessioni.
 import { describe, expect, it } from 'vitest'
 import {
-  calendarWeeks, drivingHabits, localDay, periodTotals, personalRecords, previousPeriodSessions, progressDelta, progressSeries, trend,
+  calendarWeeks, drivingHabits, localDay, periodTotals, personalRecords, previousPeriodSessions, progressDelta, progressSeries, shortDate, trend,
 } from '~/utils/statsJourney'
 import type { SessionDocument } from '~/types/telemetry'
 
@@ -60,6 +60,22 @@ describe('statsJourney', () => {
     expect(monza.avgRace?.ms).toBe(103_000)
     expect(monza.isNew).toBe(true)
     expect(rows[1]!.isNew).toBe(false)
+  })
+
+  it('a tied record keeps the first time you did it, whatever the list order', () => {
+    const first = s(at(2026, 9, 1), { best_race_ms: 100_000 }), tie = s(at(2026, 10, 25), { best_race_ms: 100_000 })
+    for (const list of [[first, tie], [tie, first]]) {
+      const row = personalRecords(list, NOW)[0]!
+      expect(row.race).toEqual({ ms: 100_000, date: at(2026, 9, 1) })
+      expect(row.isNew).toBe(false)
+    }
+  })
+
+  it('labels dates in the local calendar', () => {
+    const lateNight = new Date(2026, 9, 26, 0, 30).toISOString() // 00:30 locali del 26: in UTC e' ancora il 25
+    expect(shortDate(lateNight)).toBe('26/10')
+    expect(shortDate(lateNight, true)).toBe('26/10/26')
+    expect(shortDate('rotto')).toBe('')
   })
 
   it('shows progress only with at least three sessions', () => {
