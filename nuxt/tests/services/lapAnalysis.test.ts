@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { analysisSessionToken, bodySlipDeg, channelAt, compareCorners, finishLine, timeSyncedFraction, cornerAdvice, deltaTrend, detectCorners, formatDelta, fractions, lapDelta, mapPoints } from '~/services/telemetry/lapAnalysis'
+import { analysisSessionToken, bodySlipDeg, channelAt, compareCorners, cornerAt, followFrame, stepCorner, finishLine, timeSyncedFraction, cornerAdvice, deltaTrend, detectCorners, formatDelta, fractions, lapDelta, mapPoints } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
 const STEP = 2
@@ -182,5 +182,33 @@ describe('Garage 61 sectors', () => {
     expect(sectorBounds(steady, [30000, 30000, 40000])).toEqual([0, expect.closeTo(0.3, 6), expect.closeTo(0.6, 6), 1])
     expect(sectorBounds(steady, [30000, null, 40000])).toBeNull()
     expect(sectorBounds(steady, undefined)).toBeNull()
+  })
+})
+
+describe('corner navigation (PIP-635)', () => {
+  const corners = [{ number: 1, start: 0.1, apex: 0.15, end: 0.2, minSpeedKmh: 90 }, { number: 2, start: 0.4, apex: 0.45, end: 0.5, minSpeedKmh: 120 }, { number: 3, start: 0.7, apex: 0.75, end: 0.8, minSpeedKmh: 80 }]
+  it('steps to the next and previous corner, round the lap', () => {
+    expect(stepCorner(1, 3, 1)).toBe(2)
+    expect(stepCorner(3, 3, 1)).toBe(1)
+    expect(stepCorner(1, 3, -1)).toBe(3)
+    expect(stepCorner(2, 3, -1)).toBe(1)
+    expect(stepCorner(1, 0, 1)).toBeNull()
+  })
+  it('finds the corner under the cursor, none on the straights', () => {
+    expect(cornerAt(corners, 0.45)?.number).toBe(2)
+    expect(cornerAt(corners, 0.1)?.number).toBe(1)
+    expect(cornerAt(corners, 0.3)).toBeNull()
+    expect(cornerAt(corners, null)).toBeNull()
+  })
+})
+
+describe('map follows the cursor (PIP-635)', () => {
+  const frame = { cx: 100, cy: 100, span: 100 }
+  it('stays put while the dot is in the middle of the view', () => {
+    expect(followFrame(frame, { x: 120, y: 110 })).toBeNull()
+  })
+  it('centres on the dot when it gets near the edge, keeping the zoom', () => {
+    expect(followFrame(frame, { x: 140, y: 100 })).toEqual({ cx: 140, cy: 100, span: 100 })
+    expect(followFrame(frame, { x: 100, y: 70 })).toEqual({ cx: 100, cy: 70, span: 100 })
   })
 })

@@ -30,11 +30,13 @@ const props = withDefaults(defineProps<{
   refCursor?: number | null
   /** Corner bands with their number along the lap (Tracce). */
   corners?: Corner[]
+  /** PIP-635: what goes before the distance under the cursor (the corner, "C6"). */
+  cursorTag?: string | null
   /** Same height for every row (Tracce). */
   rowHeight?: number | null
   /** Garage 61 zoom: drag to zoom a stretch, wheel in and out, double click for the lap. */
   zoomable?: boolean
-}>(), { range: () => [0, 1], refCursor: null, corners: () => [], rowHeight: null, zoomable: false })
+}>(), { range: () => [0, 1], refCursor: null, corners: () => [], cursorTag: null, rowHeight: null, zoomable: false })
 const emit = defineEmits<{ hover: [fraction: number | null], select: [corner: number], zoom: [range: [number, number] | null] }>()
 
 const uid = useId()
@@ -255,7 +257,7 @@ function onDouble() {
       </div>
       <div class="chart-xaxis">
         <span v-for="(t, i) in xTicks" :key="i" class="chart-xtick" :style="{ left: `${t.x / WIDTH * 100}%`, '--p': `${t.x / WIDTH * 100}%` }">{{ t.label }}</span>
-        <span v-if="inRange(cursor)" class="chart-xcursor" :style="{ left: `${xOf(cursor!) / WIDTH * 100}%`, '--p': `${xOf(cursor!) / WIDTH * 100}%` }">{{ km(cursor!) }}</span>
+        <span v-if="inRange(cursor)" class="chart-xcursor" :style="{ left: `${xOf(cursor!) / WIDTH * 100}%`, '--p': `${xOf(cursor!) / WIDTH * 100}%` }">{{ cursorTag ? `${cursorTag} · ` : '' }}{{ km(cursor!) }}</span>
       </div>
     </div>
   </div>

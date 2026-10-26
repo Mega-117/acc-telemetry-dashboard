@@ -4,7 +4,7 @@
 // Corner zoom: the two racing lines, yours blue and the reference amber.
 // Two dots follow the cursor: you (blue, filled) and the reference (amber, hollow).
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { deltaTrend, finishLine, fractions, lapDelta, mapPoints, worldToMap, type Corner, type MapPoint } from '~/services/telemetry/lapAnalysis'
+import { deltaTrend, finishLine, followFrame, fractions, lapDelta, mapPoints, worldToMap, type Corner, type MapPoint } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
 const props = withDefaults(defineProps<{
@@ -57,7 +57,12 @@ const focusRange = computed<[number, number] | null>(() => {
 // Your own framing (wheel, drag, + / −), as Track Titan and Garage 61: it stays put while
 // the cursor moves on the charts. Null follows the corner, the sector or the whole track.
 const view = ref<{ cx: number, cy: number, span: number } | null>(null)
-watch(focusRange, () => { view.value = null })
+// PIP-635: zoomed in, the map follows the cursor dot moved on the charts; dragging the map by hand stops
+// it until the double click (or a new corner / sector) gives the framing back.
+const follow = ref(true)
+const onMap = ref(false)
+function resetView() { view.value = null; follow.value = true }
+watch(focusRange, resetView)
 const trend = computed(() => props.reference ? deltaTrend(lapDelta(props.lap, props.reference, at)) : null)
 const path = (points: MapPoint[] | null) => points?.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ') ?? ''
 const segments = computed(() => {
@@ -83,6 +88,12 @@ const lapArrow = computed(() => {
   return { x: a.x, y: a.y, angle: (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI }
 })
 const refDot = computed(() => props.reference ? dot(base.value, props.refCursor ?? props.cursor) : null)
+// Only for the cursor moved on the charts: on the map itself the pointer is already where you look.
+watch(lapDot, (point) => {
+  if (!point || !follow.value || onMap.value || frameNow.value.span >= W.value * 0.9) return
+  const next = followFrame(frameNow.value, point)
+  if (next) setView(next)
+})
 // Corner numbers beside the track on the outside of the bend, not on the apex: zoomed in,
 // they no longer cover the two lines exactly where you look at them.
 const labels = computed(() => {
@@ -205,6 +216,7 @@ function onUp(event: PointerEvent) {
 // Leaving the map before a drag starts drops the press, so the hand does not stay closed.
 function onLeave() {
   if (drag && !drag.moved) { drag = null; dragging.value = false; document.documentElement.classList.remove('map-grabbing') }
+  onMap.value = false
   emit("hover", null)
 }
 function onMove(event: PointerEvent) {
@@ -213,11 +225,13 @@ function onMove(event: PointerEvent) {
     const dx = event.clientX - drag.x, dy = event.clientY - drag.y
     if (!drag.moved && dx * dx + dy * dy > 16) { drag.moved = true; svg.setPointerCapture?.(event.pointerId) }
     if (drag.moved) {
+      follow.value = false
       const perPixel = frameNow.value.span / svg.getBoundingClientRect().width
       setView({ cx: drag.cx - dx * perPixel, cy: drag.cy - dy * perPixel, span: frameNow.value.span })
       return
     }
   }
+  onMap.value = true
   const points = base.value
   if (!points) return
   const { x, y } = mapPoint(event, svg)
@@ -234,7 +248,7 @@ function onMove(event: PointerEvent) {
     <button type="button" aria-label="Allontana la mappa" title="Allontana (anche con la rotella)" :disabled="frameNow.span >= maxSpan" @click="zoomStep(1.6)">−</button>
     <button v-if="view" type="button" aria-label="Rimetti la mappa com'era" title="Inquadratura iniziale (anche doppio clic)" @click="view = null">⟲</button>
   </div>
-  <svg class="map" :class="{ 'map--pan': zoomControls, 'map--dragging': dragging }" :viewBox="viewBox" :style="{ '--z': zoomScale }" role="img" aria-label="Mappa della pista" @pointermove="onMove" @pointerleave="onLeave" @pointerdown="onDown" @mousedown.prevent @dragstart.prevent @pointerup="onUp" @pointercancel="onUp" @wheel="onWheel" @dblclick="zoomControls && (view = null)">
+  <svg class="map" :class="{ 'map--pan': zoomControls, 'map--dragging': dragging }" :viewBox="viewBox" :style="{ '--z': zoomScale }" role="img" aria-label="Mappa della pista" @pointermove="onMove" @pointerleave="onLeave" @pointerdown="onDown" @mousedown.prevent @dragstart.prevent @pointerup="onUp" @pointercancel="onUp" @wheel="onWheel" @dblclick="zoomControls && resetView()">
     <template v-if="edgePaths">
       <polygon :points="edgePaths.surface" class="map-surface" fill-rule="evenodd" />
       <polyline :points="edgePaths.left" class="map-edge" />

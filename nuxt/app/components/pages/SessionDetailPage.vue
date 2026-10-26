@@ -3,6 +3,7 @@ import { vRcSwitch } from '~/directives/rcSwitch'
 import { Info } from '@lucide/vue'
 import { stintTypeLabel, gripAbbreviation, lapPointAppearance } from '~/services/session-detail/sessionPresentation'
 import { useHeaderBack } from '~/composables/useHeaderBack'
+import { initialDetailTab } from '~/utils/sessionDetailTab'
 import { noteFeatureUse } from '~/services/usage/featureUseNote'
 // ============================================
 // SessionDetailPage - Master / Detail Layout
@@ -191,13 +192,18 @@ const isEvoSession = computed(() => recordingGame(originalSession.value) === 'ev
 // PIP-618: "Avanzata" tab, the lap analysis (our Track Titan) from the logger's lap files.
 // Lap files carry the session id of the logger (YYYYMMDD_HHMMSS); other sessions have none.
 const detailTab = ref<'sessione' | 'avanzata'>('sessione')
+// PIP-635: si apre sulla Telemetria quando i giri possono esserci (programma desktop, o archivio online
+// del pilota visto dal coach); altrimenti, o se poi non ci sono giri, resta Sessione. Una scelta dell'utente vince sempre.
+const tabChosen = ref(false)
+function chooseTab(tab: 'sessione' | 'avanzata') { tabChosen.value = true; detailTab.value = tab }
 // A lap clicked in the Sessione table opens Telemetria with that lap as "Tu" (Garage 61's lap list).
 const analysisLap = ref<number | null>(null)
 function openLapTelemetry(lap: { lap?: number, lapNumber?: number }) {
   if (isEvoSession.value) return
   analysisLap.value = Number(lap.lap ?? lap.lapNumber) || null
-  detailTab.value = 'avanzata'
+  chooseTab('avanzata')
 }
+function onTelemetryUnavailable() { if (!tabChosen.value) detailTab.value = 'sessione' }
 const analysisToken = computed(() => analysisSessionToken(
   (originalSession.value as { session_id?: unknown } | null)?.session_id,
   props.sessionId,
@@ -251,6 +257,14 @@ async function shareSession() {
 
 // Get pilot context (will be set when coach views a pilot)
 const targetUserId = usePilotContext()
+// PIP-635: Telemetria appena si sa che la sessione e' di ACC e che i suoi giri possono esserci.
+watch(originalSession, (session) => {
+  if (!session || tabChosen.value) return
+  detailTab.value = initialDetailTab({
+    evo: isEvoSession.value, foreign: !!props.externalUserId, hasLapToken: !!analysisToken.value, viewingPilot: !!targetUserId.value,
+    desktop: typeof window !== 'undefined' && typeof (window as Window & { electronAPI?: { listLapTraces?: unknown } }).electronAPI?.listLapTraces === 'function',
+  })
+}, { immediate: true })
 
 onMounted(async () => {
   isLoading.value = true
@@ -2454,13 +2468,13 @@ const gripZones = computed(() => {
       <div class="header-actions">
         <SessionFileActions :can-share="canShare" :sharing="isSharing" :success="shareSuccess" :error="fileActionError" @share="shareSession" />
         <div v-if="!isEvoSession" v-rc-switch class="detail-tabs rc-switch" role="tablist" aria-label="Vista della sessione">
-          <button type="button" role="tab" :aria-selected="detailTab === 'sessione'" :class="{ active: detailTab === 'sessione' }" @click="detailTab = 'sessione'">Sessione</button>
-          <button type="button" role="tab" :aria-selected="detailTab === 'avanzata'" :class="{ active: detailTab === 'avanzata' }" title="Il giro contro un riferimento: delta, curve, traiettorie e telemetria" @click="detailTab = 'avanzata'">Telemetria</button>
+          <button type="button" role="tab" :aria-selected="detailTab === 'sessione'" :class="{ active: detailTab === 'sessione' }" @click="chooseTab('sessione')">Sessione</button>
+          <button type="button" role="tab" :aria-selected="detailTab === 'avanzata'" :class="{ active: detailTab === 'avanzata' }" title="Il giro contro un riferimento: delta, curve, traiettorie e telemetria" @click="chooseTab('avanzata')">Telemetria</button>
         </div>
       </div>
     </header>
 
-    <SessionAnalysisPanel v-if="detailTab === 'avanzata' && !isEvoSession" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="targetUserId && !externalUserId ? targetUserId : null" :foreign="!!externalUserId" />
+    <SessionAnalysisPanel v-if="detailTab === 'avanzata' && !isEvoSession" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="targetUserId && !externalUserId ? targetUserId : null" :foreign="!!externalUserId" @unavailable="onTelemetryUnavailable" />
 
     <!-- ========================================== -->
     <!-- MASTER / DETAIL LAYOUT -->

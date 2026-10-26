@@ -124,6 +124,28 @@ export interface CornerComparison {
   phaseLossS: { entry: number, mid: number, exit: number }
 }
 
+/** PIP-635: the previous or next corner, round the lap: after the last comes the first, before the first the last. */
+export function stepCorner(current: number, count: number, step: 1 | -1): number | null {
+  if (count < 1) return null
+  return ((((current - 1 + step) % count) + count) % count) + 1
+}
+
+/** PIP-635: the corner a point of the lap (0-1) falls in, for the cursor label ("C6 · 1.2 km"); null on the straights. */
+export function cornerAt(corners: Corner[], fraction: number | null): Corner | null {
+  if (fraction === null) return null
+  return corners.find(c => fraction >= c.start && fraction <= c.end) ?? null
+}
+
+/**
+ * PIP-635: a zoomed map follows the cursor dot. Frame as the map's view (centre and width; the
+ * height is 0.8 of the width): when the dot leaves the middle 70% of it, the frame is centred on
+ * the dot, otherwise it stays put (null), so the map does not shake at every small move.
+ */
+export function followFrame(frame: { cx: number, cy: number, span: number }, point: { x: number, y: number }): { cx: number, cy: number, span: number } | null {
+  const inside = Math.abs(point.x - frame.cx) <= frame.span * 0.35 && Math.abs(point.y - frame.cy) <= frame.span * 0.28
+  return inside ? null : { cx: point.x, cy: point.y, span: frame.span }
+}
+
 /** Entry ends a quarter before the apex, the middle a quarter after it: the rest is braking and exit. */
 function phaseBounds(corner: Corner): [number, number] {
   return [corner.apex - (corner.apex - corner.start) * 0.25, corner.apex + (corner.end - corner.apex) * 0.25]

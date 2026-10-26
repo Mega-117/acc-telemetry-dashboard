@@ -53,6 +53,9 @@ export default defineConfig({
         'app/utils/statsPresentation.ts',
         'app/utils/statsJourney.ts',
         'app/directives/rcSwitch.ts',
+        // PIP-635: vista di partenza del dettaglio sessione.
+        'app/utils/sessionDetailTab.ts',
+        'app/composables/useCornerStepper.ts',
         // PIP-632: tracce d'uso delle funzioni nuove.
         'app/services/usage/featureUseNote.ts',
         // PIP-615 / PIP-631: settimana di stabilita' e problemi per versione.

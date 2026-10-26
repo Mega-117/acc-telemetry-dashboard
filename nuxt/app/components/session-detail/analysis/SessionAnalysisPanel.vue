@@ -14,6 +14,7 @@ import { LapsArchiveError } from '~/services/telemetry/lapsArchiveClient'
 import { lapShareErrorMessage } from '~/services/telemetry/lapShareLink'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { compareCorners, cornerAdvice, detectCorners, formatDelta, sectorBounds } from '~/services/telemetry/lapAnalysis'
+import { useCornerStepper } from '~/composables/useCornerStepper'
 import { formatLapConditions, mergeLapConditions, normalizeLapTrace, type LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { formatLapTime } from '~/utils/telemetryFormat'
 
@@ -52,6 +53,8 @@ const entries = ref<Entry[]>([])
 const traces = ref<Record<string, LapTraceView>>({})
 const lapId = ref(''), refId = ref('')
 const loading = ref(false), error = ref('')
+// PIP-635: nessun giro da analizzare: la pagina torna su Sessione se l'aveva aperta da sola.
+const emit = defineEmits<{ unavailable: [] }>(); watch(error, message => { if (message) emit('unavailable') })
 const cursor = ref<number | null>(null)
 const selectedCorner = ref<number | null>(null)
 const skipped = ref(0)
@@ -287,9 +290,6 @@ watch([traceRoot, layout, reference], () => nextTick(measureTrace))
 // What the charts show now, and the way back to the whole lap (Garage 61 reset, Esc, double click).
 const viewLabel = computed(() => zoomRange.value ? "Zoom" : selectedSector.value !== null ? `Settore ${selectedSector.value + 1}` : selectedCorner.value !== null ? `Curva ${selectedCorner.value}` : "Giro intero")
 function wholeLap() { selectedCorner.value = null; selectedSector.value = null; zoomRange.value = null }
-function onEscape(event: KeyboardEvent) { if (event.key === "Escape" && layout.value === "tracce") wholeLap() }
-onMounted(() => window.addEventListener("keydown", onEscape))
-onBeforeUnmount(() => window.removeEventListener("keydown", onEscape))
 // Garage 61 sectors: the official sector times of the reference, placed on its trace.
 // Sector times exist only for laps of the shown session (not for "own" or "shared" references).
 const sessionRow = (e: Entry) => (e.origin === 'local' || e.origin === 'pilot') && e.sessionToken === props.sessionToken ? props.laps.find(l => l.lap_number === e.lapNumber) : undefined
@@ -307,6 +307,7 @@ const sectorGaps = computed(() => {
 const selectedSector = ref<number | null>(null)
 // Tracce: a stretch zoomed with the mouse (drag, wheel) wins over the sector or the corner.
 const zoomRange = ref<[number, number] | null>(null)
+const { goCorner, cursorCorner } = useCornerStepper({ active: () => layout.value === 'tracce', corners, selectedCorner, selectedSector, zoomRange, cursor, wholeLap })
 const range = computed<[number, number]>(() => {
   if (layout.value === 'tracce' && zoomRange.value) return zoomRange.value
   const sector = layout.value === 'tracce' && selectedSector.value !== null ? sectorList.value[selectedSector.value] : null
@@ -504,6 +505,8 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
             <span v-if="sectorList.length" class="strip-nav">
               <button v-for="s in sectorList" :key="s.index" type="button" :class="{ active: selectedSector === s.index }" @click="selectSector(s.index)">S{{ s.index + 1 }}</button>
             </span>
+            <!-- PIP-635: ‹ Curva N ›, curva precedente / successiva. -->
+            <span v-if="selectedCorner !== null && !zoomRange" class="strip-step" role="group" aria-label="Cambia curva"><button type="button" aria-label="Curva precedente" title="Curva precedente (←)" @click="goCorner(-1)">‹</button><strong aria-live="polite">Curva {{ selectedCorner }}</strong><button type="button" aria-label="Curva successiva" title="Curva successiva (→)" @click="goCorner(1)">›</button></span>
             <button type="button" class="strip-channels" :class="{ active: allChannels }" @click="allChannels = !allChannels">{{ allChannels ? 'Solo l’essenziale' : '+ Altri canali' }}</button>
             <button v-if="viewLabel !== 'Giro intero'" type="button" class="strip-reset" title="Torna al giro intero (anche Esc o doppio clic sul grafico)" @click="wholeLap">⟲ Giro intero</button>
           </div>
@@ -514,7 +517,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
             <button v-for="c in visibleCorners" :key="c.number" type="button" :class="{ active: selectedCorner === c.number, gain: c.lost <= -0.01, loss: c.lost >= 0.01 }" :style="{ left: `${c.left}%`, width: `${c.width}%` }" :title="`Curva ${c.number}: ${formatDelta(c.lost)} s`" @click="selectCorner(c.number)">{{ c.number }}</button>
           </div>
         </div>
-        <AnalysisCharts :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="traceRowHeight" zoomable @hover="cursor = $event" @zoom="zoomRange = $event" />
+        <AnalysisCharts :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="traceRowHeight" :cursor-tag="cursorCorner" zoomable @hover="cursor = $event" @zoom="zoomRange = $event" />
       </div>
     </div>
   </section>
@@ -600,6 +603,8 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
   button { height: 20px; min-width: 30px; padding: 0 6px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font: 700 11px "Inter", sans-serif; text-transform: none; cursor: pointer; &.active { border-color: #ff0024; background: #ff002433; color: #fff; } } }
 .strip-channels { margin-left: auto; height: 20px; padding: 0 8px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font: 700 11px "Inter", sans-serif; text-transform: none; letter-spacing: 0; cursor: pointer; &.active { border-color: #ff0024; } }
 .strip-reset { height: 20px; padding: 0 8px; border: 1px solid #ff0024; background: #ff00241f; color: #fff; font: 700 11px "Inter", sans-serif; text-transform: none; cursor: pointer; }
+.strip-step { display: inline-flex; align-items: center; gap: 2px; margin-left: 6px; strong { min-width: 64px; text-align: center; color: #fff; font: italic 700 12px "Racer Display", sans-serif; }
+  button { width: 22px; height: 20px; padding: 0; border: 1px solid #ffffff40; background: transparent; color: #fff; font: 700 14px/1 "Inter", sans-serif; cursor: pointer; &:hover { background: #ffffff14; border-color: #ffffffb3; } } }
 .tracce-strip { position: sticky; top: 0; z-index: 4; display: grid; gap: 2px; margin-bottom: 6px; padding: 4px 9px 4px 43px; background: #0b0b10f2; box-shadow: 0 8px 10px -10px #000; }
 .strip-row { position: relative; height: 24px;
   button { position: absolute; top: 0; height: 100%; padding: 0; border: 1px solid #0b0b10; background: #ffffff14; color: #e6e6ea; font: 700 12px 'Inter', sans-serif; cursor: pointer; overflow: hidden;
