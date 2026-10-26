@@ -1,0 +1,1 @@
+import{aO as d,dV as r,b0 as o,cb as u}from"./bm75PXS7.js";import{w as c,g as m}from"./DubdHD0e.js";const f=d(async()=>{let e,t;const{isAuthenticated:i,isAdmin:s,isLoading:n}=r();[e,t]=o(()=>c(n)),await e,t();const a=m({isAuthenticated:i.value,isAdmin:s.value});if(a)return u(a)});export{f as default};
