@@ -72,8 +72,11 @@
   &--compact { min-height: 34px; padding: 6px 12px 6px 10px; gap: 8px; font-size: 13px; }
   // Se il bottone comincia col testo (nessuna icona davanti, solo la freccia in fondo) serve piu' aria a
   // sinistra, altrimenti il testo sembra attaccato al bordo rispetto a freccia + margine a destra.
-  &:not(:has(> svg:not(.rc-btn__arrow))) { padding-left: 22px; }
-  &--compact:not(:has(> svg:not(.rc-btn__arrow))) { padding-left: 16px; }
+  &:not(:has(> svg:not(.rc-btn__arrow))):has(> .rc-btn__arrow) { padding-left: 22px; }
+  &--compact:not(:has(> svg:not(.rc-btn__arrow))):has(> .rc-btn__arrow) { padding-left: 16px; }
+  // Solo testo (niente icona ne' freccia): margini uguali, il testo sta al centro.
+  &:not(:has(> svg)) { padding-inline: 18px; }
+  &--compact:not(:has(> svg)) { padding-inline: 14px; }
   // Interruttore (es. Prove libere / Qualifica / Gara): spento = quasi trasparente e grigio; acceso = fondo
   // trasparente nel suo colore (--rc-toggle-color), testo e bordino dello stesso colore. Acceso: .is-active o aria-pressed.
   &--toggle {
@@ -90,6 +93,21 @@
   }
   // Azioni distruttive (elimina, revoca): rosso trasparente, mai pieno, per non confondersi col principale.
   &--danger { --rc-btn-edge: #ff00248c; color: #ff8a98; background: #ff00241f; &:hover:not(:disabled), &:focus-visible { --rc-btn-edge: #ff0024; color: #fff; background: #ff002447; } }
+}
+
+// Selettore a due o piu' viste (Sessione / Telemetria, Focus / Completa): un unico riquadro scuro,
+// la voce scelta schiarita con la linea rossa sotto. Scelta: .active, aria-selected o aria-pressed.
+.rc-switch {
+  display: flex; gap: 3px; width: max-content; padding: 3px; border: 1px solid #ffffff1f; background: #0a0a0feb;
+  button {
+    height: 30px; padding: 0 18px; border: 0; background: transparent; color: #b3b3b8; cursor: pointer;
+    font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase;
+    transition: background-color .15s ease, color .15s ease;
+    &:hover { color: #fff; }
+    &:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+    &.active, &[aria-selected='true'], &[aria-pressed='true'] { background: #ffffff14; color: #fff; box-shadow: inset 0 -2px #ff0024; }
+  }
+  &--compact button { height: 26px; padding: 0 14px; font-size: 13px; }
 }
 
 // One control definition; density is an explicit variant, not import order.

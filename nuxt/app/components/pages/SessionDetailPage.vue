@@ -2452,7 +2452,7 @@ const gripZones = computed(() => {
       </div>
       <div class="header-actions">
         <SessionFileActions :can-share="canShare" :sharing="isSharing" :success="shareSuccess" :error="fileActionError" @share="shareSession" />
-        <div v-if="!isEvoSession" class="detail-tabs" role="tablist" aria-label="Vista della sessione">
+        <div v-if="!isEvoSession" class="detail-tabs rc-switch" role="tablist" aria-label="Vista della sessione">
           <button type="button" role="tab" :aria-selected="detailTab === 'sessione'" :class="{ active: detailTab === 'sessione' }" @click="detailTab = 'sessione'">Sessione</button>
           <button type="button" role="tab" :aria-selected="detailTab === 'avanzata'" :class="{ active: detailTab === 'avanzata' }" title="Il giro contro un riferimento: delta, curve, traiettorie e telemetria" @click="detailTab = 'avanzata'">Telemetria</button>
         </div>
@@ -4320,10 +4320,8 @@ const gripZones = computed(() => {
 
 // A|B TABS
 .laps-tabs { display: flex; gap: 4px; }
-// PIP-618: Sessione / Avanzata, the same segmented switch as the Dati page.
-.detail-tabs { display: flex; gap: 3px; width: max-content; margin: 0 0 12px; padding: 3px; border: 1px solid #ffffff1f; background: #0a0a0feb;
-  button { height: 30px; padding: 0 18px; border: 0; background: transparent; color: #b3b3b8; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; cursor: pointer;
-    &.active { background: #ffffff14; color: #fff; box-shadow: inset 0 -2px #ff0024; } } }
+// PIP-618: Sessione / Telemetria, selettore .rc-switch del tema (lo stesso di Focus / Completa): qui solo il margine.
+.detail-tabs { margin: 0 0 12px; }
 // Schede del confronto: interruttori rc-btn--toggle (tema racing), qui solo il colore di ciascuna.
 .lap-tab { min-height: 30px; font-size: 12px; }
 .lap-tab--compare { --rc-toggle-color: #ffffff; }

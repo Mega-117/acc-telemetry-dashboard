@@ -88,9 +88,9 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
         </label>
         <fieldset>
           <legend>Scala</legend>
-          <div class="track-times__toggle">
-            <button type="button" class="rc-btn rc-btn--compact rc-btn--toggle" :aria-pressed="scale === 'focus'" @click="scale = 'focus'">Focus</button>
-            <button type="button" class="rc-btn rc-btn--compact rc-btn--toggle" :aria-pressed="scale === 'complete'" @click="scale = 'complete'">Completa</button>
+          <div class="track-times__toggle rc-switch rc-switch--compact">
+            <button type="button" :aria-pressed="scale === 'focus'" @click="scale = 'focus'">Focus</button>
+            <button type="button" :aria-pressed="scale === 'complete'" @click="scale = 'complete'">Completa</button>
           </div>
         </fieldset>
       </div>
@@ -131,10 +131,9 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
   legend { padding: 0; margin-bottom: 6px; }
   select { background: transparent; border: 1px solid var(--rc-line); border-radius: 0; color: #eeeef4; }
   select { @include controls.select; --rc-control-height: 34px; background-color: transparent; }
-  // Focus / Completa: interruttori rc-btn--toggle (tema racing), neutri in bianco.
-  &__toggle { display: flex; gap: 4px; --rc-toggle-color: #ffffff; }
-  button:not(.rc-btn) { background: transparent; color: #e0b96e; cursor: pointer; font: inherit; font-size: 12px; border: 0; }
-  button:not(.rc-btn):focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid #ffc400; outline-offset: 3px; }
+  // Focus / Completa: selettore .rc-switch del tema, come Sessione / Telemetria.
+  &__empty button { background: transparent; color: #e0b96e; cursor: pointer; font: inherit; font-size: 12px; border: 0; }
+  &__empty button:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid #ffc400; outline-offset: 3px; }
   &__card { padding: 16px; border: 1px solid rgba(255,255,255,.07); border-radius: 0; background: transparent; }
   &__canvas { position: relative; height: 280px; }
   &__legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 20px; margin: 12px 0; color: #b7b7c1; font-size: 12px; }
