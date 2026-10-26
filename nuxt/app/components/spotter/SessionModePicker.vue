@@ -50,7 +50,8 @@ function toggle(mode: SpotterSessionMode) {
 @use '@/assets/scss/racing-settings' as controls;
 .session-mode-buttons { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
 // Interruttori rc-btn--toggle nel colore della sessione (stile nel tema): qui solo colore e misure.
-.session-mode-buttons button { --rc-toggle-color: var(--racing-practice); min-width: 0; padding-inline: 10px; }
+// Un po' piu' bassi dei bottoni d'azione: sono tre per riga, accanto ad ogni funzione.
+.session-mode-buttons button { --rc-toggle-color: var(--racing-practice); min-width: 0; min-height: 32px; padding: 5px 10px; font-size: 13px; }
 .session-mode-buttons .mode-qualify { --rc-toggle-color: var(--racing-qualify); }
 .session-mode-buttons .mode-race { --rc-toggle-color: var(--racing-race); }
 @media(max-width:700px) { .session-mode-buttons { gap: 8px; }.session-mode-buttons button { padding-inline: 8px; } }
