@@ -141,8 +141,8 @@ function openSession(event: MouseEvent, id: string) {
 @use '@/assets/scss/racing-settings' as controls;
 .racing-session-list { @include controls.tokens; }
 .session-open { text-decoration: none; }
-// Tipo di sessione: riquadrino ad angoli vivi nel colore della sessione, fondo dello stesso colore trasparente (come gli interruttori dello Spotter).
-.session-kind { display: inline-flex; justify-content: center; align-items: center; min-width: 74px; min-height: 24px; padding: 0 6px; border: 1px solid currentColor; border-radius: 0; background: color-mix(in srgb, currentColor 16%, transparent); font: 600 10px/1 'Inter', sans-serif; letter-spacing: .5px; text-transform: uppercase; }
+// Tipo di sessione: stesso stile delle card dei best nel dettaglio pista (bordo al 36%, fondo all'8% del colore).
+.session-kind { display: inline-flex; justify-content: center; align-items: center; min-width: 74px; min-height: 24px; padding: 0 6px; border: 1px solid color-mix(in srgb, currentColor 36%, transparent); border-radius: 0; background: color-mix(in srgb, currentColor 8%, transparent); font: 600 10px/1 'Inter', sans-serif; letter-spacing: .5px; text-transform: uppercase; }
 .session-kind--practice { color: var(--racing-practice); } .session-kind--qualify { color: var(--racing-qualify); } .session-kind--race { color: var(--racing-race); } .session-kind--unknown { color: var(--racing-data-muted); }
 // Date come titoli di sezione; tempi nel corsivo sportivo, non in grassetto.
 .racing-day-table caption { @include controls.section-title; font-size: 15px; letter-spacing: .04em; padding: 0 0 10px; }
