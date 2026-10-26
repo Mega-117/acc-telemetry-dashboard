@@ -3,7 +3,7 @@
 // Pilot Detail View - Coach shadowing a pilot
 // ============================================
 
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { doc } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 import CoachLessonsPanel from '~/components/coach/CoachLessonsPanel.vue'
@@ -120,12 +120,56 @@ function goToCrumb(target: 'pilot' | 'tab') {
   if (target === 'pilot') activeTab.value = 'panoramica'
   goBackToList()
 }
+function selectTab(id: string) {
+  activeTab.value = id as typeof activeTab.value
+  goBackToList()
+}
+// La freccia: dalla sessione o dalla pista alla scheda da cui sei arrivato; dalla scheda alla lista dei piloti.
+const backLabel = computed(() => detailView.value === 'none' ? 'Torna ai piloti' : `Torna a ${trail.value.find(c => c.target === 'tab')?.label ?? 'Panoramica'}`)
+function goBack() {
+  if (detailView.value === 'none') void navigateTo('/piloti')
+  else goBackToList()
+}
+
+// L'area del contenuto parte sotto la testata e arriva al fondo dello schermo: si misura dove comincia
+// (la testata va a capo sugli schermi stretti) e si rimisura quando cambia la finestra.
+const contentRef = ref<HTMLElement | null>(null)
+const contentTop = ref(0)
+function measureContent() { contentTop.value = Math.max(0, Math.round(contentRef.value?.getBoundingClientRect().top ?? 0)) }
+let headerObserver: ResizeObserver | null = null
+onMounted(() => {
+  measureContent()
+  window.addEventListener('resize', measureContent)
+  headerObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measureContent)
+  for (const el of Array.from(contentRef.value?.parentElement?.children ?? [])) if (el !== contentRef.value) headerObserver?.observe(el)
+})
+onBeforeUnmount(() => { window.removeEventListener('resize', measureContent); headerObserver?.disconnect() })
 </script>
 
 <template>
   <div class="pilot-view">
-    <!-- Pilot Context Header -->
-    <!-- PIP-637: percorso unico a sinistra (il pilota in arancio: stai guardando i suoi dati), gioco a destra. -->
+    <!-- PIP-637: in alto la navbar del pilota, sempre visibile (anche dentro una sessione o una pista), con la
+         freccia indietro alla stessa altezza, come la navbar principale. -->
+    <div class="pilot-topbar">
+      <button type="button" class="pilot-back" :aria-label="backLabel" :title="backLabel" @click="goBack">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7" /></svg>
+      </button>
+      <nav class="pilot-tabs" aria-label="Sezioni del pilota">
+        <button
+          v-for="tab in pilotTabs"
+          :key="tab.id"
+          class="pilot-tab tab"
+          type="button"
+          :aria-current="activeTab === tab.id && detailView === 'none' ? 'page' : undefined"
+          :class="{ 'tab--active': activeTab === tab.id }"
+          @click="selectTab(tab.id)"
+        >
+          {{ tab.label }}
+        </button>
+      </nav>
+    </div>
+
+    <!-- Sotto: percorso a sinistra (il pilota in arancio: stai guardando i suoi dati), gioco a destra. -->
     <div class="pilot-header">
       <nav class="pilot-trail" aria-label="Percorso">
         <template v-for="(crumb, i) in trail" :key="i">
@@ -141,23 +185,8 @@ function goToCrumb(target: 'pilot' | 'tab') {
       <LayoutGameSelector />
     </div>
 
-    <!-- Pilot Sub-Tabs (hidden when showing detail view) -->
-    <nav v-if="detailView === 'none'" class="pilot-tabs" aria-label="Sezioni del pilota">
-      <button 
-        v-for="tab in pilotTabs" 
-        :key="tab.id"
-        class="pilot-tab tab"
-        type="button"
-        :aria-current="activeTab === tab.id ? 'page' : undefined"
-        :class="{ 'tab--active': activeTab === tab.id }"
-        @click="activeTab = tab.id as any"
-      >
-        {{ tab.label }}
-      </button>
-    </nav>
-
     <!-- Content Area -->
-    <div class="pilot-content">
+    <div ref="contentRef" class="pilot-content" :style="{ height: contentTop ? `calc(100dvh - ${contentTop}px)` : undefined }">
       <div v-if="isLoading" class="loading">Caricamento...</div>
       
       <template v-else>
@@ -221,6 +250,18 @@ function goToCrumb(target: 'pilot' | 'tab') {
 }
 
 // === PILOT HEADER ===
+// PIP-637: meno margine sopra della pagina intera: qui la prima cosa e' la navbar del pilota.
+.pilot-view { margin-top: calc(12px - var(--app-content-top-space, 40px)); }
+// Navbar del pilota centrata, freccia indietro a sinistra alla stessa altezza (come la barra principale).
+.pilot-topbar { position: relative; display: flex; justify-content: center; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.pilot-back {
+  position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  display: grid; place-items: center; width: 40px; height: 40px;
+  border: 1px solid transparent; background: transparent; color: #ccc; cursor: pointer;
+  transition: color 150ms, background-color 150ms, border-color 150ms;
+  &:hover { color: #fff; background: #ffffff0d; border-color: #ffffff30; }
+  &:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+}
 // Una sola fascia: percorso a sinistra, gioco a destra; spazio sotto per la riga di stato del selettore.
 .pilot-header {
   display: flex;
@@ -229,8 +270,8 @@ function goToCrumb(target: 'pilot' | 'tab') {
   gap: 16px;
   flex-wrap: wrap;
   // Allineata ai bordi del contenuto delle pagine sotto.
-  padding: 12px 16px 0 24px;
-  margin-bottom: 26px;
+  padding: 14px 16px 0 24px;
+  margin-bottom: 22px;
 }
 
 .pilot-trail {
@@ -261,7 +302,7 @@ function goToCrumb(target: 'pilot' | 'tab') {
   gap: 8px;
   min-height: 48px;
   padding: 0;
-  margin-bottom: 24px;
+  margin-bottom: 0;
   background: transparent;
   border-radius: 0;
   flex-shrink: 0;
@@ -295,12 +336,18 @@ function goToCrumb(target: 'pilot' | 'tab') {
 
 // === CONTENT ===
 .pilot-content {
-  min-height: 400px;
-  // PIP-637: le pagine del pilota stanno subito sotto il percorso, senza il loro margine di pagina intera.
+  min-height: 320px;
+  // PIP-637: e' l'area che scorre, alta quanto lo schermo sotto la testata (come la dashboard): la pagina
+  // intera qui non scorre, e la lista Sessioni ha cosi' un'altezza entro cui scorrere.
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  // Le pagine del pilota stanno subito sotto il percorso, senza il loro margine di pagina intera.
   --app-content-top-space: 4px;
 }
 
-.tab-content { min-width: 0; }
+.tab-content { min-width: 0; height: 100%; }
+// Sessioni scorre dentro la sua lista (paginazione sempre in vista), come nella dashboard.
+.tab-content :deep(.sessions-page) { height: 100%; }
 
 .loading {
   text-align: center;
