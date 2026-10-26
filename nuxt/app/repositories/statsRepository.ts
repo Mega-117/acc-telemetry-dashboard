@@ -2,9 +2,12 @@
 // (cache in memoria e su disco); il riepilogo e' un solo documento.
 import { collection, doc, orderBy, query } from 'firebase/firestore'
 import { db } from '~/config/firebase'
-import { trackedGetDoc, trackedGetDocs, trackedSetDoc } from '~/composables/useFirebaseTracker'
+import { trackedGetDoc, trackedGetDocs, trackedRunTransaction } from '~/composables/useFirebaseTracker'
 import { loadLightweightSessionSource } from '~/composables/useSessionPager'
-import { parseStatsSummary, type StatsSummary } from '~/services/telemetry/activityStats'
+import {
+  mergeStatsSummary, parseStatsSummary, statsSummaryFingerprint,
+  type StatsSessionUpdate, type StatsSummary,
+} from '~/services/telemetry/activityStats'
 import { refreshStatsSummary, statsSummaryPath, type RefreshStatsSummaryResult } from '~/services/sync/statsSummaryService'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 import type { SessionDocument } from '~/types/telemetry'
@@ -20,8 +23,21 @@ export async function loadStatsSummary(uid: string): Promise<StatsSummary | null
   return snap.exists() ? parseStatsSummary(snap.data()) : null
 }
 
-export async function writeStatsSummary(path: string, summary: StatsSummary): Promise<void> {
-  await trackedSetDoc(doc(db, path), sanitizeForFirestore(summary), CALLER)
+/**
+ * Unisce gli aggiornamenti all'ULTIMO riepilogo salvato, in una transazione: due PC dello stesso
+ * utente non si cancellano il lavoro. Si scrive solo se cambiano i record o il contatore letture.
+ */
+export async function commitStatsSummary(path: string, updates: StatsSessionUpdate[], cloudReads: number): Promise<StatsSummary> {
+  const ref = doc(db, path)
+  return trackedRunTransaction(db, CALLER, ref, async (transaction) => {
+    const snap = await transaction.get(ref)
+    const latest = snap.exists() ? parseStatsSummary(snap.data()) : null
+    const next = mergeStatsSummary(latest, updates, new Date().toISOString(), cloudReads)
+    if (!latest || cloudReads > 0 || statsSummaryFingerprint(next) !== statsSummaryFingerprint(latest)) {
+      transaction.set(ref, sanitizeForFirestore(next))
+    }
+    return next
+  }, { reads: 1, writes: 1 })
 }
 
 /**
@@ -39,15 +55,16 @@ export async function refreshOwnStats(params: {
   if (!sessions) return null
   const existing = params.existing !== undefined ? params.existing : await loadStatsSummary(params.uid)
   return refreshStatsSummary({
-    uid: params.uid, sessions, existing, electronAPI: params.electronAPI, write: writeStatsSummary,
+    uid: params.uid, sessions, existing, electronAPI: params.electronAPI, commit: commitStatsSummary,
     readCloudSession: (id) => readCloudSessionRaw(params.uid, id),
   })
 }
 
-/** La copia compatta online di una sessione del proprietario: una lettura (un chunk). */
-export async function readCloudSessionRaw(uid: string, sessionId: string): Promise<unknown | null> {
+/** La copia compatta online di una sessione del proprietario; `reads` = documenti letti (chunk). */
+export async function readCloudSessionRaw(uid: string, sessionId: string): Promise<{ raw: unknown | null, reads: number }> {
   const snap = await trackedGetDocs(query(collection(db, `users/${uid}/sessions/${sessionId}/rawChunks`), orderBy('idx', 'asc')), CALLER)
   const text = snap.docs.map(d => String(d.data()?.chunk || '')).join('')
-  if (!text) return null
-  try { return JSON.parse(text) } catch { return null }
+  const reads = Math.max(1, snap.docs.length)
+  if (!text) return { raw: null, reads }
+  try { return { raw: JSON.parse(text), reads } } catch { return { raw: null, reads } }
 }

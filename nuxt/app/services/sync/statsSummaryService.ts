@@ -1,21 +1,22 @@
 // PIP-619: riepilogo Statistiche in UN documento (`users/{uid}/sessionListMeta/statsV1`),
-// aggiornato solo dal proprietario e riscritto solo quando cambia.
+// aggiornato solo dal proprietario.
 //
-// Da dove arrivano i giri di una sessione non ancora contata (decisione utente 26/10, opzione A):
+// Da dove arrivano i giri di una sessione da contare (decisione utente 26/10, opzione A):
 // 1. dal file sul PC, se c'e' ancora (gratis); i contributi dei file restano in cache con la firma
 //    del file, quindi si rileggono solo i file nuovi o cambiati;
-// 2. altrimenti dalla copia compatta online della sessione: una lettura per sessione, una volta
-//    sola, con un tetto giornaliero per utente (lo storico si recupera in uno o due giorni).
-// Le sessioni contate stanno nel documento stesso: niente si rilegge, nemmeno cambiando PC.
+// 2. altrimenti dalla copia compatta online della sessione, una volta sola, con un tetto di letture
+//    al giorno per utente contato sulle letture vere e condiviso fra i PC (nel documento stesso).
+// Una sessione si riconta se nella lista cambiano i suoi giri validi. La scrittura e' una
+// transazione: due PC dello stesso utente non si cancellano il lavoro a vicenda.
 // Le regole di `sessionListMeta` gia' permettono scrittura al proprietario e lettura al coach.
 import { isSessionFileCandidate } from '~/repositories/telemetryLocalRepository'
 import { generateSessionId } from '~/utils/sessionParser'
 import { recordingGame } from '~/services/telemetry/gameIdentity'
 import {
   contributionFromSession,
-  mergeStatsSummary,
-  statsSummaryFingerprint,
+  StatsSummaryTooLargeError,
   type SessionStatsContribution,
+  type StatsSessionUpdate,
   type StatsSummary,
 } from '~/services/telemetry/activityStats'
 import type { SessionDocument } from '~/types/telemetry'
@@ -24,7 +25,7 @@ export const STATS_SUMMARY_DOC = 'statsV1'
 export const statsSummaryPath = (uid: string) => `users/${uid}/sessionListMeta/${STATS_SUMMARY_DOC}`
 /** Letture online al giorno per utente, solo per lo storico: ben sotto le 50.000 gratuite del progetto. */
 export const STATS_DAILY_CLOUD_READS = 1000
-const CACHE_PREFIX = 'racercore.stats.v2.'
+const CACHE_PREFIX = 'racercore.stats.v3.'
 
 interface CachedFile { sig: string, id: string | null, c: SessionStatsContribution | null }
 interface StatsCache { files: Record<string, CachedFile>, day: string, cloudReads: number }
@@ -50,9 +51,10 @@ export interface RefreshStatsSummaryParams {
   sessions: SessionDocument[]
   /** Riepilogo attuale (gia' letto dalla pagina) oppure null. */
   existing: StatsSummary | null
-  /** Copia compatta online di una sessione (una lettura) oppure null. */
-  readCloudSession: (sessionId: string) => Promise<unknown | null>
-  write: (path: string, summary: StatsSummary) => Promise<void>
+  /** Copia compatta online di una sessione e quante letture e' costata. */
+  readCloudSession: (sessionId: string) => Promise<{ raw: unknown | null, reads: number }>
+  /** Unisce gli aggiornamenti all'ultimo riepilogo salvato (transazione) e restituisce quello scritto. */
+  commit: (path: string, updates: StatsSessionUpdate[], cloudReads: number) => Promise<StatsSummary>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- bridge Electron (getTelemetryFiles, readFile), assente nel browser
   electronAPI?: any
   storage?: StatsSummaryStorage
@@ -67,14 +69,19 @@ export interface RefreshStatsSummaryResult {
   cloudReads: number
   /** Sessioni ancora da contare (tetto giornaliero raggiunto). */
   remaining: number
+  reason?: 'too-large'
 }
 
-let inFlight: Promise<RefreshStatsSummaryResult> | null = null
+const inFlight = new Map<string, Promise<RefreshStatsSummaryResult>>()
 
-/** Una sola esecuzione alla volta: chi chiama durante un calcolo riceve lo stesso risultato. */
+/** Una sola esecuzione per utente: chi chiama durante un calcolo dello stesso utente riceve lo stesso risultato. */
 export function refreshStatsSummary(params: RefreshStatsSummaryParams): Promise<RefreshStatsSummaryResult> {
-  if (!inFlight) inFlight = runRefresh(params).finally(() => { inFlight = null })
-  return inFlight
+  let running = inFlight.get(params.uid)
+  if (!running) {
+    running = runRefresh(params).finally(() => { inFlight.delete(params.uid) })
+    inFlight.set(params.uid, running)
+  }
+  return running
 }
 
 async function localContributions(uid: string, electronAPI: RefreshStatsSummaryParams['electronAPI'], cache: StatsCache) {
@@ -107,53 +114,49 @@ async function localContributions(uid: string, electronAPI: RefreshStatsSummaryP
 }
 
 async function runRefresh(params: RefreshStatsSummaryParams): Promise<RefreshStatsSummaryResult> {
-  const { uid, sessions, existing, readCloudSession, write, electronAPI, storage = browserStatsStorage, now = () => new Date(), dailyCloudReads = STATS_DAILY_CLOUD_READS } = params
-  if (!uid) return { written: false, summary: existing, filesRead: 0, cloudReads: 0, remaining: 0 }
+  const { uid, sessions, existing, readCloudSession, commit, electronAPI, storage = browserStatsStorage, now = () => new Date(), dailyCloudReads = STATS_DAILY_CLOUD_READS } = params
+  const empty = { written: false, summary: existing, filesRead: 0, cloudReads: 0, remaining: 0 }
+  if (!uid) return empty
   const cache = readCache(storage, uid)
   const today = now().toISOString().slice(0, 10)
-  let readsToday = cache.day === today ? cache.cloudReads : 0
-  const counted = new Set(existing?.counted ?? [])
-  // Solo sessioni ACC con giri validi: le altre non hanno niente da contare.
+  // Il tetto vale per l'utente (contatore nel documento, condiviso fra PC) e per questo PC.
+  const usedToday = Math.max(cache.day === today ? cache.cloudReads : 0, existing?.cloudReads.day === today ? existing.cloudReads.count : 0)
+  let budget = Math.max(0, dailyCloudReads - usedToday)
+  const counted = existing?.counted ?? {}
+  // Solo sessioni ACC con giri validi, nuove o con giri validi cambiati.
   const pending = sessions
-    .filter(s => (s.meta?.gameId ?? 'acc') === 'acc' && Number(s.summary?.lapsValid) > 0 && !counted.has(s.sessionId))
-    .map(s => s.sessionId)
+    .filter(s => (s.meta?.gameId ?? 'acc') === 'acc' && Number(s.summary?.lapsValid) > 0 && counted[s.sessionId] !== Number(s.summary?.lapsValid))
+    .map(s => ({ id: s.sessionId, lapsValid: Number(s.summary?.lapsValid) }))
   const local = await localContributions(uid, electronAPI, cache)
-  const contributions: SessionStatsContribution[] = []
-  const done: string[] = []
-  const fromCloud: string[] = []
-  for (const id of pending) {
-    if (local.byId.has(id)) {
-      const c = local.byId.get(id)
-      if (c) contributions.push(c)
-      done.push(id)
-    } else if (readsToday + fromCloud.length < dailyCloudReads) fromCloud.push(id)
+  const updates: StatsSessionUpdate[] = []
+  const fromCloud: typeof pending = []
+  for (const p of pending) {
+    if (local.byId.has(p.id)) updates.push({ sessionId: p.id, lapsValid: p.lapsValid, contribution: local.byId.get(p.id) ?? null })
+    else fromCloud.push(p)
   }
-  readsToday += fromCloud.length
-  const cloudReads = fromCloud.length
+  let cloudReads = 0
+  let remaining = 0
   // Otto letture alla volta: lo storico arriva in pochi secondi senza raffiche.
   for (let i = 0; i < fromCloud.length; i += 8) {
-    const batch = fromCloud.slice(i, i + 8)
-    const raws = await Promise.all(batch.map(id => readCloudSession(id).catch(() => undefined)))
-    raws.forEach((raw, k) => {
-      if (raw === undefined) return // errore di rete: si riprova la prossima volta
-      const c = raw ? contributionFromSession(raw) : null
-      if (c) contributions.push(c)
-      done.push(batch[k]!)
+    if (budget <= 0) { remaining = fromCloud.length - i; break }
+    const batch = fromCloud.slice(i, i + Math.min(8, budget))
+    const results = await Promise.all(batch.map(p => readCloudSession(p.id).catch(() => undefined)))
+    results.forEach((result, k) => {
+      if (!result) return // errore di rete: si riprova la prossima volta
+      cloudReads += Math.max(1, result.reads)
+      budget -= Math.max(1, result.reads)
+      updates.push({ sessionId: batch[k]!.id, lapsValid: batch[k]!.lapsValid, contribution: result.raw ? contributionFromSession(result.raw) : null })
     })
-  }
-  const persist = () => storage.set(CACHE_PREFIX + uid, JSON.stringify({ files: { ...cache.files, ...local.files }, day: today, cloudReads: readsToday }))
-  const remaining = pending.length - done.length
-  if (!done.length) {
-    persist()
-    return { written: false, summary: existing, filesRead: local.filesRead, cloudReads, remaining }
+    if (batch.length < Math.min(8, fromCloud.length - i)) { remaining = fromCloud.length - i - batch.length; break }
   }
   // Il contatore delle letture si salva prima della scrittura: anche se questa fallisce, il tetto tiene.
-  persist()
-  const summary = mergeStatsSummary(existing, contributions, done, now().toISOString())
-  let written = false
-  if (!existing || statsSummaryFingerprint(summary) !== statsSummaryFingerprint(existing)) {
-    await write(statsSummaryPath(uid), summary)
-    written = true
+  storage.set(CACHE_PREFIX + uid, JSON.stringify({ files: { ...cache.files, ...local.files }, day: today, cloudReads: usedToday + cloudReads }))
+  if (!updates.length) return { ...empty, filesRead: local.filesRead, remaining }
+  try {
+    const summary = await commit(statsSummaryPath(uid), updates, cloudReads)
+    return { written: true, summary, filesRead: local.filesRead, cloudReads, remaining }
+  } catch (error) {
+    if (error instanceof StatsSummaryTooLargeError) return { ...empty, filesRead: local.filesRead, cloudReads, remaining, reason: 'too-large' }
+    throw error
   }
-  return { written, summary, filesRead: local.filesRead, cloudReads, remaining }
 }

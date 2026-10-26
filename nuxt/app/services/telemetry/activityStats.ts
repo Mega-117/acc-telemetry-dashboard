@@ -9,7 +9,7 @@ import { normalizeSessionListKey } from '~/services/sync/sessionListProjectionSe
 import { recordingGame } from '~/services/telemetry/gameIdentity'
 import type { SessionDocument } from '~/types/telemetry'
 
-export const STATS_SUMMARY_SCHEMA_VERSION = 2
+export const STATS_SUMMARY_SCHEMA_VERSION = 3
 /** Fasce dell'aria a estremi non sovrapposti: [min, max). */
 export const AIR_BANDS = [
   { id: 'lt15', label: '< 15°', min: -Infinity, max: 15 },
@@ -49,11 +49,25 @@ export interface ComboStats {
 export interface StatsSummary {
   schemaVersion: number
   updatedAt: string
-  sessionsCounted: number
-  /** Sessioni gia' contate (id della lista sessioni): mai rilette, anche cambiando PC. */
-  counted: string[]
+  /**
+   * Sessioni contate (id della lista) -> giri validi quando sono state contate. Una sessione si
+   * riconta solo se nella lista i giri validi cambiano (es. sincronizzata a meta' e poi completata).
+   */
+  counted: Record<string, number>
+  /** Letture online di oggi per lo storico, condivise fra i PC dell'utente (tetto giornaliero). */
+  cloudReads: { day: string, count: number }
   /** Chiave `${trackKey}|${carKey}`, stesse chiavi della lista sessioni. */
   combos: Record<string, ComboStats>
+}
+
+/** Una sessione esaminata: il suo contributo (o null) e i giri validi della lista in quel momento. */
+export interface StatsSessionUpdate { sessionId: string, lapsValid: number, contribution: SessionStatsContribution | null }
+
+/** Oltre questa dimensione il documento si avvicina al limite di Firestore (1 MiB): non si scrive. */
+export const STATS_SUMMARY_MAX_BYTES = 900_000
+
+export class StatsSummaryTooLargeError extends Error {
+  constructor() { super('stats-summary-too-large') }
 }
 
 const positive = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null)
@@ -109,18 +123,19 @@ export function contributionFromSession(raw: RawSession): SessionStatsContributi
   return any ? out : null
 }
 
-/** Unisce i contributi in un riepilogo; l'ordine dei contributi non conta. */
-export function buildStatsSummary(contributions: SessionStatsContribution[], updatedAt: string): StatsSummary {
-  return mergeStatsSummary(null, contributions, [], updatedAt)
-}
-
 /**
- * Aggiunge al riepilogo esistente i contributi di sessioni nuove. `countedIds` sono le sessioni
- * appena esaminate (anche quelle senza giri utili: non vanno rilette).
+ * Aggiunge al riepilogo le sessioni appena esaminate (anche quelle senza giri utili: non vanno
+ * rilette) e le letture online di oggi. I minimi sono idempotenti: ricontare una sessione cambiata
+ * non sporca i record; il conteggio delle sessioni per combinazione sale solo per id nuovi.
  */
-export function mergeStatsSummary(base: StatsSummary | null, contributions: SessionStatsContribution[], countedIds: string[], updatedAt: string): StatsSummary {
+export function mergeStatsSummary(base: StatsSummary | null, updates: StatsSessionUpdate[], updatedAt: string, cloudReads = 0): StatsSummary {
   const combos: Record<string, ComboStats> = { ...(base?.combos ?? {}) }
-  for (const c of contributions) {
+  const counted: Record<string, number> = { ...(base?.counted ?? {}) }
+  for (const u of updates) {
+    const isNew = !(u.sessionId in counted)
+    counted[u.sessionId] = u.lapsValid
+    const c = u.contribution
+    if (!c) continue
     const prev = combos[c.key] ?? { track: c.track, car: c.car, sessions: 0, lastDate: '', bestLapMs: null, bestSectorsMs: [null, null, null] as Sectors, byAir: {}, byGrip: {} }
     const byAir = { ...prev.byAir }
     for (const [band, ms] of Object.entries(c.byAir) as [AirBandId, number][]) byAir[band] = minOf(byAir[band], ms) as number
@@ -129,36 +144,35 @@ export function mergeStatsSummary(base: StatsSummary | null, contributions: Sess
     const newer = c.date > prev.lastDate
     combos[c.key] = {
       track: newer ? c.track : prev.track, car: newer ? c.car : prev.car,
-      sessions: prev.sessions + 1, lastDate: newer ? c.date : prev.lastDate,
+      sessions: prev.sessions + (isNew ? 1 : 0), lastDate: newer ? c.date : prev.lastDate,
       bestLapMs: minOf(prev.bestLapMs, c.bestLapMs),
       bestSectorsMs: prev.bestSectorsMs.map((s, i) => minOf(s, c.bestSectorsMs[i])) as Sectors,
       byAir, byGrip,
     }
   }
-  const counted = [...new Set([...(base?.counted ?? []), ...countedIds])]
-  return {
-    schemaVersion: STATS_SUMMARY_SCHEMA_VERSION, updatedAt, counted, combos,
-    sessionsCounted: (base?.sessionsCounted ?? 0) + contributions.length,
-  }
+  const day = updatedAt.slice(0, 10)
+  const already = base?.cloudReads?.day === day ? base.cloudReads.count : 0
+  const summary: StatsSummary = { schemaVersion: STATS_SUMMARY_SCHEMA_VERSION, updatedAt, counted, cloudReads: { day, count: already + cloudReads }, combos }
+  if (new TextEncoder().encode(JSON.stringify(summary)).length > STATS_SUMMARY_MAX_BYTES) throw new StatsSummaryTooLargeError()
+  return summary
 }
 
-/** Impronta del contenuto (senza data): se non cambia, il riepilogo non si riscrive. */
+/** Impronta del contenuto (senza data e contatori): se non cambia, i record non si riscrivono. */
 export function statsSummaryFingerprint(summary: StatsSummary): string {
   // Chiavi ordinate a ogni livello: l'ordine dei file letti non cambia l'impronta.
   const canonical = (value: unknown): unknown => value && typeof value === 'object' && !Array.isArray(value)
     ? Object.fromEntries(Object.keys(value).sort().map(k => [k, canonical((value as Record<string, unknown>)[k])]))
     : value
-  return JSON.stringify(canonical({ v: summary.schemaVersion, n: summary.sessionsCounted, ids: [...summary.counted].sort(), combos: summary.combos }))
+  return JSON.stringify(canonical({ v: summary.schemaVersion, counted: summary.counted, combos: summary.combos }))
 }
 
 /** Riepilogo letto da Firestore: scarta schemi diversi o forme rotte. */
 export function parseStatsSummary(value: unknown): StatsSummary | null {
   const v = value as Partial<StatsSummary> | null
-  if (!v || v.schemaVersion !== STATS_SUMMARY_SCHEMA_VERSION || !v.combos || typeof v.combos !== 'object' || !Array.isArray(v.counted)) return null
-  return {
-    schemaVersion: v.schemaVersion, updatedAt: String(v.updatedAt || ''), sessionsCounted: Number(v.sessionsCounted) || 0,
-    counted: v.counted.filter((id): id is string => typeof id === 'string'), combos: v.combos as Record<string, ComboStats>,
-  }
+  if (!v || v.schemaVersion !== STATS_SUMMARY_SCHEMA_VERSION || !v.combos || typeof v.combos !== 'object' || !v.counted || typeof v.counted !== 'object') return null
+  const counted = Object.fromEntries(Object.entries(v.counted).filter(([, n]) => typeof n === 'number' && Number.isFinite(n)))
+  const reads = v.cloudReads && typeof v.cloudReads.day === 'string' ? { day: v.cloudReads.day, count: Number(v.cloudReads.count) || 0 } : { day: '', count: 0 }
+  return { schemaVersion: v.schemaVersion, updatedAt: String(v.updatedAt || ''), counted, cloudReads: reads, combos: v.combos as Record<string, ComboStats> }
 }
 
 export function idealLapMs(sectors: Sectors): number | null {
@@ -246,7 +260,3 @@ export function filterCombos(summary: StatsSummary | null, filter: Pick<StatsFil
     .sort((a, b) => b.lastDate.localeCompare(a.lastDate))
 }
 
-/** Sessioni del riepilogo rispetto alla lista: la copertura reale dei riquadri dal PC. */
-export function summaryCoverage(summary: StatsSummary | null, accSessions: number): { counted: number, total: number } {
-  return { counted: summary?.sessionsCounted ?? 0, total: accSessions }
-}

@@ -184,7 +184,7 @@ watch(targetUserId, (uid, previous) => { if (uid && uid !== previous) void load(
 
       <p v-if="status === 'ready'" class="stats__note">
         <template v-if="computing">Aggiornamento di settori, temperature e grip…</template>
-        <template v-else-if="summary">Settori, temperature e grip: {{ summary.counted.length }} sessioni analizzate su {{ accSessions.length }} sessioni ACC<template v-if="remaining">; altre {{ remaining }} si aggiungono domani</template><template v-else-if="summary.counted.length < accSessions.length"> (le altre non hanno giri validi)</template>.</template>
+        <template v-else-if="summary">Settori, temperature e grip: {{ Object.keys(summary.counted).length }} sessioni analizzate su {{ accSessions.length }} sessioni ACC<template v-if="remaining">; altre {{ remaining }} si aggiungono domani</template><template v-else-if="Object.keys(summary.counted).length < accSessions.length"> (le altre non hanno giri validi)</template>.</template>
       </p>
     </div>
   </LayoutPageContainer>

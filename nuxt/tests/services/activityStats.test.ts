@@ -1,8 +1,9 @@
 // PIP-619: Statistiche di attivita' — calcoli puri e riepilogo dal PC scritto solo se cambia.
 import { describe, expect, it, vi } from 'vitest'
 import {
-  airBandOf, buildStatsSummary, mergeStatsSummary, compareCars, contributionFromSession, filterCombos, filterSessions,
-  idealLapMs, parseStatsSummary, statsSummaryFingerprint, timeByCar, timeByWeek,
+  airBandOf, mergeStatsSummary, compareCars, contributionFromSession, filterCombos, filterSessions,
+  idealLapMs, parseStatsSummary, statsSummaryFingerprint, StatsSummaryTooLargeError, timeByCar, timeByWeek,
+  type StatsSessionUpdate, type StatsSummary,
 } from '~/services/telemetry/activityStats'
 import { refreshStatsSummary, statsSummaryPath, type StatsSummaryStorage } from '~/services/sync/statsSummaryService'
 import { formatLapConditions, lapConditions, mergeLapConditions, normalizeLapTrace } from '~/services/telemetry/lapTraceChart'
@@ -44,11 +45,13 @@ describe('contributionFromSession', () => {
   })
 })
 
-describe('buildStatsSummary', () => {
+describe('mergeStatsSummary', () => {
+  const a = contributionFromSession(raw([lap({ sector_times_ms: [37000, 38000, 29500] })]))!
+  const b = contributionFromSession(raw([lap({ lap_time_ms: 103900, air_temp: 26, sector_times_ms: [37200, 37700, 29000] })], { session_info: { track: 'Hungaroring', car: 'ferrari_296_gt3', date_start: '2026-10-26T10:00:00' } }))!
+  const up = (sessionId: string, contribution: typeof a | null, lapsValid = 5) => ({ sessionId, lapsValid, contribution })
+
   it('merges sessions per track and car and gives the ideal lap', () => {
-    const a = contributionFromSession(raw([lap({ sector_times_ms: [37000, 38000, 29500] })]))!
-    const b = contributionFromSession(raw([lap({ lap_time_ms: 103900, air_temp: 26, sector_times_ms: [37200, 37700, 29000] })], { session_info: { track: 'Hungaroring', car: 'ferrari_296_gt3', date_start: '2026-10-26T10:00:00' } }))!
-    const s = buildStatsSummary([a, b], '2026-10-26T12:00:00Z')
+    const s = mergeStatsSummary(null, [up('s-a', a), up('s-b', b), up('s-empty', null, 0)], '2026-10-26T12:00:00Z')
     const combo = s.combos['hungaroring|ferrari_296_gt3']!
     expect(combo.sessions).toBe(2)
     expect(combo.bestLapMs).toBe(103900)
@@ -56,13 +59,29 @@ describe('buildStatsSummary', () => {
     expect(idealLapMs(combo.bestSectorsMs)).toBe(103700)
     expect(combo.byAir).toEqual({ '15-20': 104000, '25-30': 103900 })
     expect(combo.lastDate).toBe('2026-10-26T10:00:00')
-    expect(statsSummaryFingerprint(s)).toBe(statsSummaryFingerprint(buildStatsSummary([b, a], 'another time')))
-    expect(mergeStatsSummary(s, [], ['x'], 't').counted).toEqual(['x'])
-    expect(parseStatsSummary(JSON.parse(JSON.stringify(s)))?.sessionsCounted).toBe(2)
-    expect(parseStatsSummary({ schemaVersion: 99, combos: {} })).toBeNull()
+    expect(s.counted).toEqual({ 's-a': 5, 's-b': 5, 's-empty': 0 })
+    expect(statsSummaryFingerprint(s)).toBe(statsSummaryFingerprint(mergeStatsSummary(null, [up('s-b', b), up('s-empty', null, 0), up('s-a', a)], 'another time')))
+    expect(parseStatsSummary(JSON.parse(JSON.stringify(s)))?.counted).toEqual(s.counted)
+    expect(parseStatsSummary({ schemaVersion: 99, combos: {}, counted: {} })).toBeNull()
     expect(idealLapMs([1, null, 2])).toBeNull()
     expect(filterCombos(s, { trackKey: 'monza', carKey: null })).toEqual([])
     expect(filterCombos(s, { trackKey: 'hungaroring', carKey: null })).toHaveLength(1)
+  })
+
+  it('a recounted session (more laps after a mid-session sync) improves records without counting twice', () => {
+    const first = mergeStatsSummary(null, [up('s-a', a, 3)], '2026-10-26T12:00:00Z')
+    const better = contributionFromSession(raw([lap({ lap_time_ms: 103500, sector_times_ms: [36800, 37900, 28800] })]))!
+    const again = mergeStatsSummary(first, [up('s-a', better, 6)], '2026-10-26T13:00:00Z')
+    expect(again.combos['hungaroring|ferrari_296_gt3']).toMatchObject({ sessions: 1, bestLapMs: 103500, bestSectorsMs: [36800, 37900, 28800] })
+    expect(again.counted).toEqual({ 's-a': 6 })
+  })
+
+  it('cloud reads add up within the day and restart the next day; an oversized summary is refused', () => {
+    const d1 = mergeStatsSummary(null, [], '2026-10-26T10:00:00Z', 40)
+    expect(mergeStatsSummary(d1, [], '2026-10-26T18:00:00Z', 10).cloudReads).toEqual({ day: '2026-10-26', count: 50 })
+    expect(mergeStatsSummary(d1, [], '2026-10-27T08:00:00Z', 5).cloudReads).toEqual({ day: '2026-10-27', count: 5 })
+    const many = Array.from({ length: 30_000 }, (_, i) => up(`2026_10_25T08_58_31_Hungaroring_${i}`, null))
+    expect(() => mergeStatsSummary(null, many, 't')).toThrow(StatsSummaryTooLargeError)
   })
 })
 
@@ -121,52 +140,89 @@ describe('refreshStatsSummary', () => {
     const data: Record<string, string> = {}
     return { get: k => data[k] ?? null, set: (k, v) => { data[k] = v } }
   }
+  /** The document as Firestore would keep it: every commit merges into the latest saved version. */
+  const store = (now = () => '2026-10-26T10:00:00Z') => {
+    const box: { doc: StatsSummary | null, commits: number } = { doc: null, commits: 0 }
+    const commit = vi.fn(async (path: string, updates: StatsSessionUpdate[], reads: number) => {
+      expect(path).toBe('users/u1/sessionListMeta/statsV1')
+      box.commits += 1
+      box.doc = mergeStatsSummary(box.doc, updates, now(), reads)
+      return box.doc
+    })
+    return { box, commit }
+  }
   const localRaw = raw([lap()], { session_info: { track: 'Hungaroring', car: 'ferrari_296_gt3', date_start: '2026-10-25T08:58:31' } })
   const localId = '2026_10_25T08_58_31_Hungaroring'
   const listed = (id: string, lapsValid = 5) => ({ sessionId: id, meta: { gameId: 'acc' }, summary: { lapsValid } } as unknown as SessionDocument)
   const sessions = [listed(localId), listed('cloud-a'), listed('cloud-b'), listed('no-laps', 0)]
   const cloud: Record<string, unknown> = { 'cloud-a': raw([lap({ lap_time_ms: 103000, air_temp: 27 })]), 'cloud-b': null }
   const electronAPI = { getTelemetryFiles: async () => [{ name: 'session_x.json', size: 1, mtime: 1 }, { name: 'live_state.json', size: 1, mtime: 1 }], readFile: vi.fn(async () => localRaw) }
+  const reader = (fail?: string) => vi.fn(async (id: string) => { if (id === fail) throw new Error('offline'); return { raw: cloud[id] ?? null, reads: 1 } })
 
   it('takes local files first, the rest from the cloud once, and never counts a session twice', async () => {
-    const storage = memory()
-    const readCloudSession = vi.fn(async (id: string) => cloud[id] ?? null)
-    const write = vi.fn(async () => {})
-    const first = await refreshStatsSummary({ uid: 'u1', sessions, existing: null, readCloudSession, write, electronAPI, storage })
+    const { box, commit } = store()
+    const readCloudSession = reader()
+    const first = await refreshStatsSummary({ uid: 'u1', sessions, existing: null, readCloudSession, commit, electronAPI, storage: memory() })
     expect(readCloudSession.mock.calls.map(c => c[0]).sort()).toEqual(['cloud-a', 'cloud-b'])
-    expect(write).toHaveBeenCalledWith(statsSummaryPath('u1'), expect.objectContaining({ sessionsCounted: 2 }))
-    expect(write.mock.calls[0]![0]).toBe('users/u1/sessionListMeta/statsV1')
-    expect(first.summary!.counted.sort()).toEqual([localId, 'cloud-a', 'cloud-b'].sort())
+    expect(statsSummaryPath('u1')).toBe('users/u1/sessionListMeta/statsV1')
+    expect(Object.keys(first.summary!.counted).sort()).toEqual([localId, 'cloud-a', 'cloud-b'].sort())
     expect(first.summary!.combos['hungaroring|ferrari_296_gt3']!.byAir).toEqual({ '15-20': 104000, '25-30': 103000 })
+    expect(first.summary!.cloudReads.count).toBe(2)
 
-    const again = await refreshStatsSummary({ uid: 'u1', sessions, existing: first.summary, readCloudSession, write, electronAPI, storage })
-    expect(again).toMatchObject({ written: false, cloudReads: 0, filesRead: 0, remaining: 0 })
+    const again = await refreshStatsSummary({ uid: 'u1', sessions, existing: box.doc, readCloudSession, commit, electronAPI, storage: memory() })
+    expect(again).toMatchObject({ written: false, cloudReads: 0, remaining: 0 })
     expect(readCloudSession).toHaveBeenCalledTimes(2)
-    expect(write).toHaveBeenCalledTimes(1)
+    expect(box.commits).toBe(1)
   })
 
-  it('stops at the daily cloud cap and resumes on another day; a network error is retried', async () => {
-    const storage = memory()
+  it('recounts a session whose valid laps changed in the list', async () => {
+    const { box, commit } = store()
+    await refreshStatsSummary({ uid: 'u1', sessions, existing: null, readCloudSession: reader(), commit, storage: memory() })
+    const readCloudSession = reader()
+    await refreshStatsSummary({ uid: 'u1', sessions: [listed('cloud-a', 9)], existing: box.doc, readCloudSession, commit, storage: memory() })
+    expect(readCloudSession.mock.calls.map(c => c[0])).toEqual(['cloud-a'])
+    expect(box.doc!.counted['cloud-a']).toBe(9)
+  })
+
+  it('the daily cap is shared through the document (another PC) and restarts the next day; a network error is retried', async () => {
     let day = '2026-10-26T10:00:00Z'
+    const { box, commit } = store(() => day)
     const now = () => new Date(day)
-    const readCloudSession = vi.fn(async (id: string) => { if (id === 'cloud-b') throw new Error('offline'); return cloud[id] ?? null })
-    const write = vi.fn(async () => {})
-    const r1 = await refreshStatsSummary({ uid: 'u1', sessions, existing: null, readCloudSession, write, storage, now, dailyCloudReads: 1 })
-    expect(r1.cloudReads).toBe(1)
-    expect(r1.remaining).toBe(2)
-    const r2 = await refreshStatsSummary({ uid: 'u1', sessions, existing: r1.summary, readCloudSession, write, storage, now, dailyCloudReads: 1 })
+    const readCloudSession = reader('cloud-b')
+    const two = [listed('cloud-a'), listed('cloud-b')]
+    const r1 = await refreshStatsSummary({ uid: 'u1', sessions: two, existing: null, readCloudSession, commit, storage: memory(), now, dailyCloudReads: 1 })
+    expect(r1).toMatchObject({ cloudReads: 1, remaining: 1 })
+    // Another PC (empty local storage) the same day: the counter in the document stops it.
+    const r2 = await refreshStatsSummary({ uid: 'u1', sessions: two, existing: box.doc, readCloudSession, commit, storage: memory(), now, dailyCloudReads: 1 })
     expect(r2.cloudReads).toBe(0)
     day = '2026-10-27T10:00:00Z'
-    const r3 = await refreshStatsSummary({ uid: 'u1', sessions, existing: r2.summary, readCloudSession, write, storage, now, dailyCloudReads: 1 })
-    expect(r3.cloudReads).toBe(1)
-    expect(r3.summary!.counted).not.toContain('cloud-b')
+    const r3 = await refreshStatsSummary({ uid: 'u1', sessions: two, existing: box.doc, readCloudSession, commit, storage: memory(), now, dailyCloudReads: 1 })
+    expect(r3.cloudReads).toBe(0) // cloud-b failed: not counted, retried later
+    expect(Object.keys(box.doc!.counted)).not.toContain('cloud-b')
   })
 
-  it('a failed write keeps the read counter and is retried next time', async () => {
+  it('keeps one run per user: two accounts never share a result', async () => {
+    const a = store(), b = store()
+    const [ra, rb] = await Promise.all([
+      refreshStatsSummary({ uid: 'u1', sessions: [listed('cloud-a')], existing: null, readCloudSession: reader(), commit: a.commit, storage: memory() }),
+      refreshStatsSummary({ uid: 'u2', sessions: [listed('cloud-b')], existing: null, readCloudSession: reader(), commit: async (_p, updates, reads) => mergeStatsSummary(null, updates, 't', reads), storage: memory() }),
+    ])
+    expect(Object.keys(ra.summary!.counted)).toEqual(['cloud-a'])
+    expect(Object.keys(rb.summary!.counted)).toEqual(['cloud-b'])
+    expect(b.box.commits).toBe(0)
+  })
+
+  it('a failed commit keeps the device read counter and is retried next time', async () => {
     const storage = memory()
-    const readCloudSession = async (id: string) => cloud[id] ?? null
-    await expect(refreshStatsSummary({ uid: 'u1', sessions, existing: null, readCloudSession, write: async () => { throw new Error('offline') }, storage })).rejects.toThrow('offline')
-    const write = vi.fn(async () => {})
-    expect((await refreshStatsSummary({ uid: 'u1', sessions, existing: null, readCloudSession, write, storage })).written).toBe(true)
+    await expect(refreshStatsSummary({ uid: 'u1', sessions, existing: null, readCloudSession: reader(), commit: async () => { throw new Error('offline') }, storage })).rejects.toThrow('offline')
+    const { commit } = store()
+    const ok = await refreshStatsSummary({ uid: 'u1', sessions, existing: null, readCloudSession: reader(), commit, storage, dailyCloudReads: 4 })
+    expect(ok.written).toBe(true)
+    expect(ok.cloudReads).toBe(1) // 3 of the 4 daily reads were already used by the failed run on this PC
+  })
+
+  it('an oversized summary is not written', async () => {
+    const result = await refreshStatsSummary({ uid: 'u1', sessions: [listed('cloud-a')], existing: null, readCloudSession: reader(), commit: async () => { throw new StatsSummaryTooLargeError() }, storage: memory() })
+    expect(result).toMatchObject({ written: false, reason: 'too-large' })
   })
 })

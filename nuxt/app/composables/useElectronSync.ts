@@ -855,7 +855,7 @@ export function useElectronSync() {
             const uid = currentUser.value?.uid
             if (uid) {
                 void refreshOwnStats({ uid, electronAPI: getElectronApi() })
-                    .then(result => { if (result?.written) console.log('[STATS] summary written', result.summary?.sessionsCounted) })
+                    .then(result => { if (result?.written) console.log('[STATS] summary written', Object.keys(result.summary?.counted ?? {}).length) })
                     .catch(error => console.warn('[STATS] summary refresh failed', error))
             }
         }
