@@ -42,19 +42,30 @@
 // Font dei titoli (corsivo, maiuscolo), solo l'angolo in alto a destra smussato, nessun bordo:
 // principale rosso pieno, secondario fondo trasparente leggero. Icona a sinistra, freccia a destra.
 .rc-btn {
+  position: relative;
   display: inline-flex; align-items: center; justify-content: center; gap: 10px;
   min-height: 42px; padding: 9px 16px 9px 14px; border: 0; border-radius: 0;
   color: #fff; background: #ffffff14; text-decoration: none; white-space: nowrap; cursor: pointer;
+  // Bordo bianco leggero del secondario: dentro al bottone (il clip-path taglierebbe un border),
+  // piu' la diagonale dell'angolo smussato disegnata a parte.
+  --rc-btn-edge: #ffffff59;
+  box-shadow: inset 0 0 0 1px var(--rc-btn-edge);
+  &::after {
+    content: ''; position: absolute; top: 0; right: 0; width: 10px; height: 10px; pointer-events: none;
+    // La diagonale del taglio cade a meta' del riquadro: la linea sta dal lato interno (verso il basso a sinistra).
+    background: linear-gradient(to bottom left, transparent 50%, var(--rc-btn-edge, #ffffff59) 50%, var(--rc-btn-edge, #ffffff59) calc(50% + 1.4px), transparent calc(50% + 1.4px));
+  }
   font: italic 700 14px/1 'Racer Display', sans-serif; text-transform: uppercase; letter-spacing: .02em;
   clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
   transition: background-color .15s ease, color .15s ease;
   svg { display: block; flex-shrink: 0; }
   .rc-btn__arrow { transition: transform .15s ease; }
-  &:hover:not(:disabled), &:focus-visible { background: #ffffff26; }
+  &:hover:not(:disabled), &:focus-visible { --rc-btn-edge: #ffffffb3; background: #ffffff26; }
   &:hover:not(:disabled) .rc-btn__arrow, &:focus-visible .rc-btn__arrow { transform: translateX(3px); }
   // Il clip-path taglierebbe un outline esterno: fuoco da tastiera come bordo interno.
   &:focus-visible { outline: none; box-shadow: inset 0 0 0 2px #fff; }
   &:disabled { opacity: .4; cursor: default; }
+  // Il principale e' rosso pieno, con lo stesso bordo bianco leggero del secondario.
   &--primary { background: #ff0024; &:hover:not(:disabled), &:focus-visible { background: #ff2a45; } }
   &--compact { min-height: 34px; padding: 6px 12px 6px 10px; gap: 8px; font-size: 13px; }
 }

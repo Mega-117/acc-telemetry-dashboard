@@ -168,7 +168,7 @@ function goToStats() {
             </tbody>
           </table>
           <div class="last-drive__actions">
-            <button class="rc-btn" :disabled="!lastTrack" @click="goToTrack"><UiRacingIcon name="track" :size="20" />Dettaglio pista<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" /></button>
+            <button class="rc-btn" :disabled="!lastTrack" @click="goToTrack"><UiRacingIcon name="flag" :size="20" />Dettaglio pista<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" /></button>
             <button class="rc-btn rc-btn--primary" :disabled="!lastSession?.id" @click="goToSession"><UiRacingIcon name="stopwatch" :size="20" />Ultima sessione<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" /></button>
           </div>
         </div>
