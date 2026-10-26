@@ -285,7 +285,7 @@ onBeforeUnmount(() => {
         <span v-if="!racing" class="eyebrow">Calendario pilota</span>
         <h2 class="coach-title">{{ racing ? 'Prossima gara' : 'Prossime gare' }}</h2>
       </div>
-      <button class="race-action" type="button" aria-label="Aggiungi gara" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Aggiungi gara' : cloudWriteGate.message" @click="openCreateModal"><CirclePlus v-if="racing" :size="32" :stroke-width="1.5" aria-hidden="true" /><span v-else>Aggiungi gara</span></button>
+      <button class="race-action" type="button" aria-label="Aggiungi gara" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Aggiungi gara' : cloudWriteGate.message" @click="openCreateModal"><CirclePlus v-if="racing" :size="32" :stroke-width="1.2" aria-hidden="true" /><span v-else>Aggiungi gara</span></button>
     </div>
 
     <div v-if="!cloudSessionReady" class="race-empty" role="status">Calendario non disponibile offline.</div>
@@ -326,7 +326,7 @@ onBeforeUnmount(() => {
           <p>{{ featuredEvent.trackName }}<span v-if="featuredEvent.carName"> - {{ featuredEvent.carName }}</span></p>
         </div>
         <details v-if="racing" class="race-options">
-          <summary aria-label="Opzioni prossima gara" title="Opzioni prossima gara"><Ellipsis :size="26" aria-hidden="true" /></summary>
+          <summary aria-label="Opzioni prossima gara" title="Opzioni prossima gara"><Ellipsis :size="26" :stroke-width="1.6" aria-hidden="true" /></summary>
           <div class="race-options__menu">
             <a v-if="featuredEvent.simGridUrl" :href="featuredEvent.simGridUrl" target="_blank" rel="noopener"><ExternalLink :size="17" aria-hidden="true" /><span>SimGrid</span></a>
             <a v-if="featuredEvent.raceUrl" :href="featuredEvent.raceUrl" target="_blank" rel="noopener"><ExternalLink :size="17" aria-hidden="true" /><span>Link gara</span></a>
@@ -354,7 +354,7 @@ onBeforeUnmount(() => {
               <span>{{ formatShortDate(event.startsAt) }} · {{ event.trackName }}</span>
             </div>
             <details v-if="racing" class="race-options race-options--compact">
-              <summary :aria-label="`Opzioni gara ${event.title}`" :title="`Opzioni gara ${event.title}`"><Ellipsis :size="26" aria-hidden="true" /></summary>
+              <summary :aria-label="`Opzioni gara ${event.title}`" :title="`Opzioni gara ${event.title}`"><Ellipsis :size="26" :stroke-width="1.6" aria-hidden="true" /></summary>
               <div class="race-options__menu">
                 <button type="button" class="race-options__edit" :disabled="!cloudWriteGate.allowed" @click="openEditModal(event)"><Pencil :size="17" aria-hidden="true" /><span>Modifica gara</span></button>
                 <button type="button" class="race-options__delete" :disabled="!cloudWriteGate.allowed" @click="openDeleteModal(event)"><Trash2 :size="17" aria-hidden="true" /><span>Elimina gara</span></button>
