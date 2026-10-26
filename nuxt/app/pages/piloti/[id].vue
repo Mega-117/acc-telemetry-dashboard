@@ -10,6 +10,9 @@ import CoachLessonsPanel from '~/components/coach/CoachLessonsPanel.vue'
 import { providePilotContext } from '~/composables/usePilotContext'
 import { useGameContext } from '~/composables/useGameContext'
 import { endFirebaseScenario, startFirebaseScenario, trackedGetDoc } from '~/composables/useFirebaseTracker'
+import { provideHeaderBack } from '~/composables/useHeaderBack'
+import { formatTrackName } from '~/utils/telemetryFormat'
+import { pilotTrail } from '~/utils/pilotTrail'
 
 definePageMeta({
   layout: 'coach',
@@ -103,30 +106,42 @@ function goBackToList() {
   selectedTrackId.value = null
   selectedSessionId.value = null
 }
+
+// PIP-637: un solo percorso in alto ("Piloti › Enrico Saiani › Sessioni › Sessione") al posto dei bottoni
+// "Torna…" sparsi. Le pagine figlie trovano qui il "torna indietro" e non disegnano piu' il loro.
+provideHeaderBack()
+const trail = computed(() => pilotTrail({
+  pilotName: pilotName.value,
+  tabLabel: pilotTabs.find(t => t.id === activeTab.value)?.label ?? '',
+  detail: detailView.value,
+  trackName: selectedTrackId.value ? formatTrackName(selectedTrackId.value) : null,
+}))
+function goToCrumb(target: 'pilot' | 'tab') {
+  if (target === 'pilot') activeTab.value = 'panoramica'
+  goBackToList()
+}
 </script>
 
 <template>
   <div class="pilot-view">
     <!-- Pilot Context Header -->
+    <!-- PIP-637: percorso unico a sinistra (il pilota in arancio: stai guardando i suoi dati), gioco a destra. -->
     <div class="pilot-header">
-      <NuxtLink to="/piloti" class="back-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M19 12H5M12 19l-7-7 7-7"/>
-        </svg>
-        Torna ai piloti
-      </NuxtLink>
-      
-      <div class="viewing-badge">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-          <circle cx="12" cy="12" r="3"/>
-        </svg>
-        <span>Stai visualizzando: <strong>{{ pilotName }}</strong></span>
-      </div>
+      <nav class="pilot-trail" aria-label="Percorso">
+        <template v-for="(crumb, i) in trail" :key="i">
+          <span v-if="i" class="pilot-trail__sep" aria-hidden="true">›</span>
+          <NuxtLink v-if="crumb.target === 'pilots'" to="/piloti" class="pilot-trail__link">{{ crumb.label }}</NuxtLink>
+          <button v-else-if="crumb.target" type="button" class="pilot-trail__link" :class="{ 'pilot-trail__pilot': crumb.target === 'pilot' }" @click="goToCrumb(crumb.target)">
+            <svg v-if="crumb.target === 'pilot'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+            {{ crumb.label }}
+          </button>
+          <span v-else class="pilot-trail__here" aria-current="page">{{ crumb.label }}</span>
+        </template>
+      </nav>
+      <LayoutGameSelector />
     </div>
 
     <!-- Pilot Sub-Tabs (hidden when showing detail view) -->
-    <LayoutGameSelector />
     <nav v-if="detailView === 'none'" class="pilot-tabs" aria-label="Sezioni del pilota">
       <button 
         v-for="tab in pilotTabs" 
@@ -140,16 +155,6 @@ function goBackToList() {
         {{ tab.label }}
       </button>
     </nav>
-
-    <!-- Back button for detail views -->
-    <div v-if="detailView !== 'none'" class="detail-back-bar">
-      <button class="detail-back-btn" @click="goBackToList">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M19 12H5M12 19l-7-7 7-7"/>
-        </svg>
-        Torna a {{ activeTab === 'panoramica' ? 'Panoramica' : activeTab === 'sessioni' ? 'Sessioni' : activeTab === 'piste' ? 'Piste' : 'Pilota' }}
-      </button>
-    </div>
 
     <!-- Content Area -->
     <div class="pilot-content">
@@ -216,43 +221,36 @@ function goBackToList() {
 }
 
 // === PILOT HEADER ===
+// Una sola fascia: percorso a sinistra, gioco a destra; spazio sotto per la riga di stato del selettore.
 .pilot-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 0;
-  margin-bottom: 8px;
+  gap: 16px;
+  flex-wrap: wrap;
+  // Allineata ai bordi del contenuto delle pagine sotto.
+  padding: 12px 16px 0 24px;
+  margin-bottom: 26px;
 }
 
-.back-link {
+.pilot-trail {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
+  min-width: 0;
+  font: 500 14px/1.3 'Inter', sans-serif;
   color: rgba(255, 255, 255, 0.6);
-  text-decoration: none;
-  font-size: 14px;
-  font-weight: 500;
-  transition: color 0.2s;
-
-  &:hover {
-    color: #fff;
+  &__sep { color: rgba(255, 255, 255, 0.35); }
+  &__link {
+    display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none;
+    color: inherit; font: inherit; text-decoration: none; cursor: pointer;
+    &:hover { color: #fff; }
+    &:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
   }
-}
-
-.viewing-badge {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  background: rgba($racing-orange, 0.1);
-  border: 1px solid rgba($racing-orange, 0.3);
-  border-radius: 10px;
-  color: $racing-orange;
-  font-size: 14px;
-
-  strong {
-    color: #fff;
-  }
+  // Il pilota che stai guardando: arancio, come il vecchio "Stai visualizzando".
+  &__pilot { color: $racing-orange; font-weight: 600; &:hover { color: lighten($racing-orange, 10%); } }
+  &__here { color: #fff; font-weight: 600; }
 }
 
 // === PILOT TABS ===
@@ -298,6 +296,8 @@ function goBackToList() {
 // === CONTENT ===
 .pilot-content {
   min-height: 400px;
+  // PIP-637: le pagine del pilota stanno subito sotto il percorso, senza il loro margine di pagina intera.
+  --app-content-top-space: 4px;
 }
 
 .tab-content { min-width: 0; }
@@ -306,36 +306,5 @@ function goBackToList() {
   text-align: center;
   padding: 60px;
   color: rgba(255, 255, 255, 0.5);
-}
-
-// === DETAIL BACK BAR ===
-.detail-back-bar {
-  margin-bottom: 16px;
-}
-
-.detail-back-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
-  color: rgba(255, 255, 255, 0.8);
-  font-family: $font-primary;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-
-  &:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.25);
-    color: #fff;
-  }
-
-  svg {
-    flex-shrink: 0;
-  }
 }
 </style>
