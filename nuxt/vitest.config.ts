@@ -49,6 +49,8 @@ export default defineConfig({
         // PIP-591: esito del salvataggio attrezzatura.
         'app/utils/equipmentSaveOutcome.ts',
         'app/utils/sessionShareUrl.ts',
+        // PIP-633: presentazione delle Statistiche.
+        'app/utils/statsPresentation.ts',
         // PIP-632: tracce d'uso delle funzioni nuove.
         'app/services/usage/featureUseNote.ts',
         // PIP-615 / PIP-631: settimana di stabilita' e problemi per versione.

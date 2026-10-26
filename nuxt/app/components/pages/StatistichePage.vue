@@ -7,11 +7,12 @@ import { loadStatsSummary, refreshOwnStats } from '~/repositories/statsRepositor
 import { noteFeatureUse } from '~/services/usage/featureUseNote'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import {
-  AIR_BANDS, GRIP_ORDER, compareCars, filterCombos, filterSessions, idealLapMs, timeByCar, timeByWeek,
+  AIR_BANDS, GRIP_ORDER, compareCars, filterCombos, filterSessions, timeByCar, timeByWeek,
   type StatsFilter, type StatsSummary,
 } from '~/services/telemetry/activityStats'
 import { normalizeSessionListKey } from '~/services/sync/sessionListProjectionService'
 import { formatCarName, formatDriveTime, formatLapTime, formatTrackName } from '~/utils/telemetryFormat'
+import { byIdealMargin, gapBarPct, heatLevel, marginLevel, rowBest, statsTotals } from '~/utils/statsPresentation'
 import type { SessionDocument } from '~/types/telemetry'
 
 const emit = defineEmits<{ back: [] }>()
@@ -51,9 +52,12 @@ const carOptions = computed(() => options(s => s.meta?.car || '', formatCarName)
 
 const filtered = computed(() => filterSessions(sessions.value, filter.value, Date.now()))
 const cars = computed(() => timeByCar(filtered.value))
-const totalMs = computed(() => cars.value.reduce((sum, c) => sum + c.timeMs, 0))
+// PIP-633: numeri in testa, barre per auto e per settimana con le etichette.
+const totals = computed(() => statsTotals(cars.value))
+const carMax = computed(() => Math.max(1, ...cars.value.map(c => c.timeMs)))
 const weeks = computed(() => timeByWeek(filtered.value, Math.min(26, Math.max(4, Math.ceil((periodDays.value || 182) / 7))), Date.now()))
 const weekMax = computed(() => Math.max(1, ...weeks.value.map(w => w.timeMs)))
+const weekLabel = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 
 const carA = ref('')
 const carB = ref('')
@@ -63,8 +67,17 @@ watch(cars, (list) => {
   if (!keys.includes(carB.value) || carB.value === carA.value) carB.value = keys.find(k => k !== carA.value) ?? ''
 }, { immediate: true })
 const comparison = computed(() => carA.value && carB.value ? compareCars(filtered.value, carA.value, carB.value) : [])
+const gapMax = computed(() => Math.max(0, ...comparison.value.map(r => Math.abs(r.gapMs ?? 0))))
 
 const combos = computed(() => filterCombos(summary.value, filter.value))
+// Prima le piste dove il giro ideale lascia piu' tempo da guadagnare.
+const idealRows = computed(() => byIdealMargin(combos.value))
+const heatClass = (value: number | null | undefined, best: number | null) => {
+  const level = heatLevel(value, best)
+  return level === null ? null : `heat--${level}`
+}
+const airBest =(c: { byAir: Record<string, number | undefined> }) => rowBest(AIR_BANDS.map(b => c.byAir[b.id]))
+const gripBest = (c: { byGrip: Record<string, number> }) => rowBest(gripColumns.value.map(g => c.byGrip[g]))
 const gripColumns = computed(() => {
   const seen = new Set(combos.value.flatMap(c => Object.keys(c.byGrip)))
   return [...GRIP_ORDER.filter(g => seen.has(g)), ...[...seen].filter(g => !(GRIP_ORDER as readonly string[]).includes(g))]
@@ -120,20 +133,32 @@ watch(targetUserId, (uid, previous) => { if (uid && uid !== previous) void load(
       <p v-if="status === 'loading'" class="stats__note" role="status">Caricamento…</p>
       <p v-else-if="status === 'error'" class="stats__note" role="status">Dati non disponibili. <button type="button" @click="load">Riprova</button></p>
 
-      <div v-else class="stats__grid">
+      <template v-else>
+      <dl class="stats-kpis" aria-label="Riepilogo del periodo">
+        <div><dt>Tempo in pista</dt><dd>{{ hours(totals.timeMs) }}</dd></div>
+        <div><dt>Sessioni</dt><dd>{{ totals.sessions }}</dd></div>
+        <div><dt>Giri</dt><dd>{{ totals.laps }}</dd></div>
+        <div><dt>Giri validi</dt><dd>{{ totals.validPct === null ? '–' : `${totals.validPct}%` }}</dd></div>
+      </dl>
+
+      <div class="stats__grid">
         <section class="stats-panel" aria-labelledby="stats-time">
           <h2 id="stats-time">Tempo in pista per auto</h2>
-          <p class="stats__sub">{{ hours(totalMs) }} in {{ filtered.length }} sessioni</p>
-          <svg class="weeks" :viewBox="`0 0 ${weeks.length * 12} 40`" preserveAspectRatio="none" role="img" aria-label="Ore per settimana">
-            <rect v-for="(w, i) in weeks" :key="w.weekStart" :x="i * 12 + 1" :y="40 - (w.timeMs / weekMax) * 38" width="10" :height="(w.timeMs / weekMax) * 38" rx="1"><title>{{ w.weekStart }} · {{ hours(w.timeMs) }}</title></rect>
-          </svg>
-          <table class="stats-table">
-            <thead><tr><th>Auto</th><th>Ore</th><th>Sessioni</th><th>Giri</th><th>Validi</th></tr></thead>
-            <tbody>
-              <tr v-for="c in cars" :key="c.carKey"><td>{{ formatCarName(c.car) }}</td><td>{{ hours(c.timeMs) }}</td><td>{{ c.sessions }}</td><td>{{ c.laps }}</td><td>{{ c.laps ? Math.round((c.lapsValid / c.laps) * 100) + '%' : '–' }}</td></tr>
-              <tr v-if="!cars.length"><td colspan="5" class="empty">Nessuna sessione nel periodo.</td></tr>
-            </tbody>
-          </table>
+          <ul class="car-bars">
+            <li v-for="c in cars" :key="c.carKey">
+              <div class="car-bars__label"><span>{{ formatCarName(c.car) }}</span><strong>{{ hours(c.timeMs) }}</strong></div>
+              <div class="car-bars__track"><span :style="{ width: `${Math.max(2, (c.timeMs / carMax) * 100)}%` }" /></div>
+              <small>{{ c.sessions }} {{ c.sessions === 1 ? 'sessione' : 'sessioni' }} · {{ c.laps }} {{ c.laps === 1 ? 'giro' : 'giri' }} · {{ c.laps ? Math.round((c.lapsValid / c.laps) * 100) + '% validi' : 'nessun giro' }}</small>
+            </li>
+            <li v-if="!cars.length" class="empty">Nessuna sessione nel periodo.</li>
+          </ul>
+          <h3 class="stats__h3">Ore per settimana</h3>
+          <div class="weeks" role="img" :aria-label="`Ore per settimana, massimo ${hours(weekMax)}`">
+            <div v-for="(w, i) in weeks" :key="w.weekStart" class="weeks__col" :title="`Settimana dal ${weekLabel(w.weekStart)} · ${hours(w.timeMs)}`">
+              <span class="weeks__bar" :style="{ height: `${(w.timeMs / weekMax) * 100}%` }" />
+              <small v-if="i === 0 || i === weeks.length - 1 || i % 4 === 0">{{ weekLabel(w.weekStart) }}</small>
+            </div>
+          </div>
         </section>
 
         <section class="stats-panel" aria-labelledby="stats-compare">
@@ -146,7 +171,13 @@ watch(targetUserId, (uid, previous) => { if (uid && uid !== previous) void load(
           <table class="stats-table">
             <thead><tr><th>Pista</th><th>Prima</th><th>Seconda</th><th title="Tempo della seconda meno quello della prima: verde se la seconda e' piu' veloce">Seconda vs prima</th><th>Ore</th></tr></thead>
             <tbody>
-              <tr v-for="r in comparison" :key="r.trackKey"><td>{{ formatTrackName(r.track) }}</td><td>{{ formatLapTime(r.bestA) }}</td><td>{{ formatLapTime(r.bestB) }}</td><td :class="{ worse: (r.gapMs ?? 0) > 0, better: (r.gapMs ?? 0) < 0 }">{{ gap(r.gapMs) }}</td><td>{{ hours(r.timeA) }} / {{ hours(r.timeB) }}</td></tr>
+              <tr v-for="r in comparison" :key="r.trackKey">
+                <td>{{ formatTrackName(r.track) }}</td><td>{{ formatLapTime(r.bestA) }}</td><td>{{ formatLapTime(r.bestB) }}</td>
+                <td class="gap-cell" :class="{ worse: (r.gapMs ?? 0) > 0, better: (r.gapMs ?? 0) < 0 }">
+                  <span class="gap-cell__bar" :style="{ width: `${gapBarPct(r.gapMs, gapMax)}%` }" />{{ gap(r.gapMs) }}
+                </td>
+                <td>{{ hours(r.timeA) }} / {{ hours(r.timeB) }}</td>
+              </tr>
               <tr v-if="!comparison.length"><td colspan="5" class="empty">Servono due auto con sessioni nel periodo.</td></tr>
             </tbody>
           </table>
@@ -154,14 +185,14 @@ watch(targetUserId, (uid, previous) => { if (uid && uid !== previous) void load(
 
         <section class="stats-panel" aria-labelledby="stats-sectors">
           <h2 id="stats-sectors">Settori migliori e giro ideale</h2>
-          <p class="stats__sub">Su tutto lo storico: il giro ideale somma i tuoi tre settori migliori.</p>
+          <p class="stats__sub">Su tutto lo storico: il giro ideale somma i tuoi tre settori migliori. Prima le piste dove hai più da guadagnare.</p>
           <table class="stats-table">
-            <thead><tr><th>Pista · auto</th><th>S1</th><th>S2</th><th>S3</th><th>Ideale</th><th>Migliore</th><th>Margine</th></tr></thead>
+            <thead><tr><th>Pista · auto</th><th>S1</th><th>S2</th><th>S3</th><th>Ideale</th><th>Migliore</th><th title="Ideale meno migliore: quanto puoi guadagnare mettendo insieme i settori migliori">Margine</th></tr></thead>
             <tbody>
-              <tr v-for="c in combos" :key="c.key">
+              <tr v-for="c in idealRows" :key="c.key">
                 <td>{{ label(c) }}</td><td v-for="(s, i) in c.bestSectorsMs" :key="i">{{ sector(s) }}</td>
-                <td>{{ formatLapTime(idealLapMs(c.bestSectorsMs)) }}</td><td>{{ formatLapTime(c.bestLapMs) }}</td>
-                <td>{{ idealLapMs(c.bestSectorsMs) !== null && c.bestLapMs !== null ? gap((idealLapMs(c.bestSectorsMs) as number) - c.bestLapMs) : '–' }}</td>
+                <td>{{ formatLapTime(c.idealMs) }}</td><td>{{ formatLapTime(c.bestLapMs) }}</td>
+                <td><span v-if="c.marginMs !== null" class="margin" :class="`margin--${marginLevel(c.marginMs)}`">{{ gap(c.marginMs) }}</span><template v-else>–</template></td>
               </tr>
               <tr v-if="!combos.length"><td colspan="7" class="empty">{{ summary ? 'Nessun dato per questi filtri.' : 'Questi dati arrivano dal programma Racer Core sul PC del pilota.' }}</td></tr>
             </tbody>
@@ -170,22 +201,24 @@ watch(targetUserId, (uid, previous) => { if (uid && uid !== previous) void load(
 
         <section class="stats-panel" aria-labelledby="stats-conditions">
           <h2 id="stats-conditions">Tempi per temperatura dell'aria e grip</h2>
-          <p class="stats__sub">Miglior giro valido in ogni condizione, su tutto lo storico.</p>
+          <p class="stats__sub">Miglior giro valido in ogni condizione, su tutto lo storico. Colore: distacco dal tuo migliore della riga.</p>
+          <p class="heat-legend" aria-hidden="true"><span class="heat--0">migliore</span><span class="heat--1">≤ 0,3 s</span><span class="heat--2">≤ 1 s</span><span class="heat--3">≤ 2 s</span><span class="heat--4">oltre</span></p>
           <table class="stats-table">
             <thead><tr><th>Pista · auto</th><th v-for="b in AIR_BANDS" :key="b.id">{{ b.label }}</th></tr></thead>
             <tbody>
-              <tr v-for="c in combos" :key="c.key"><td>{{ label(c) }}</td><td v-for="b in AIR_BANDS" :key="b.id">{{ formatLapTime(c.byAir[b.id] ?? null) }}</td></tr>
+              <tr v-for="c in combos" :key="c.key"><td>{{ label(c) }}</td><td v-for="b in AIR_BANDS" :key="b.id" :class="heatClass(c.byAir[b.id], airBest(c))">{{ formatLapTime(c.byAir[b.id] ?? null) }}</td></tr>
               <tr v-if="!combos.length"><td :colspan="AIR_BANDS.length + 1" class="empty">{{ summary ? 'Nessun dato per questi filtri.' : 'Questi dati arrivano dal programma Racer Core sul PC del pilota.' }}</td></tr>
             </tbody>
           </table>
           <table v-if="gripColumns.length" class="stats-table">
             <thead><tr><th>Pista · auto</th><th v-for="g in gripColumns" :key="g">{{ g }}</th></tr></thead>
             <tbody>
-              <tr v-for="c in combos" :key="c.key"><td>{{ label(c) }}</td><td v-for="g in gripColumns" :key="g">{{ formatLapTime(c.byGrip[g] ?? null) }}</td></tr>
+              <tr v-for="c in combos" :key="c.key"><td>{{ label(c) }}</td><td v-for="g in gripColumns" :key="g" :class="heatClass(c.byGrip[g], gripBest(c))">{{ formatLapTime(c.byGrip[g] ?? null) }}</td></tr>
             </tbody>
           </table>
         </section>
       </div>
+      </template>
 
       <p v-if="status === 'ready'" class="stats__note">
         <template v-if="computing">Aggiornamento di settori, temperature e grip…</template>
@@ -207,8 +240,40 @@ select { background: #0b0b0b; color: #f5f5f5; border: 1px solid #ffffff55; paddi
 .stats-panel h2 { margin: 0 0 4px; font: italic 700 18px/1.2 'Racer Display', sans-serif; text-transform: uppercase; }
 .stats__sub { margin: 0 0 10px; font-size: 12px; color: #bdbdbd; }
 .stats__pair { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; color: #bdbdbd; }
-.weeks { width: 100%; height: 48px; margin-bottom: 10px; }
-.weeks rect { fill: #e10600; }
+// PIP-633: numeri grandi in testa.
+.stats-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 0; }
+.stats-kpis div { border: 1px solid rgba(255, 255, 255, 0.3960784314); border-left: 3px solid #e10600; padding: 12px 16px; }
+.stats-kpis dt { font: 400 12px/1.2 'Arial Narrow', 'Segoe UI', sans-serif; text-transform: uppercase; color: #cfcfcf; }
+.stats-kpis dd { margin: 4px 0 0; font: italic 700 clamp(24px, 2.2vw, 34px)/1.1 'Racer Display', sans-serif; font-variant-numeric: tabular-nums; }
+// Ore per auto: barra con nome e ore sopra, dettagli sotto.
+.car-bars { list-style: none; margin: 8px 0 14px; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.car-bars__label { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
+.car-bars__label strong { font-variant-numeric: tabular-nums; }
+.car-bars__track { height: 8px; background: #ffffff14; margin: 5px 0 4px; }
+.car-bars__track span { display: block; height: 100%; background: linear-gradient(90deg, #e10600, #ff4d45); }
+.car-bars small { font-size: 12px; color: #a8a8a8; }
+.car-bars .empty { color: #9a9a9a; font-size: 13px; }
+.stats__h3 { margin: 4px 0 8px; font: 400 12px/1.2 'Arial Narrow', 'Segoe UI', sans-serif; text-transform: uppercase; color: #cfcfcf; }
+.weeks { display: flex; align-items: flex-end; gap: 4px; height: 84px; padding-bottom: 18px; border-bottom: 1px solid #ffffff30; }
+.weeks__col { position: relative; flex: 1; height: 100%; display: flex; align-items: flex-end; }
+.weeks__bar { display: block; width: 100%; min-height: 1px; background: #e10600; }
+.weeks__col small { position: absolute; top: calc(100% + 4px); left: 0; font-size: 10px; color: #a8a8a8; white-space: nowrap; }
+// Barra del distacco nel confronto tra auto.
+.gap-cell { position: relative; min-width: 110px; }
+.gap-cell__bar { display: inline-block; vertical-align: middle; height: 6px; max-width: 60px; margin-right: 8px; background: currentColor; opacity: .7; }
+// Margine del giro ideale: piu' tempo da guadagnare, colore piu' acceso.
+.margin { padding: 1px 6px; font-variant-numeric: tabular-nums; }
+.margin--big { background: #e1060033; color: #ff6b63; font-weight: 700; }
+.margin--mid { background: #f5a62326; color: #ffc15c; }
+.margin--small { color: #bdbdbd; }
+// Distacco dal migliore della riga, dal verde al rosso.
+.heat-legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; font-size: 11px; }
+.heat-legend span { padding: 2px 8px; }
+.heat--0 { background: #1f9d5533; color: #4be08f; font-weight: 700; }
+.heat--1 { background: #1f9d551a; color: #9be3b8; }
+.heat--2 { background: #f5a6231a; color: #ffd28a; }
+.heat--3 { background: #f5a62333; color: #ffb347; }
+.heat--4 { background: #e106002e; color: #ff7b74; }
 .stats-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; margin-bottom: 10px; }
 .stats-table th { text-align: left; font: 400 11px/1.2 'Arial Narrow', 'Segoe UI', sans-serif; text-transform: uppercase; color: #cfcfcf; padding: 4px 6px; border-bottom: 1px solid #ffffff40; white-space: nowrap; }
 .stats-table td { padding: 5px 6px; border-bottom: 1px solid #ffffff14; white-space: nowrap; }
@@ -218,5 +283,5 @@ select { background: #0b0b0b; color: #f5f5f5; border: 1px solid #ffffff55; paddi
 .better { color: #3fd07a; }
 .stats__note { margin: 0; font-size: 12px; color: #bdbdbd; }
 .stats__note button { background: none; border: 1px solid #ffffff55; color: inherit; padding: 2px 8px; cursor: pointer; }
-@media (max-width: 1100px) { .stats__grid { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) { .stats__grid { grid-template-columns: 1fr; } .stats-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>

@@ -24,7 +24,10 @@ const props = defineProps<{
   qualifyTotal?: { minutes: number; sessions: number }
   raceTotal?: { minutes: number; sessions: number }
   otherTotal?: { minutes: number; sessions: number }
+  // PIP-633: la card e' l'ingresso alle Statistiche (link in testa, clic sul grafico).
+  statsLink?: boolean
 }>()
+const emit = defineEmits<{ 'open-stats': [] }>()
 
 // Animation state
 const isAnimated = ref(false)
@@ -99,10 +102,13 @@ const formatYLabel = (minutes: number): string => {
 <template>
   <div class="activity-card" :class="{ 'activity-card--racing': racing }">
     <!-- Title -->
-    <h2 class="card-title">{{ racing ? 'Attività · ultimi 7 giorni' : 'Attività (ultimi 7 giorni)' }}</h2>
-    
-    <!-- Main Content: Chart + Legend Side by Side -->
-    <div class="card-content">
+    <div class="card-head">
+      <h2 class="card-title">{{ racing ? 'Attività · ultimi 7 giorni' : 'Attività (ultimi 7 giorni)' }}</h2>
+      <button v-if="statsLink" type="button" class="stats-link" @click="emit('open-stats')">Statistiche complete →</button>
+    </div>
+
+    <!-- Main Content: Chart + Legend Side by Side; il grafico apre le Statistiche (il link resta la via da tastiera) -->
+    <div class="card-content" :class="{ 'card-content--link': statsLink }" @click="statsLink && emit('open-stats')">
       <!-- Chart Area (takes most space) -->
       <div class="chart-area">
         <!-- Y-axis labels -->
@@ -242,6 +248,13 @@ $color-race: $racing-red;         // Red
   }
 }
 
+.card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.stats-link {
+  background: none; border: 0; padding: 0; cursor: pointer; white-space: nowrap;
+  font: 600 13px/1.2 'Outfit', $font-primary; color: #ff4d45;
+  &:hover, &:focus-visible { color: #fff; text-decoration: underline; }
+}
+.card-content--link { cursor: pointer; }
 .card-title {
   font-family: 'Outfit', $font-primary;
   font-size: 18px;

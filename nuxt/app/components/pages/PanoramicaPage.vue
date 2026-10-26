@@ -170,7 +170,6 @@ function goToStats() {
           <div class="last-drive__actions">
             <button class="racing-button" :disabled="!lastTrack" @click="goToTrack">Dettaglio pista</button>
             <button class="racing-button racing-button--primary" :disabled="!lastSession?.id" @click="goToSession">Ultima sessione</button>
-            <button v-if="consultedGame === 'acc'" class="racing-button" @click="goToStats">Statistiche</button>
           </div>
         </div>
         <span v-if="isOverviewPlaceholder" class="overview-loading-label" role="status">Caricamento dati…</span>
@@ -178,7 +177,7 @@ function goToStats() {
 
       <aside class="racing-overview__side">
         <OverviewUpcomingRacesCard :user-id="targetUserId" :game-id="consultedGame" @loading="calendarBusy = $event" :initial-events="prepared?.events" :initial-user-id="prepared?.uid" racing />
-        <CardsActivityCard class="overview-activity" :data="activityData" :practice-total="activityTotals.practice" :qualify-total="activityTotals.qualify" :race-total="activityTotals.race" :other-total="overviewProjection?.otherActivity" racing :aria-busy="isOverviewPlaceholder" />
+        <CardsActivityCard class="overview-activity" :data="activityData" :practice-total="activityTotals.practice" :qualify-total="activityTotals.qualify" :race-total="activityTotals.race" :other-total="overviewProjection?.otherActivity" racing :aria-busy="isOverviewPlaceholder" :stats-link="consultedGame === 'acc'" @open-stats="goToStats" />
         <section class="training-panel racing-panel">
           <div><h2>Allenamenti</h2><p>Migliora il tuo tempo in pista</p></div>
           <NuxtLink to="/preparazione?scenario=tracktitan_input" class="racing-button racing-button--primary">Esplora allenamenti</NuxtLink>
