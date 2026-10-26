@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vRcSwitch } from '~/directives/rcSwitch'
 import { Info } from '@lucide/vue'
 import { stintTypeLabel, gripAbbreviation, lapPointAppearance } from '~/services/session-detail/sessionPresentation'
 import { useHeaderBack } from '~/composables/useHeaderBack'
@@ -2452,7 +2453,7 @@ const gripZones = computed(() => {
       </div>
       <div class="header-actions">
         <SessionFileActions :can-share="canShare" :sharing="isSharing" :success="shareSuccess" :error="fileActionError" @share="shareSession" />
-        <div v-if="!isEvoSession" class="detail-tabs rc-switch" role="tablist" aria-label="Vista della sessione">
+        <div v-if="!isEvoSession" v-rc-switch class="detail-tabs rc-switch" role="tablist" aria-label="Vista della sessione">
           <button type="button" role="tab" :aria-selected="detailTab === 'sessione'" :class="{ active: detailTab === 'sessione' }" @click="detailTab = 'sessione'">Sessione</button>
           <button type="button" role="tab" :aria-selected="detailTab === 'avanzata'" :class="{ active: detailTab === 'avanzata' }" title="Il giro contro un riferimento: delta, curve, traiettorie e telemetria" @click="detailTab = 'avanzata'">Telemetria</button>
         </div>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vRcSwitch } from '~/directives/rcSwitch'
 import { computed, ref } from 'vue'
 import { Line } from 'vue-chartjs'
 import { Chart as ChartJS, LinearScale, PointElement, LineElement, Tooltip, Legend, type ChartData, type ChartOptions } from 'chart.js'
@@ -88,7 +89,7 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
         </label>
         <fieldset>
           <legend>Scala</legend>
-          <div class="track-times__toggle rc-switch rc-switch--compact">
+          <div v-rc-switch class="track-times__toggle rc-switch rc-switch--compact">
             <button type="button" :aria-pressed="scale === 'focus'" @click="scale = 'focus'">Focus</button>
             <button type="button" :aria-pressed="scale === 'complete'" @click="scale = 'complete'">Completa</button>
           </div>

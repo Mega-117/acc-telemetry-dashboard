@@ -108,6 +108,21 @@
     &.active, &[aria-selected='true'], &[aria-pressed='true'] { background: #ffffff14; color: #fff; box-shadow: inset 0 -2px #ff0024; }
   }
   &--compact button { height: 26px; padding: 0 14px; font-size: 13px; }
+  // Con v-rc-switch la selezione e' un riquadro unico che scorre sotto il testo delle voci.
+  &--sliding {
+    position: relative;
+    button { position: relative; z-index: 1; }
+    button.active, button[aria-selected='true'], button[aria-pressed='true'] { background: transparent; box-shadow: none; }
+  }
+  &__indicator {
+    position: absolute; top: 3px; bottom: 3px; left: 0; width: 0; opacity: 0; pointer-events: none;
+    background: #ffffff14; box-shadow: inset 0 -2px #ff0024;
+  }
+  // Stessa curva della linea della navbar: rapida e senza rimbalzi.
+  &--ready &__indicator {
+    transition: transform 260ms cubic-bezier(.2, .8, .2, 1), width 260ms cubic-bezier(.2, .8, .2, 1), opacity .15s ease;
+    @media (prefers-reduced-motion: reduce) { transition: none; }
+  }
 }
 
 // One control definition; density is an explicit variant, not import order.

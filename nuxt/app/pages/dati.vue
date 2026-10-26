@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vRcSwitch } from '~/directives/rcSwitch'
 import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
@@ -229,7 +230,7 @@ const repairTotal = computed(() => {
 
 <template>
   <LayoutPageContainer class="data-page">
-    <div class="data-tabs" role="tablist" aria-label="Vista dati">
+    <div v-rc-switch class="data-tabs rc-switch" role="tablist" aria-label="Vista dati">
       <button type="button" role="tab" :aria-selected="tab === 'giro'" :class="{ active: tab === 'giro' }" title="I dati del giro registrato" @click="selectTab('giro')">Giro</button>
       <button type="button" role="tab" :aria-selected="tab === 'box'" :class="{ active: tab === 'box' }" title="Il box in diretta mentre guidi" @click="selectTab('box')">Box</button>
     </div>
@@ -375,14 +376,11 @@ $cell: #ffffff08;
 .data-page { @include controls.tokens; }
 h2, h3 { margin: 0; font-family: 'Racer Display', 'Arial Narrow', sans-serif; font-style: italic; font-weight: 700; text-transform: uppercase; }
 // I bottoni d'azione usano il comune .rc-btn: il vecchio stile resta solo ai controlli a icona.
-button:not(.rc-btn) { @include controls.action; }
+button:not(.rc-btn, .rc-switch button) { @include controls.action; }
 select { @include controls.select; }
 
-// Giro / Box: the segmented switch of the Pit Wall views.
-.data-tabs { display: flex; gap: 3px; width: max-content; margin-bottom: 12px; padding: 3px; border: 1px solid #ffffff1f; background: #0a0a0feb;
-  button { height: 30px; padding: 0 18px; border: 0; background: transparent; clip-path: none; color: #b3b3b8; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; cursor: pointer;
-    &::after { display: none; }
-    &.active { background: #ffffff14; color: #fff; box-shadow: inset 0 -2px #ff0024; } } }
+// Giro / Box: selettore .rc-switch del tema (come Sessione / Telemetria), qui solo il margine.
+.data-tabs { margin-bottom: 12px; }
 .data-bar { display: flex; gap: 10px; align-items: center; }
 .data-session { flex: 1; min-width: 0; }
 .data-stint { flex: 0 0 170px; }

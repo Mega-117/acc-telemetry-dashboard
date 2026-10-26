@@ -52,6 +52,7 @@ export default defineConfig({
         // PIP-633: presentazione delle Statistiche.
         'app/utils/statsPresentation.ts',
         'app/utils/statsJourney.ts',
+        'app/directives/rcSwitch.ts',
         // PIP-632: tracce d'uso delle funzioni nuove.
         'app/services/usage/featureUseNote.ts',
         // PIP-615 / PIP-631: settimana di stabilita' e problemi per versione.

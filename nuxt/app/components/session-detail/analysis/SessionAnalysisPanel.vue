@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vRcSwitch } from '~/directives/rcSwitch'
 // PIP-618: the session "Avanzata" tab, our Track Titan. One lap ("Tu") against a
 // reference from the logger's lap files (laps of this session only, read through
 // Electron), in two layouts: Tracce (MoTeC / Garage 61, default) to see why, Pilota
@@ -413,7 +414,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
       <span v-if="shareMessage" class="bar-note" :class="{ failed: shareState === 'error' }" role="status">{{ shareMessage }}</span>
       <!-- What you look at on the left (laps and gap), how you look at it on the right,
            under the Sessione / Telemetria switch: page, then view. -->
-      <div class="seg seg--views" role="tablist" aria-label="Layout dell’analisi">
+      <div v-rc-switch class="rc-switch views-switch" role="tablist" aria-label="Layout dell’analisi">
         <button v-for="l in LAYOUTS" :key="l.id" type="button" role="tab" :aria-selected="layout === l.id" :class="{ active: layout === l.id }" :title="l.hint" @click="layout = l.id">{{ l.label }}</button>
       </div>
     </div>
@@ -524,7 +525,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .analysis { display: grid; gap: 10px; }
 // Sticky: lap pickers and layout stay in sight while the charts scroll under them.
 .analysis-bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 6px 0; background: #0b0b10f2; box-shadow: 0 8px 12px -10px #000; }
-.seg--views { margin-left: auto; }
+.views-switch { margin-left: auto; }
 // PIP-623: share and paste, square buttons as tall as the pickers.
 .bar-btn { height: 38px; padding: 0 12px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font: 700 12px 'Inter', sans-serif; cursor: pointer;
   &:hover:not(:disabled), &.active { border-color: #fbbf24; }
@@ -533,11 +534,6 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
   &.failed { border-color: #ff5a6e; } }
 .bar-note { color: #3ddc5a; font-size: 12px; &.failed { color: #ff5a6e; } }
 .analysis-note--warn { color: #fbbf24; }
-.seg { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid #ffffff1f; background: #0a0a0feb;
-  button { height: 30px; padding: 0 16px; border: 0; background: transparent; color: #b3b3b8; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; cursor: pointer;
-    &.active { background: #ffffff14; color: #fff; box-shadow: inset 0 -2px #ff0024; }
-    &:disabled { opacity: .4; cursor: default; } }
-  &--small button { height: 24px; padding: 0 10px; font: 600 11px 'Inter', sans-serif; text-transform: none; } }
 // The lap pickers wear the lap colour (Track Titan): blue for you, amber for the reference.
 .pick { --c: #38bdf8; display: flex; align-items: stretch; height: 38px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 14%, #0a0a0f);
   &--ref { --c: #fbbf24; }
