@@ -18,6 +18,9 @@ export interface ChartRow {
   digits?: number
   min?: number
   max?: number
+  /** PIP-635: a fixed note after the title (the time in the stretch you look at), red or green. */
+  note?: string
+  noteTone?: 'loss' | 'gain' | null
 }
 
 const props = withDefaults(defineProps<{
@@ -226,7 +229,7 @@ function onDouble() {
     <div v-for="(chart, index) in charts" :key="chart.row.key" class="chart">
       <!-- Track Titan header: the channel name, readable, and the values at the cursor. -->
       <div class="chart-head">
-        <span class="chart-title">{{ chart.row.title }}</span>
+        <span class="chart-title">{{ chart.row.title }}<em v-if="chart.row.note" class="chart-note" :class="chart.row.noteTone ? `chart-note--${chart.row.noteTone}` : null">{{ chart.row.note }}</em></span>
         <span v-if="headerValues[index]" class="chart-values">
           <span class="v" :class="'tone' in headerValues[index]! && headerValues[index]!.tone ? `v--${headerValues[index]!.tone}` : 'v--lap'">Tu <b>{{ headerValues[index]!.lap }}</b></span>
           <span v-if="headerValues[index]!.ref" class="v v--ref">Rif. <b>{{ headerValues[index]!.ref }}</b></span>
@@ -291,6 +294,8 @@ svg { display: block; width: 100%; touch-action: none; cursor: crosshair; }
 .chart-head { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 24px; padding: 0 0 4px 12px; }
 .chart-title { color: #fff; font: italic 700 13px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; letter-spacing: .03em;
   small { color: #8a8a90; font: 500 11px 'Inter', sans-serif; text-transform: none; } }
+.chart-note { margin-left: 8px; padding: 1px 6px; border: 1px solid #ffffff2e; color: #e6e6ea; font: normal 700 11px 'Inter', sans-serif; letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums;
+  &--loss { border-color: #ff5a6e80; background: #e4002b33; color: #ff8a98; } &--gain { border-color: #3ddc5a80; background: #16a34a33; color: #7ee79a; } }
 .chart-values { display: flex; gap: 6px; font: 600 11px 'Inter', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap;
   // A small fixed width per number, right-aligned: changing digits barely move the boxes.
   // Riquadri discreti: bordo e fondo appena accennati nel colore del giro, il numero e' quello che si nota.

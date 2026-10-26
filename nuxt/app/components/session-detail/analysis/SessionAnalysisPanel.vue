@@ -360,7 +360,9 @@ function emptyTrace(): LapTraceView {
   return { gameId: 'acc', variant: null, sessionId: null, track: '', car: '', lapTimeS: 0, source: '', complete: false, valid: null, fuelL: null, conditions: null, gridStepM: 2, lengthM: 0, channels: {} }
 }
 const has = (name: string) => !!lap.value?.channels[name]
-const deltaRow = computed<ChartRow[]>(() => reference.value ? [{ key: 'delta', title: 'Delta', unit: 's', channels: [], delta: true, height: 70 }] : [])
+// PIP-635: the time in the stretch you look at sits in the Delta header (Garage 61, Delta), fixed.
+const deltaRow = computed<ChartRow[]>(() => reference.value ? [{ key: 'delta', title: 'Delta', unit: 's', channels: [], delta: true, height: 70,
+  ...(stretchLoss.value !== null ? { note: `${viewLabel.value} · ${formatDelta(stretchLoss.value)} s`, noteTone: stretchLoss.value >= 0.01 ? 'loss' as const : stretchLoss.value <= -0.01 ? 'gain' as const : null } : {}) }] : [])
 const speedRow: ChartRow = { key: 'speed', title: 'Velocità', unit: 'km/h', channels: [{ name: 'speed_kmh' }], height: 100 }
 // One channel per chart: every chart shows only your line and the reference's.
 const pedalRows: ChartRow[] = [
@@ -470,11 +472,10 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
           <p v-else class="analysis-note">Tempi dei settori non disponibili per questi giri.</p>
         </section>
         <!-- VRS: corners from the costliest; the first three carry their rank. -->
-        <!-- Only corners here; the way back to the whole lap is a real button, as on the strip. -->
+        <!-- PIP-635: only the list here (Delta, Garage 61): a row selects and zooms; the way back is in the charts' bar. -->
         <section v-if="comparison.length" ref="cornersBox" class="side-box side-box--corners">
           <div class="side-head">
             <h4>Dove perdi di più</h4>
-            <button v-if="viewLabel !== 'Giro intero'" type="button" class="strip-reset" title="Torna al giro intero (anche Esc)" @click="wholeLap">⟲ Giro intero</button>
           </div>
           <!-- Column heads as in the Curve table: the rows are corners, the cell the time lost there. -->
           <div class="corner-row corner-row--head" aria-hidden="true"><span>Curva</span><span>Tempo perso</span></div>
@@ -497,23 +498,22 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
         <!-- Sectors and corners on top of the charts, aligned to their distance axis and
              sticky under the lap bar (Track Titan's segment strip, MoTeC's section bar). -->
         <div class="tracce-strip">
+          <!-- PIP-635 (Garage 61, Delta, MoTeC): one context control on the left (what you are looking at, ‹ › for
+               corners, ✕ back to the whole lap, also Esc / double click), the channels on the right. -->
           <div class="strip-head">
-            <span>Settori</span>
-            <!-- Navigation as Garage 61 and Track Titan: every sector always there, whatever the zoom. -->
-            <span v-if="sectorList.length" class="strip-nav">
-              <button v-for="s in sectorList" :key="s.index" type="button" :class="{ active: selectedSector === s.index }" @click="selectSector(s.index)">S{{ s.index + 1 }}</button>
+            <span class="strip-context" :class="{ 'is-zoomed': viewLabel !== 'Giro intero' }">
+              <button v-if="selectedCorner !== null && !zoomRange" type="button" class="strip-context__step" aria-label="Curva precedente" title="Curva precedente (←)" @click="goCorner(-1)">‹</button>
+              <strong aria-live="polite">{{ viewLabel }}</strong>
+              <button v-if="selectedCorner !== null && !zoomRange" type="button" class="strip-context__step" aria-label="Curva successiva" title="Curva successiva (→)" @click="goCorner(1)">›</button>
+              <button v-if="viewLabel !== 'Giro intero'" type="button" class="strip-context__close" aria-label="Torna al giro intero" title="Torna al giro intero (anche Esc o doppio clic sul grafico)" @click="wholeLap">✕</button>
             </span>
             <button type="button" class="strip-channels" :class="{ active: allChannels }" @click="allChannels = !allChannels">{{ allChannels ? 'Solo l’essenziale' : '+ Altri canali' }}</button>
-            <span v-if="stretchLoss !== null" class="strip-loss" :style="{ background: heat(stretchLoss) }" :title="`Tempo nel tratto rispetto al riferimento`">{{ viewLabel }} {{ formatDelta(stretchLoss) }} s</span>
-            <button v-if="viewLabel !== 'Giro intero'" type="button" class="strip-reset" title="Torna al giro intero (anche Esc o doppio clic sul grafico)" @click="wholeLap">⟲ Giro intero</button>
           </div>
           <div v-if="sectorList.length" class="strip-row">
             <button v-for="s in visibleSectors" :key="s.index" type="button" :class="{ active: selectedSector === s.index }" :style="{ left: `${s.left}%`, width: `${s.width}%` }" :title="`Settore ${s.index + 1}: clic per ingrandire, di nuovo per il giro intero`" @click="selectSector(s.index)">S{{ s.index + 1 }}</button>
           </div>
           <div class="strip-row strip-row--corners">
             <button v-for="c in visibleCorners" :key="c.number" type="button" :class="{ active: selectedCorner === c.number, gain: c.lost <= -0.01, loss: c.lost >= 0.01 }" :style="{ left: `${c.left}%`, width: `${c.width}%` }" :title="`Curva ${c.number}: ${formatDelta(c.lost)} s`" @click="selectCorner(c.number)">{{ c.number }}</button>
-            <!-- PIP-635: curva precedente / successiva sulla riga delle curve, quando ne guardi una (anche ← →). -->
-            <template v-if="selectedCorner !== null && !zoomRange"><button type="button" class="corner-step corner-step--prev" aria-label="Curva precedente" title="Curva precedente (←)" @click="goCorner(-1)">‹</button><button type="button" class="corner-step corner-step--next" aria-label="Curva successiva" title="Curva successiva (→)" @click="goCorner(1)">›</button></template>
           </div>
         </div>
         <AnalysisCharts :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="traceRowHeight" :cursor-tag="cursorCorner" zoomable @hover="cursor = $event" @zoom="zoomRange = $event" />
@@ -594,14 +594,16 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .tracce-center { grid-area: center; display: grid; gap: 8px; align-content: start; height: 100%; overflow-y: auto; overflow-x: hidden; }
 .tracce-right { grid-area: right; min-width: 0; height: 100%; overflow-y: auto; overflow-x: hidden; }
 // Sector and corner strip: sticky under the lap bar, aligned to the plot area (42 px axis, 8 px right).
-.strip-head { display: flex; align-items: center; gap: 10px; height: 20px; margin-left: -34px; color: #b3b3b8; font: 700 11px "Inter", sans-serif; text-transform: uppercase; letter-spacing: .04em; }
-.strip-nav { display: flex; gap: 3px;
-  button { height: 20px; min-width: 30px; padding: 0 6px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font: 700 11px "Inter", sans-serif; text-transform: none; cursor: pointer; &.active { border-color: #ff0024; background: #ff002433; color: #fff; } } }
-.strip-channels { margin-left: auto; height: 20px; padding: 0 8px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font: 700 11px "Inter", sans-serif; text-transform: none; letter-spacing: 0; cursor: pointer; &.active { border-color: #ff0024; } }
-.strip-reset { height: 20px; padding: 0 8px; border: 1px solid #ff0024; background: #ff00241f; color: #fff; font: 700 11px "Inter", sans-serif; text-transform: none; cursor: pointer; }
-.strip-loss { height: 20px; padding: 0 8px; color: #fff; font: 700 11px/20px 'Inter', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.strip-row .corner-step { z-index: 1; width: 28px; border-color: #ffffff59; background: #0b0b10e6; color: #fff; font: 700 15px/1 "Inter", sans-serif; &:hover { background: #ffffff26; } }
-.strip-row .corner-step--prev { left: 0; } .strip-row .corner-step--next { right: 0; }
+.strip-head { display: flex; align-items: center; gap: 10px; height: 22px; margin-left: -34px; color: #b3b3b8; font: 700 11px "Inter", sans-serif; text-transform: uppercase; letter-spacing: .04em; }
+.strip-channels { margin-left: auto; height: 22px; padding: 0 8px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font: 700 11px "Inter", sans-serif; text-transform: none; letter-spacing: 0; cursor: pointer; &.active { border-color: #ff0024; } }
+// PIP-635: what you are looking at, in one framed control: "‹ Curva 5 › ✕" or "Giro intero".
+.strip-context { display: inline-flex; align-items: stretch; height: 22px; border: 1px solid #ffffff2e; background: #ffffff08;
+  strong { display: grid; place-items: center; min-width: 86px; padding: 0 10px; color: #b3b3b8; font: italic 700 12px "Racer Display", sans-serif; letter-spacing: .03em; }
+  &.is-zoomed { border-color: #ffffff59; strong { color: #fff; } }
+  button { width: 24px; padding: 0; border: 0; border-left: 1px solid #ffffff1f; background: transparent; color: #e6e6ea; font: 700 13px/1 "Inter", sans-serif; cursor: pointer;
+    &:hover { background: #ffffff1a; color: #fff; } &:focus-visible { outline: 2px solid #fff; outline-offset: -2px; } }
+  &__step:first-child { border-left: 0; border-right: 1px solid #ffffff1f; }
+  &__close:hover { background: #ff002433; } }
 .tracce-strip { position: sticky; top: 0; z-index: 4; display: grid; gap: 2px; margin-bottom: 6px; padding: 4px 9px 4px 43px; background: #0b0b10f2; box-shadow: 0 8px 10px -10px #000; }
 .strip-row { position: relative; height: 24px;
   button { position: absolute; top: 0; height: 100%; padding: 0; border: 1px solid #0b0b10; background: #ffffff14; color: #e6e6ea; font: 700 12px 'Inter', sans-serif; cursor: pointer; overflow: hidden;
