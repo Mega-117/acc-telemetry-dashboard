@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { analysisSessionToken, bodySlipDeg, channelAt, compareCorners, cornerAt, followFrame, stepCorner, finishLine, timeSyncedFraction, cornerAdvice, deltaTrend, detectCorners, formatDelta, fractions, lapDelta, mapPoints } from '~/services/telemetry/lapAnalysis'
+import { analysisSessionToken, bodySlipDeg, channelAt, compareCorners, cornerAt, glideFrame, stepCorner, finishLine, timeSyncedFraction, cornerAdvice, deltaTrend, detectCorners, formatDelta, fractions, lapDelta, mapPoints } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
 const STEP = 2
@@ -204,11 +204,13 @@ describe('corner navigation (PIP-635)', () => {
 
 describe('map follows the cursor (PIP-635)', () => {
   const frame = { cx: 100, cy: 100, span: 100 }
-  it('stays put while the dot is in the middle of the view', () => {
-    expect(followFrame(frame, { x: 120, y: 110 })).toBeNull()
+  it('glides a share of the way to the dot, keeping the zoom', () => {
+    expect(glideFrame(frame, { x: 140, y: 60 })).toEqual({ frame: { cx: 110, cy: 90, span: 100 }, done: false })
   })
-  it('centres on the dot when it gets near the edge, keeping the zoom', () => {
-    expect(followFrame(frame, { x: 140, y: 100 })).toEqual({ cx: 140, cy: 100, span: 100 })
-    expect(followFrame(frame, { x: 100, y: 70 })).toEqual({ cx: 100, cy: 70, span: 100 })
+  it('settles on the dot once it is close enough', () => {
+    expect(glideFrame(frame, { x: 100.5, y: 100 })).toEqual({ frame: { cx: 100.5, cy: 100, span: 100 }, done: true })
+    let f = frame, steps = 0
+    for (let r = glideFrame(f, { x: 180, y: 40 }); !r.done && steps < 100; r = glideFrame(f, { x: 180, y: 40 })) { f = r.frame; steps++ }
+    expect(steps).toBeLessThan(30)
   })
 })

@@ -4,7 +4,7 @@
 // Corner zoom: the two racing lines, yours blue and the reference amber.
 // Two dots follow the cursor: you (blue, filled) and the reference (amber, hollow).
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { deltaTrend, finishLine, followFrame, fractions, lapDelta, mapPoints, worldToMap, type Corner, type MapPoint } from '~/services/telemetry/lapAnalysis'
+import { deltaTrend, finishLine, glideFrame, fractions, lapDelta, mapPoints, worldToMap, type Corner, type MapPoint } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
 const props = withDefaults(defineProps<{
@@ -89,11 +89,22 @@ const lapArrow = computed(() => {
 })
 const refDot = computed(() => props.reference ? dot(base.value, props.refCursor ?? props.cursor) : null)
 // Only for the cursor moved on the charts: on the map itself the pointer is already where you look.
+// PIP-635: zoomed in, the dot stays centred and the map glides to it frame by frame (Track Titan).
+let glide = 0
+let glideTarget: MapPoint | null = null
+function glideStep() {
+  glide = 0
+  if (!glideTarget) return
+  const { frame, done } = glideFrame(frameNow.value, glideTarget)
+  setView(frame)
+  if (!done) glide = requestAnimationFrame(glideStep)
+}
 watch(lapDot, (point) => {
-  if (!point || !follow.value || onMap.value || frameNow.value.span >= W.value * 0.9) return
-  const next = followFrame(frameNow.value, point)
-  if (next) setView(next)
+  if (!point || !follow.value || onMap.value || frameNow.value.span >= W.value * 0.9) { glideTarget = null; return }
+  glideTarget = point
+  if (!glide) glide = requestAnimationFrame(glideStep)
 })
+onBeforeUnmount(() => { if (glide) cancelAnimationFrame(glide) })
 // Corner numbers beside the track on the outside of the bend, not on the apex: zoomed in,
 // they no longer cover the two lines exactly where you look at them.
 const labels = computed(() => {
@@ -225,7 +236,7 @@ function onMove(event: PointerEvent) {
     const dx = event.clientX - drag.x, dy = event.clientY - drag.y
     if (!drag.moved && dx * dx + dy * dy > 16) { drag.moved = true; svg.setPointerCapture?.(event.pointerId) }
     if (drag.moved) {
-      follow.value = false
+      follow.value = false; glideTarget = null
       const perPixel = frameNow.value.span / svg.getBoundingClientRect().width
       setView({ cx: drag.cx - dx * perPixel, cy: drag.cy - dy * perPixel, span: frameNow.value.span })
       return

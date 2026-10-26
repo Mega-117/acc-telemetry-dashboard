@@ -90,8 +90,9 @@ const charts = computed(() => props.rows.map(row => {
   const y = (v: number) => height - 4 - ((v - (min - pad)) / (max - min + 2 * pad)) * (height - 8)
   const line = (list: (number | null)[]) => list.map((v, i) => v === null ? '' : `${(i / (SAMPLES - 1) * WIDTH).toFixed(1)},${y(v).toFixed(1)}`).filter(Boolean).join(' ')
   // One colour per lap in every chart.
+  // PIP-635: the delta line itself is red where you lose and green where you gain (two clipped copies below).
   const lines = row.delta
-    ? [{ points: line(delta), color: '#e6e6ea', ref: false }]
+    ? []
     : row.channels.flatMap((_, i) => [
       ...(props.reference ? [{ points: line(refSeries[i]!), color: REF, ref: true }] : []),
       { points: line(lapSeries[i]!), color: LAP, ref: false },
@@ -103,7 +104,7 @@ const charts = computed(() => props.rows.map(row => {
     y: y(value),
     label: `${row.delta && value > 0 ? '+' : ''}${value.toFixed(row.delta ? 2 : stepDigits(min, max, height >= 120 ? 5 : 3, digits))}`,
   }))
-  return { row, height, lines, area, zero: row.delta ? y(0) : null, origin, y, ticks }
+  return { row, height, lines, area, deltaLine: row.delta ? line(delta) : '', zero: row.delta ? y(0) : null, origin, y, ticks }
 }))
 
 // Dots at the cursor, apart from the lines: moving the mouse never resamples the traces.
@@ -117,7 +118,8 @@ const dots = computed(() => charts.value.map(chart => {
       if (props.reference && inRange(refAt)) { const v = valueAt(props.reference, c, refAt); if (v !== null) list.push({ x: xOf(refAt), y: chart.y(v), color: REF, ref: true }) }
     })
   } else if (inRange(props.cursor)) {
-    list.push({ x: xOf(props.cursor), y: chart.y(deltaAt(props.cursor) - chart.origin), color: '#e6e6ea', ref: false })
+    const d = deltaAt(props.cursor) - chart.origin
+    list.push({ x: xOf(props.cursor), y: chart.y(d), color: d > 0 ? '#ff5a6e' : d < 0 ? '#3ddc5a' : '#e6e6ea', ref: false })
   }
   return list
 }))
@@ -130,7 +132,8 @@ const bands = computed(() => props.corners
 const headerValues = computed(() => charts.value.map(chart => {
   const f = props.cursor
   if (!inRange(f)) return null
-  if (chart.row.delta) return props.reference ? { lap: `${formatDelta(deltaAt(f) - chart.origin)} s`, ref: null, diff: null } : null
+  // The delta box takes the line's colour: red when you lose, green when you gain.
+  if (chart.row.delta) { const d = deltaAt(f) - chart.origin; return props.reference ? { lap: `${formatDelta(d)} s`, ref: null, diff: null, tone: d > 0 ? 'loss' : d < 0 ? 'gain' : null } : null }
   const c = chart.row.channels[0]
   if (!c) return null
   const digits = chart.row.digits ?? 0
@@ -225,7 +228,7 @@ function onDouble() {
       <div class="chart-head">
         <span class="chart-title">{{ chart.row.title }}</span>
         <span v-if="headerValues[index]" class="chart-values">
-          <span class="v v--lap">Tu <b>{{ headerValues[index]!.lap }}</b></span>
+          <span class="v" :class="'tone' in headerValues[index]! && headerValues[index]!.tone ? `v--${headerValues[index]!.tone}` : 'v--lap'">Tu <b>{{ headerValues[index]!.lap }}</b></span>
           <span v-if="headerValues[index]!.ref" class="v v--ref">Rif. <b>{{ headerValues[index]!.ref }}</b></span>
           <span v-if="headerValues[index]!.diff" class="v v--diff">Δ <b>{{ headerValues[index]!.diff }}</b></span>
         </span>
@@ -246,6 +249,8 @@ function onDouble() {
             <!-- Above zero you are behind (red), below you are ahead (green). -->
             <polygon :points="chart.area" fill="#ff5a6e40" :clip-path="`url(#above-${uid}-${chart.row.key})`" />
             <polygon :points="chart.area" fill="#3ddc5a40" :clip-path="`url(#below-${uid}-${chart.row.key})`" />
+            <polyline :points="chart.deltaLine" stroke="#ff5a6e" class="chart-line" :clip-path="`url(#above-${uid}-${chart.row.key})`" />
+            <polyline :points="chart.deltaLine" stroke="#3ddc5a" class="chart-line" :clip-path="`url(#below-${uid}-${chart.row.key})`" />
             <line x1="0" :x2="WIDTH" :y1="chart.zero!" :y2="chart.zero!" class="chart-zero" />
           </template>
           <polyline v-for="(line, i) in chart.lines" :key="i" :points="line.points" :stroke="line.color" :class="['chart-line', { 'chart-line--ref': line.ref }]" />
@@ -284,11 +289,13 @@ svg { display: block; width: 100%; touch-action: none; cursor: crosshair; }
 .chart-head { grid-column: 1 / -1; display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 0 0 4px 12px; }
 .chart-title { color: #fff; font: italic 700 13px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; letter-spacing: .03em;
   small { color: #8a8a90; font: 500 11px 'Inter', sans-serif; text-transform: none; } }
-.chart-values { display: flex; gap: 12px; font: 600 11px 'Inter', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap;
+.chart-values { display: flex; gap: 6px; font: 600 11px 'Inter', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap;
+  // PIP-635: ogni valore nel suo riquadro col colore del giro, leggibile a colpo d'occhio sopra il grafico.
   // Fixed width per value, right-aligned: changing digits never shifts the others.
-  .v { color: #8a8a90; b { display: inline-block; min-width: 9ch; text-align: right; font-weight: 700; font-size: 12px; } }
+  .v { --vc: #e6e6ea; padding: 2px 7px; border: 1px solid color-mix(in srgb, var(--vc) 45%, transparent); background: color-mix(in srgb, var(--vc) 14%, #0b0b10); color: #b3b3b8;
+    b { display: inline-block; min-width: 9ch; text-align: right; color: var(--vc); font-weight: 700; font-size: 13px; } }
   .v--diff b { min-width: 6ch; }
-  .v--lap b { color: #38bdf8; } .v--ref b { color: #fbbf24; } .v--diff b { color: #e6e6ea; } }
+  .v--lap { --vc: #38bdf8; } .v--ref { --vc: #fbbf24; } .v--loss { --vc: #ff5a6e; } .v--gain { --vc: #3ddc5a; } }
 .chart-grid--x { stroke-dasharray: none; stroke: #ffffff0d; }
 .chart-xaxis { grid-column: 2; position: relative; overflow: hidden; height: 16px; color: #8a8a90; font: 600 10px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
 // Labels slide from left-aligned at the start to right-aligned at the end (--p), so the

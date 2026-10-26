@@ -137,13 +137,14 @@ export function cornerAt(corners: Corner[], fraction: number | null): Corner | n
 }
 
 /**
- * PIP-635: a zoomed map follows the cursor dot. Frame as the map's view (centre and width; the
- * height is 0.8 of the width): when the dot leaves the middle 70% of it, the frame is centred on
- * the dot, otherwise it stays put (null), so the map does not shake at every small move.
+ * PIP-635: a zoomed map keeps the cursor dot centred (Track Titan), gliding instead of jumping: each
+ * animation frame moves the centre a share `k` of the way to the dot, the zoom stays. `done` once it
+ * is closer than a hundredth of the view, so the animation can stop.
  */
-export function followFrame(frame: { cx: number, cy: number, span: number }, point: { x: number, y: number }): { cx: number, cy: number, span: number } | null {
-  const inside = Math.abs(point.x - frame.cx) <= frame.span * 0.35 && Math.abs(point.y - frame.cy) <= frame.span * 0.28
-  return inside ? null : { cx: point.x, cy: point.y, span: frame.span }
+export function glideFrame(frame: { cx: number, cy: number, span: number }, point: { x: number, y: number }, k = 0.25): { frame: { cx: number, cy: number, span: number }, done: boolean } {
+  const dx = point.x - frame.cx, dy = point.y - frame.cy
+  if (Math.hypot(dx, dy) <= frame.span * 0.01) return { frame: { cx: point.x, cy: point.y, span: frame.span }, done: true }
+  return { frame: { cx: frame.cx + dx * k, cy: frame.cy + dy * k, span: frame.span }, done: false }
 }
 
 /** Entry ends a quarter before the apex, the middle a quarter after it: the rest is braking and exit. */

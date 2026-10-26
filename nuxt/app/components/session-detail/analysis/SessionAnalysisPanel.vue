@@ -9,6 +9,7 @@ import AnalysisMap from './AnalysisMap.vue'
 import AnalysisCar from './AnalysisCar.vue'
 import AnalysisCharts, { type ChartRow } from './AnalysisCharts.vue'
 import SharedLapPanel, { type SharedLapLoaded } from './SharedLapPanel.vue'
+import LapPicker, { type LapGroup, type LapOption } from './LapPicker.vue'
 import { electronLapSource, listOwnLaps, pilotLapSource, type LapOrigin, type LapSource, type LocalLapBridge } from '~/services/telemetry/lapSources'
 import { LapsArchiveError } from '~/services/telemetry/lapsArchiveClient'
 import { lapShareErrorMessage } from '~/services/telemetry/lapShareLink'
@@ -378,11 +379,16 @@ const pilotRowHeight = computed(() => Math.max(80, Math.floor((traceHeight.value
 const traceRows = computed(() => [speedRow, ...pedalRows, steerRow, gearRow, ...(allChannels.value ? extraRows.value : [])])
 
 // PIP-619: air/road and grip of each lap (from the lap, else this session's laps): like for like.
-const lapLabel = (e: Entry) => [e.label ?? `Giro ${e.lapNumber} · ${formatLapTime(e.lapTimeMs)}${e.complete ? '' : ' · parziale'}${e.valid ? '' : ' · invalido'}`,
-  formatLapConditions(mergeLapConditions(traces.value[e.id]?.conditions ?? null, sessionRow(e)))].filter(Boolean).join(' · ')
 const sessionEntries = computed(() => entries.value.filter(e => e.origin === 'local' || e.origin === 'pilot'))
 const ownEntries = computed(() => entries.value.filter(e => e.origin === 'own'))
 const sharedEntries = computed(() => entries.value.filter(e => e.origin === 'shared'))
+// PIP-635: il best (valido e completo) della sessione, segnato nei giri come nei tempi del gioco.
+const bestId = computed(() => [...sessionEntries.value].filter(e => e.valid && e.complete).sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0]?.id ?? '')
+const lapOption = (e: Entry): LapOption => ({ id: e.id, title: e.label ?? `Giro ${e.lapNumber}`, time: e.label ? '' : formatLapTime(e.lapTimeMs), valid: e.valid, complete: e.complete, best: e.id === bestId.value,
+  conditions: formatLapConditions(mergeLapConditions(traces.value[e.id]?.conditions ?? null, sessionRow(e))) })
+const lapGroups = computed<LapGroup[]>(() => [{ label: '', options: sessionEntries.value.map(lapOption) }])
+const refGroups = computed<LapGroup[]>(() => [{ label: props.pilotUid ? 'Giri del pilota' : 'Questa sessione', options: sessionEntries.value.map(lapOption) },
+  ...(ownEntries.value.length ? [{ label: 'I miei giri', options: ownEntries.value.map(lapOption) }] : []), ...(sharedEntries.value.length ? [{ label: 'Condiviso', options: sharedEntries.value.map(lapOption) }] : [])])
 const short = (e: Entry | null) => e ? `Giro ${e.lapNumber} · ${formatLapTime(e.lapTimeMs)}` : '--'
 const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTime(s * 1000) : '--'
 </script>
@@ -391,16 +397,8 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
   <section class="analysis">
     <div class="analysis-bar">
       <!-- Track Titan: each lap's select wears its colour, so a colour tells which lap it is. -->
-      <label class="pick pick--lap" title="Il tuo giro: azzurro in grafici e mappa"><span class="pick-name">Tu</span>
-        <select v-model="lapId" :disabled="!sessionEntries.length" :title="lapEntry ? lapLabel(lapEntry) : ''"><option v-for="e in sessionEntries" :key="e.id" :value="e.id" :disabled="!e.complete">{{ lapLabel(e) }}</option></select>
-      </label>
-      <label class="pick pick--ref" title="Il giro di riferimento: ambra in grafici e mappa"><span class="pick-name">Riferimento</span>
-        <select v-model="refId" :disabled="!entries.length" :title="refEntry ? lapLabel(refEntry) : ''">
-          <optgroup :label="pilotUid ? 'Giri del pilota' : 'Questa sessione'"><option v-for="e in sessionEntries" :key="e.id" :value="e.id" :disabled="!e.complete">{{ lapLabel(e) }}</option></optgroup>
-          <optgroup v-if="ownEntries.length" label="I miei giri"><option v-for="e in ownEntries" :key="e.id" :value="e.id">{{ lapLabel(e) }}</option></optgroup>
-          <optgroup v-if="sharedEntries.length" label="Condiviso"><option v-for="e in sharedEntries" :key="e.id" :value="e.id">{{ lapLabel(e) }}</option></optgroup>
-        </select>
-      </label>
+      <LapPicker v-model="lapId" name="Tu" color="#38bdf8" :groups="lapGroups" :disabled="!sessionEntries.length" hint="Il tuo giro: azzurro in grafici e mappa" />
+      <LapPicker v-model="refId" name="Riferimento" color="#fbbf24" :groups="refGroups" :disabled="!entries.length" hint="Il giro di riferimento: ambra in grafici e mappa" />
       <!-- The lap gap next to the pickers, in words: who is faster and by how much. -->
       <!-- PIP-623: a lap from another pilot as reference, by link. -->
       <button v-if="entries.length" type="button" class="bar-btn" :class="{ active: showShared }" title="Incolla il link di un giro ricevuto: diventa il riferimento" @click="showShared = !showShared">+ Giro di un altro pilota</button>
@@ -500,8 +498,6 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
             <span v-if="sectorList.length" class="strip-nav">
               <button v-for="s in sectorList" :key="s.index" type="button" :class="{ active: selectedSector === s.index }" @click="selectSector(s.index)">S{{ s.index + 1 }}</button>
             </span>
-            <!-- PIP-635: ‹ Curva N ›, curva precedente / successiva. -->
-            <span v-if="selectedCorner !== null && !zoomRange" class="strip-step" role="group" aria-label="Cambia curva"><button type="button" aria-label="Curva precedente" title="Curva precedente (←)" @click="goCorner(-1)">‹</button><strong aria-live="polite">Curva {{ selectedCorner }}</strong><button type="button" aria-label="Curva successiva" title="Curva successiva (→)" @click="goCorner(1)">›</button></span>
             <button type="button" class="strip-channels" :class="{ active: allChannels }" @click="allChannels = !allChannels">{{ allChannels ? 'Solo l’essenziale' : '+ Altri canali' }}</button>
             <button v-if="viewLabel !== 'Giro intero'" type="button" class="strip-reset" title="Torna al giro intero (anche Esc o doppio clic sul grafico)" @click="wholeLap">⟲ Giro intero</button>
           </div>
@@ -510,6 +506,8 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
           </div>
           <div class="strip-row strip-row--corners">
             <button v-for="c in visibleCorners" :key="c.number" type="button" :class="{ active: selectedCorner === c.number, gain: c.lost <= -0.01, loss: c.lost >= 0.01 }" :style="{ left: `${c.left}%`, width: `${c.width}%` }" :title="`Curva ${c.number}: ${formatDelta(c.lost)} s`" @click="selectCorner(c.number)">{{ c.number }}</button>
+            <!-- PIP-635: curva precedente / successiva sulla riga delle curve, quando ne guardi una (anche ← →). -->
+            <template v-if="selectedCorner !== null && !zoomRange"><button type="button" class="corner-step corner-step--prev" aria-label="Curva precedente" title="Curva precedente (←)" @click="goCorner(-1)">‹</button><button type="button" class="corner-step corner-step--next" aria-label="Curva successiva" title="Curva successiva (→)" @click="goCorner(1)">›</button></template>
           </div>
         </div>
         <AnalysisCharts :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="traceRowHeight" :cursor-tag="cursorCorner" zoomable @hover="cursor = $event" @zoom="zoomRange = $event" />
@@ -532,11 +530,6 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
   &.failed { border-color: #ff5a6e; } }
 .bar-note { color: #3ddc5a; font-size: 12px; &.failed { color: #ff5a6e; } }
 .analysis-note--warn { color: #fbbf24; }
-// The lap pickers wear the lap colour (Track Titan): blue for you, amber for the reference.
-.pick { --c: #38bdf8; display: flex; align-items: stretch; height: 38px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 14%, #0a0a0f);
-  &--ref { --c: #fbbf24; }
-  .pick-name { display: grid; place-items: center; padding: 0 10px; background: var(--c); color: #0a0a0f; font: italic 700 13px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; }
-  select { min-width: 220px; max-width: 232px; height: 100%; padding: 0 8px; border: 0; background: transparent; color: #fff; font: 600 13px 'Inter', sans-serif; option { background: #0d0d12; color: #e6e6ea; } } }
 .delta-badge { display: flex; align-items: baseline; gap: 6px; height: 38px; margin: 0; padding: 0 10px; border: 1px solid #ffffff2e; background: #ffffff08; line-height: 38px; color: #e6e6ea;
   span { color: #8a8a90; font: 700 11px 'Inter', sans-serif; text-transform: uppercase; }
   strong { font: 700 17px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
@@ -598,8 +591,8 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
   button { height: 20px; min-width: 30px; padding: 0 6px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font: 700 11px "Inter", sans-serif; text-transform: none; cursor: pointer; &.active { border-color: #ff0024; background: #ff002433; color: #fff; } } }
 .strip-channels { margin-left: auto; height: 20px; padding: 0 8px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font: 700 11px "Inter", sans-serif; text-transform: none; letter-spacing: 0; cursor: pointer; &.active { border-color: #ff0024; } }
 .strip-reset { height: 20px; padding: 0 8px; border: 1px solid #ff0024; background: #ff00241f; color: #fff; font: 700 11px "Inter", sans-serif; text-transform: none; cursor: pointer; }
-.strip-step { display: inline-flex; align-items: center; gap: 2px; margin-left: 6px; strong { min-width: 64px; text-align: center; color: #fff; font: italic 700 12px "Racer Display", sans-serif; }
-  button { width: 22px; height: 20px; padding: 0; border: 1px solid #ffffff40; background: transparent; color: #fff; font: 700 14px/1 "Inter", sans-serif; cursor: pointer; &:hover { background: #ffffff14; border-color: #ffffffb3; } } }
+.strip-row .corner-step { z-index: 1; width: 28px; border-color: #ffffff59; background: #0b0b10e6; color: #fff; font: 700 15px/1 "Inter", sans-serif; &:hover { background: #ffffff26; } }
+.strip-row .corner-step--prev { left: 0; } .strip-row .corner-step--next { right: 0; }
 .tracce-strip { position: sticky; top: 0; z-index: 4; display: grid; gap: 2px; margin-bottom: 6px; padding: 4px 9px 4px 43px; background: #0b0b10f2; box-shadow: 0 8px 10px -10px #000; }
 .strip-row { position: relative; height: 24px;
   button { position: absolute; top: 0; height: 100%; padding: 0; border: 1px solid #0b0b10; background: #ffffff14; color: #e6e6ea; font: 700 12px 'Inter', sans-serif; cursor: pointer; overflow: hidden;
