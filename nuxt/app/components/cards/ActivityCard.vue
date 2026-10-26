@@ -5,7 +5,6 @@
 // ============================================
 
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
-import { ChartColumnIncreasing, ChevronRight } from '@lucide/vue'
 
 // Types
 type DayData = {
@@ -106,7 +105,7 @@ const formatYLabel = (minutes: number): string => {
     <div class="card-head">
       <h2 class="card-title">{{ racing ? 'Attività · ultimi 7 giorni' : 'Attività (ultimi 7 giorni)' }}</h2>
       <button v-if="statsLink" type="button" class="rc-btn rc-btn--compact stats-link" title="Apri le statistiche complete" @click="emit('open-stats')">
-        <ChartColumnIncreasing :size="18" :stroke-width="1.8" aria-hidden="true" /><span>Statistiche</span><ChevronRight class="rc-btn__arrow" :size="16" :stroke-width="2" aria-hidden="true" />
+        <UiRacingIcon name="chart" :size="19" /><span>Statistiche</span><UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" />
       </button>
     </div>
 
