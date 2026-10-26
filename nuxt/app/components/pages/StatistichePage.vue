@@ -57,7 +57,9 @@ const totals = computed(() => statsTotals(cars.value))
 const carMax = computed(() => Math.max(1, ...cars.value.map(c => c.timeMs)))
 const weeks = computed(() => timeByWeek(filtered.value, Math.min(26, Math.max(4, Math.ceil((periodDays.value || 182) / 7))), Date.now()))
 const weekMax = computed(() => Math.max(1, ...weeks.value.map(w => w.timeMs)))
-const weekLabel = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
+// Grafici vivaci: il rosso del marchio resta un accento, ogni auto ha il suo colore.
+const CAR_COLORS = ['#3b82f6', '#14b8a6', '#f59e0b', '#a855f7', '#ec4899', '#84cc16']
+const weekLabel =(iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 
 const carA = ref('')
 const carB = ref('')
@@ -145,9 +147,9 @@ watch(targetUserId, (uid, previous) => { if (uid && uid !== previous) void load(
         <section class="stats-panel" aria-labelledby="stats-time">
           <h2 id="stats-time">Tempo in pista per auto</h2>
           <ul class="car-bars">
-            <li v-for="c in cars" :key="c.carKey">
+            <li v-for="(c, i) in cars" :key="c.carKey">
               <div class="car-bars__label"><span>{{ formatCarName(c.car) }}</span><strong>{{ hours(c.timeMs) }}</strong></div>
-              <div class="car-bars__track"><span :style="{ width: `${Math.max(2, (c.timeMs / carMax) * 100)}%` }" /></div>
+              <div class="car-bars__track"><span :style="{ width: `${Math.max(2, (c.timeMs / carMax) * 100)}%`, '--bar': CAR_COLORS[i % CAR_COLORS.length] }" /></div>
               <small>{{ c.sessions }} {{ c.sessions === 1 ? 'sessione' : 'sessioni' }} · {{ c.laps }} {{ c.laps === 1 ? 'giro' : 'giri' }} · {{ c.laps ? Math.round((c.lapsValid / c.laps) * 100) + '% validi' : 'nessun giro' }}</small>
             </li>
             <li v-if="!cars.length" class="empty">Nessuna sessione nel periodo.</li>
@@ -242,7 +244,11 @@ select { background: #0b0b0b; color: #f5f5f5; border: 1px solid #ffffff55; paddi
 .stats__pair { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; color: #bdbdbd; }
 // PIP-633: numeri grandi in testa.
 .stats-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 0; }
-.stats-kpis div { border: 1px solid rgba(255, 255, 255, 0.3960784314); border-left: 3px solid #e10600; padding: 12px 16px; }
+.stats-kpis div { border: 1px solid rgba(255, 255, 255, 0.3960784314); border-left: 3px solid var(--kpi, #3b82f6); padding: 12px 16px; background: linear-gradient(90deg, color-mix(in srgb, var(--kpi, #3b82f6) 14%, transparent), transparent 60%); }
+.stats-kpis div:nth-child(1) { --kpi: #3b82f6; }
+.stats-kpis div:nth-child(2) { --kpi: #14b8a6; }
+.stats-kpis div:nth-child(3) { --kpi: #a855f7; }
+.stats-kpis div:nth-child(4) { --kpi: #22c55e; }
 .stats-kpis dt { font: 400 12px/1.2 'Arial Narrow', 'Segoe UI', sans-serif; text-transform: uppercase; color: #cfcfcf; }
 .stats-kpis dd { margin: 4px 0 0; font: italic 700 clamp(24px, 2.2vw, 34px)/1.1 'Racer Display', sans-serif; font-variant-numeric: tabular-nums; }
 // Ore per auto: barra con nome e ore sopra, dettagli sotto.
@@ -250,37 +256,38 @@ select { background: #0b0b0b; color: #f5f5f5; border: 1px solid #ffffff55; paddi
 .car-bars__label { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; }
 .car-bars__label strong { font-variant-numeric: tabular-nums; }
 .car-bars__track { height: 8px; background: #ffffff14; margin: 5px 0 4px; }
-.car-bars__track span { display: block; height: 100%; background: linear-gradient(90deg, #e10600, #ff4d45); }
+.car-bars__track span { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--bar), color-mix(in srgb, var(--bar) 75%, #fff)); box-shadow: 0 0 10px color-mix(in srgb, var(--bar) 45%, transparent); }
+.car-bars__track { border-radius: 4px; }
 .car-bars small { font-size: 12px; color: #a8a8a8; }
 .car-bars .empty { color: #9a9a9a; font-size: 13px; }
 .stats__h3 { margin: 4px 0 8px; font: 400 12px/1.2 'Arial Narrow', 'Segoe UI', sans-serif; text-transform: uppercase; color: #cfcfcf; }
 .weeks { display: flex; align-items: flex-end; gap: 4px; height: 84px; padding-bottom: 18px; border-bottom: 1px solid #ffffff30; }
 .weeks__col { position: relative; flex: 1; height: 100%; display: flex; align-items: flex-end; }
-.weeks__bar { display: block; width: 100%; min-height: 1px; background: #e10600; }
+.weeks__bar { display: block; width: 100%; min-height: 1px; border-radius: 3px 3px 0 0; background: linear-gradient(180deg, #22d3ee, #3b82f6); }
 .weeks__col small { position: absolute; top: calc(100% + 4px); left: 0; font-size: 10px; color: #a8a8a8; white-space: nowrap; }
 // Barra del distacco nel confronto tra auto.
 .gap-cell { position: relative; min-width: 110px; }
 .gap-cell__bar { display: inline-block; vertical-align: middle; height: 6px; max-width: 60px; margin-right: 8px; background: currentColor; opacity: .7; }
 // Margine del giro ideale: piu' tempo da guadagnare, colore piu' acceso.
 .margin { padding: 1px 6px; font-variant-numeric: tabular-nums; }
-.margin--big { background: #e1060033; color: #ff6b63; font-weight: 700; }
-.margin--mid { background: #f5a62326; color: #ffc15c; }
+.margin--big { background: #ef444433; color: #f87171; font-weight: 700; }
+.margin--mid { background: #f9731626; color: #fb923c; }
 .margin--small { color: #bdbdbd; }
 // Distacco dal migliore della riga, dal verde al rosso.
 .heat-legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; font-size: 11px; }
 .heat-legend span { padding: 2px 8px; }
-.heat--0 { background: #1f9d5533; color: #4be08f; font-weight: 700; }
-.heat--1 { background: #1f9d551a; color: #9be3b8; }
-.heat--2 { background: #f5a6231a; color: #ffd28a; }
-.heat--3 { background: #f5a62333; color: #ffb347; }
-.heat--4 { background: #e106002e; color: #ff7b74; }
+.heat--0 { background: #22c55e38; color: #4ade80; font-weight: 700; }
+.heat--1 { background: #84cc1626; color: #a3e635; }
+.heat--2 { background: #facc1526; color: #fde047; }
+.heat--3 { background: #f9731630; color: #fb923c; }
+.heat--4 { background: #ef444433; color: #f87171; }
 .stats-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; margin-bottom: 10px; }
 .stats-table th { text-align: left; font: 400 11px/1.2 'Arial Narrow', 'Segoe UI', sans-serif; text-transform: uppercase; color: #cfcfcf; padding: 4px 6px; border-bottom: 1px solid #ffffff40; white-space: nowrap; }
 .stats-table td { padding: 5px 6px; border-bottom: 1px solid #ffffff14; white-space: nowrap; }
 .stats-table td:first-child { white-space: normal; }
 .stats-table .empty { color: #9a9a9a; text-align: center; white-space: normal; }
-.worse { color: #ff5b52; }
-.better { color: #3fd07a; }
+.worse { color: #f87171; }
+.better { color: #4ade80; }
 .stats__note { margin: 0; font-size: 12px; color: #bdbdbd; }
 .stats__note button { background: none; border: 1px solid #ffffff55; color: inherit; padding: 2px 8px; cursor: pointer; }
 @media (max-width: 1100px) { .stats__grid { grid-template-columns: 1fr; } .stats-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
