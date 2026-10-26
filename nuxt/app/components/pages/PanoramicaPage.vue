@@ -168,8 +168,8 @@ function goToStats() {
             </tbody>
           </table>
           <div class="last-drive__actions">
-            <button class="rc-btn" :disabled="!lastTrack" @click="goToTrack"><UiRacingIcon name="flag" :size="20" />Dettaglio pista<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" /></button>
-            <button class="rc-btn rc-btn--primary" :disabled="!lastSession?.id" @click="goToSession"><UiRacingIcon name="stopwatch" :size="20" />Ultima sessione<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" /></button>
+            <button class="rc-btn" :disabled="!lastTrack" @click="goToTrack">Dettaglio pista<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" /></button>
+            <button class="rc-btn rc-btn--primary" :disabled="!lastSession?.id" @click="goToSession">Ultima sessione<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" /></button>
           </div>
         </div>
         <span v-if="isOverviewPlaceholder" class="overview-loading-label" role="status">Caricamento dati…</span>
@@ -180,7 +180,7 @@ function goToStats() {
         <CardsActivityCard class="overview-activity" :data="activityData" :practice-total="activityTotals.practice" :qualify-total="activityTotals.qualify" :race-total="activityTotals.race" :other-total="overviewProjection?.otherActivity" racing :aria-busy="isOverviewPlaceholder" :stats-link="consultedGame === 'acc'" @open-stats="goToStats" />
         <section class="training-panel racing-panel">
           <div><h2>Allenamenti</h2><p>Migliora il tuo tempo in pista</p></div>
-          <NuxtLink to="/preparazione?scenario=tracktitan_input" class="rc-btn rc-btn--primary"><UiRacingIcon name="gauge" :size="20" />Esplora allenamenti<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" /></NuxtLink>
+          <NuxtLink to="/preparazione?scenario=tracktitan_input" class="rc-btn rc-btn--primary">Esplora allenamenti<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" /></NuxtLink>
         </section>
       </aside>
     </div>
