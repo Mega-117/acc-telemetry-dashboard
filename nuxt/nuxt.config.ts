@@ -1,6 +1,7 @@
 import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { PRODUCT } from './shared/productIdentity'
 import { removeDesktopExcludedPages } from './shared/desktopBundleRoutes'
+import { siteRobotsMeta } from './shared/siteIndexing'
 import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
@@ -12,6 +13,7 @@ const qaEmulatorPorts = isDev ? [process.env.VITE_ACC_AUTH_EMULATOR_PORT, proces
   .map(Number).filter(port => Number.isInteger(port) && port >= 1024 && port <= 65535) : []
 const qaEmulatorSources = [...new Set(qaEmulatorPorts)].map(port => ` http://127.0.0.1:${port} ws://127.0.0.1:${port}`).join('')
 const baseURL = isDev || desktopBundle ? '/' : '/acc-telemetry-dashboard/docs/'
+const robotsMeta = siteRobotsMeta(process.env)
 // The source ICO is mirrored from the suite root; its hash invalidates browser caches.
 const iconRevision = createHash('sha256')
   .update(readFileSync(new URL('./public/favicon.ico', import.meta.url)))
@@ -88,6 +90,8 @@ export default defineNuxtConfig({
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
         { name: 'description', content: 'Dashboard telemetria per Assetto Corsa Competizione' },
+        // PIP-638: fuori da Google finche' RACER_SITE_INDEXABLE=1 non lo rende indicizzabile.
+        ...(robotsMeta ? [robotsMeta] : []),
         // Content-Security-Policy: blocca inline scripts non autorizzati e risorse esterne non previste
         {
           'http-equiv': 'Content-Security-Policy',
