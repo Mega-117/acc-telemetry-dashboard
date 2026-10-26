@@ -358,7 +358,7 @@ function goToSession(id: string) {
 <template>
   <LayoutPageContainer class="sessions-page racing-data">
     <GameContextTransition :game-id="consultedGame" :busy="isLoading">
-    <h1 class="sessions-title">
+    <h1 class="racing-sr-only">
       Sessioni
     </h1>
     <p
@@ -461,7 +461,6 @@ function goToSession(id: string) {
       </div>
     </section>
 
-    <div class="sessions-frame">
     <UiScrollArea
       class="sessions-scroll"
       label="Elenco sessioni"
@@ -504,7 +503,6 @@ function goToSession(id: string) {
         <RacingSessionList :groups="paginatedSessionsByDay" @go-to-session="goToSession" />
       </div>
     </UiScrollArea>
-    </div>
     <UiPaginationControls
       v-model:current-page="currentPage"
       class="sessions-pagination"
@@ -524,12 +522,9 @@ function goToSession(id: string) {
 @use '@/assets/scss/racing-settings' as controls;
 .sessions-page { width: 100%; padding-top: var(--app-content-top-space); padding-bottom: 0; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .sessions-page :deep(.game-context), .sessions-page :deep(.game-context__content) { flex: 1 1 0%; min-height: 0; }
-// Come la Panoramica: titolo sportivo, filtri con lo switcher che scorre, elenco dentro una cornice.
-.sessions-title { @include controls.title; margin: 0 0 18px; flex: 0 0 auto; }
-.session-filters { margin-bottom: 20px; flex: 0 0 auto; }
+.session-filters { margin-bottom: 24px; flex: 0 0 auto; }
+// Tipo di sessione: switcher del tema con la selezione che scorre.
 .racing-filter-tabs { margin-bottom: 14px; }
-// La cornice sta fuori dall'area che scorre: la sfumatura dello scroll non deve mangiarne il bordo.
-.sessions-frame { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 4px 18px 0; border: 1px solid #ffffff65; }
 .sessions-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
   overscroll-behavior-y: contain; scrollbar-gutter: stable;
   padding: var(--app-scroll-fade-size) 0 12px; mask-image: var(--app-scroll-fade-mask); }

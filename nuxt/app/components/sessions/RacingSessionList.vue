@@ -141,12 +141,12 @@ function openSession(event: MouseEvent, id: string) {
 @use '@/assets/scss/racing-settings' as controls;
 .racing-session-list { @include controls.tokens; }
 .session-open { text-decoration: none; }
-// Tipo di sessione come in Panoramica: lineetta nel colore della sessione e nome in chiaro, niente riquadro.
-.session-kind { display: inline-block; padding: 3px 0 3px 10px; border-left: 3px solid currentColor; font: 600 11px/1.2 'Inter', sans-serif; letter-spacing: .5px; text-transform: uppercase; }
+// Tipo di sessione: riquadrino nel colore della sessione, con il font delle etichette del sito.
+.session-kind { display: inline-flex; justify-content: center; align-items: center; min-width: 74px; min-height: 24px; padding: 0 6px; border: 1px solid currentColor; border-radius: 2px; font: 600 10px/1 'Inter', sans-serif; letter-spacing: .5px; text-transform: uppercase; }
 .session-kind--practice { color: var(--racing-practice); } .session-kind--qualify { color: var(--racing-qualify); } .session-kind--race { color: var(--racing-race); } .session-kind--unknown { color: var(--racing-data-muted); }
-// Date come titoli di sezione e tempi nel corsivo sportivo, come in Panoramica.
+// Date come titoli di sezione; tempi nel corsivo sportivo, non in grassetto.
 .racing-day-table caption { @include controls.section-title; font-size: 15px; letter-spacing: .04em; padding: 0 0 10px; }
-.session-best > span { font: italic 700 15px/1 'Racer Display', sans-serif; letter-spacing: .02em; }
+.session-best > span { font: italic 500 14px/1 'Racer Display', sans-serif; letter-spacing: .03em; }
 .racing-session-list--track {
   .racing-day-table { min-width: 720px; }
   .col-type { width: 12%; }
