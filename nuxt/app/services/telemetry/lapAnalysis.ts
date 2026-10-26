@@ -124,6 +124,13 @@ export interface CornerComparison {
   phaseLossS: { entry: number, mid: number, exit: number }
 }
 
+/** PIP-635: time lost (+) or gained (−) against the reference over a stretch of the lap (0-1), null without times. */
+export function stretchDelta(lap: LapTraceView, reference: LapTraceView, [start, end]: [number, number]): number | null {
+  const t = (trace: LapTraceView, f: number) => channelAt(trace, 'time_s', f)
+  const la = t(lap, start), lb = t(lap, end), ra = t(reference, start), rb = t(reference, end)
+  return la === null || lb === null || ra === null || rb === null ? null : (lb - la) - (rb - ra)
+}
+
 /** PIP-635: the previous or next corner, round the lap: after the last comes the first, before the first the last. */
 export function stepCorner(current: number, count: number, step: 1 | -1): number | null {
   if (count < 1) return null

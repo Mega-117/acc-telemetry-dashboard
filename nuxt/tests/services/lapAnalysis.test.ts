@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { analysisSessionToken, bodySlipDeg, channelAt, compareCorners, cornerAt, glideFrame, stepCorner, finishLine, timeSyncedFraction, cornerAdvice, deltaTrend, detectCorners, formatDelta, fractions, lapDelta, mapPoints } from '~/services/telemetry/lapAnalysis'
+import { analysisSessionToken, bodySlipDeg, channelAt, compareCorners, cornerAt, glideFrame, stepCorner, stretchDelta, finishLine, timeSyncedFraction, cornerAdvice, deltaTrend, detectCorners, formatDelta, fractions, lapDelta, mapPoints } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
 const STEP = 2
@@ -212,5 +212,17 @@ describe('map follows the cursor (PIP-635)', () => {
     let f = frame, steps = 0
     for (let r = glideFrame(f, { x: 180, y: 40 }); !r.done && steps < 100; r = glideFrame(f, { x: 180, y: 40 })) { f = r.frame; steps++ }
     expect(steps).toBeLessThan(30)
+  })
+})
+
+describe('time lost over a stretch (PIP-635)', () => {
+  it('is the lap time over the stretch minus the reference time over it', () => {
+    const fast = lap(() => 180), slow = lap(m => (m >= 1000 && m < 2000 ? 120 : 180))
+    // Only the middle third is slower: all the loss is there, none outside.
+    const middle = stretchDelta(slow, fast, [1 / 3, 2 / 3])!
+    expect(middle).toBeGreaterThan(9)
+    expect(stretchDelta(slow, fast, [0, 0.3])).toBeCloseTo(0, 2)
+    expect(stretchDelta(slow, fast, [0, 1])).toBeCloseTo(middle, 1)
+    expect(stretchDelta(fast, slow, [1 / 3, 2 / 3])).toBeCloseTo(-middle, 6)
   })
 })

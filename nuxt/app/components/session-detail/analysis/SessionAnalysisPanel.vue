@@ -14,7 +14,7 @@ import { electronLapSource, listOwnLaps, pilotLapSource, type LapOrigin, type La
 import { LapsArchiveError } from '~/services/telemetry/lapsArchiveClient'
 import { lapShareErrorMessage } from '~/services/telemetry/lapShareLink'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { compareCorners, cornerAdvice, detectCorners, formatDelta, sectorBounds } from '~/services/telemetry/lapAnalysis'
+import { compareCorners, cornerAdvice, detectCorners, formatDelta, sectorBounds, stretchDelta } from '~/services/telemetry/lapAnalysis'
 import { useCornerStepper } from '~/composables/useCornerStepper'
 import { formatLapConditions, mergeLapConditions, normalizeLapTrace, type LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { formatLapTime } from '~/utils/telemetryFormat'
@@ -285,6 +285,12 @@ const traceRowHeight = computed(() => Math.max(80, Math.floor((viewportHeight.va
 watch([traceRoot, layout, reference], () => nextTick(measureTrace))
 // What the charts show now, and the way back to the whole lap (Garage 61 reset, Esc, double click).
 const viewLabel = computed(() => zoomRange.value ? "Zoom" : selectedSector.value !== null ? `Settore ${selectedSector.value + 1}` : selectedCorner.value !== null ? `Curva ${selectedCorner.value}` : "Giro intero")
+// PIP-635: quanto perdi nel tratto che guardi (curva, settore o zoom), fisso: senza cercarlo in fondo al delta.
+const stretchLoss = computed(() => viewLabel.value === 'Giro intero' || !lap.value || !reference.value ? null
+  : zoomRange.value ? stretchDelta(lap.value, reference.value, range.value)
+    // Same numbers as the lists on the left: the corner table and the official sector times.
+    : selectedSector.value !== null ? (sectorGaps.value[selectedSector.value] ? sectorGaps.value[selectedSector.value]!.gap / 1000 : stretchDelta(lap.value, reference.value, range.value))
+      : comparison.value.find(c => c.corner.number === selectedCorner.value)?.timeLostS ?? null)
 function wholeLap() { selectedCorner.value = null; selectedSector.value = null; zoomRange.value = null }
 // Garage 61 sectors: the official sector times of the reference, placed on its trace.
 // Sector times exist only for laps of the shown session (not for "own" or "shared" references).
@@ -336,13 +342,12 @@ const visibleCorners = computed(() => corners.value.flatMap(c => {
 }))
 // VRS: corners from the costliest; heat from green (gaining) through yellow to red (losing).
 const cornersByLoss = computed(() => [...comparison.value].sort((a, b) => b.timeLostS - a.timeLostS))
-// Diverging scale as VRS: red where you lose, green where you gain, the same red and green as
-// the map and the delta. The strength follows the seconds on a fixed scale (full at 0.15 s), so
-// a 2-hundredths corner never looks like a disaster and a bad lap can be red all over.
+// Red where you lose, green where you gain (VRS). PIP-635: full colours, so a loss reads as a loss at a
+// glance; the seconds only shade it a little (full at 0.15 s). Under a hundredth it is even (grey).
 function heat(seconds: number) {
   if (Math.abs(seconds) < 0.01) return 'rgba(255, 255, 255, 0.06)'
-  const strength = (0.18 + 0.5 * Math.min((Math.abs(seconds) - 0.01) / 0.14, 1)).toFixed(2)
-  return seconds > 0 ? `rgba(255, 90, 110, ${strength})` : `rgba(61, 220, 90, ${strength})`
+  const strength = (0.72 + 0.28 * Math.min((Math.abs(seconds) - 0.01) / 0.14, 1)).toFixed(2)
+  return seconds > 0 ? `rgba(228, 0, 43, ${strength})` : `rgba(22, 163, 74, ${strength})`
 }
 function selectFirst() {
   if (!corners.value.length) { selectedCorner.value = null; return }
@@ -499,6 +504,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
               <button v-for="s in sectorList" :key="s.index" type="button" :class="{ active: selectedSector === s.index }" @click="selectSector(s.index)">S{{ s.index + 1 }}</button>
             </span>
             <button type="button" class="strip-channels" :class="{ active: allChannels }" @click="allChannels = !allChannels">{{ allChannels ? 'Solo l’essenziale' : '+ Altri canali' }}</button>
+            <span v-if="stretchLoss !== null" class="strip-loss" :style="{ background: heat(stretchLoss) }" :title="`Tempo nel tratto rispetto al riferimento`">{{ viewLabel }} {{ formatDelta(stretchLoss) }} s</span>
             <button v-if="viewLabel !== 'Giro intero'" type="button" class="strip-reset" title="Torna al giro intero (anche Esc o doppio clic sul grafico)" @click="wholeLap">⟲ Giro intero</button>
           </div>
           <div v-if="sectorList.length" class="strip-row">
@@ -593,6 +599,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
   button { height: 20px; min-width: 30px; padding: 0 6px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font: 700 11px "Inter", sans-serif; text-transform: none; cursor: pointer; &.active { border-color: #ff0024; background: #ff002433; color: #fff; } } }
 .strip-channels { margin-left: auto; height: 20px; padding: 0 8px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font: 700 11px "Inter", sans-serif; text-transform: none; letter-spacing: 0; cursor: pointer; &.active { border-color: #ff0024; } }
 .strip-reset { height: 20px; padding: 0 8px; border: 1px solid #ff0024; background: #ff00241f; color: #fff; font: 700 11px "Inter", sans-serif; text-transform: none; cursor: pointer; }
+.strip-loss { height: 20px; padding: 0 8px; color: #fff; font: 700 11px/20px 'Inter', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .strip-row .corner-step { z-index: 1; width: 28px; border-color: #ffffff59; background: #0b0b10e6; color: #fff; font: 700 15px/1 "Inter", sans-serif; &:hover { background: #ffffff26; } }
 .strip-row .corner-step--prev { left: 0; } .strip-row .corner-step--next { right: 0; }
 .tracce-strip { position: sticky; top: 0; z-index: 4; display: grid; gap: 2px; margin-bottom: 6px; padding: 4px 9px 4px 43px; background: #0b0b10f2; box-shadow: 0 8px 10px -10px #000; }
