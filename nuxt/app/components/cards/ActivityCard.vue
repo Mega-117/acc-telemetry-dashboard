@@ -258,10 +258,9 @@ $color-race: $racing-red;         // Red
 .stats-link {
   display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; white-space: nowrap; cursor: pointer;
   min-height: 34px; padding: 6px 10px 6px 12px; border: 0; border-radius: 2px;
-  background: #ffffff12; color: #fff; font: 500 13px/1.2 'Arial Narrow', 'Segoe UI', sans-serif; text-transform: uppercase; letter-spacing: .04em;
+  background: #ffffff12; color: #fff; font: italic 700 14px/1 'Racer Display', sans-serif; text-transform: uppercase; letter-spacing: .02em;
   transition: background-color .15s ease, color .15s ease;
   svg { display: block; flex-shrink: 0; }
-  svg:first-child { color: #0076ff; }
   svg:last-child { transition: transform .15s ease; }
   &:hover, &:focus-visible { background: #ffffff24; }
   &:hover svg:last-child, &:focus-visible svg:last-child { transform: translateX(3px); }
