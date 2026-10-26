@@ -6,9 +6,16 @@ import { vClickOutside } from '~/directives/clickOutside'
 
 export interface LapOption { id: string, title: string, time: string, conditions: string, valid: boolean, complete: boolean, best: boolean }
 export interface LapGroup { label: string, options: LapOption[] }
+/** Extra actions under the list, about this lap choice (paste another pilot's lap, share yours). */
+export interface LapAction { id: string, label: string, disabled?: boolean, hint?: string }
 
-const props = defineProps<{ modelValue: string, groups: LapGroup[], name: string, color: string, disabled?: boolean, hint?: string }>()
-const emit = defineEmits<{ 'update:modelValue': [id: string] }>()
+const props = defineProps<{ modelValue: string, groups: LapGroup[], name: string, color: string, disabled?: boolean, hint?: string, actions?: LapAction[] }>()
+const emit = defineEmits<{ 'update:modelValue': [id: string], 'action': [id: string] }>()
+function runAction(action: LapAction) {
+  if (action.disabled) return
+  close()
+  emit('action', action.id)
+}
 
 const open = ref(false)
 const active = ref('')
@@ -61,7 +68,8 @@ function onKey(event: KeyboardEvent) {
       <span v-else class="lap-picker__title">--</span>
       <svg class="lap-picker__chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
     </button>
-    <div v-if="open" :id="`${uid}-list`" ref="list" class="lap-picker__list" role="listbox" :aria-label="name">
+    <div v-if="open" class="lap-picker__pop">
+    <div :id="`${uid}-list`" ref="list" class="lap-picker__list" role="listbox" :aria-label="name">
       <template v-for="group in groups" :key="group.label">
         <p v-if="groups.length > 1 || group.label" class="lap-picker__group" role="presentation">{{ group.label }}</p>
         <div v-for="o in group.options" :id="`${uid}-${o.id}`" :key="o.id" :data-id="o.id" role="option" class="lap-row"
@@ -76,6 +84,10 @@ function onKey(event: KeyboardEvent) {
           <span class="lap-row__cond" :title="o.conditions">{{ o.conditions }}</span>
         </div>
       </template>
+    </div>
+    <div v-if="actions?.length" class="lap-picker__actions">
+      <button v-for="a in actions" :key="a.id" type="button" :disabled="a.disabled" :title="a.hint" @click="runAction(a)">{{ a.label }}</button>
+    </div>
     </div>
   </div>
 </template>
@@ -94,7 +106,11 @@ function onKey(event: KeyboardEvent) {
 .lap-picker__time { font: italic 700 13px 'Racer Display', sans-serif; letter-spacing: .02em; }
 // Le condizioni (aria/asfalto, grip) si leggono sempre intere: niente puntini.
 .lap-picker__cond { flex-shrink: 0; color: #b3b3b8; font-weight: 500; font-size: 12px; }
-.lap-picker__list { position: absolute; top: calc(100% + 4px); left: -1px; z-index: 30; width: calc(100% + 2px); box-sizing: border-box; max-height: 380px; overflow-y: auto; padding: 4px; border: 1px solid #ffffff40; background: #0b0b10f7; box-shadow: 0 14px 34px #000c; }
+.lap-picker__pop { position: absolute; top: calc(100% + 4px); left: -1px; z-index: 30; width: calc(100% + 2px); box-sizing: border-box; border: 1px solid #ffffff40; background: #0b0b10f7; box-shadow: 0 14px 34px #000c; }
+.lap-picker__list { max-height: 360px; overflow-y: auto; padding: 4px; }
+.lap-picker__actions { display: grid; gap: 2px; padding: 4px; border-top: 1px solid #ffffff1f;
+  button { height: 32px; padding: 0 10px; border: 0; background: transparent; color: #e6e6ea; font: 600 13px 'Inter', sans-serif; text-align: left; cursor: pointer;
+    &:hover:not(:disabled) { background: #ffffff12; color: #fff; } &:disabled { opacity: .45; cursor: default; } &:focus-visible { outline: 2px solid #fff; outline-offset: -2px; } } }
 .lap-picker__group { margin: 6px 8px 4px; color: #8a8a90; font: 600 10px 'Inter', sans-serif; letter-spacing: .06em; text-transform: uppercase; }
 .lap-row { display: grid; grid-template-columns: 54px 72px 1fr auto; align-items: center; gap: 8px; min-height: 32px; padding: 0 10px; border-left: 2px solid transparent; color: #e6e6ea; font: 500 13px 'Inter', sans-serif; cursor: pointer; white-space: nowrap;
   &.is-active { background: #ffffff12; }

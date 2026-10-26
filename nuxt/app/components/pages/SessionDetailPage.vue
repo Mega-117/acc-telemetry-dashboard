@@ -3251,7 +3251,8 @@ const gripZones = computed(() => {
   .header-actions { display: flex; align-items: center; gap: 12px; }
   .detail-tabs { margin: 0; } }
 .header-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
-.track-name { font-family: 'Outfit', $font-primary; font-size: 28px; font-weight: 800; color: #fff; letter-spacing: 2px; margin: 0; }
+// PIP-635: lo stesso titolo sportivo del dettaglio pista.
+.track-name { @include racing.title; color: #fff; margin: 0; }
 .track-link { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; color: inherit; font: inherit; letter-spacing: inherit; cursor: pointer;
   svg { width: .7em; height: .7em; opacity: .35; transition: opacity .15s, transform .15s; }
   &:hover { color: #fff; svg { opacity: 1; transform: translateX(2px); } } }

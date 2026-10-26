@@ -9,7 +9,7 @@ import AnalysisMap from './AnalysisMap.vue'
 import AnalysisCar from './AnalysisCar.vue'
 import AnalysisCharts, { type ChartRow } from './AnalysisCharts.vue'
 import SharedLapPanel, { type SharedLapLoaded } from './SharedLapPanel.vue'
-import LapPicker, { type LapGroup, type LapOption } from './LapPicker.vue'
+import LapPicker, { type LapAction, type LapGroup, type LapOption } from './LapPicker.vue'
 import { electronLapSource, listOwnLaps, pilotLapSource, type LapOrigin, type LapSource, type LocalLapBridge } from '~/services/telemetry/lapSources'
 import { LapsArchiveError } from '~/services/telemetry/lapsArchiveClient'
 import { lapShareErrorMessage } from '~/services/telemetry/lapShareLink'
@@ -186,6 +186,11 @@ let shareTimer: ReturnType<typeof setTimeout> | null = null
 const canShare = computed(() => !props.pilotUid && typeof api()?.shareLapTrace === 'function'
   && lapEntry.value?.origin === 'local' && lapEntry.value.complete && lapEntry.value.valid)
 const shareHint = computed(() => props.pilotUid ? '' : lapEntry.value && !lapEntry.value.valid ? 'Si condividono solo giri validi' : 'Copia il link di questo giro: chi lo riceve lo usa come riferimento')
+// PIP-635: the two lap actions sit at the bottom of their menu (your lap: share it; reference: a lap by link).
+const lapActions = computed<LapAction[]>(() => !props.pilotUid && typeof api()?.shareLapTrace === 'function'
+  ? [{ id: 'share', label: shareState.value === 'busy' ? 'Condivido…' : 'Condividi questo giro (copia il link)', disabled: !canShare.value || shareState.value === 'busy', hint: shareHint.value }] : [])
+const refActions = computed<LapAction[]>(() => entries.value.length ? [{ id: 'shared', label: '+ Giro di un altro pilota (incolla il link)', hint: 'Incolla il link di un giro ricevuto: diventa il riferimento' }] : [])
+function onLapAction(id: string) { if (id === 'share') void shareLap(); else if (id === 'shared') showShared.value = true }
 async function shareLap() {
   const id = lapId.value
   if (!canShare.value || shareState.value === 'busy') return
@@ -403,19 +408,17 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 <template>
   <section class="analysis">
     <div class="analysis-bar">
-      <!-- Track Titan: each lap's select wears its colour, so a colour tells which lap it is. -->
-      <LapPicker v-model="lapId" name="Tu" color="#38bdf8" :groups="lapGroups" :disabled="!sessionEntries.length" hint="Il tuo giro: azzurro in grafici e mappa" />
-      <LapPicker v-model="refId" name="Riferimento" color="#fbbf24" :groups="refGroups" :disabled="!entries.length" hint="Il giro di riferimento: ambra in grafici e mappa" />
-      <!-- The lap gap next to the pickers, in words: who is faster and by how much. -->
-      <!-- PIP-623: a lap from another pilot as reference, by link. -->
-      <button v-if="entries.length" type="button" class="bar-btn" :class="{ active: showShared }" title="Incolla il link di un giro ricevuto: diventa il riferimento" @click="showShared = !showShared">+ Giro di un altro pilota</button>
-      <p v-if="totalDelta !== null" class="delta-badge" :class="{ gain: totalDelta < 0, loss: totalDelta > 0 }" title="Il tuo giro contro il riferimento"><span>Tu</span><strong>{{ formatDelta(totalDelta) }} s</strong><em>{{ totalDelta < 0 ? "più veloce" : totalDelta > 0 ? "più lento" : "pari" }}</em></p>
-      <button v-if="!pilotUid && api()?.shareLapTrace" type="button" class="bar-btn" :class="{ copied: shareState === 'copied', failed: shareState === 'error' }"
-        :disabled="!canShare || shareState === 'busy'" :title="shareHint" @click="shareLap">{{ shareState === 'busy' ? 'Condivido…' : shareState === 'copied' ? 'Link copiato' : 'Condividi giro' }}</button>
+      <!-- PIP-635: one comparison block, "Tu  +1.733 s  Riferimento": each lap in its colour (Track Titan), the gap
+           between them; sharing your lap and a lap by link live in the two menus. The view sits apart, on the right. -->
+      <div class="compare" role="group" aria-label="Confronto dei giri">
+        <LapPicker v-model="lapId" name="Tu" color="#38bdf8" :groups="lapGroups" :actions="lapActions" :disabled="!sessionEntries.length" hint="Il tuo giro: azzurro in grafici e mappa" @action="onLapAction" />
+        <p class="compare-gap" :class="{ gain: (totalDelta ?? 0) < 0, loss: (totalDelta ?? 0) > 0 }" title="Il tuo giro contro il riferimento">
+          <template v-if="totalDelta !== null"><strong>{{ formatDelta(totalDelta) }} s</strong><em>{{ totalDelta < 0 ? "più veloce" : totalDelta > 0 ? "più lento" : "pari" }}</em></template><em v-else>contro</em>
+        </p>
+        <LapPicker v-model="refId" name="Riferimento" color="#fbbf24" :groups="refGroups" :actions="refActions" :disabled="!entries.length" hint="Il giro di riferimento: ambra in grafici e mappa" @action="onLapAction" />
+      </div>
       <span v-if="shareMessage" class="bar-note" :class="{ failed: shareState === 'error' }" role="status">{{ shareMessage }}</span>
-      <!-- What you look at on the left (laps and gap), how you look at it on the right,
-           under the Sessione / Telemetria switch: page, then view. -->
-      <div v-rc-switch class="rc-switch views-switch" role="tablist" aria-label="Layout dell’analisi">
+      <div v-rc-switch class="rc-switch views-switch" role="tablist" aria-label="Vista dell’analisi">
         <button v-for="l in LAYOUTS" :key="l.id" type="button" role="tab" :aria-selected="layout === l.id" :class="{ active: layout === l.id }" :title="l.hint" @click="layout = l.id">{{ l.label }}</button>
       </div>
     </div>
@@ -462,7 +465,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
         <!-- Who is faster is already in the coloured pickers above: here only where. -->
         <section class="side-box">
           <h4>Settori</h4>
-          <div v-if="sectorGaps.length" class="sector-rows">
+          <div v-if="sectorGaps.length" class="sector-rows" :class="{ 'has-active': selectedSector !== null && !zoomRange }">
             <button v-for="(g, i) in sectorGaps" :key="i" type="button" class="sector-row" :class="{ active: selectedSector === i }" :title="`Riferimento ${(g.ref / 1000).toFixed(3)} s · clic per ingrandire`" @click="selectSector(i)">
               <span class="sector-name">S{{ i + 1 }}</span>
               <span class="sector-time">{{ (g.ref / 1000).toFixed(3) }}</span>
@@ -479,7 +482,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
           </div>
           <!-- Column heads as in the Curve table: the rows are corners, the cell the time lost there. -->
           <div class="corner-row corner-row--head" aria-hidden="true"><span>Curva</span><span>Tempo perso</span></div>
-          <div class="corner-list">
+          <div class="corner-list" :class="{ 'has-active': selectedCorner !== null && selectedSector === null && !zoomRange }">
             <button v-for="c in cornersByLoss" :key="c.corner.number" type="button" class="corner-row" :class="{ active: selectedCorner === c.corner.number }" :title="`Curva ${c.corner.number} · velocità minima ${c.lapMinKmh?.toFixed(0) ?? '--'} / ${c.refMinKmh?.toFixed(0) ?? '--'} km/h (tu / rif.) · ${cornerAdvice(c)}`" @click="selectCorner(c.corner.number)">
               <span class="corner-num">{{ c.corner.number }}</span><span class="corner-cell" :style="{ background: heat(c.timeLostS) }">{{ formatDelta(c.timeLostS) }}</span>
             </button>
@@ -528,22 +531,17 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 // Sticky: lap pickers and layout stay in sight while the charts scroll under them.
 .analysis-bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 6px 0; background: #0b0b10f2; box-shadow: 0 8px 12px -10px #000; }
 // PIP-635: sugli schermi larghi una riga sola: i selettori dei giri si stringono, lo switcher non va a capo.
-@media (min-width: 1200px) { .analysis-bar { flex-wrap: nowrap; } .analysis-bar > * { flex-shrink: 0; } .analysis-bar > .lap-picker { flex-shrink: 1; } }
+@media (min-width: 1200px) { .analysis-bar { flex-wrap: nowrap; } .analysis-bar > * { flex-shrink: 0; } .analysis-bar > .compare { flex-shrink: 1; } }
 .views-switch { margin-left: auto; }
 // PIP-623: share and paste, square buttons as tall as the pickers.
-.bar-btn { height: 38px; padding: 0 12px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font: 700 12px 'Inter', sans-serif; cursor: pointer;
-  &:hover:not(:disabled), &.active { border-color: #fbbf24; }
-  &:disabled { opacity: .45; cursor: default; }
-  &.copied { border-color: #3ddc5a; color: #3ddc5a; }
-  &.failed { border-color: #ff5a6e; } }
 .bar-note { color: #3ddc5a; font-size: 12px; &.failed { color: #ff5a6e; } }
 .analysis-note--warn { color: #fbbf24; }
-.delta-badge { display: flex; align-items: baseline; gap: 6px; height: 38px; margin: 0; padding: 0 10px; border: 1px solid #ffffff2e; background: #ffffff08; line-height: 38px; color: #e6e6ea;
-  span { color: #8a8a90; font: 700 11px 'Inter', sans-serif; text-transform: uppercase; }
-  strong { font: 700 17px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
-  em { font-style: normal; font-size: 12px; color: #b3b3b8; }
-  &.gain { border-color: #3ddc5a66; strong { color: #3ddc5a; } }
-  &.loss { border-color: #ff5a6e66; strong { color: #ff5a6e; } } }
+// PIP-635: the comparison block: Tu, the gap between the two laps, Riferimento.
+.compare { display: flex; align-items: center; gap: 0; min-width: 0; flex: 1 1 auto; }
+.compare-gap { display: grid; justify-items: center; align-content: center; min-width: 104px; height: 38px; margin: 0; padding: 0 10px; line-height: 1.1; color: #b3b3b8;
+  strong { font: 700 16px 'Inter', sans-serif; font-variant-numeric: tabular-nums; color: #e6e6ea; }
+  em { font-style: normal; font-size: 11px; }
+  &.gain strong { color: #3ddc5a; } &.loss strong { color: #ff5a6e; } }
 .analysis-empty { padding: 30px 0; color: #aaa; }
 .analysis-note { margin: 4px 0 0; color: #77777d; font-size: 11px; }
 .gain { color: #3ddc5a; }
@@ -578,8 +576,12 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
   &--corners { flex: 1 1 auto; min-height: 160px; max-height: 760px; grid-template-rows: auto auto minmax(0, 1fr); } }
 .side-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; h4 { margin: 0; } }
 .sector-rows { display: grid; gap: 3px; }
+// PIP-635: the row you are looking at stands out as a whole (white frame, number on white), the others step back;
+// red and green stay only for losing and gaining.
+.sector-row, .corner-row { transition: opacity .15s ease; &.active { outline: 2px solid #fff; outline-offset: 1px; z-index: 1; } }
+.has-active > .sector-row:not(.active), .has-active > .corner-row:not(.active) { opacity: .5; &:hover { opacity: .85; } }
 .sector-row { display: grid; grid-template-columns: 30px 1fr 1fr; gap: 3px; padding: 0; border: 0; background: none; cursor: pointer; font-variant-numeric: tabular-nums;
-  &.active .sector-name { background: #ff0024; color: #fff; } }
+  &.active .sector-name { background: #fff; color: #0b0b10; } }
 .sector-name { display: grid; place-items: center; padding: 5px 0; background: #ffffff0d; color: #e6e6ea; font: italic 700 13px 'Racer Display', 'Arial Narrow', sans-serif; }
 .sector-time { display: grid; place-items: center; background: #ffffff08; color: #b3b3b8; font: 600 12px 'Inter', sans-serif; }
 .sector-gap { display: grid; place-items: center; color: #fff; font: 700 12px 'Inter', sans-serif; }
@@ -587,8 +589,8 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 // One corner per row, the section scrolls on its own when the list is longer than the column.
 .corner-list { display: grid; gap: 3px; align-content: start; min-height: 0; overflow-y: auto; padding-right: 2px; }
 .corner-row { display: grid; grid-template-columns: 52px 1fr; gap: 3px; padding: 0; border: 0; background: none; cursor: pointer; text-align: center;
-  &.active .corner-num { background: #ff0024; color: #fff; }
-  &.active .corner-cell { box-shadow: inset 0 0 0 1px #ff0024; } }
+  &.active .corner-num { background: #fff; color: #0b0b10; }
+  &.active .corner-cell { box-shadow: none; } }
 .corner-num { position: relative; display: grid; place-items: center; padding: 3px 0; background: #ffffff0d; color: #e6e6ea; font: italic 700 15px 'Racer Display', 'Arial Narrow', sans-serif; }
 .corner-cell { display: grid; place-items: center; color: #fff; font: 700 12px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
 .tracce-center { grid-area: center; display: grid; gap: 8px; align-content: start; height: 100%; overflow-y: auto; overflow-x: hidden; }
