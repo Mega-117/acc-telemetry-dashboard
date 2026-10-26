@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { standingsManufacturerLogo } from '../../app/services/overlay/standingsManufacturer'
+import { standingsManufacturerFromModel, standingsManufacturerLogo } from '../../app/services/overlay/standingsManufacturer'
 
 describe('standingsManufacturerLogo', () => {
   it.each([
@@ -40,5 +40,15 @@ describe('standingsManufacturerLogo', () => {
       .toBe('/acc-telemetry-dashboard/docs/standings/manufacturers/ferrari.png')
     expect(standingsManufacturerLogo('unknown', productionPath).src)
       .toBe('/acc-telemetry-dashboard/docs/standings/manufacturers/none.png')
+  })
+})
+
+describe('standingsManufacturerFromModel', () => {
+  it('reads the make from the model, including the AMR name for Aston Martin', () => {
+    expect(standingsManufacturerFromModel('ferrari_296_gt3')).toBe('ferrari')
+    expect(standingsManufacturerFromModel('AMR V8 Vantage GT3')).toBe('aston-martin')
+    expect(standingsManufacturerFromModel('amr_v12_vantage_gt3')).toBe('aston-martin')
+    expect(standingsManufacturerFromModel('Mercedes AMG GT3 Evo')).toBe('mercedes-amg')
+    expect(standingsManufacturerFromModel('chevrolet_camaro_gt4r')).toBeNull()
   })
 })

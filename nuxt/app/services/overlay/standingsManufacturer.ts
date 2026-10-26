@@ -6,10 +6,14 @@ export interface StandingsManufacturerLogo {
 
 export type StandingsPublicPathResolver = (path: string) => string
 
+// Prefixes ACC uses for a make under another name: "AMR V8 Vantage" (amr_v8_vantage_gt3) is an Aston Martin.
+const MAKE_ALIASES: Readonly<Record<string, string>> = Object.freeze({ amr: 'aston-martin' })
+
 /** Match an explicit make prefix only, without inferring classes or numbers. */
 export function standingsManufacturerFromModel(model: string | null): string | null {
   const normalized = model?.trim().toLowerCase().replace(/[_\s]+/g, '-') ?? ''
-  return Object.keys(LOGOS).find(key => normalized === key || normalized.startsWith(key + '-')) ?? null
+  const starts = (key: string) => normalized === key || normalized.startsWith(key + '-')
+  return Object.keys(LOGOS).find(starts) ?? Object.entries(MAKE_ALIASES).find(([alias]) => starts(alias))?.[1] ?? null
 }
 
 const identityPublicPath: StandingsPublicPathResolver = path => path
