@@ -234,8 +234,25 @@ function goToStats() {
   .training-panel { padding: 14px 18px; }
 }
 @media (max-width: 1050px) { .racing-overview { grid-template-columns: 1.2fr 1fr; gap: 12px; } .last-drive__results { padding-inline: 12px; } .performance-table td { padding-inline: 10px; } .training-panel { flex-direction: column; align-items: stretch; } .last-drive__actions { gap: 12px; } }
-@media (max-width: 800px) { .racing-overview { grid-template-columns: 1fr; } .last-drive__hero { min-height: 390px; } .training-panel { flex-direction: row; } }
+// PIP-639: tablet in verticale e telefono: una colonna (due colonne strette tagliavano testi e bottoni).
+@media (max-width: 900px) { .racing-overview { grid-template-columns: 1fr; } .last-drive__hero { min-height: 340px; } .training-panel { flex-direction: row; } }
+// Le etichette dei tempi vanno a capo invece di finire con i puntini quando la colonna e' stretta.
+@media (max-width: 1300px) { .time-label { white-space: normal; } }
+// Tablet in orizzontale, schermo basso (barre del browser comprese): tutto in una schermata, foto piu' bassa.
+@media (min-width: 1051px) and (max-height: 780px) {
+  .last-drive__hero { min-height: 220px; }
+  .performance-table td { padding-block: 9px; }
+  .last-drive__actions { padding-top: 10px; }
+  .training-panel { padding: 8px 18px; } .training-panel h2 { font-size: 18px; margin: 0; }
+  .racing-overview__side :deep(.activity-card--racing) { min-height: 0; padding-block: 14px; }
+  .racing-overview__side :deep(.legend-dot) { height: 44px; }
+  .racing-overview { --overview-race-min-height: 130px; --overview-chart-min-height: 92px; --overview-chart-title-gap: 8px; }
+  .training-panel p { display: none; }
+  .racing-overview__side :deep(.race-countdown__value) { font-size: 46px; }
+}
 @media (max-width: 480px) { .last-drive__hero { min-height: 310px; }
-.last-drive__identity { left: 16px; } .performance-table td { padding-inline: 6px; } .time-label { font-size: 10px; } .grip-badge { display: block; margin: 3px 0 0; } .training-panel { flex-direction: column; } .last-drive__actions button { padding-inline: 8px; font-size: 12px; } }
+.last-drive__identity { left: 16px; } .performance-table td { padding-inline: 6px; } .time-label { font-size: 10px; } .grip-badge { display: block; margin: 3px 0 0; } .training-panel { flex-direction: column; }
+  // Telefono: i due bottoni uno sotto l'altro, larghi quanto la card.
+  .last-drive__actions { flex-direction: column; gap: 10px; } .last-drive__actions button { width: 100%; min-width: 0; } }
 .racing-overview { @include controls.tokens; }
 </style>

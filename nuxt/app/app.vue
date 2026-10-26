@@ -714,6 +714,8 @@ html, body {
 #app {
   position: relative;
   min-height: 100vh;
+  // PIP-639: lo spazio davvero visibile su telefoni e tablet (barre del browser escluse).
+  min-height: 100dvh;
   background: transparent;
   isolation: isolate;
   display: flex;

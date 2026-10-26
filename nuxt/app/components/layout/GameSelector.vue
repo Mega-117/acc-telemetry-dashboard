@@ -105,5 +105,7 @@ details[open] .arrow-icon { transform: rotate(180deg); }
 .game-options small { display: block; color: #aaa; margin-top: 4px; }
 summary:focus-visible, button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 @media (max-width: 700px) { .game-selector { width: 160px; } summary { padding-inline: 10px; gap: 10px; } summary :deep(.game-logo) { width: 104px; } }
+// PIP-639: phone, second row of the top bar: logo and arrow both inside.
+@media (max-width: 420px) { .game-selector { width: 136px; margin-right: 0; } summary { gap: 6px; } summary :deep(.game-logo) { width: 86px; } }
 @media (prefers-reduced-motion: reduce) { .arrow-icon { transition: none; } }
 </style>

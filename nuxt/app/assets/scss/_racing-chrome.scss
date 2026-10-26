@@ -21,6 +21,12 @@
   // Reserve the connection-status line and keep it clear of the navigation.
   :deep(.topbar__inner) { max-width: var(--app-content-max-width); padding: 14px 28px 30px; }
   :deep(.brand-logo) { width: clamp(200px, 22vw, 300px); }
+  // PIP-639: on a phone the bar takes two rows (TopBar): smaller logo and margins.
+  @media (max-width: 700px) { :deep(.topbar__inner) { padding: 10px 16px 26px; } :deep(.brand-logo) { width: 128px; } }
+  // Short screens (landscape tablets, browser bars included): slimmer bar and tabs leave room to the page.
+  @media (min-width: 701px) and (max-height: 780px) { :deep(.topbar__inner) { padding-block: 8px 24px; } :deep(.tab) { padding-block: 9px; } }
+  // Narrow screens: tighter tabs, so the whole navbar fits a portrait tablet (it scrolls only on phones).
+  @media (max-width: 1000px) { :deep(.tab) { padding-inline: 14px; } }
   :deep(.tab) { font-family: 'Racer Display', 'Arial Narrow', sans-serif; font-style: italic; font-size: 16px; font-weight: 700; letter-spacing: 0; padding: 13px 26px; color: #ccc; transition: color .15s; }
   :deep(.tab--active) { color: #fff; }
   :deep(.tab--active::after) { height: 3px; background: var(--racing-accent); clip-path: polygon(3px 0,100% 0,calc(100% - 3px) 100%,0 100%); }

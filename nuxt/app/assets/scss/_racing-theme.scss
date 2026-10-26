@@ -11,6 +11,8 @@
   --racing-qualify: #ffc400;
   --racing-race: #ff0024;
 }
+// PIP-639: on short screens (landscape tablets, phones on their side) the page starts closer to the tabs.
+@media (max-height: 780px) { :root { --app-content-top-space: 16px; } }
 
 @font-face {
   font-family: 'Racer Display'; src: url('../fonts/ChakraPetch-MediumItalic.woff2') format('woff2');

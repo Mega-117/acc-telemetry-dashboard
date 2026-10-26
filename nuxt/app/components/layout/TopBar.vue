@@ -388,4 +388,18 @@ onMounted(() => {
   display: flex;
   align-items: center;
 }
+
+// PIP-639: on a phone the bar does not fit one row. First row: logo and user menu; second row: the game,
+// the bells and the reserved tools. The user group dissolves into the bar so its pieces can be ordered.
+@media (max-width: 700px) {
+  .topbar__inner { flex-wrap: wrap; row-gap: 10px; padding: 10px 16px; }
+  .topbar__inner::after { content: ''; order: 2; flex-basis: 100%; height: 0; }
+  .brand-logo { width: 132px; }
+  .topbar__spacer, .voice-group { display: none; }
+  .topbar__user { display: contents; }
+  .topbar__user > :last-child { order: 1; margin-left: auto; }
+  .topbar__user > :first-child { order: 3; margin-right: auto; }
+  .topbar__user > :not(:first-child):not(:last-child) { order: 4; }
+  .topbar__role-tools { order: 5; gap: 6px; margin: 0 0 0 6px; padding: 0; &::after { display: none; } }
+}
 </style>

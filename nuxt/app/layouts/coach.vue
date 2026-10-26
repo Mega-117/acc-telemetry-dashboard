@@ -120,6 +120,7 @@ const isAdminRouteActive = (path: string) => route.path === path || route.path.s
 .coach-layout {
   @include racing-chrome.chrome;
   min-height: 100vh;
+  min-height: 100dvh;
   background: transparent;
 }
 
