@@ -257,14 +257,17 @@ $color-race: $racing-red;         // Red
 // Senza cornice: fondo trasparente leggero, icona + testo + freccia; al passaggio si accende.
 .stats-link {
   display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; white-space: nowrap; cursor: pointer;
-  min-height: 34px; padding: 6px 10px 6px 12px; border: 0; border-radius: 2px;
+  min-height: 34px; padding: 6px 14px 6px 12px; border: 0; border-radius: 0;
+  // Solo l'angolo in alto a destra smussato, come i tagli dei bottoni del sito.
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%);
   background: #ffffff12; color: #fff; font: italic 700 14px/1 'Racer Display', sans-serif; text-transform: uppercase; letter-spacing: .02em;
   transition: background-color .15s ease, color .15s ease;
   svg { display: block; flex-shrink: 0; }
   svg:last-child { transition: transform .15s ease; }
   &:hover, &:focus-visible { background: #ffffff24; }
   &:hover svg:last-child, &:focus-visible svg:last-child { transform: translateX(3px); }
-  &:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  // Il clip-path taglierebbe un outline esterno: il fuoco da tastiera e' un bordo interno.
+  &:focus-visible { outline: none; box-shadow: inset 0 0 0 2px #fff; }
 }
 .card-content--link { cursor: pointer; }
 .card-title {
