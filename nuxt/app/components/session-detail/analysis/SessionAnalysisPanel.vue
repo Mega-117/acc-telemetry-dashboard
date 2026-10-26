@@ -521,6 +521,8 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .analysis { display: grid; gap: 10px; }
 // Sticky: lap pickers and layout stay in sight while the charts scroll under them.
 .analysis-bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 6px 0; background: #0b0b10f2; box-shadow: 0 8px 12px -10px #000; }
+// PIP-635: sugli schermi larghi una riga sola: i selettori dei giri si stringono, lo switcher non va a capo.
+@media (min-width: 1200px) { .analysis-bar { flex-wrap: nowrap; } .analysis-bar > * { flex-shrink: 0; } .analysis-bar > .lap-picker { flex-shrink: 1; } }
 .views-switch { margin-left: auto; }
 // PIP-623: share and paste, square buttons as tall as the pickers.
 .bar-btn { height: 38px; padding: 0 12px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font: 700 12px 'Inter', sans-serif; cursor: pointer;

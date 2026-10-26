@@ -84,8 +84,9 @@ function onKey(event: KeyboardEvent) {
 </template>
 
 <style scoped lang="scss">
-// Stessa larghezza per Tu e Riferimento; il menu combacia con il campo.
-.lap-picker { --c: #38bdf8; position: relative; display: flex; align-items: stretch; width: 400px; max-width: 100%; height: 38px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 14%, #0a0a0f); }
+// Stessa larghezza per Tu e Riferimento (si stringono insieme se la riga e' corta, cosi' lo switcher
+// Avanzata / Semplice non va a capo); il menu combacia con il campo.
+.lap-picker { --c: #38bdf8; position: relative; display: flex; align-items: stretch; flex: 0 1 360px; min-width: 260px; max-width: 100%; height: 38px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 14%, #0a0a0f); }
 .lap-picker__name { display: grid; place-items: center; padding: 0 10px; background: var(--c); color: #0a0a0f; font: italic 700 13px 'Racer Display', sans-serif; text-transform: uppercase; }
 // Il contenuto non tocca mai la freccia: la freccia ha il suo spazio a destra.
 .lap-picker__button { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 100%; padding: 0 34px 0 10px; position: relative; border: 0; background: transparent; color: #fff; font: 600 13px 'Inter', sans-serif; text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden;
@@ -97,7 +98,7 @@ function onKey(event: KeyboardEvent) {
 .lap-picker__cond { color: #b3b3b8; font-weight: 500; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
 .lap-picker__list { position: absolute; top: calc(100% + 4px); left: -1px; z-index: 30; width: calc(100% + 2px); box-sizing: border-box; max-height: 380px; overflow-y: auto; padding: 4px; border: 1px solid #ffffff40; background: #0b0b10f7; box-shadow: 0 14px 34px #000c; }
 .lap-picker__group { margin: 6px 8px 4px; color: #8a8a90; font: 600 10px 'Inter', sans-serif; letter-spacing: .06em; text-transform: uppercase; }
-.lap-row { display: grid; grid-template-columns: 64px 76px 86px minmax(0, 1fr); align-items: center; gap: 8px; min-height: 32px; padding: 0 10px; border-left: 2px solid transparent; color: #e6e6ea; font: 500 13px 'Inter', sans-serif; cursor: pointer; white-space: nowrap;
+.lap-row { display: grid; grid-template-columns: 58px 74px 80px minmax(0, 1fr); align-items: center; gap: 8px; min-height: 32px; padding: 0 10px; border-left: 2px solid transparent; color: #e6e6ea; font: 500 13px 'Inter', sans-serif; cursor: pointer; white-space: nowrap;
   &.is-active { background: #ffffff12; }
   &.is-selected { border-left-color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
   &.is-partial { color: #6e6e74; cursor: default; }
