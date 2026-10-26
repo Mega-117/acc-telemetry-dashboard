@@ -5,6 +5,7 @@
 
 import GameContextTransition from '~/components/layout/GameContextTransition.vue'
 import GameLogo from '~/components/layout/GameLogo.vue'
+import { ChevronRight, History, MapPinned, Target } from '@lucide/vue'
 import { getCarCategory } from '~/utils/telemetryFormat'
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -168,8 +169,8 @@ function goToStats() {
             </tbody>
           </table>
           <div class="last-drive__actions">
-            <button class="racing-button" :disabled="!lastTrack" @click="goToTrack">Dettaglio pista</button>
-            <button class="racing-button racing-button--primary" :disabled="!lastSession?.id" @click="goToSession">Ultima sessione</button>
+            <button class="rc-btn" :disabled="!lastTrack" @click="goToTrack"><MapPinned :size="18" aria-hidden="true" />Dettaglio pista<ChevronRight class="rc-btn__arrow" :size="16" aria-hidden="true" /></button>
+            <button class="rc-btn rc-btn--primary" :disabled="!lastSession?.id" @click="goToSession"><History :size="18" aria-hidden="true" />Ultima sessione<ChevronRight class="rc-btn__arrow" :size="16" aria-hidden="true" /></button>
           </div>
         </div>
         <span v-if="isOverviewPlaceholder" class="overview-loading-label" role="status">Caricamento dati…</span>
@@ -180,7 +181,7 @@ function goToStats() {
         <CardsActivityCard class="overview-activity" :data="activityData" :practice-total="activityTotals.practice" :qualify-total="activityTotals.qualify" :race-total="activityTotals.race" :other-total="overviewProjection?.otherActivity" racing :aria-busy="isOverviewPlaceholder" :stats-link="consultedGame === 'acc'" @open-stats="goToStats" />
         <section class="training-panel racing-panel">
           <div><h2>Allenamenti</h2><p>Migliora il tuo tempo in pista</p></div>
-          <NuxtLink to="/preparazione?scenario=tracktitan_input" class="racing-button racing-button--primary">Esplora allenamenti</NuxtLink>
+          <NuxtLink to="/preparazione?scenario=tracktitan_input" class="rc-btn rc-btn--primary"><Target :size="18" aria-hidden="true" />Esplora allenamenti<ChevronRight class="rc-btn__arrow" :size="16" aria-hidden="true" /></NuxtLink>
         </section>
       </aside>
     </div>

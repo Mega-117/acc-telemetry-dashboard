@@ -38,6 +38,27 @@
   &:not(.racing-button--primary)::after { left: -3px; bottom: 4px; }
 }
 
+// PIP-633: nuovo bottone, in prova sulla Panoramica prima di sostituire .racing-button nel sito.
+// Font dei titoli (corsivo, maiuscolo), solo l'angolo in alto a destra smussato, nessun bordo:
+// principale rosso pieno, secondario fondo trasparente leggero. Icona a sinistra, freccia a destra.
+.rc-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+  min-height: 42px; padding: 9px 16px 9px 14px; border: 0; border-radius: 0;
+  color: #fff; background: #ffffff14; text-decoration: none; white-space: nowrap; cursor: pointer;
+  font: italic 700 14px/1 'Racer Display', sans-serif; text-transform: uppercase; letter-spacing: .02em;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  transition: background-color .15s ease, color .15s ease;
+  svg { display: block; flex-shrink: 0; }
+  .rc-btn__arrow { transition: transform .15s ease; }
+  &:hover:not(:disabled), &:focus-visible { background: #ffffff26; }
+  &:hover:not(:disabled) .rc-btn__arrow, &:focus-visible .rc-btn__arrow { transform: translateX(3px); }
+  // Il clip-path taglierebbe un outline esterno: fuoco da tastiera come bordo interno.
+  &:focus-visible { outline: none; box-shadow: inset 0 0 0 2px #fff; }
+  &:disabled { opacity: .4; cursor: default; }
+  &--primary { background: #ff0024; &:hover:not(:disabled), &:focus-visible { background: #ff2a45; } }
+  &--compact { min-height: 34px; padding: 6px 12px 6px 10px; gap: 8px; font-size: 13px; }
+}
+
 // One control definition; density is an explicit variant, not import order.
 .racing-select { @include controls.select; }
 .racing-select--compact { @include controls.compact-select; }

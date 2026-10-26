@@ -105,8 +105,8 @@ const formatYLabel = (minutes: number): string => {
     <!-- Title -->
     <div class="card-head">
       <h2 class="card-title">{{ racing ? 'Attività · ultimi 7 giorni' : 'Attività (ultimi 7 giorni)' }}</h2>
-      <button v-if="statsLink" type="button" class="stats-link" title="Apri le statistiche complete" @click="emit('open-stats')">
-        <ChartColumnIncreasing :size="18" :stroke-width="1.8" aria-hidden="true" /><span>Statistiche</span><ChevronRight :size="16" :stroke-width="2" aria-hidden="true" />
+      <button v-if="statsLink" type="button" class="rc-btn rc-btn--compact stats-link" title="Apri le statistiche complete" @click="emit('open-stats')">
+        <ChartColumnIncreasing :size="18" :stroke-width="1.8" aria-hidden="true" /><span>Statistiche</span><ChevronRight class="rc-btn__arrow" :size="16" :stroke-width="2" aria-hidden="true" />
       </button>
     </div>
 
@@ -254,21 +254,8 @@ $color-race: $racing-red;         // Red
 // Titolo e bottone sulla stessa riga, centrati: lo spazio sotto lo da' la riga, non il titolo.
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
 .card-head .card-title { margin: 0; }
-// Senza cornice: fondo trasparente leggero, icona + testo + freccia; al passaggio si accende.
-.stats-link {
-  display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; white-space: nowrap; cursor: pointer;
-  min-height: 34px; padding: 6px 14px 6px 12px; border: 0; border-radius: 0;
-  // Solo l'angolo in alto a destra smussato, come i tagli dei bottoni del sito.
-  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%);
-  background: #ffffff12; color: #fff; font: italic 700 14px/1 'Racer Display', sans-serif; text-transform: uppercase; letter-spacing: .02em;
-  transition: background-color .15s ease, color .15s ease;
-  svg { display: block; flex-shrink: 0; }
-  svg:last-child { transition: transform .15s ease; }
-  &:hover, &:focus-visible { background: #ffffff24; }
-  &:hover svg:last-child, &:focus-visible svg:last-child { transform: translateX(3px); }
-  // Il clip-path taglierebbe un outline esterno: il fuoco da tastiera e' un bordo interno.
-  &:focus-visible { outline: none; box-shadow: inset 0 0 0 2px #fff; }
-}
+// Il bottone e' lo stile comune .rc-btn (tema racing); qui solo che non si stringa accanto al titolo.
+.stats-link { flex-shrink: 0; }
 .card-content--link { cursor: pointer; }
 .card-title {
   font-family: 'Outfit', $font-primary;
