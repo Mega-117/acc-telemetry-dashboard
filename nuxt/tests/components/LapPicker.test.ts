@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// PIP-635: scelta del giro nello stile del sito, con best e giri non validi in evidenza.
+// PIP-635: scelta del giro nello stile del sito: best in fucsia, giri non validi in rosso.
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import LapPicker, { type LapGroup } from '~/components/session-detail/analysis/LapPicker.vue'
@@ -12,9 +12,10 @@ const groups: LapGroup[] = [{ label: '', options: [
 const render = (modelValue = 'b') => mount(LapPicker, { props: { modelValue, groups, name: 'Tu', color: '#38bdf8' }, attachTo: document.body })
 
 describe('LapPicker', () => {
-  it('shows the chosen lap with its best tag, and marks invalid and partial laps in the list', async () => {
+  it('shows the best lap in fuchsia without a tag, and marks invalid and partial laps in the list', async () => {
     const w = render()
-    expect(w.get('.lap-picker__button').text()).toContain('Best')
+    expect(w.get('.lap-picker__time').classes()).toContain('is-best')
+    expect(w.get('.lap-picker__button').text()).not.toContain('Best')
     await w.get('.lap-picker__button').trigger('click')
     const rows = w.findAll('[role="option"]')
     expect(rows).toHaveLength(3)

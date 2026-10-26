@@ -286,15 +286,17 @@ svg { display: block; width: 100%; touch-action: none; cursor: crosshair; }
 .chart-dot { position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--c); border: 1.5px solid #fff; pointer-events: none;
   &.ref { background: #0a0a0f; border: 2px solid var(--c); } }
 // Track Titan header: name on the left in white, live values on the right in the lap colours.
-.chart-head { grid-column: 1 / -1; display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 0 0 4px 12px; }
+// Altezza fissa: i riquadri dei valori compaiono e spariscono col cursore senza spostare nulla (niente
+// scrollbar che lampeggia nella colonna centrale).
+.chart-head { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 24px; padding: 0 0 4px 12px; }
 .chart-title { color: #fff; font: italic 700 13px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; letter-spacing: .03em;
   small { color: #8a8a90; font: 500 11px 'Inter', sans-serif; text-transform: none; } }
 .chart-values { display: flex; gap: 6px; font: 600 11px 'Inter', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap;
-  // PIP-635: ogni valore nel suo riquadro col colore del giro, leggibile a colpo d'occhio sopra il grafico.
-  // Fixed width per value, right-aligned: changing digits never shifts the others.
-  .v { --vc: #e6e6ea; padding: 2px 7px; border: 1px solid color-mix(in srgb, var(--vc) 45%, transparent); background: color-mix(in srgb, var(--vc) 14%, #0b0b10); color: #b3b3b8;
-    b { display: inline-block; min-width: 9ch; text-align: right; color: var(--vc); font-weight: 700; font-size: 13px; } }
-  .v--diff b { min-width: 6ch; }
+  // A small fixed width per number, right-aligned: changing digits barely move the boxes.
+  // Riquadri discreti: bordo e fondo appena accennati nel colore del giro, il numero e' quello che si nota.
+  .v { --vc: #e6e6ea; display: inline-flex; align-items: baseline; gap: 5px; height: 20px; box-sizing: border-box; padding: 2px 6px; border: 1px solid color-mix(in srgb, var(--vc) 22%, transparent); background: color-mix(in srgb, var(--vc) 7%, transparent); color: #8a8a90;
+    b { display: inline-block; min-width: 5ch; text-align: right; color: var(--vc); font-weight: 700; font-size: 12px; } }
+  .v--diff b { min-width: 3ch; }
   .v--lap { --vc: #38bdf8; } .v--ref { --vc: #fbbf24; } .v--loss { --vc: #ff5a6e; } .v--gain { --vc: #3ddc5a; } }
 .chart-grid--x { stroke-dasharray: none; stroke: #ffffff0d; }
 .chart-xaxis { grid-column: 2; position: relative; overflow: hidden; height: 16px; color: #8a8a90; font: 600 10px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }

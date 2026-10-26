@@ -56,8 +56,6 @@ function onKey(event: KeyboardEvent) {
       <template v-if="current">
         <span class="lap-picker__title">{{ current.title }}</span>
         <span class="lap-picker__time" :class="{ 'is-invalid': !current.valid, 'is-best': current.best }">{{ current.time }}</span>
-        <span v-if="current.best" class="lap-tag lap-tag--best">Best</span>
-        <span v-else-if="!current.valid" class="lap-tag lap-tag--invalid">Non valido</span>
         <span v-if="current.conditions" class="lap-picker__cond">{{ current.conditions }}</span>
       </template>
       <span v-else class="lap-picker__title">--</span>
@@ -70,9 +68,8 @@ function onKey(event: KeyboardEvent) {
           :class="{ 'is-active': active === o.id, 'is-selected': modelValue === o.id, 'is-partial': !o.complete }" :aria-selected="modelValue === o.id" :aria-disabled="!o.complete || undefined"
           @mouseenter="o.complete && (active = o.id)" @click="pick(o)">
           <span class="lap-row__title">{{ o.title }}</span>
-          <span class="lap-row__time" :class="{ 'is-invalid': !o.valid, 'is-best': o.best }">{{ o.time }}</span>
+          <span class="lap-row__time" :class="{ 'is-invalid': !o.valid, 'is-best': o.best }" :title="o.best ? 'Il tuo giro migliore' : undefined">{{ o.time }}</span>
           <span class="lap-row__tags">
-            <span v-if="o.best" class="lap-tag lap-tag--best">Best</span>
             <span v-if="!o.complete" class="lap-tag lap-tag--partial">Parziale</span>
             <span v-else-if="!o.valid" class="lap-tag lap-tag--invalid">Non valido</span>
           </span>
@@ -87,29 +84,29 @@ function onKey(event: KeyboardEvent) {
 // Stessa larghezza per Tu e Riferimento (si stringono insieme se la riga e' corta, cosi' lo switcher
 // Avanzata / Semplice non va a capo); il menu combacia con il campo.
 .lap-picker { --c: #38bdf8; position: relative; display: flex; align-items: stretch; flex: 0 1 360px; min-width: 260px; max-width: 100%; height: 38px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 14%, #0a0a0f); }
-.lap-picker__name { display: grid; place-items: center; padding: 0 10px; background: var(--c); color: #0a0a0f; font: italic 700 13px 'Racer Display', sans-serif; text-transform: uppercase; }
+.lap-picker__name { display: grid; place-items: center; padding: 0 8px; background: var(--c); color: #0a0a0f; font: italic 700 13px 'Racer Display', sans-serif; text-transform: uppercase; }
 // Il contenuto non tocca mai la freccia: la freccia ha il suo spazio a destra.
-.lap-picker__button { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 100%; padding: 0 34px 0 10px; position: relative; border: 0; background: transparent; color: #fff; font: 600 13px 'Inter', sans-serif; text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden;
+.lap-picker__button { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 100%; padding: 0 30px 0 10px; position: relative; border: 0; background: transparent; color: #fff; font: 600 13px 'Inter', sans-serif; text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden;
   &:disabled { opacity: .5; cursor: default; }
   &:focus-visible { outline: 2px solid #fff; outline-offset: -3px; } }
 .lap-picker__chevron { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: #fff; transition: transform .15s ease; }
 .lap-picker__button[aria-expanded='true'] .lap-picker__chevron { transform: translateY(-50%) rotate(180deg); }
 .lap-picker__time { font: italic 700 13px 'Racer Display', sans-serif; letter-spacing: .02em; }
-.lap-picker__cond { color: #b3b3b8; font-weight: 500; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+// Le condizioni (aria/asfalto, grip) si leggono sempre intere: niente puntini.
+.lap-picker__cond { flex-shrink: 0; color: #b3b3b8; font-weight: 500; font-size: 12px; }
 .lap-picker__list { position: absolute; top: calc(100% + 4px); left: -1px; z-index: 30; width: calc(100% + 2px); box-sizing: border-box; max-height: 380px; overflow-y: auto; padding: 4px; border: 1px solid #ffffff40; background: #0b0b10f7; box-shadow: 0 14px 34px #000c; }
 .lap-picker__group { margin: 6px 8px 4px; color: #8a8a90; font: 600 10px 'Inter', sans-serif; letter-spacing: .06em; text-transform: uppercase; }
-.lap-row { display: grid; grid-template-columns: 58px 74px 80px minmax(0, 1fr); align-items: center; gap: 8px; min-height: 32px; padding: 0 10px; border-left: 2px solid transparent; color: #e6e6ea; font: 500 13px 'Inter', sans-serif; cursor: pointer; white-space: nowrap;
+.lap-row { display: grid; grid-template-columns: 54px 72px 1fr auto; align-items: center; gap: 8px; min-height: 32px; padding: 0 10px; border-left: 2px solid transparent; color: #e6e6ea; font: 500 13px 'Inter', sans-serif; cursor: pointer; white-space: nowrap;
   &.is-active { background: #ffffff12; }
   &.is-selected { border-left-color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
   &.is-partial { color: #6e6e74; cursor: default; }
   &__title { font-weight: 600; }
   &__time { font: italic 700 13px 'Racer Display', sans-serif; letter-spacing: .02em; }
-  &__cond { color: #9a9aa0; font-size: 12px; overflow: hidden; text-overflow: ellipsis; } }
+  &__cond { color: #9a9aa0; font-size: 12px; text-align: right; } }
 // Viola per il best (come i tempi del gioco), rosso per i giri non validi.
 .is-best { color: #c084fc; }
 .is-invalid { color: #ff5a6e; }
 .lap-tag { display: inline-grid; place-items: center; height: 18px; padding: 0 6px; border: 1px solid currentColor; font: 700 10px 'Inter', sans-serif; letter-spacing: .04em; text-transform: uppercase; }
-.lap-tag--best { color: #c084fc; background: #c084fc1f; }
 .lap-tag--invalid { color: #ff5a6e; background: #ff5a6e1a; }
 .lap-tag--partial { color: #8a8a90; }
 </style>
