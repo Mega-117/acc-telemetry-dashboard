@@ -210,7 +210,7 @@ watch(targetUserId, (uid, previous) => { if (uid && uid !== previous) void load(
         <section class="stats-panel" aria-labelledby="stats-sectors">
           <h2 id="stats-sectors">Settori migliori e giro ideale</h2>
           <p v-if="insights.ideal" class="insight">{{ insights.ideal }}</p>
-          <p class="stats__sub">Il giro ideale mette insieme i tuoi tre settori migliori: il margine è quanto potresti guadagnare. In alto le piste con più margine.</p>
+          <p class="stats__sub">Il giro ideale mette insieme i tuoi tre settori migliori: il margine è quanto potresti guadagnare. In alto le piste con più margine. Su tutto lo storico: periodo e tipo di sessione qui non si applicano.</p>
           <table class="stats-table">
             <thead><tr><th>Pista · auto</th><th>S1</th><th>S2</th><th>S3</th><th>Ideale</th><th>Migliore</th><th title="Ideale meno migliore: quanto puoi guadagnare mettendo insieme i settori migliori">Margine</th></tr></thead>
             <tbody>
@@ -227,7 +227,7 @@ watch(targetUserId, (uid, previous) => { if (uid && uid !== previous) void load(
         <section class="stats-panel" aria-labelledby="stats-conditions">
           <h2 id="stats-conditions">Tempi per temperatura dell'aria e grip</h2>
           <p v-if="insights.air" class="insight">{{ insights.air }}</p>
-          <p class="stats__sub">Il tuo miglior giro valido in ogni condizione. Verde dove vai più forte, rosso dove perdi di più.</p>
+          <p class="stats__sub">Il tuo miglior giro valido in ogni condizione. Verde dove vai più forte, rosso dove perdi di più. Su tutto lo storico: periodo e tipo di sessione qui non si applicano.</p>
           <p class="heat-legend" aria-hidden="true"><span class="heat--0">migliore</span><span class="heat--1">≤ 0,3 s</span><span class="heat--2">≤ 1 s</span><span class="heat--3">≤ 2 s</span><span class="heat--4">oltre</span></p>
           <table class="stats-table">
             <thead><tr><th>Pista · auto</th><th v-for="b in AIR_BANDS" :key="b.id">{{ b.label }}</th></tr></thead>
