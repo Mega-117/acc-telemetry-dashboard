@@ -45,7 +45,7 @@
   position: relative;
   display: inline-flex; align-items: center; justify-content: center; gap: 10px;
   min-height: 42px; padding: 9px 16px 9px 14px; border: 0; border-radius: 0;
-  color: #fff; background: #ffffff14; text-decoration: none; white-space: nowrap; cursor: pointer;
+  color: #fff; background: #ffffff08; text-decoration: none; white-space: nowrap; cursor: pointer;
   // Bordo bianco leggero del secondario: dentro al bottone (il clip-path taglierebbe un border),
   // piu' la diagonale dell'angolo smussato disegnata a parte.
   --rc-btn-edge: #ffffff59;
@@ -62,7 +62,7 @@
   transition: background-color .15s ease, color .15s ease;
   svg { display: block; flex-shrink: 0; }
   .rc-btn__arrow { transition: transform .15s ease; }
-  &:hover:not(:disabled), &:focus-visible { --rc-btn-edge: #ffffffb3; background: #ffffff26; }
+  &:hover:not(:disabled), &:focus-visible { --rc-btn-edge: #ffffffb3; background: #ffffff1a; }
   &:hover:not(:disabled) .rc-btn__arrow, &:focus-visible .rc-btn__arrow { transform: translateX(3px); }
   // Il clip-path taglierebbe un outline esterno: fuoco da tastiera come bordo interno.
   &:focus-visible { outline: none; box-shadow: inset 0 0 0 2px #fff; }
@@ -70,18 +70,18 @@
   // Il principale e' rosso pieno, con lo stesso bordo bianco leggero del secondario.
   &--primary { background: #ff0024; &:hover:not(:disabled), &:focus-visible { background: #ff2a45; } }
   &--compact { min-height: 34px; padding: 6px 12px 6px 10px; gap: 8px; font-size: 13px; }
-  // Interruttore (es. Prove libere / Qualifica / Gara): spento = quasi trasparente e grigio, acceso = pieno
-  // nel suo colore (--rc-toggle-color) con il bordino dello stesso colore. Acceso si legge con .is-active o aria-pressed.
+  // Interruttore (es. Prove libere / Qualifica / Gara): spento = quasi trasparente e grigio; acceso = fondo
+  // trasparente nel suo colore (--rc-toggle-color), testo e bordino dello stesso colore. Acceso: .is-active o aria-pressed.
   &--toggle {
-    --rc-btn-edge: #ffffff21; color: #8a8a8a; background: #ffffff08;
+    --rc-btn-edge: #ffffff21; color: #8a8a8a; background: #ffffff05;
     &:hover:not(:disabled), &:focus-visible {
-      --rc-btn-edge: color-mix(in srgb, var(--rc-toggle-color, #fff) 60%, transparent);
-      color: #d6d6d6; background: color-mix(in srgb, var(--rc-toggle-color, #fff) 14%, transparent);
+      --rc-btn-edge: color-mix(in srgb, var(--rc-toggle-color, #fff) 55%, transparent);
+      color: #d6d6d6; background: color-mix(in srgb, var(--rc-toggle-color, #fff) 8%, transparent);
     }
     &.is-active, &[aria-pressed='true'] {
-      --rc-btn-edge: color-mix(in srgb, var(--rc-toggle-color, #fff) 70%, #fff);
-      color: var(--rc-toggle-on-text, #fff); background: var(--rc-toggle-color, #ff0024);
-      &:hover:not(:disabled), &:focus-visible { background: color-mix(in srgb, var(--rc-toggle-color, #ff0024) 85%, #fff); color: var(--rc-toggle-on-text, #fff); }
+      --rc-btn-edge: var(--rc-toggle-color, #ff0024);
+      color: var(--rc-toggle-color, #fff); background: color-mix(in srgb, var(--rc-toggle-color, #ff0024) 16%, transparent);
+      &:hover:not(:disabled), &:focus-visible { background: color-mix(in srgb, var(--rc-toggle-color, #ff0024) 26%, transparent); color: var(--rc-toggle-color, #fff); }
     }
   }
   // Azioni distruttive (elimina, revoca): rosso trasparente, mai pieno, per non confondersi col principale.
