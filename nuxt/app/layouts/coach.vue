@@ -84,6 +84,7 @@ const isAdminRouteActive = (path: string) => route.path === path || route.path.s
             Utenti
           </NuxtLink>
           <NuxtLink to="/admin/utilizzo" :aria-current="isAdminRouteActive('/admin/utilizzo') ? 'page' : undefined">Utilizzo</NuxtLink>
+          <NuxtLink to="/admin/archivio-giri" :aria-current="isAdminRouteActive('/admin/archivio-giri') ? 'page' : undefined">Giri</NuxtLink>
           <NuxtLink to="/admin-diagnostics" :aria-current="isAdminRouteActive('/admin-diagnostics') ? 'page' : undefined">
             Diagnostica
           </NuxtLink>

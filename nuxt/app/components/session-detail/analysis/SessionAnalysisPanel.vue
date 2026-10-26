@@ -7,6 +7,10 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AnalysisMap from './AnalysisMap.vue'
 import AnalysisCar from './AnalysisCar.vue'
 import AnalysisCharts, { type ChartRow } from './AnalysisCharts.vue'
+import SharedLapPanel, { type SharedLapLoaded } from './SharedLapPanel.vue'
+import { electronLapSource, listOwnLaps, pilotLapSource, type LapOrigin, type LapSource, type LocalLapBridge } from '~/services/telemetry/lapSources'
+import { LapsArchiveError } from '~/services/telemetry/lapsArchiveClient'
+import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { compareCorners, cornerAdvice, detectCorners, formatDelta, sectorBounds } from '~/services/telemetry/lapAnalysis'
 import { normalizeLapTrace, type LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { formatLapTime } from '~/utils/telemetryFormat'
@@ -16,6 +20,8 @@ const props = defineProps<{
   laps: { lap_number: number, lap_time_ms: number | null, is_valid: boolean | null, sector_times_ms?: (number | null)[] | null }[]
   /** Lap to open as "Tu", when the driver picked it in the Sessione table. */
   initialLap?: number | null
+  /** PIP-623: coach view of a linked pilot: the laps come from the online archive. */
+  pilotUid?: string | null
 }>()
 
 type Layout = 'pilota' | 'tracce'
@@ -34,7 +40,10 @@ function remembered<T extends string>(key: string, values: readonly T[], fallbac
 const layout = remembered<Layout>('rc:analysis:layout', ['pilota', 'tracce'], 'tracce')
 const allChannels = ref(false)
 
-interface Entry { id: string, lapNumber: number, lapTimeMs: number, valid: boolean, complete: boolean }
+// PIP-623: every lap carries its origin. Only laps of the shown session ("local" on the PC,
+// "pilot" from the archive in coach view) can be "Tu" and have sector times; "own" (the
+// coach's laps) and "shared" (a pasted link) are references only.
+interface Entry { id: string, lapNumber: number, lapTimeMs: number, valid: boolean, complete: boolean, origin: LapOrigin, sessionToken: string, label?: string }
 const entries = ref<Entry[]>([])
 const traces = ref<Record<string, LapTraceView>>({})
 const lapId = ref(''), refId = ref('')
@@ -43,38 +52,49 @@ const cursor = ref<number | null>(null)
 const selectedCorner = ref<number | null>(null)
 const skipped = ref(0)
 
-interface LapTraceApi {
-  listLapTraces?: (filter?: { sessionToken: string }) => Promise<{ id: string }[] | null>
-  readLapTrace?: (id: string) => Promise<unknown>
+interface LapTraceApi extends LocalLapBridge {
+  shareLapTrace?: (id: string) => Promise<{ link: string, shareId: string }>
   hudOverlayGetTrackEdges?: (track: string, sim: string, variant: string | null) => Promise<{ left: [number, number][], right: [number, number][] } | null>
 }
 function api(): LapTraceApi | null {
   return typeof window === 'undefined' ? null : (window as Window & { electronAPI?: LapTraceApi }).electronAPI ?? null
 }
+const { currentUser } = useFirebaseAuth()
+const archiveDeps = { getToken: async () => (await currentUser.value?.getIdToken()) ?? null }
+// Each load gets a generation: a late answer for another session or pilot never replaces the current one.
+let loadGeneration = 0
 async function load() {
+  const generation = ++loadGeneration
+  const isCurrent = () => generation === loadGeneration
   const token = props.sessionToken
+  const pilot = props.pilotUid || null
   error.value = ''
   entries.value = []
   traces.value = {}
   skipped.value = 0
+  sharedWarning.value = ''
   if (!token) { error.value = 'Questa sessione non ha giri registrati sul computer.'; return }
   const bridge = api()
-  if (typeof bridge?.listLapTraces !== 'function' || typeof bridge.readLapTrace !== 'function') { error.value = 'L’analisi dei giri è disponibile nel programma Racer Core.'; return }
+  let source: LapSource
+  if (pilot) source = pilotLapSource(pilot, archiveDeps)
+  else {
+    if (typeof bridge?.listLapTraces !== 'function' || typeof bridge.readLapTrace !== 'function') { error.value = 'L’analisi dei giri è disponibile nel programma Racer Core.'; return }
+    source = electronLapSource(bridge)
+  }
   loading.value = true
   try {
-    const list = (await bridge.listLapTraces({ sessionToken: token })) ?? []
+    const list = await source.list(token)
+    if (!isCurrent()) return
     const valid = new Map(props.laps.map(l => [l.lap_number, l.is_valid === true]))
     // All laps of the session at once (about 120 KB each): a lap that cannot be read
     // (pruned meanwhile, damaged) is left out here, never on a later click.
-    const read = await Promise.all(list.map(async item => {
-      const match = /_L(\d{3})_(\d+)ms\.json\.gz$/.exec(item.id)
-      if (!match) return null
+    const read = await Promise.all(list.map(async (d) => {
       try {
-        const trace = normalizeLapTrace(await bridge.readLapTrace!(item.id))
-        return trace ? { trace, entry: { id: item.id, lapNumber: Number(match[1]), lapTimeMs: Number(match[2]), valid: valid.get(Number(match[1])) ?? false, complete: trace.complete } } : null
+        const trace = normalizeLapTrace(await source.read(d))
+        return trace ? { trace, entry: { id: d.id, lapNumber: d.lapNumber, lapTimeMs: d.lapTimeMs, valid: d.valid ?? valid.get(d.lapNumber) ?? false, complete: trace.complete, origin: d.origin, sessionToken: d.sessionToken } } : null
       } catch { return null }
     }))
-    if (token !== props.sessionToken) return
+    if (!isCurrent()) return
     const ok = read.filter((r): r is { trace: LapTraceView, entry: Entry } => r !== null)
     skipped.value = list.length - ok.length
     traces.value = Object.fromEntries(ok.map(r => [r.entry.id, r.trace]))
@@ -82,7 +102,12 @@ async function load() {
     // A partial lap (logger started mid-lap, out-lap) covers only part of the track:
     // stretched on the whole lap it would compare different places. Listed, not usable.
     const usable = entries.value.filter(e => e.complete)
-    if (!usable.length) { error.value = entries.value.length ? 'Ci sono solo giri parziali in questa sessione: servono giri completi, partiti dal traguardo.' : 'Nessun giro registrato per questa sessione: le analisi arrivano dai giri guidati con Racer Core attivo.'; return }
+    if (!usable.length) {
+      error.value = pilot
+        ? 'Nessun giro di questa sessione nell’archivio online: arrivano quando il pilota guida con Racer Core aggiornato.'
+        : entries.value.length ? 'Ci sono solo giri parziali in questa sessione: servono giri completi, partiti dal traguardo.' : 'Nessun giro registrato per questa sessione: le analisi arrivano dai giri guidati con Racer Core attivo.'
+      return
+    }
     // Default as Track Titan: your best valid lap is the reference, the last lap the one to study.
     const best = [...usable].filter(e => e.valid).sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0] ?? usable[0]!
     const other = [...usable].reverse().find(e => e.id !== best.id) ?? best
@@ -91,17 +116,84 @@ async function load() {
     if (picked) {
       lapId.value = picked.id
       refId.value = picked.id !== best.id ? best.id : ([...usable].filter(e => e.valid && e.id !== picked.id).sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0] ?? usable.find(e => e.id !== picked.id) ?? best).id
-      return
+    } else {
+      refId.value = best.id
+      lapId.value = other.id
     }
-    refId.value = best.id
-    lapId.value = other.id
-  } catch {
-    error.value = 'Impossibile leggere i giri di questa sessione.'
+    // Coach view: the coach's own laps on the same track and car, as possible references.
+    const first = traces.value[usable[0]!.id]
+    if (pilot && bridge && first) void loadOwnLaps(generation, bridge, first.track, first.car)
+  } catch (e) {
+    if (isCurrent()) error.value = e instanceof LapsArchiveError ? e.message : 'Impossibile leggere i giri di questa sessione.'
   } finally {
-    loading.value = false
+    if (isCurrent()) loading.value = false
   }
 }
-watch(() => props.sessionToken, () => { void load() })
+
+async function loadOwnLaps(generation: number, bridge: LapTraceApi, track: string, car: string) {
+  try {
+    const own = (await listOwnLaps(bridge, track, car)).slice(0, 10)
+    const read = await Promise.all(own.map(async (d): Promise<{ trace: LapTraceView, entry: Entry } | null> => {
+      try {
+        const trace = normalizeLapTrace(await bridge.readLapTrace!(d.id.replace(/^own:/, '')))
+        return trace?.complete ? { trace, entry: { id: d.id, lapNumber: d.lapNumber, lapTimeMs: d.lapTimeMs, valid: trace.valid === true, complete: true, origin: 'own' as const, sessionToken: d.sessionToken, label: `Mio · Giro ${d.lapNumber} · ${formatLapTime(d.lapTimeMs)}` } } : null
+      } catch { return null }
+    }))
+    if (generation !== loadGeneration) return
+    const ok = read.filter((r): r is { trace: LapTraceView, entry: Entry } => r !== null)
+    traces.value = { ...traces.value, ...Object.fromEntries(ok.map(r => [r.entry.id, r.trace])) }
+    entries.value = [...entries.value, ...ok.map(r => r.entry).sort((a, b) => a.lapTimeMs - b.lapTimeMs)]
+  } catch { /* the coach's own laps are an extra: the pilot's laps stay usable */ }
+}
+
+// PIP-623: a lap shared with a link becomes the reference (one at a time).
+const showShared = ref(false)
+const sharedWarning = ref('')
+function onSharedLoaded(shared: SharedLapLoaded) {
+  traces.value = { ...traces.value, [shared.id]: shared.trace }
+  entries.value = [...entries.value.filter(e => e.origin !== 'shared'), {
+    id: shared.id, lapNumber: shared.lapNumber, lapTimeMs: shared.lapTimeMs, valid: true, complete: shared.trace.complete,
+    origin: 'shared', sessionToken: '', label: shared.label,
+  }]
+  refId.value = shared.id
+  sharedWarning.value = shared.carMismatch ? 'Auto diversa dalla tua: il confronto è indicativo.' : ''
+  showShared.value = false
+}
+
+// PIP-623: "Condividi giro": the selected lap goes online (if not yet) and its link is copied.
+const shareState = ref<'idle' | 'busy' | 'copied' | 'error'>('idle')
+const shareMessage = ref('')
+let shareTimer: ReturnType<typeof setTimeout> | null = null
+const canShare = computed(() => !props.pilotUid && typeof api()?.shareLapTrace === 'function'
+  && lapEntry.value?.origin === 'local' && lapEntry.value.complete && lapEntry.value.valid)
+const shareHint = computed(() => props.pilotUid ? '' : lapEntry.value && !lapEntry.value.valid ? 'Si condividono solo giri validi' : 'Copia il link di questo giro: chi lo riceve lo usa come riferimento')
+function shareError(error: unknown) {
+  const text = String((error as Error)?.message || error)
+  if (text.includes('archive-paused')) return 'Archivio giri in pausa: riprova più tardi.'
+  if (text.includes('share-daily-cap')) return 'Hai raggiunto le condivisioni di oggi.'
+  if (text.includes('auth-required') || text.includes('owner-changed') || text.includes('token-unavailable')) return 'Accedi di nuovo per condividere.'
+  if (text.includes('archive-disabled')) return 'Condivisione non disponibile in questa versione.'
+  return 'Condivisione non riuscita: riprova.'
+}
+async function shareLap() {
+  const id = lapId.value
+  if (!canShare.value || shareState.value === 'busy') return
+  shareState.value = 'busy'
+  shareMessage.value = ''
+  try {
+    const result = await api()!.shareLapTrace!(id)
+    await navigator.clipboard.writeText(result.link)
+    shareState.value = 'copied'
+    shareMessage.value = 'Link copiato: mandalo a chi vuoi.'
+  } catch (error) {
+    shareState.value = 'error'
+    shareMessage.value = shareError(error)
+  }
+  if (shareTimer) clearTimeout(shareTimer)
+  shareTimer = setTimeout(() => { shareState.value = 'idle'; shareMessage.value = '' }, 4000)
+}
+onBeforeUnmount(() => { if (shareTimer) clearTimeout(shareTimer) })
+watch(() => [props.sessionToken, props.pilotUid], () => { void load() })
 onMounted(() => { void load() })
 
 const lap = computed(() => traces.value[lapId.value] ?? null)
@@ -192,7 +284,10 @@ function onEscape(event: KeyboardEvent) { if (event.key === "Escape" && layout.v
 onMounted(() => window.addEventListener("keydown", onEscape))
 onBeforeUnmount(() => window.removeEventListener("keydown", onEscape))
 // Garage 61 sectors: the official sector times of the reference, placed on its trace.
-const sectorTimes = (e: Entry | null) => e ? props.laps.find(l => l.lap_number === e.lapNumber)?.sector_times_ms ?? null : null
+// Sector times exist only for laps of the shown session (not for "own" or "shared" references).
+const sectorTimes = (e: Entry | null) => e && (e.origin === 'local' || e.origin === 'pilot') && e.sessionToken === props.sessionToken
+  ? props.laps.find(l => l.lap_number === e.lapNumber)?.sector_times_ms ?? null
+  : null
 const sectorList = computed(() => {
   const frame = reference.value ?? lap.value
   const bounds = frame ? sectorBounds(frame, (sectorTimes(refEntry.value ?? lapEntry.value) ?? undefined) as number[] | undefined) : null
@@ -280,7 +375,10 @@ const pilotRowHeight = computed(() => Math.max(80, Math.floor((traceHeight.value
 // Garage 61: the delta sits under the map; the channels on the right are speed, pedals, steering, gear.
 const traceRows = computed(() => [speedRow, ...pedalRows, steerRow, gearRow, ...(allChannels.value ? extraRows.value : [])])
 
-const lapLabel = (e: Entry) => `Giro ${e.lapNumber} · ${formatLapTime(e.lapTimeMs)}${e.complete ? '' : ' · parziale'}${e.valid ? '' : ' · invalido'}`
+const lapLabel = (e: Entry) => e.label ?? `Giro ${e.lapNumber} · ${formatLapTime(e.lapTimeMs)}${e.complete ? '' : ' · parziale'}${e.valid ? '' : ' · invalido'}`
+const sessionEntries = computed(() => entries.value.filter(e => e.origin === 'local' || e.origin === 'pilot'))
+const ownEntries = computed(() => entries.value.filter(e => e.origin === 'own'))
+const sharedEntries = computed(() => entries.value.filter(e => e.origin === 'shared'))
 const short = (e: Entry | null) => e ? `Giro ${e.lapNumber} · ${formatLapTime(e.lapTimeMs)}` : '--'
 const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTime(s * 1000) : '--'
 </script>
@@ -290,19 +388,30 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
     <div class="analysis-bar">
       <!-- Track Titan: each lap's select wears its colour, so a colour tells which lap it is. -->
       <label class="pick pick--lap" title="Il tuo giro: azzurro in grafici e mappa"><span class="pick-name">Tu</span>
-        <select v-model="lapId" :disabled="!entries.length"><option v-for="e in entries" :key="e.id" :value="e.id" :disabled="!e.complete">{{ lapLabel(e) }}</option></select>
+        <select v-model="lapId" :disabled="!sessionEntries.length"><option v-for="e in sessionEntries" :key="e.id" :value="e.id" :disabled="!e.complete">{{ lapLabel(e) }}</option></select>
       </label>
       <label class="pick pick--ref" title="Il giro di riferimento: ambra in grafici e mappa"><span class="pick-name">Riferimento</span>
-        <select v-model="refId" :disabled="!entries.length"><option v-for="e in entries" :key="e.id" :value="e.id" :disabled="!e.complete">{{ lapLabel(e) }}</option></select>
+        <select v-model="refId" :disabled="!entries.length">
+          <optgroup :label="pilotUid ? 'Giri del pilota' : 'Questa sessione'"><option v-for="e in sessionEntries" :key="e.id" :value="e.id" :disabled="!e.complete">{{ lapLabel(e) }}</option></optgroup>
+          <optgroup v-if="ownEntries.length" label="I miei giri"><option v-for="e in ownEntries" :key="e.id" :value="e.id">{{ lapLabel(e) }}</option></optgroup>
+          <optgroup v-if="sharedEntries.length" label="Condiviso"><option v-for="e in sharedEntries" :key="e.id" :value="e.id">{{ lapLabel(e) }}</option></optgroup>
+        </select>
       </label>
       <!-- The lap gap next to the pickers, in words: who is faster and by how much. -->
+      <!-- PIP-623: a lap from another pilot as reference, by link. -->
+      <button v-if="entries.length" type="button" class="bar-btn" :class="{ active: showShared }" title="Incolla il link di un giro ricevuto: diventa il riferimento" @click="showShared = !showShared">+ Giro di un altro pilota</button>
       <p v-if="totalDelta !== null" class="delta-badge" :class="{ gain: totalDelta < 0, loss: totalDelta > 0 }" title="Il tuo giro contro il riferimento"><span>Tu</span><strong>{{ formatDelta(totalDelta) }} s</strong><em>{{ totalDelta < 0 ? "più veloce" : totalDelta > 0 ? "più lento" : "pari" }}</em></p>
+      <button v-if="!pilotUid && api()?.shareLapTrace" type="button" class="bar-btn" :class="{ copied: shareState === 'copied', failed: shareState === 'error' }"
+        :disabled="!canShare || shareState === 'busy'" :title="shareHint" @click="shareLap">{{ shareState === 'busy' ? 'Condivido…' : shareState === 'copied' ? 'Link copiato' : 'Condividi giro' }}</button>
+      <span v-if="shareMessage" class="bar-note" :class="{ failed: shareState === 'error' }" role="status">{{ shareMessage }}</span>
       <!-- What you look at on the left (laps and gap), how you look at it on the right,
            under the Sessione / Telemetria switch: page, then view. -->
       <div class="seg seg--views" role="tablist" aria-label="Layout dell’analisi">
         <button v-for="l in LAYOUTS" :key="l.id" type="button" role="tab" :aria-selected="layout === l.id" :class="{ active: layout === l.id }" :title="l.hint" @click="layout = l.id">{{ l.label }}</button>
       </div>
     </div>
+    <SharedLapPanel v-if="showShared" :current="lap" :deps="archiveDeps" @loaded="onSharedLoaded" @close="showShared = false" />
+    <p v-if="sharedWarning && refEntry?.origin === 'shared'" class="analysis-note analysis-note--warn">{{ sharedWarning }}</p>
 
     <p v-if="skipped" class="analysis-note">{{ skipped }} giri non leggibili esclusi.</p>
     <p v-if="loading" class="analysis-empty" role="status">Caricamento dei giri…</p>
@@ -409,6 +518,14 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 // Sticky: lap pickers and layout stay in sight while the charts scroll under them.
 .analysis-bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 6px 0; background: #0b0b10f2; box-shadow: 0 8px 12px -10px #000; }
 .seg--views { margin-left: auto; }
+// PIP-623: share and paste, square buttons as tall as the pickers.
+.bar-btn { height: 38px; padding: 0 12px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font: 700 12px 'Inter', sans-serif; cursor: pointer;
+  &:hover:not(:disabled), &.active { border-color: #fbbf24; }
+  &:disabled { opacity: .45; cursor: default; }
+  &.copied { border-color: #3ddc5a; color: #3ddc5a; }
+  &.failed { border-color: #ff5a6e; } }
+.bar-note { color: #3ddc5a; font-size: 12px; &.failed { color: #ff5a6e; } }
+.analysis-note--warn { color: #fbbf24; }
 .seg { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid #ffffff1f; background: #0a0a0feb;
   button { height: 30px; padding: 0 16px; border: 0; background: transparent; color: #b3b3b8; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; cursor: pointer;
     &.active { background: #ffffff14; color: #fff; box-shadow: inset 0 -2px #ff0024; }

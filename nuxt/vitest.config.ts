@@ -49,6 +49,14 @@ export default defineConfig({
         // PIP-591: esito del salvataggio attrezzatura.
         'app/utils/equipmentSaveOutcome.ts',
         'app/utils/sessionShareUrl.ts',
+        // PIP-623: giri online (Condividi giro, coach, archivio).
+        'app/services/telemetry/lapShareLink.ts',
+        'app/services/telemetry/lapsArchiveClient.ts',
+        'app/services/telemetry/lapSources.ts',
+        'app/repositories/lapsArchiveRepository.ts',
+        'app/components/admin/AdminLapsArchiveView.vue',
+        'app/components/session-detail/analysis/SharedLapPanel.vue',
+        'app/components/session-detail/analysis/SessionAnalysisPanel.vue',
         'app/composables/useSessionPickerPages.ts',
         'app/utils/coachLessonPermissions.ts',
         'app/repositories/usageRepository.ts',
