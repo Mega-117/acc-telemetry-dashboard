@@ -104,7 +104,7 @@ describe('racing overview components', () => {
     await flushPromises()
     await wrapper.get('[aria-label="Aggiungi gara"]').trigger('click')
     await wrapper.get('input').setValue('Bozza da annullare')
-    await wrapper.get('footer .secondary-action').trigger('click')
+    await wrapper.get('footer .rc-btn:not(.rc-btn--primary)').trigger('click')
     expect(wrapper.find('form').exists()).toBe(false)
     expect(mocks.create).not.toHaveBeenCalled()
     await wrapper.get('[aria-label="Aggiungi gara"]').trigger('click')

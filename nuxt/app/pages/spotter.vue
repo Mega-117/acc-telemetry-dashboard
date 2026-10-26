@@ -281,7 +281,7 @@ onMounted(() => {
             </button>
           </div>
           <NuxtLink
-            class="racing-button racing-button--primary"
+            class="rc-btn rc-btn--primary"
             :to="referenceVoiceLabLink"
           >
             Gestisci in Voice Lab
@@ -334,7 +334,7 @@ h2 { margin: 0; padding-left: 14px; border-left: 3px solid var(--racing-race); c
 .feature-control { display: flex; align-items: center; gap: 32px; min-height: 46px; border-left: 1px solid #ffffff45; padding-left: 22px; }.feature-control .select-shell { flex: 0 0 135px; }.feature-control select { min-width: 0; }
 .reference-panel { padding: 24px 20px; display: flex; flex-direction: column; }.reference-panel > .select-shell { width: 100%; margin-top: 24px; }
 .reference-metrics { margin: 28px 0 16px; flex: 1; display: flex; flex-direction: column; }.reference-metrics div { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 70px; border-top: 1px solid #ffffff35; }.reference-metrics dt { font-size: 12px; text-transform: uppercase; color: #bfc7cc; }.reference-metrics dd { margin: 0; font-size: 26px; font-weight: 650; }
-.reference-panel .racing-button { width: 100%; font-size: 13px; }.reference-status { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 16px; font-size: 10px; color: #aaa; }.reference-status button { border: 0; background: none; color: #ddd; cursor: pointer; text-decoration: underline; }
+.reference-panel .rc-btn { width: 100%; font-size: 13px; }.reference-status { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 16px; font-size: 10px; color: #aaa; }.reference-status button { border: 0; background: none; color: #ddd; cursor: pointer; text-decoration: underline; }
 .runtime-status { margin: 12px 0; color: #9caaa2; font-size: 11px; }.is-warning,.panel-error { color: var(--racing-qualify); }.admin-links { display: flex; gap: 20px; font-size: 11px; }.admin-links a { color: #aaa; }
 @media(max-width: 1350px) { .spotter-grid { grid-template-columns: 1fr; } }
 @media(max-width: 940px) { .feature-head,.feature-row { grid-template-columns: minmax(140px,1fr) 261px minmax(260px,1.5fr); } }
@@ -348,7 +348,7 @@ h2 { margin: 0; padding-left: 14px; border-left: 3px solid var(--racing-race); c
 @media(max-width: 1350px) { .reference-panel { max-width: none; }.reference-metrics { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); column-gap: 24px; } }
 @media(max-width: 780px) { .feature-row { gap: 18px; }.feature-control { border: 0; padding-left: 0; }.feature-row :deep(.session-mode-picker) { padding: 14px 0 0; border-left: 0; border-top: 1px solid #ffffff25; }.voice-card .voice-wave { gap: 3px; left: 16px; }.reference-metrics { display: flex; } }
 .spotter-page { @include controls.tokens; }
-.spotter-hero h1 { @include controls.title; margin-bottom: 24px; }.reference-panel .racing-button { @include controls.action; @include controls.primary; }.reference-panel .racing-button::before { display: none; }.feature-row h3 { font-size: 13px; font-weight: 500; }
+.spotter-hero h1 { @include controls.title; margin-bottom: 24px; }.feature-row h3 { font-size: 13px; font-weight: 500; }
 
 .spotter-page { padding-bottom: 0; }
 .spotter-hero { margin-bottom: 24px; }

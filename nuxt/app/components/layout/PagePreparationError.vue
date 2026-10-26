@@ -5,7 +5,7 @@ defineEmits<{ retry: [] }>()
   <LayoutPageContainer class="page-preparation-error">
     <div role="status">
       <p>Non è stato possibile preparare la pagina.</p>
-      <button type="button" class="racing-button" @click="$emit('retry')">Riprova</button>
+      <button type="button" class="rc-btn" @click="$emit('retry')">Riprova</button>
     </div>
   </LayoutPageContainer>
 </template>

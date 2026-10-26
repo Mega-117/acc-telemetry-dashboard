@@ -90,7 +90,7 @@ it('uses one layout, clears another game immediately and rejects its late respon
   resolveAcc(projection('ACC delayed'))
   await flushPromises()
   expect(wrapper.text()).not.toContain('ACC delayed')
-  await wrapper.get('.racing-button--primary').trigger('click')
+  await wrapper.get('.last-drive__actions .rc-btn--primary').trigger('click')
   expect(mocks.push).toHaveBeenCalledWith('/sessioni/Ferrari%20EVO')
   mocks.acc.mockResolvedValue({ ...projection('ACC current'), performanceColumns: undefined })
   game.value = 'acc'

@@ -413,8 +413,8 @@ onBeforeUnmount(() => {
           </div>
 
           <footer>
-            <button type="button" class="secondary-action" :class="{ 'racing-button': racing }" :disabled="isSaving" @click="closeModal">Annulla</button>
-            <button class="primary-action" :class="{ danger: modalMode === 'delete', 'racing-button racing-button--primary': racing }" type="submit" :disabled="isSaving || !cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? modalSubmitLabel : cloudWriteGate.message">
+            <button type="button" :class="racing ? 'rc-btn' : 'secondary-action'" :disabled="isSaving" @click="closeModal">Annulla</button>
+            <button :class="racing ? 'rc-btn rc-btn--primary' : ['primary-action', { danger: modalMode === 'delete' }]" type="submit" :disabled="isSaving || !cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? modalSubmitLabel : cloudWriteGate.message">
               {{ modalSubmitLabel }}
             </button>
           </footer>
@@ -466,11 +466,7 @@ onBeforeUnmount(() => {
   input:focus { border-color: #ff0024; outline: 1px solid #ff0024; outline-offset: 1px; }
   button:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
   footer { flex-direction: row; justify-content: flex-end; gap: 12px; padding-top: 20px; border-top: 1px solid #ffffff24; }
-  footer .racing-button { min-width: 156px; min-height: 46px; padding: 10px 22px; border-radius: 0; font: 500 14px/1.2 'Segoe UI', sans-serif; text-transform: uppercase; }
-  .secondary-action { background: transparent; border: 1px solid #c9c9c9; color: #fff; }
-  .primary-action { background: #ff0024; }
-  .primary-action:hover:not(:disabled) { background: #d90020; }
-  .secondary-action:hover:not(:disabled) { background: #ffffff12; }
+  footer .rc-btn { min-width: 156px; min-height: 46px; }
   .delete-confirm { border-radius: 0; border-color: #ff002450; background: #ff00240a; padding: 18px; gap: 12px; }
   .form-error { color: #ff9aaa; padding: 12px; border-left: 2px solid #ff0024; background: #ff00240a; }
 }
@@ -479,7 +475,7 @@ onBeforeUnmount(() => {
   .race-modal--racing {
     max-height: calc(100dvh - 64px); padding: 20px; gap: 16px;
     .form-row { grid-template-columns: 1fr; }
-    footer .racing-button { min-width: 0; flex: 1; padding-inline: 12px; }
+    footer .rc-btn { min-width: 0; flex: 1; padding-inline: 12px; }
     h2 { font-size: 24px; }
   }
 }
@@ -563,6 +559,6 @@ onBeforeUnmount(() => {
     .featured-race p { margin-top: 6px; }
   }
 }
-.race-modal--racing { @include controls.tokens; footer .racing-button { @include controls.action; text-transform: none; &::before { display: none; } } footer .racing-button--primary { @include controls.primary; } }
+.race-modal--racing { @include controls.tokens; }
 .upcoming-races-card--racing .race-empty { border: 0; background: transparent; border-radius: 0; padding: 12px 0; }
 </style>

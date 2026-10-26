@@ -218,7 +218,6 @@ function goToStats() {
 .training-panel { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px; }
 .training-panel h2 { font: italic 700 22px/1.2 'Racer Display', sans-serif; text-transform: uppercase; margin: 0 0 6px; }
 .training-panel p { font: italic 13px/1.4 'Segoe UI', sans-serif; text-transform: uppercase; margin: 0; color: #ccc; }
-.training-panel .racing-button { padding-inline: 20px; font-size: 12px; }
 .overview-error { color: #ffafba; padding: 12px; }
 .overview-error button { color: #fff; background: transparent; border: 1px solid #aaa; padding: 6px 12px; }
 .overview-placeholder > :not(.overview-loading-label) { visibility: hidden; }
@@ -238,7 +237,4 @@ function goToStats() {
 @media (max-width: 480px) { .last-drive__hero { min-height: 310px; }
 .last-drive__identity { left: 16px; } .performance-table td { padding-inline: 6px; } .time-label { font-size: 10px; } .grip-badge { display: block; margin: 3px 0 0; } .training-panel { flex-direction: column; } .last-drive__actions button { padding-inline: 8px; font-size: 12px; } }
 .racing-overview { @include controls.tokens; }
-.racing-overview .racing-button { @include controls.action; text-transform: none; }
-.racing-overview .racing-button::before { display: none; }
-.racing-overview .racing-button--primary { @include controls.primary; }
 </style>
