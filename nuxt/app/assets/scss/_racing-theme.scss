@@ -70,6 +70,10 @@
   // Il principale e' rosso pieno, con lo stesso bordo bianco leggero del secondario.
   &--primary { background: #ff0024; &:hover:not(:disabled), &:focus-visible { background: #ff2a45; } }
   &--compact { min-height: 34px; padding: 6px 12px 6px 10px; gap: 8px; font-size: 13px; }
+  // Se il bottone comincia col testo (nessuna icona davanti, solo la freccia in fondo) serve piu' aria a
+  // sinistra, altrimenti il testo sembra attaccato al bordo rispetto a freccia + margine a destra.
+  &:not(:has(> svg:not(.rc-btn__arrow))) { padding-left: 22px; }
+  &--compact:not(:has(> svg:not(.rc-btn__arrow))) { padding-left: 16px; }
   // Interruttore (es. Prove libere / Qualifica / Gara): spento = quasi trasparente e grigio; acceso = fondo
   // trasparente nel suo colore (--rc-toggle-color), testo e bordino dello stesso colore. Acceso: .is-active o aria-pressed.
   &--toggle {
