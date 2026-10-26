@@ -100,8 +100,11 @@
 .rc-switch {
   // Fondo trasparente come il resto della grafica (niente riquadro pieno), bordino come i menu a tendina.
   display: flex; gap: 3px; width: max-content; padding: 3px; border: 1px solid #ffffff40; background: transparent;
+  // Su schermi stretti non deve uscire dalla pagina: scorre in orizzontale (l'indicatore scorre con le voci).
+  max-width: 100%; overflow-x: auto; scrollbar-width: none;
   button {
-    height: 30px; padding: 0 18px; border: 0; background: transparent; color: #b3b3b8; cursor: pointer;
+    flex-shrink: 0; height: 30px; padding: 0 18px; border: 0; background: transparent; color: #b3b3b8; cursor: pointer;
+    @media (max-width: 480px) { padding-inline: 10px; }
     font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase;
     transition: background-color .15s ease, color .15s ease;
     &:hover { color: #fff; }
@@ -124,6 +127,13 @@
     transition: transform 260ms cubic-bezier(.2, .8, .2, 1), width 260ms cubic-bezier(.2, .8, .2, 1), opacity .15s ease;
     @media (prefers-reduced-motion: reduce) { transition: none; }
   }
+}
+
+// Contrasto elevato di Windows (forced-colors): ombre e sfondi spariscono, quindi fuoco e voce scelta
+// devono avere un contorno vero.
+@media (forced-colors: active) {
+  .rc-btn:focus-visible { outline: 2px solid CanvasText; outline-offset: -4px; }
+  .rc-switch button.active, .rc-switch button[aria-selected='true'], .rc-switch button[aria-pressed='true'] { outline: 1px solid Highlight; outline-offset: -2px; }
 }
 
 // One control definition; density is an explicit variant, not import order.

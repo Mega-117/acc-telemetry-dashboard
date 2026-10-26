@@ -233,6 +233,8 @@ async function nextPage() {
   .page-btn:hover:not(:disabled):not(.page-btn--active) { background: var(--racing-data-hover); }
   .page-btn:disabled { cursor: default; opacity: .5; }
   .page-btn:focus-visible, .pagination-btn:focus-visible { outline: none; box-shadow: inset 0 0 0 2px #fff; }
+  // Contrasto elevato: le ombre spariscono, serve un contorno vero.
+  @media (forced-colors: active) { .page-btn:focus-visible, .pagination-btn:focus-visible { outline: 2px solid CanvasText; outline-offset: -3px; } }
 }
 
 .pagination-gap, .pagination--racing .pagination-gap { border-color: transparent; background: transparent; box-shadow: none; cursor: default; }

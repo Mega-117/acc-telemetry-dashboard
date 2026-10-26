@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // PIP-633: "stai migliorando?". Il tempo di ogni sessione nel tempo per una pista e un'auto, con la
 // frase che confronta i tuoi inizi con le sessioni recenti (come le Tendenze di Apple Fitness).
+import { computed, ref, watch } from 'vue'
 import { personalRecords, progressDelta, progressSeries, shortDate, type ProgressMetric } from '~/utils/statsJourney'
 import type { SessionDocument } from '~/types/telemetry'
 import { formatCarName, formatLapTime, formatTrackName } from '~/utils/telemetryFormat'
@@ -93,6 +94,13 @@ const metricLabel = computed(() => METRICS.find(m => m.id === metric.value)?.lab
     </svg>
     <p v-if="chart" class="progress__legend"><span class="progress__legend-line" :style="{ background: color }" />il tuo record nel tempo <span class="progress__legend-dot" :style="{ background: color }" />ogni sessione</p>
     <p v-else class="progress__empty">Nessuna sessione con tempi per questa scelta.</p>
+    <!-- Gli stessi dati del grafico in testo: i puntini non sono raggiungibili da tastiera o lettore di schermo. -->
+    <details v-if="chart" class="progress__list">
+      <summary>Elenco delle sessioni ({{ points.length }})</summary>
+      <ol>
+        <li v-for="(p, i) in points" :key="`${p.date}-${i}`">{{ shortDate(p.date, true) }} · {{ formatLapTime(p.ms) }}<template v-if="p.ms === chart.min"> · record</template></li>
+      </ol>
+    </details>
   </section>
 </template>
 
@@ -116,4 +124,7 @@ select { background: #0b0b0b; color: #f5f5f5; border: 1px solid #ffffff55; paddi
 .progress__legend { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; font-size: 11px; color: #a8a8a8; }
 .progress__legend-line { display: inline-block; width: 18px; height: 3px; }
 .progress__legend-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; opacity: .5; margin-left: 10px; }
+.progress__list { margin-top: 8px; font-size: 12px; color: #c4c4c4; }
+.progress__list summary { cursor: pointer; color: #a8a8a8; }
+.progress__list ol { margin: 6px 0 0; padding-left: 20px; columns: 2; }
 </style>

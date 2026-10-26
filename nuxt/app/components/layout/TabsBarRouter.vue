@@ -47,15 +47,23 @@ function placeIndicator() {
   const active = inner.value?.querySelector<HTMLElement>('.tab--active')
   indicator.value = active ? { left: active.offsetLeft, width: active.offsetWidth } : null
 }
-watch([() => route.path, tabs], () => nextTick(placeIndicator))
 let resizeObserver: ResizeObserver | null = null
+// Si osservano anche le singole voci: il font sportivo arriva dopo il primo disegno e cambia larghezze e
+// posizioni delle voci senza per forza cambiare quelle del contenitore.
+function observeTabs() {
+  if (!resizeObserver || !inner.value) return
+  resizeObserver.disconnect()
+  resizeObserver.observe(inner.value)
+  inner.value.querySelectorAll('.tab').forEach(tab => resizeObserver!.observe(tab))
+}
+watch([() => route.path, tabs], () => nextTick(() => { observeTabs(); placeIndicator() }))
 onMounted(() => {
   placeIndicator()
-  // Il font sportivo arriva dopo il primo disegno e cambia la larghezza delle voci.
   resizeObserver = new ResizeObserver(placeIndicator)
-  if (inner.value) resizeObserver.observe(inner.value)
+  observeTabs()
+  document.fonts?.ready.then(() => { if (resizeObserver) placeIndicator() })
 })
-onBeforeUnmount(() => resizeObserver?.disconnect())
+onBeforeUnmount(() => { resizeObserver?.disconnect(); resizeObserver = null })
 
 function onTabClick(tab: { id: string }) {
   if (tab.id === 'pitwall') openPitwallHome()

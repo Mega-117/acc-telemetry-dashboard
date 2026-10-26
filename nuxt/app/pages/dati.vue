@@ -376,7 +376,8 @@ $cell: #ffffff08;
 .data-page { @include controls.tokens; }
 h2, h3 { margin: 0; font-family: 'Racer Display', 'Arial Narrow', sans-serif; font-style: italic; font-weight: 700; text-transform: uppercase; }
 // I bottoni d'azione usano il comune .rc-btn: il vecchio stile resta solo ai controlli a icona.
-button:not(.rc-btn, .rc-switch button) { @include controls.action; }
+// :where() tiene l'esclusione degli switcher a specificita' zero: i controlli compatti (.tele-steps, .tele-lap) devono continuare a vincere come prima.
+button:not(.rc-btn):where(:not(.rc-switch button)) { @include controls.action; }
 select { @include controls.select; }
 
 // Giro / Box: selettore .rc-switch del tema (come Sessione / Telemetria), qui solo il margine.

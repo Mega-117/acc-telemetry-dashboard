@@ -143,7 +143,8 @@ export function personalRecords(sessions: SessionDocument[], nowMs: number): Rec
     const date = s.meta.date_start
     const row = rows.get(key) ?? { key, trackKey, carKey, track: s.meta.track, car: s.meta.car, sessions: 0, lastDate: date, bestLap: null, qualy: null, race: null, avgRace: null, isNew: false }
     row.sessions += 1
-    if (date > row.lastDate) row.lastDate = date
+    // Confronto per istante, non per testo: le date importate possono avere fusi diversi (+01:00 / +02:00).
+    if (Date.parse(date) > Date.parse(row.lastDate)) row.lastDate = date
     const sum = s.summary
     row.bestLap = better(row.bestLap, positive(sum?.bestLap), date)
     row.qualy = better(row.qualy, positive(sum?.best_qualy_ms), date)
@@ -154,7 +155,7 @@ export function personalRecords(sessions: SessionDocument[], nowMs: number): Rec
   const recent = (t: RecordTime | null) => !!t && nowMs - Date.parse(t.date) <= 7 * DAY_MS
   return [...rows.values()]
     .map(r => ({ ...r, isNew: recent(r.qualy) || recent(r.race) || recent(r.avgRace) }))
-    .sort((a, b) => b.lastDate.localeCompare(a.lastDate))
+    .sort((a, b) => Date.parse(b.lastDate) - Date.parse(a.lastDate))
 }
 
 // ---- Progressi: il tempo di ogni sessione nel tempo, per pista e auto ----
@@ -168,7 +169,7 @@ export function progressSeries(sessions: SessionDocument[], trackKey: string, ca
     .filter(s => isAcc(s) && normalizeSessionListKey(s.meta?.track || '') === trackKey && normalizeSessionListKey(s.meta?.car || '') === carKey)
     .map(s => ({ date: s.meta.date_start, ms: positive((s.summary as unknown as Record<string, unknown> | undefined)?.[METRIC_FIELD[metric]]) }))
     .filter((p): p is ProgressPoint => p.ms !== null && Number.isFinite(Date.parse(p.date)))
-    .sort((a, b) => a.date.localeCompare(b.date))
+    .sort((a, b) => Date.parse(a.date) - Date.parse(b.date))
 }
 
 /** Il migliore del primo terzo delle sessioni contro il migliore dell'ultimo terzo (servono almeno 3 sessioni). */

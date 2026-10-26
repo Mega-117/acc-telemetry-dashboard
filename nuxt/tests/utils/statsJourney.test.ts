@@ -87,4 +87,14 @@ describe('statsJourney', () => {
     expect(progressDelta(points.slice(0, 2))).toBeNull()
     expect(progressSeries(list, 'monza', 'ferrari_296_gt3', 'qualy')).toEqual([])
   })
+
+  it('orders by instant, not by text, when dates carry different offsets', () => {
+    // Testo: 02:15+01 < 02:20+01 < 02:30+02; istanti: 02:30+02 (00:30Z) e' il primo.
+    const list = [['2026-10-25T02:30:00+02:00', 100_000], ['2026-10-25T02:15:00+01:00', 105_000], ['2026-10-25T02:20:00+01:00', 110_000]]
+      .map(([d, ms]) => s(d as string, { bestLap: ms as number }))
+    expect(progressSeries(list, 'monza', 'ferrari_296_gt3', 'bestLap').map(p => p.ms)).toEqual([100_000, 105_000, 110_000])
+    expect(personalRecords(list, NOW)[0]!.lastDate).toBe('2026-10-25T02:20:00+01:00')
+    const spa = s('2026-10-25T02:25:00+02:00', {}, { track: 'spa' }) // 00:25Z: prima di Monza (01:20Z)
+    expect(personalRecords([...list, spa], NOW).map(r => r.track)).toEqual(['monza', 'spa'])
+  })
 })
