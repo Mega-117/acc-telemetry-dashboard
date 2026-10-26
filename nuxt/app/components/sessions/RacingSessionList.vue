@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { standingsManufacturerFromModel, standingsManufacturerLogo } from '~/services/overlay/standingsManufacturer'
+import { usePublicPath } from '~/composables/usePublicPath'
+
 export interface RacingSessionRow {
   id: string
   time: string
@@ -18,6 +21,14 @@ defineProps<{
   sessionHref?: (id: string) => string
 }>()
 const emit = defineEmits<{ 'go-to-session': [id: string] }>()
+// Logo del costruttore accanto all'auto (lo stesso set della classifica HUD), solo se il marchio e' noto.
+const { getPublicPath } = usePublicPath()
+function carLogo(car: string) {
+  const key = standingsManufacturerFromModel(car)
+  if (!key) return null
+  // Copie piccole ricampionate (public/standings/manufacturers/small): ridurre nel browser l'originale da ~170 px a 18 px lo sgrana.
+  return standingsManufacturerLogo(key, path => getPublicPath(path.replace('/manufacturers/', '/manufacturers/small/')))
+}
 
 function formatDateHeader(dateStr: string) {
   const [year, month, day] = dateStr.split('-').map(Number)
@@ -106,16 +117,19 @@ function openSession(event: MouseEvent, id: string) {
                     class="session-car"
                     :title="session.car"
                   >
-                    <component
-                      :is="sessionHref ? 'a' : 'button'"
-                      v-if="hideTrack"
-                      :type="sessionHref ? undefined : 'button'"
-                      :href="sessionHref?.(session.id)"
-                      class="session-open"
-                      :aria-label="`Apri sessione ${getTypeLabel(session.type)}, ${session.track}, ${formatDateHeader(group.date)}, ${session.time}`"
-                      @click="openSession($event, session.id)"
-                    >{{ session.car }}</component>
-                    <template v-else>{{ session.car }}</template>
+                    <span class="session-car__line">
+                      <img v-if="carLogo(session.car)" :src="carLogo(session.car)!.src" alt="" class="session-car__logo">
+                      <component
+                        :is="sessionHref ? 'a' : 'button'"
+                        v-if="hideTrack"
+                        :type="sessionHref ? undefined : 'button'"
+                        :href="sessionHref?.(session.id)"
+                        class="session-open"
+                        :aria-label="`Apri sessione ${getTypeLabel(session.type)}, ${session.track}, ${formatDateHeader(group.date)}, ${session.time}`"
+                        @click="openSession($event, session.id)"
+                      >{{ session.car }}</component>
+                      <span v-else>{{ session.car }}</span>
+                    </span>
                   </td>
                   <td class="session-stat">
                     {{ session.laps }} <span>{{ session.laps === 1 ? 'giro' : 'giri' }}</span>
@@ -170,6 +184,10 @@ function openSession(event: MouseEvent, id: string) {
 .session-row .session-best--qualify { padding-left: 24px; }
 .session-car, .session-stat span { color: var(--racing-data-muted); }
 .session-car { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+// Logo del costruttore prima del nome; il nome si accorcia con i puntini se non c'e' spazio.
+.session-car__line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.session-car__line > :last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-car__logo { width: 28px; height: 18px; flex-shrink: 0; object-fit: contain; }
 .session-open { width: 100%; text-align: left; font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
 .session-best { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .session-best--qualify { color: var(--racing-qualify); position: relative; }

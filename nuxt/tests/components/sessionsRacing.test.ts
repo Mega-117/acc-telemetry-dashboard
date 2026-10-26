@@ -24,6 +24,7 @@ function render(initiallyPrepared = false) {
   return w
 }
 beforeEach(() => {
+  vi.stubGlobal('useRuntimeConfig', () => ({ app: { baseURL: '/' } }))
   useGameContext().selectGame('acc')
   vi.useFakeTimers(); disposeScrollbars = installScrollbarActivity()
   vi.setSystemTime(new Date('2026-09-25T12:00:00'))
@@ -37,7 +38,7 @@ beforeEach(() => {
   HTMLElement.prototype.scrollIntoView = vi.fn()
   HTMLElement.prototype.scrollTo = vi.fn()
 })
-afterEach(() => { disposeScrollbars(); wrappers.splice(0).forEach(w => w.unmount()); vi.useRealTimers() })
+afterEach(() => { disposeScrollbars(); wrappers.splice(0).forEach(w => w.unmount()); vi.useRealTimers(); vi.unstubAllGlobals() })
 
 describe('Sessioni racing single table', () => {
   it('keeps named common qualifications visible and unknown kinds out of the filter', async () => {
