@@ -1,0 +1,1 @@
+import{ec as c}from"./Ct8rlTSL.js";function r(){const n=c();function s(e){if(/^(https?:|data:|blob:|file:|acc-voice:)/i.test(e))return e;const i=e.startsWith("/")?e.slice(1):e,t=n.app.baseURL||"/";return(t.endsWith("/")?t:t+"/")+i}return{getPublicPath:s}}export{r as u};
