@@ -63,7 +63,7 @@ const syncAge = computed(() => {
           </tbody>
         </table>
         <table>
-          <thead><tr><th>Rifiuti</th><th>Piloti-giorno</th></tr></thead>
+          <thead><tr><th>Rifiuti{{ model.rejectionsTruncated ? ' (parziale)' : '' }}</th><th>Piloti-giorno</th></tr></thead>
           <tbody>
             <tr v-for="r in model.rejections" :key="r.reason"><td>{{ r.reason }}</td><td>{{ r.count }}</td></tr>
             <tr v-if="!model.rejections.length"><td colspan="2">Nessun rifiuto.</td></tr>

@@ -2455,7 +2455,7 @@ const gripZones = computed(() => {
       </div>
     </header>
 
-    <SessionAnalysisPanel v-if="detailTab === 'avanzata' && !isEvoSession" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="targetUserId && !externalUserId ? targetUserId : null" />
+    <SessionAnalysisPanel v-if="detailTab === 'avanzata' && !isEvoSession" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="targetUserId && !externalUserId ? targetUserId : null" :foreign="!!externalUserId" />
 
     <!-- ========================================== -->
     <!-- MASTER / DETAIL LAYOUT -->

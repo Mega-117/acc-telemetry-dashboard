@@ -40,6 +40,27 @@ describe('SharedLapPanel', () => {
     expect(loaded.carMismatch).toBe(true)
   })
 
+  it('refuses a partial or invalid lap', async () => {
+    const partial = { ...rawLap(), meta: { ...rawLap().meta, complete: false } }
+    const view = mountPanel(async () => gzResponse(partial))
+    await view.get('input').setValue(`${SHARE}.${KEY}`)
+    await view.get('button.shared-load').trigger('click')
+    await vi.waitFor(() => expect(view.text()).toContain('non è completo o valido'))
+    expect(view.emitted('loaded')).toBeUndefined()
+  })
+
+  it('a change of session while loading discards the old answer', async () => {
+    let release: (r: Response) => void = () => {}
+    const view = mountPanel(() => new Promise<Response>((resolve) => { release = resolve }))
+    await view.get('input').setValue(`${SHARE}.${KEY}`)
+    await view.get('button.shared-load').trigger('click')
+    await view.setProps({ current: normalizeLapTrace(rawLap({ track: 'Monza' }))! })
+    release(gzResponse(rawLap()))
+    await flushPromises()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(view.emitted('loaded')).toBeUndefined()
+  })
+
   it('refuses a lap of another track and a malformed link', async () => {
     const view = mountPanel(async () => gzResponse(rawLap({ track: 'Monza' })))
     await view.get('input').setValue('nonsense')
@@ -74,6 +95,15 @@ describe('SessionAnalysisPanel sharing and coach view', () => {
     expect((window as any).electronAPI.shareLapTrace).toHaveBeenCalledWith('h__c/lap_20261025_175240_L006_104900ms.json.gz')
     expect(writeText).toHaveBeenCalledWith(`https://x/giro#${SHARE}.${KEY}`)
     expect(view.text()).toContain('Link copiato')
+    view.unmount()
+  })
+
+  it('someone else\'s session opened by link never reads this PC\'s laps', async () => {
+    ;(window as any).electronAPI = { listLapTraces: vi.fn(async () => []), readLapTrace: vi.fn() }
+    const view = mount(SessionAnalysisPanel, { props: { sessionToken: '20261025_175240', laps, foreign: true }, global: { stubs: { AnalysisMap: true, AnalysisCharts: true, AnalysisCar: true } } })
+    await flushPromises()
+    expect((window as any).electronAPI.listLapTraces).not.toHaveBeenCalled()
+    expect(view.text()).toContain('Condividi giro')
     view.unmount()
   })
 

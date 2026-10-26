@@ -2,7 +2,7 @@
 // PIP-623: "Giro di un altro pilota". Si incolla il link ricevuto, il giro arriva dall'archivio
 // online e diventa il Riferimento. Un giro di un'altra pista non si confronta; un'altra auto si
 // confronta ma con l'avviso.
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { parseLapShareLink } from '~/services/telemetry/lapShareLink'
 import { fetchSharedLap, LapsArchiveError, type LapsArchiveDeps } from '~/services/telemetry/lapsArchiveClient'
 import { normalizeLapTrace, type LapTraceView } from '~/services/telemetry/lapTraceChart'
@@ -18,8 +18,15 @@ const text = ref('')
 const busy = ref(false)
 const error = ref('')
 let attempt = 0
+// A change of session or pilot invalidates a request still in flight.
+watch(() => props.current, () => { attempt++; busy.value = false })
+
+function sameContext(trace: LapTraceView, current: LapTraceView | null) {
+  return !current || (trace.gameId === current.gameId && trace.track === current.track && (trace.variant ?? null) === (current.variant ?? null))
+}
 
 async function load() {
+  if (busy.value) return
   const link = parseLapShareLink(text.value)
   error.value = ''
   if (!link) { error.value = 'Link non riconosciuto: incolla il link ricevuto con "Condividi giro".'; return }
@@ -30,13 +37,15 @@ async function load() {
     if (mine !== attempt) return
     const trace = normalizeLapTrace(raw)
     if (!trace) { error.value = 'Giro non valido: formato non riconosciuto.'; return }
-    const current = props.current
-    if (current && (trace.gameId !== current.gameId || trace.track !== current.track || (trace.variant ?? null) !== (current.variant ?? null))) {
+    // Only whole, valid laps are references: a partial lap would compare different places.
+    if (!trace.complete || trace.valid !== true) { error.value = 'Questo giro non è completo o valido: chiedi un altro giro.'; return }
+    if (!sameContext(trace, props.current)) {
       error.value = `Questo giro è su ${trace.track}: si confronta solo con giri della stessa pista.`
       return
     }
     const nickname = (await (props.nickname ?? loadPublicNickname)(meta.ownerUid)) || 'Pilota'
-    if (mine !== attempt) return
+    if (mine !== attempt || !sameContext(trace, props.current)) return
+    const current = props.current
     const lapNumber = meta.lapNumber ?? 0
     const lapTimeMs = meta.lapTimeMs ?? Math.round(trace.lapTimeS * 1000)
     emit('loaded', {

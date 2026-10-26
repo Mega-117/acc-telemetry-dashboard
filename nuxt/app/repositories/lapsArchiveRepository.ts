@@ -18,6 +18,7 @@ export interface LapsSummary {
   days: Record<string, Record<string, { uploads: number, shares: number }>>
   countersTruncated?: boolean
   rejections: { day: string, reason: string, uid: string }[]
+  rejectionsTruncated?: boolean
 }
 
 export interface LapsArchiveModel {
@@ -31,6 +32,7 @@ export interface LapsArchiveModel {
   rejections: { reason: string, count: number }[]
   forecast: { uploadsPerDay: number, storagePercent: number, classAPercent: number } | null
   truncated: boolean
+  rejectionsTruncated: boolean
 }
 
 const REASONS: Record<string, string> = {
@@ -82,6 +84,7 @@ export function lapsArchiveModel(summary: LapsSummary, nowMs: number): LapsArchi
       classAPercent: Math.round((uploadsPerDay * 30 * CLASS_A_PER_UPLOAD) / (LAPS_CAPS.classA * 2) * 1000) / 10,
     } : null,
     truncated: summary.countersTruncated === true,
+    rejectionsTruncated: summary.rejectionsTruncated === true,
   }
 }
 

@@ -1,7 +1,7 @@
 // PIP-623: link "Condividi giro", client dell'archivio giri, sorgenti dei giri e riepilogo admin.
 import { describe, expect, it, vi } from 'vitest'
 import { gzipSync } from 'node:zlib'
-import { buildLapShareLink, parseLapShareLink, LAP_SHARE_LINK_BASE } from '~/services/telemetry/lapShareLink'
+import { buildLapShareLink, lapShareErrorMessage, parseLapShareLink, LAP_SHARE_LINK_BASE } from '~/services/telemetry/lapShareLink'
 import { fetchSharedLap, gunzipBounded, listPilotLaps, LapsArchiveError, readLapBody } from '~/services/telemetry/lapsArchiveClient'
 import { electronLapSource, listOwnLaps, parseLocalLapId, pilotLapSource } from '~/services/telemetry/lapSources'
 import { lapsArchiveModel, reasonLabel, type LapsSummary } from '~/repositories/lapsArchiveRepository'
@@ -25,6 +25,14 @@ describe('lap share link', () => {
     expect(parseLapShareLink('https://example.com/giro#nope')).toBeNull()
     expect(parseLapShareLink(42)).toBeNull()
     expect(parseLapShareLink('x'.repeat(500))).toBeNull()
+  })
+
+  it('maps wrapped Electron errors to short Italian messages', () => {
+    expect(lapShareErrorMessage(new Error("Error invoking remote method 'share-lap-trace': Error: archive-paused"))).toContain('in pausa')
+    expect(lapShareErrorMessage('share-daily-cap')).toContain('condivisioni di oggi')
+    expect(lapShareErrorMessage(new Error('owner-changed'))).toContain('Accedi')
+    expect(lapShareErrorMessage(new Error('archive-disabled'))).toContain('non disponibile')
+    expect(lapShareErrorMessage(new Error('boom'))).toContain('non riuscita')
   })
 })
 
@@ -53,6 +61,24 @@ describe('archive client', () => {
     const many = Object.fromEntries(Array.from({ length: 41 }, (_, i) => [`c${i}`, [0, 1]]))
     await expect(readLapBody(binary(gz(lap(many))))).rejects.toThrow('troppi canali')
     await expect(readLapBody(binary(gz({ schema: 'x' })))).rejects.toThrow('mancano i canali')
+    await expect(readLapBody(binary(gz(lap({ time_s: Array.from({ length: 20001 }, (_, i) => i) }))))).rejects.toThrow('troppi canali o campioni')
+  })
+
+  it('stops reading a body that exceeds the compressed cap while it streams', async () => {
+    let pulled = 0
+    const stream = new ReadableStream<Uint8Array>({ pull(controller) { pulled += 1; controller.enqueue(new Uint8Array(64 * 1024)) } })
+    await expect(readLapBody(new Response(stream))).rejects.toThrow('dimensione')
+    expect(pulled).toBeLessThan(10)
+  })
+
+  it('never follows redirects and times out a stalled body', async () => {
+    const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => {
+      expect(init.redirect).toBe('error')
+      const stalled = new ReadableStream<Uint8Array>({ start() {} })
+      init.signal?.addEventListener('abort', () => { /* body never resolves; the deadline aborts it */ })
+      return new Response(stalled, { status: 200 })
+    })
+    await expect(fetchSharedLap({ shareId: SHARE, key: KEY }, { ...deps(fetchImpl as unknown as typeof fetch), timeoutMs: 50 })).rejects.toBeInstanceOf(LapsArchiveError)
   })
 
   it('follows the pilot list cursor', async () => {
@@ -113,6 +139,7 @@ describe('admin archive model', () => {
     expect(model.rejections[0]).toEqual({ reason: 'daily-cap', count: 2 })
     expect(model.forecast!.uploadsPerDay).toBe(2)
     expect(lapsArchiveModel({ ...summary, days: {} }, NOW).forecast).toBeNull()
+    expect(lapsArchiveModel({ ...summary, rejectionsTruncated: true }, NOW).rejectionsTruncated).toBe(true)
     expect(reasonLabel('something-new')).toBe('something-new')
   })
 })

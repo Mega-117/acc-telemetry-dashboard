@@ -10,6 +10,7 @@ import AnalysisCharts, { type ChartRow } from './AnalysisCharts.vue'
 import SharedLapPanel, { type SharedLapLoaded } from './SharedLapPanel.vue'
 import { electronLapSource, listOwnLaps, pilotLapSource, type LapOrigin, type LapSource, type LocalLapBridge } from '~/services/telemetry/lapSources'
 import { LapsArchiveError } from '~/services/telemetry/lapsArchiveClient'
+import { lapShareErrorMessage } from '~/services/telemetry/lapShareLink'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { compareCorners, cornerAdvice, detectCorners, formatDelta, sectorBounds } from '~/services/telemetry/lapAnalysis'
 import { normalizeLapTrace, type LapTraceView } from '~/services/telemetry/lapTraceChart'
@@ -22,6 +23,8 @@ const props = defineProps<{
   initialLap?: number | null
   /** PIP-623: coach view of a linked pilot: the laps come from the online archive. */
   pilotUid?: string | null
+  /** PIP-623: someone else's session opened by link: never read this PC's laps for it. */
+  foreign?: boolean
 }>()
 
 type Layout = 'pilota' | 'tracce'
@@ -68,12 +71,14 @@ async function load() {
   const isCurrent = () => generation === loadGeneration
   const token = props.sessionToken
   const pilot = props.pilotUid || null
+  loading.value = false
   error.value = ''
   entries.value = []
   traces.value = {}
   skipped.value = 0
   sharedWarning.value = ''
   if (!token) { error.value = 'Questa sessione non ha giri registrati sul computer.'; return }
+  if (props.foreign && !pilot) { error.value = 'I giri di questa sessione restano sul PC di chi ha guidato: per confrontarti chiedi un link con "Condividi giro".'; return }
   const bridge = api()
   let source: LapSource
   if (pilot) source = pilotLapSource(pilot, archiveDeps)
@@ -88,12 +93,20 @@ async function load() {
     const valid = new Map(props.laps.map(l => [l.lap_number, l.is_valid === true]))
     // All laps of the session at once (about 120 KB each): a lap that cannot be read
     // (pruned meanwhile, damaged) is left out here, never on a later click.
-    const read = await Promise.all(list.map(async (d) => {
+    const readOne = async (d: (typeof list)[number]): Promise<{ trace: LapTraceView, entry: Entry } | null> => {
       try {
         const trace = normalizeLapTrace(await source.read(d))
         return trace ? { trace, entry: { id: d.id, lapNumber: d.lapNumber, lapTimeMs: d.lapTimeMs, valid: d.valid ?? valid.get(d.lapNumber) ?? false, complete: trace.complete, origin: d.origin, sessionToken: d.sessionToken } } : null
       } catch { return null }
-    }))
+    }
+    // Laps on the PC are read together; from the archive one at a time, stopping if the view changed.
+    let read: ({ trace: LapTraceView, entry: Entry } | null)[] = []
+    if (pilot) {
+      for (const d of list) {
+        if (!isCurrent()) return
+        read.push(await readOne(d))
+      }
+    } else read = await Promise.all(list.map(readOne))
     if (!isCurrent()) return
     const ok = read.filter((r): r is { trace: LapTraceView, entry: Entry } => r !== null)
     skipped.value = list.length - ok.length
@@ -167,14 +180,6 @@ let shareTimer: ReturnType<typeof setTimeout> | null = null
 const canShare = computed(() => !props.pilotUid && typeof api()?.shareLapTrace === 'function'
   && lapEntry.value?.origin === 'local' && lapEntry.value.complete && lapEntry.value.valid)
 const shareHint = computed(() => props.pilotUid ? '' : lapEntry.value && !lapEntry.value.valid ? 'Si condividono solo giri validi' : 'Copia il link di questo giro: chi lo riceve lo usa come riferimento')
-function shareError(error: unknown) {
-  const text = String((error as Error)?.message || error)
-  if (text.includes('archive-paused')) return 'Archivio giri in pausa: riprova più tardi.'
-  if (text.includes('share-daily-cap')) return 'Hai raggiunto le condivisioni di oggi.'
-  if (text.includes('auth-required') || text.includes('owner-changed') || text.includes('token-unavailable')) return 'Accedi di nuovo per condividere.'
-  if (text.includes('archive-disabled')) return 'Condivisione non disponibile in questa versione.'
-  return 'Condivisione non riuscita: riprova.'
-}
 async function shareLap() {
   const id = lapId.value
   if (!canShare.value || shareState.value === 'busy') return
@@ -187,7 +192,7 @@ async function shareLap() {
     shareMessage.value = 'Link copiato: mandalo a chi vuoi.'
   } catch (error) {
     shareState.value = 'error'
-    shareMessage.value = shareError(error)
+    shareMessage.value = lapShareErrorMessage(error)
   }
   if (shareTimer) clearTimeout(shareTimer)
   shareTimer = setTimeout(() => { shareState.value = 'idle'; shareMessage.value = '' }, 4000)
