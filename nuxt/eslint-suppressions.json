@@ -55,11 +55,6 @@
       "count": 1
     }
   },
-  "app/components/pitwall/concept/PitwallConcept.vue": {
-    "max-lines": {
-      "count": 1
-    }
-  },
   "app/components/profile/CoachLessonsCard.vue": {
     "max-lines": {
       "count": 1

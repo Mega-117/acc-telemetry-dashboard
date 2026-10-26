@@ -166,7 +166,7 @@ onMounted(() => {
       <NuxtLink
         v-if="canAccessDevTools"
         to="/dev"
-        class="dev-button"
+        class="dev-button rc-btn"
         title="Strumenti sviluppo (solo admin, in locale)"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -299,20 +299,20 @@ onMounted(() => {
   }
 }
 
-.dev-button, .coach-button {
+// DEV usa rc-btn: qui resta solo l'altezza, allineata al bottone coach.
+.dev-button { flex-shrink: 0; height: 46px; }
+.coach-button {
   @include racing.action;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  width: 46px;
   height: 46px;
-  gap: 7px;
-  text-decoration: none;
+  padding: 0;
   transition: background 150ms ease, color 150ms ease;
   svg { flex-shrink: 0; }
 }
-.dev-button { padding: 0 14px; font-weight: 650; letter-spacing: .06em; }
-.coach-button { width: 46px; padding: 0; }
 
 .voice-group {
   display: flex;

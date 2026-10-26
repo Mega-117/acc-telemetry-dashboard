@@ -758,7 +758,7 @@ describe('Pitwall wiring', () => {
     expect(concept).toContain('@media (max-width: 980px)')
     expect(concept).toContain('@media (max-width: 760px)')
     expect(conceptLive).toContain('@media (max-width: 760px)')
-    expect(concept).toContain('.pwc button:focus-visible')
+    expect(concept).toContain('.pwc button:not(.rc-btn):focus-visible')
     // Un solo passaggio di stile per file: niente strati di correzioni sovrapposte,
     // e le basi condivise stanno in un posto solo.
     expect(concept).not.toContain('Visual rhythm pass')

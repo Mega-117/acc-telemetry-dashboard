@@ -67,7 +67,7 @@ onBeforeUnmount(() => { void finishConfiguration() })
       </div>
       <button
         type="button"
-        class="test-button"
+        class="test-button rc-btn rc-btn--compact"
         :class="{ 'is-active': testMode }"
         :disabled="!state.available || !!state.capture"
         @click="setTestMode(!testMode)"
@@ -87,7 +87,7 @@ onBeforeUnmount(() => { void finishConfiguration() })
       <span :class="['device-status', { 'is-connected': !!state.devices.length }]">{{ statusText }}</span>
       <div v-for="source in failedSources" :key="source" role="status">
         {{ source === 'keyboard' ? 'Lettore tastiera non avviato.' : 'Lettore controller non avviato.' }}
-        <button type="button" class="test-button" :disabled="!state.available || !!state.capture" @click="retrySource(source)">Riprova {{ source === 'keyboard' ? 'tastiera' : 'controller' }}</button>
+        <button type="button" class="rc-btn rc-btn--compact" :disabled="!state.available || !!state.capture" @click="retrySource(source)">Riprova {{ source === 'keyboard' ? 'tastiera' : 'controller' }}</button>
       </div>
       <span v-if="state.inputBackend === 'native' && !state.sources" class="device-status">La separazione dei lettori richiede l’aggiornamento della Suite desktop.</span>
     </div>
@@ -125,16 +125,17 @@ onBeforeUnmount(() => { void finishConfiguration() })
         <div class="command-row__actions">
           <button
             v-if="state.capture?.action !== action.id"
+            class="rc-btn rc-btn--compact"
             type="button"
             :disabled="!state.available || !sourceReady || (!state.devices.length && state.inputBackend !== 'native') || !!state.capture || testMode"
             @click="beginCapture(action.id, selectedDevice)"
           >
             Assegna
           </button>
-          <button v-else type="button" @click="cancelCapture">Annulla</button>
+          <button v-else class="rc-btn rc-btn--compact" type="button" @click="cancelCapture">Annulla</button>
           <button
             type="button"
-            class="remove-button"
+            class="rc-btn rc-btn--danger rc-btn--compact"
             :disabled="!state.bindings[action.id] || !!state.capture || testMode"
             @click="clearBinding(action.id)"
           >
@@ -153,7 +154,7 @@ onBeforeUnmount(() => { void finishConfiguration() })
 h2 { margin: 0 0 6px; padding-left: 14px; border-left: 3px solid var(--racing-race); font-size: 20px; font-weight: 550; }
 p { margin: 0; color: #aaa; font-size: 13px; line-height: 1.6; }
 .eyebrow { display: none; }
-.test-button,.command-row button { @include controls.action; white-space: nowrap; }
+// Il bottone di prova resta verde mentre la modalita prova e attiva.
 .test-button.is-active { color: #21ff83; background: #21ff8314; }
 .device-row { display: grid; grid-template-columns: auto minmax(180px,320px); align-items: center; justify-content: start; gap: 8px 16px; padding: 0 0 16px; }
 .device-row label { font-size: 13px; }
@@ -169,7 +170,7 @@ p { margin: 0; color: #aaa; font-size: 13px; line-height: 1.6; }
 .command-row.is-capturing { background: #0076ff12; }.command-row.is-tested { background: #21ff8314; }
 .command-row__copy { display: grid; gap: 3px; }.command-row__copy strong { font-size: 13px; font-weight: 550; }.command-row__copy span { color: #999; font-size: 12px; line-height: 1.5; }
 .command-row code { color: #ddd; padding: 6px 10px; border: 1px solid #ffffff25; background: #ffffff05; width: fit-content; max-width: 100%; font-family: inherit; font-size: 12px; overflow-wrap: anywhere; }
-.command-row__actions { display: flex; gap: 8px; }.command-row .remove-button { color: #ff7188; }
+.command-row__actions { display: flex; gap: 8px; }
 @media(max-width:1150px) { .command-row { grid-template-columns: 1fr auto; }.binding-copy { grid-column: 1; }.command-row__actions { grid-column: 2; grid-row: 1 / span 2; } }
 @media(max-width:900px) { .commands-panel__header { flex-direction: column; } }
 @media(max-width:600px) { .command-row { grid-template-columns: 1fr; }.command-row__actions { grid-column: 1; grid-row: auto; }.device-row { grid-template-columns: 1fr; } }

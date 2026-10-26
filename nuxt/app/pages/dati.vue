@@ -244,7 +244,7 @@ const repairTotal = computed(() => {
       <select v-model.number="stintNumber" class="data-stint" :disabled="busy || !stints.length" aria-label="Stint">
         <option v-for="s in stints" :key="s.stint_number" :value="s.stint_number">Stint {{ s.stint_number }} · {{ s.laps.length }} giri</option>
       </select>
-      <button type="button" :disabled="!latest || busy || isLatest" @click="latest && selectSession(latest.sessionId)">Ultima sessione</button>
+      <button type="button" class="rc-btn" :disabled="!latest || busy || isLatest" @click="latest && selectSession(latest.sessionId)">Ultima sessione</button>
       <button type="button" class="data-refresh" :disabled="busy" aria-label="Aggiorna" title="Aggiorna" @click="load">↻</button>
     </div>
     <p class="data-meta">{{ isLatest ? 'Ultima sessione registrata' : 'Sessione storica' }}<template v-if="updatedAt"> · aggiornato {{ updatedAt }}</template></p>
@@ -374,7 +374,8 @@ $line: #ffffff24;
 $cell: #ffffff08;
 .data-page { @include controls.tokens; }
 h2, h3 { margin: 0; font-family: 'Racer Display', 'Arial Narrow', sans-serif; font-style: italic; font-weight: 700; text-transform: uppercase; }
-button { @include controls.action; }
+// I bottoni d'azione usano il comune .rc-btn: il vecchio stile resta solo ai controlli a icona.
+button:not(.rc-btn) { @include controls.action; }
 select { @include controls.select; }
 
 // Giro / Box: the segmented switch of the Pit Wall views.

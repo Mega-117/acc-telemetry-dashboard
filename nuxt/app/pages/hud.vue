@@ -773,7 +773,7 @@ async function toggleTraining() {
             <div>
               <button
                 type="button"
-                class="btn btn--primary"
+                class="rc-btn rc-btn--primary rc-btn--compact"
                 :disabled="replayBusy || replayStatus.running"
                 @click="startHudReplay"
               >
@@ -781,7 +781,7 @@ async function toggleTraining() {
               </button>
               <button
                 type="button"
-                class="btn"
+                class="rc-btn rc-btn--compact"
                 :disabled="replayBusy || !replayStatus.running"
                 @click="stopHudReplay"
               >
@@ -850,7 +850,7 @@ async function toggleTraining() {
             </div>
             <button
               type="button"
-              class="btn"
+              class="rc-btn rc-btn--compact"
               :disabled="!isElectron || positioning || placementBusy"
               @click="toggleTraining"
             >
@@ -1305,14 +1305,13 @@ async function toggleTraining() {
 .hud-slider { width: 100%; height: 3px; appearance: none; background: #ffffff45; cursor: pointer; accent-color: var(--racing-race); }.hud-slider::-webkit-slider-thumb { appearance: none; width: 4px; height: 20px; border: 0; border-radius: 0; background: #fff; }.hud-slider::-moz-range-thumb { width: 4px; height: 20px; border: 0; border-radius: 0; background: #fff; }.hud-slider::-moz-range-progress { background: var(--racing-race); }
 .hud-settings input[type='checkbox'] { appearance: auto; width: 16px; height: 16px; flex: 0 0 auto; accent-color: var(--racing-race); }
 .hud-settings__divider { height: 1px; margin: 24px 0 0; border: 0; background: var(--hud-border); }.hud-info-group { min-width: 0; }.hud-info-group h3 { margin: 0 0 14px; color: #aaa; font-size: 12px; text-transform: uppercase; }.hud-info-group + .hud-info-group { border-top: 1px solid var(--hud-border); padding-top: 20px; }.hud-info-group__head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; color: #ccc; font-size: 13px; }.hud-info-group__options { display: grid; gap: 12px; }.hud-info-group__options .hud-control > span:first-child { flex: 0 1 auto; }.hud-info-group__options input { order: -1; }
-.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 8px 16px; border: 1px solid #ffffff55; background: #ffffff08; color: #eee; cursor: pointer; font-size: 12px; clip-path: polygon(0 0,calc(100% - 9px) 0,100% 9px,100% 100%,9px 100%,0 calc(100% - 9px)); }.btn:hover:not(:disabled) { background: #ffffff18; }.btn--primary { background: var(--racing-race); }
 .test-hud :disabled { cursor: not-allowed; opacity: .45; }.hud-settings.is-overlay-disabled .hud-settings__specific { color: #999; }
 .hud-overlay-list__item:focus-visible,.test-hud button:focus-visible,.test-hud input:focus-visible,.test-hud select:focus-visible,.test-hud summary:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
 @media(max-width: 980px) { .test-hud { grid-template-columns: 1fr; }.test-hud__global { justify-self: start; }.hud-workspace { grid-template-columns: 210px minmax(0,1fr); padding: 18px; }.hud-settings { padding-left: 20px; }.hud-control > span:first-child { flex-basis: 120px; } }
 @media(max-width: 680px) { .hud-workspace { grid-template-columns: 1fr; }.hud-overlay-list { border-right: 0; padding-right: 0; padding-bottom: 20px; border-bottom: 1px solid var(--hud-border); }.hud-overlay-list nav { grid-template-columns: repeat(2,minmax(0,1fr)); }.hud-settings { padding: 22px 0 0; }.hud-global-control + .hud-global-control { border: 0; padding-left: 0; }.hud-control { flex-wrap: wrap; }.hud-control__range { width: 220px; }.hud-control > span:first-child { flex-basis: 110px; } }
 
 .test-hud { @include controls.tokens; }
-.test-hud__hero h1 { @include controls.title; }.test-hud .hud-select { @include controls.select; }.test-hud .btn { @include controls.action; }.test-hud .btn--primary { @include controls.primary; }.test-hud .hud-overlay-list__item { @include controls.navigation; }.test-hud .hud-slider { @include controls.slider; }.hud-workspace { border-color: var(--rc-border); }
+.test-hud__hero h1 { @include controls.title; }.test-hud .hud-select { @include controls.select; }.test-hud .hud-overlay-list__item { @include controls.navigation; }.test-hud .hud-slider { @include controls.slider; }.hud-workspace { border-color: var(--rc-border); }
 
 /* Compact workspace: long checkbox lists use the available horizontal space. */
 .test-hud { grid-template-columns: minmax(150px,1fr) auto auto; gap: 20px 16px; }

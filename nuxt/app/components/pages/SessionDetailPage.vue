@@ -2695,7 +2695,7 @@ const gripZones = computed(() => {
 
         <!-- ALTRA SESSIONE BUTTON: Below stint list, hidden when cross-session active -->
         <button
-          v-if="comparisonOpen" class="altra-sessione-btn"
+          v-if="comparisonOpen" class="rc-btn rc-btn--compact altra-sessione-btn"
           @click="openSessionPicker"
         >
           Altra sessione o link
@@ -6365,27 +6365,9 @@ const gripZones = computed(() => {
 }
 
 // ========================================
-// ALTRA SESSIONE BUTTON - Inviting CTA per UX audit
+// ALTRA SESSIONE BUTTON - aspetto dal bottone comune .rc-btn, qui solo l'ingombro
 // ========================================
-.altra-sessione-btn {
-  width: 100%;
-  padding: 14px 16px;
-  margin-top: 32px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 2px dashed rgba(255, 255, 255, 0.35);
-  border-radius: 6px;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.15s ease;
-
-  &:hover {
-    border-color: rgba(255, 255, 255, 0.5);
-    background: rgba(255, 255, 255, 0.08);
-  }
-}
+.altra-sessione-btn { width: 100%; margin-top: 12px; }
 
 // ========================================
 // COMPARISON TABLE - Side-by-side A vs B
@@ -6712,7 +6694,7 @@ const gripZones = computed(() => {
   .builder-slot { border: 0; margin: 0; padding: 0; min-height: 32px; }
   .builder-chip { border-radius: 0; }
   .builder-slot-empty { font-size: 12px; }
-  .altra-sessione-btn, .share-session-btn, .header-row .nav-btn { @include racing.action; font-size: 12px; margin-top: 12px; }
+  .share-session-btn, .header-row .nav-btn { @include racing.action; font-size: 12px; margin-top: 12px; }
   .header-row .nav-btn { margin-top: 0; }
   .share-session-btn { margin-top: 0; }
   .cross-session-header { flex-wrap: wrap; gap: 6px; }

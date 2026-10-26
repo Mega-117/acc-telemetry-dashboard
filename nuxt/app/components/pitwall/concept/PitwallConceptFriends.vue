@@ -169,7 +169,7 @@ function removeWarning(personId: string): string {
           <template v-if="friend.state === 'received'">
             <button
               type="button"
-              class="pwc-btn is-primary"
+              class="rc-btn rc-btn--compact rc-btn--primary"
               @click="emit('accept', friend.personId)"
             >
               Accetta
@@ -209,7 +209,7 @@ function removeWarning(personId: string): string {
             </button>
             <button
               type="button"
-              class="pwc-btn is-danger"
+              class="rc-btn rc-btn--compact rc-btn--danger"
               @click="confirmRemove(friend.personId)"
             >
               Rimuovi

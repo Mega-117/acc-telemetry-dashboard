@@ -127,7 +127,7 @@ describe('compact Pitwall friends directory', () => {
     expect(page.emitted('remove')).toBeUndefined()
     expect(page.find('.pwc-confirm').exists()).toBe(false)
     await page.findAll('[popover] button').find(b => b.text() === 'Rimuovi amico')!.trigger('click')
-    await page.find('.pwc-confirm .is-danger').trigger('click')
+    await page.find('.pwc-confirm .rc-btn--danger').trigger('click')
     expect(page.emitted('remove')).toEqual([['A']])
     page.unmount()
   })

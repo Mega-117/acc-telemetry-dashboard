@@ -234,7 +234,7 @@ function goToSession(id: string) {
 <template>
   <LayoutPageContainer class="track-detail racing-data">
     <!-- Back button -->
-    <button v-if="!headerBack" class="back-button" @click="emit('back')">
+    <button v-if="!headerBack" class="rc-btn back-button" @click="emit('back')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M19 12H5M12 19l-7-7 7-7"/>
       </svg>
@@ -429,7 +429,8 @@ function goToSession(id: string) {
 .reference-empty-note { color: #999; font-size: 12px; line-height: 1.5; margin: 10px 0; }
 
 .track-detail { @include controls.tokens; --rc-control-height: 34px; }
-.back-button { @include controls.action; display: inline-flex; align-items: center; gap: 8px; margin-bottom: 24px; }
+// Aspetto dal bottone comune .rc-btn: qui solo la spaziatura sotto.
+.back-button { margin-bottom: 24px; }
 .back-button svg { width: 16px; height: 16px; }
 .track-header { display: flex; align-items: center; gap: 24px; margin-bottom: 28px; }
 .track-header-image { width: 104px; flex: 0 0 104px; aspect-ratio: 1; }

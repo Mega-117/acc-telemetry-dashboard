@@ -36,7 +36,7 @@ function toggle(mode: SpotterSessionMode) {
         v-for="mode in SPOTTER_SESSION_MODES"
         :key="mode"
         type="button"
-        :class="['rc-btn', `mode-${mode}`, { 'is-active': modelValue.includes(mode) }]"
+        :class="['rc-btn', 'rc-btn--toggle', `mode-${mode}`, { 'is-active': modelValue.includes(mode) }]"
         :aria-pressed="modelValue.includes(mode)"
         @click="toggle(mode)"
       >
@@ -49,10 +49,9 @@ function toggle(mode: SpotterSessionMode) {
 <style scoped lang="scss">
 @use '@/assets/scss/racing-settings' as controls;
 .session-mode-buttons { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
-.session-mode-buttons button { --mode-color: var(--racing-practice); min-width: 0; padding-inline: 10px; color: #bbb; }
-.session-mode-buttons .mode-qualify { --mode-color: var(--racing-qualify); }.session-mode-buttons .mode-race { --mode-color: var(--racing-race); }
-.session-mode-buttons button.is-active { --mode-text: var(--mode-color); --mode-fill: color-mix(in srgb,var(--mode-color) 8%,transparent); color: var(--mode-text); background: var(--mode-fill); }
-// Hover must never hide the selected state immediately after a click.
-.session-mode-buttons button:hover:not(:disabled) { color: var(--mode-text, #bbb); background: var(--mode-fill, #ffffff08); }
+// Interruttori rc-btn--toggle nel colore della sessione (stile nel tema): qui solo colore e misure.
+.session-mode-buttons button { --rc-toggle-color: var(--racing-practice); min-width: 0; padding-inline: 10px; }
+.session-mode-buttons .mode-qualify { --rc-toggle-color: var(--racing-qualify); --rc-toggle-on-text: #111; }
+.session-mode-buttons .mode-race { --rc-toggle-color: var(--racing-race); }
 @media(max-width:700px) { .session-mode-buttons { gap: 8px; }.session-mode-buttons button { padding-inline: 8px; } }
 </style>

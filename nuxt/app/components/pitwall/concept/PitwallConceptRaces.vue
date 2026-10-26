@@ -97,7 +97,7 @@ function wallLabel(race: PitwallConceptRace): string {
       <button
         v-if="!race.closed"
         type="button"
-        class="pwc-btn is-primary"
+        class="rc-btn rc-btn--compact rc-btn--primary"
         @click="$emit('enter', race)"
       >
         Entra
@@ -162,6 +162,6 @@ function wallLabel(race: PitwallConceptRace): string {
 
 @media (max-width: 760px) {
   .pwc-race { grid-template-columns: 1fr; }
-  .pwc-race > .pwc-btn { justify-self: start; }
+  .pwc-race > .rc-btn { justify-self: start; }
 }
 </style>

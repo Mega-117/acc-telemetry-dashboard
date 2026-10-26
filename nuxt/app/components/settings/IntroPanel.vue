@@ -9,14 +9,13 @@ const intro = useOnboardingIntro()
   <section class="intro-panel" aria-labelledby="intro-title">
     <h2 id="intro-title">Introduzione</h2>
     <p>Le cinque schede che vedi al primo avvio: cosa fa Racer Core in pista, il pannello Ctrl+K, le automazioni, gli HUD e i comandi al volante.</p>
-    <button type="button" @click="intro.open()">Rivedi l'introduzione</button>
+    <button class="rc-btn" type="button" @click="intro.open()">Rivedi l'introduzione</button>
   </section>
 </template>
 
 <style scoped lang="scss">
-@use '@/assets/scss/racing-settings' as controls;
 .intro-panel { max-width: 600px; }
 h2 { margin: 0 0 12px; padding-left: 14px; border-left: 3px solid var(--racing-race); font-size: 20px; font-weight: 550; }
 p { color: #aaa; line-height: 1.6; font-size: 13px; max-width: 520px; }
-button { @include controls.action; margin-top: 16px; }
+button { margin-top: 16px; }
 </style>

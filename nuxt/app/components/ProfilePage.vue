@@ -307,7 +307,7 @@ watch(
   <div class="profile-page" :class="{ 'profile-page--embedded': embedded }">
     <header v-if="!embedded" class="profile-header">
       <div class="header-inner">
-        <button class="back-btn" @click="emit('back')">
+        <button class="back-btn rc-btn" @click="emit('back')">
           <svg viewBox="0 0 20 20" fill="none">
             <path d="M12 4L6 10L12 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
@@ -376,22 +376,22 @@ watch(
               <div class="account-preview__item">
                 <label for="profile-preview-name">Nome e cognome</label>
                 <input id="profile-preview-name" type="text" placeholder="Il tuo nome e cognome" disabled />
-                <button type="button" disabled>Modifica nome</button>
+                <button class="rc-btn rc-btn--compact" type="button" disabled>Modifica nome</button>
               </div>
               <div class="account-preview__item">
                 <label for="profile-preview-nickname">Nickname</label>
                 <input id="profile-preview-nickname" type="text" :value="displayName" disabled />
-                <button type="button" disabled>Modifica nickname</button>
+                <button class="rc-btn rc-btn--compact" type="button" disabled>Modifica nickname</button>
               </div>
               <div class="account-preview__item">
                 <label for="profile-preview-email">Indirizzo email</label>
                 <input id="profile-preview-email" type="email" :value="userEmail" placeholder="La tua email" disabled />
-                <button type="button" disabled>Cambia email</button>
+                <button class="rc-btn rc-btn--compact" type="button" disabled>Cambia email</button>
               </div>
               <div class="account-preview__item">
                 <label for="profile-preview-password">Password</label>
                 <input id="profile-preview-password" type="text" placeholder="Gestione della password" disabled />
-                <button type="button" disabled>Reimposta password</button>
+                <button class="rc-btn rc-btn--compact" type="button" disabled>Reimposta password</button>
               </div>
             </fieldset>
           </section>
@@ -400,9 +400,9 @@ watch(
               <h3 class="card-title">Attrezzatura</h3>
               <div class="card-actions">
                 <template v-if="isEditingEquipment">
-                  <button class="ghost-action" type="button" :disabled="isSaving" @click="cancelEquipmentEdit">Annulla</button>
+                  <button class="rc-btn rc-btn--compact" type="button" :disabled="isSaving" @click="cancelEquipmentEdit">Annulla</button>
                   <button
-                    class="primary-action"
+                    class="rc-btn rc-btn--primary rc-btn--compact"
                     :class="{ 'primary-action--success': saveSuccess }"
                     :disabled="isSaving || !cloudWriteGate.allowed"
                     :title="cloudWriteGate.allowed ? 'Salva attrezzatura' : cloudWriteGate.message"
@@ -413,7 +413,7 @@ watch(
                     <template v-else>Salva</template>
                   </button>
                 </template>
-                <button v-else class="primary-action" type="button" @click="startEquipmentEdit">
+                <button v-else class="rc-btn rc-btn--primary rc-btn--compact" type="button" @click="startEquipmentEdit">
                   {{ hasEquipmentSummary ? 'Modifica' : 'Configura' }}
                 </button>
               </div>
@@ -567,7 +567,7 @@ watch(
             <p v-else class="muted-text">Nessuna sessione condivisa.</p>
             <button
               v-if="sharedSessionsCount > 0"
-              class="danger-action"
+              class="rc-btn rc-btn--danger rc-btn--compact"
               :class="{ 'danger-action--success': revokeSuccess }"
               :disabled="isRevoking || !cloudWriteGate.allowed"
               :title="cloudWriteGate.allowed ? 'Revoca tutte le condivisioni' : cloudWriteGate.message"
@@ -587,7 +587,7 @@ watch(
               Cancella i best storici salvati e li ricalcola alla prossima sincronizzazione.
             </p>
             <button
-              class="danger-action"
+              class="rc-btn rc-btn--danger rc-btn--compact"
               :class="{ 'danger-action--success': resetBestsSuccess }"
               :disabled="isResettingBests || !cloudWriteGate.allowed"
               :title="cloudWriteGate.allowed ? 'Elimina i best storici cloud' : cloudWriteGate.message"
@@ -662,27 +662,11 @@ $color-card: #121218;
 .back-btn {
   grid-column: 2;
   grid-row: 1;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
   width: fit-content;
-  padding: 8px 16px;
-  background: none;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  color: rgba(255, 255, 255, 0.7);
-  font-family: $font-primary;
-  font-size: 14px;
-  cursor: pointer;
 
   svg {
     width: 20px;
     height: 20px;
-  }
-
-  &:hover {
-    color: #fff;
-    border-color: rgba(#ff0024, 0.4);
   }
 }
 
@@ -901,51 +885,6 @@ $color-card: #121218;
 
   strong {
     color: var(--gold, #ffc800);
-  }
-}
-
-.danger-action,
-.ghost-action,
-.primary-action {
-  min-height: 42px;
-  padding: 0 18px;
-  border-radius: 0;
-  font-family: $font-primary;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-
-  &:disabled {
-    opacity: 0.62;
-    cursor: wait;
-  }
-}
-
-.ghost-action {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.danger-action {
-  background: rgba(239, 68, 68, 0.14);
-  border: 1px solid rgba(239, 68, 68, 0.34);
-  color: #f87171;
-
-  &--success {
-    background: rgba(34, 197, 94, 0.14);
-    border-color: rgba(34, 197, 94, 0.34);
-    color: #22c55e;
-  }
-}
-
-.primary-action {
-  background: linear-gradient(135deg, #ff0024, #ff0024);
-  border: 0;
-  color: #fff;
-
-  &--success {
-    background: #22c55e;
   }
 }
 
@@ -1388,9 +1327,7 @@ $color-card: #121218;
 }
 
 // Shared racing controls retain the existing form and data handlers.
-.back-btn, .primary-action, .ghost-action, .danger-action { @include controls.action; }
-.primary-action { background: linear-gradient(110deg,#ff002430,#ff002412); color: #ff526b; }
-.danger-action { background: #ff00240c; color: #ff7188; }
+// Stato "fatto" sui bottoni rc-btn: verde temporaneo dopo salvataggio/revoca riuscita.
 .primary-action--success, .danger-action--success { color: #21ff83; background: #21ff8314; }
 .profile-card { @include controls.panel; }
 .profile-hero { margin-bottom: 32px; }
@@ -1409,7 +1346,7 @@ $color-card: #121218;
 .segmented-control, .segmented-control__item { border-radius: 0; }
 @media(max-width:700px) { .card-head { flex-wrap: wrap; }.scale-row,.slider-row { grid-template-columns: 1fr; }.profile-card { padding: 18px; }.hero-meta { font-size: 12px; } }
 .profile-page { @include controls.tokens; }
-.hero-copy h1 { @include controls.title; }.profile-page .primary-action { @include controls.primary; }.profile-page .slider-row input[type='range'] { @include controls.slider; }.profile-page .card-title { font-weight: 550; }.profile-page .summary-section h4 { font-weight: 500; }.profile-page .form-group span { font-weight: 500; }
+.hero-copy h1 { @include controls.title; }.profile-page .slider-row input[type='range'] { @include controls.slider; }.profile-page .card-title { font-weight: 550; }.profile-page .summary-section h4 { font-weight: 500; }.profile-page .form-group span { font-weight: 500; }
 .profile-page--embedded { min-height: 0; }.profile-page--embedded .profile-main { padding-top: var(--app-content-top-space); }
 .profile-page .account-grid { width: 100%; gap: 20px; }
 .account-preview { grid-column: 1 / -1; border-color: #ffffff25; }
@@ -1421,7 +1358,6 @@ $color-card: #121218;
 .account-preview__item label { color: #9898a1; font-size: 13px; }
 .account-preview__item input { @include controls.field; box-sizing: border-box; width: 100%; padding: 8px 12px; color: #85858f; border-color: #ffffff20; background: #ffffff03; cursor: not-allowed; text-overflow: ellipsis; }
 .account-preview__item input::placeholder { color: #787882; opacity: 1; }
-.account-preview__item button { @include controls.action; }
 @media (max-width: 1100px) { .account-preview__fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 600px) { .account-preview__fields { grid-template-columns: 1fr; } }
 .profile-page .profile-card--secondary { min-height: 0; }

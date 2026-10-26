@@ -78,7 +78,7 @@ function leave() {
     </button>
 
     <header class="pwc-live__heading"><h2>{{ race?.label || 'Pitwall' }}</h2>
-      <button v-if="isManager && !isFull && race?.membershipModel !== 'social'" type="button" class="pwc-btn" @click="guestOpen = true">+ Ospite</button>
+      <button v-if="isManager && !isFull && race?.membershipModel !== 'social'" type="button" class="rc-btn rc-btn--compact" @click="guestOpen = true">+ Ospite</button>
     </header>
     <PitwallConceptWall
       v-if="race"
@@ -128,7 +128,7 @@ function leave() {
           <template #actions="{ person }">
             <button
               type="button"
-              class="pwc-btn is-primary"
+              class="rc-btn rc-btn--compact rc-btn--primary"
               @click="invite(person.id)"
             >
               Invita
@@ -167,7 +167,7 @@ function leave() {
 /* I due ruoli partono dall'alto: le etichette restano sulla stessa riga anche
    quando sotto al volante c'e' una frase in piu'. */
 .pwc-wall .pwc-role { align-self: start; }
-.pwc-wall .pwc-btn { margin-left: auto; }
+.pwc-wall .rc-btn { margin-left: auto; }
 .pwc-wall__full { margin-left: auto; }
 .pwc-avatar.is-more { border-style: dashed; color: $text-secondary; font-size: 9px; }
 
@@ -204,6 +204,6 @@ function leave() {
 
 @media (max-width: 760px) {
   .pwc-wall { gap: 20px; }
-  .pwc-wall .pwc-btn { margin-left: 0; }
+  .pwc-wall .rc-btn { margin-left: 0; }
 }
 </style>

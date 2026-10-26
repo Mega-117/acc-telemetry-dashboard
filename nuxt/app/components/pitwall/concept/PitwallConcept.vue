@@ -181,7 +181,7 @@ function add(personId: string) {
           <template #search>
             <PitwallConceptSearch v-model="search" :found="found" linked-label="Già collegato">
               <template #actions="{ person }">
-                <button type="button" class="pwc-btn" @click="add(person.id)">Aggiungi</button>
+                <button type="button" class="rc-btn rc-btn--compact" @click="add(person.id)">Aggiungi</button>
               </template>
             </PitwallConceptSearch>
           </template>
@@ -228,7 +228,8 @@ function add(personId: string) {
 .pwc *::before,
 .pwc *::after { box-sizing: border-box; }
 
-.pwc button,
+/* .rc-btn porta font e fuoco suoi (PIP-634): le basi del Pitwall non lo toccano. */
+.pwc button:not(.rc-btn),
 .pwc input,
 .pwc select { font: inherit; }
 
@@ -241,7 +242,7 @@ function add(personId: string) {
 .pwc h2 { margin: 0; font-size: 18px; }
 .pwc small { color: $text-secondary; }
 
-.pwc button:focus-visible,
+.pwc button:not(.rc-btn):focus-visible,
 .pwc input:focus-visible,
 .pwc select:focus-visible {
   outline: 2px solid $racing-orange;
@@ -262,27 +263,7 @@ function add(personId: string) {
 /* Ambra e non rosso: non e' rotto niente, c'e' da sistemare una cosa fuori. */
 .pwc-flash.is-warn { border-color: rgba(245, 158, 11, 0.55); color: #f59e0b; }
 
-/* Elementi condivisi */
-.pwc-btn {
-  min-height: 38px;
-  padding: 0 16px;
-  border: 1px solid var(--pwc-line);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #fff;
-  font-weight: 700;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-}
-.pwc-btn:hover { border-color: rgba(255, 107, 0, 0.6); background: rgba(255, 107, 0, 0.08); }
-.pwc-btn.is-primary { border-color: #ff3d16; background: #e0210b; }
-.pwc-btn.is-primary:hover { background: #f5290f; }
-.pwc-btn.is-active { border-color: rgba(255, 107, 0, 0.8); background: rgba(255, 107, 0, 0.12); }
-/* Un solo gesto distruttivo nel prototipo, e si vede che lo e'. */
-.pwc-btn.is-danger { border-color: rgba(239, 68, 68, 0.6); background: rgba(239, 68, 68, 0.14); }
-.pwc-btn.is-danger:hover { border-color: #ef4444; background: rgba(239, 68, 68, 0.24); }
-
+/* Elementi condivisi: i bottoni d'azione sono il globale .rc-btn (PIP-634). */
 .pwc-link-btn {
   padding: 0;
   border: 0;
@@ -537,12 +518,8 @@ function add(personId: string) {
   h2, strong, b { font-family: var(--rc-font), sans-serif; }
   .pwc-block__title { font-size: 12px; letter-spacing: .08em; }
   .pwc-block__head { min-height: 34px; margin-bottom: 12px; }
-  .pwc-btn { @include racing.action; padding: 7px 14px; }
-  .pwc-btn.is-primary { @include racing.primary; }
-  .pwc-btn.is-danger { color: #ff6178; background: #ff002419; }
   .pwc-link-btn { min-height: 32px; font-size: 12px; }
   button:focus-visible, input:focus-visible { outline-color: #fff; }
-  .pwc-btn:focus-visible { outline-offset: -3px; }
   .pwc-panel, .pwc-race, .pwc-person, .pwc-search, .pwc-flash { border-radius: 0; }
   .pwc-chip { border: 0; padding: 0; font-size: 11px; }
   .pwc-chip.is-asking { color: #ffc400; }
@@ -588,14 +565,14 @@ function add(personId: string) {
     .pwc-mine__actions { grid-column: 1 / -1; }
     .pwc-race { grid-template-columns: minmax(0,1fr) auto; gap: 12px; }
     .pwc-race__wall { grid-column: 1; grid-row: 2; }
-    .pwc-race > .pwc-btn { grid-column: 2; grid-row: 1 / 3; }
+    .pwc-race > .rc-btn { grid-column: 2; grid-row: 1 / 3; }
   }
   @media(max-width: 720px) {
     padding-right: 16px; padding-left: 16px;
     .pwc-home { height: 760px; grid-template-columns: minmax(0,1fr); grid-template-rows: minmax(0,1fr) minmax(0,1fr) 56px; gap: 16px; padding: 16px 16px 0; }
     .pwc-home__social { padding: 16px 0 0; border-left: 0; border-top: 1px solid var(--rc-line); }
     .pwc-mine, .pwc-mine.is-off { grid-template-columns: 1fr; }
-    .pwc-mine > .pwc-btn { justify-self: start; }
+    .pwc-mine > .rc-btn { justify-self: start; }
   }
 }
 
@@ -623,8 +600,6 @@ function add(personId: string) {
   .pwc-chip, .pwc-fresh { border: 0; background: transparent; padding: 0; font-size: 11px; }
   .pwc-recipient { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 0 16px 12px; font-size: 12px; }
   .pwc-recipient select { @include racing.select; width: 210px; }
-  .pwc-btn { @include racing.action; }
-  .pwc-btn.is-primary { @include racing.primary; }
   .pwc-link-btn { font-size: 12px; min-height: 32px; }
   .pwc-flash { border-radius: 0; margin: 0 0 16px; padding: 8px 12px; font-size: 12px; }
   @media (max-width: 1000px) {

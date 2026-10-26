@@ -84,7 +84,7 @@ const driving = computed(() => {
       </div>
       <button
         type="button"
-        class="pwc-btn is-primary"
+        class="rc-btn rc-btn--compact rc-btn--primary"
         @click="$emit('start')"
       >
         Apri il Pitwall
@@ -127,7 +127,7 @@ const driving = computed(() => {
         </small>
       </div>
       <div class="pwc-mine__actions">
-        <button v-if="room" type="button" class="pwc-btn" @click="$emit('open')">Apri pannello</button>
+        <button v-if="room" type="button" class="rc-btn rc-btn--compact" @click="$emit('open')">Apri pannello</button>
         <PitwallConceptActionMenu label="Opzioni Pitwall" action-label="Abbandona Pitwall" @select="$emit('close')" />
       </div>
     </article>
@@ -136,7 +136,7 @@ const driving = computed(() => {
 
 <style scoped>
 /*
- * Gli stili della schermata (`.pwc-panel`, `.pwc-chip`, `.pwc-btn`,
+ * Gli stili della schermata (`.pwc-panel`, `.pwc-chip`, il globale `.rc-btn`,
  * `.pwc-race__*`, `.pwc-empty`) sono globali dentro `.pwc`: qui resta solo la
  * disposizione propria di questa card.
  */

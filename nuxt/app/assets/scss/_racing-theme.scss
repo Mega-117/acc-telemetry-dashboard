@@ -38,9 +38,9 @@
   &:not(.racing-button--primary)::after { left: -3px; bottom: 4px; }
 }
 
-// PIP-633: nuovo bottone, in prova sulla Panoramica prima di sostituire .racing-button nel sito.
-// Font dei titoli (corsivo, maiuscolo), solo l'angolo in alto a destra smussato, nessun bordo:
-// principale rosso pieno, secondario fondo trasparente leggero. Icona a sinistra, freccia a destra.
+// PIP-633/PIP-634: il bottone d'azione del sito. Font dei titoli (corsivo, maiuscolo), solo l'angolo
+// in alto a destra smussato, bordino bianco semi-trasparente: principale rosso pieno, secondario
+// fondo trasparente leggero, pericolo rosso trasparente. Icona a sinistra, freccia a destra.
 .rc-btn {
   position: relative;
   display: inline-flex; align-items: center; justify-content: center; gap: 10px;
@@ -70,6 +70,22 @@
   // Il principale e' rosso pieno, con lo stesso bordo bianco leggero del secondario.
   &--primary { background: #ff0024; &:hover:not(:disabled), &:focus-visible { background: #ff2a45; } }
   &--compact { min-height: 34px; padding: 6px 12px 6px 10px; gap: 8px; font-size: 13px; }
+  // Interruttore (es. Prove libere / Qualifica / Gara): spento = quasi trasparente e grigio, acceso = pieno
+  // nel suo colore (--rc-toggle-color) con il bordino dello stesso colore. Acceso si legge con .is-active o aria-pressed.
+  &--toggle {
+    --rc-btn-edge: #ffffff21; color: #8a8a8a; background: #ffffff08;
+    &:hover:not(:disabled), &:focus-visible {
+      --rc-btn-edge: color-mix(in srgb, var(--rc-toggle-color, #fff) 60%, transparent);
+      color: #d6d6d6; background: color-mix(in srgb, var(--rc-toggle-color, #fff) 14%, transparent);
+    }
+    &.is-active, &[aria-pressed='true'] {
+      --rc-btn-edge: color-mix(in srgb, var(--rc-toggle-color, #fff) 70%, #fff);
+      color: var(--rc-toggle-on-text, #fff); background: var(--rc-toggle-color, #ff0024);
+      &:hover:not(:disabled), &:focus-visible { background: color-mix(in srgb, var(--rc-toggle-color, #ff0024) 85%, #fff); color: var(--rc-toggle-on-text, #fff); }
+    }
+  }
+  // Azioni distruttive (elimina, revoca): rosso trasparente, mai pieno, per non confondersi col principale.
+  &--danger { --rc-btn-edge: #ff00248c; color: #ff8a98; background: #ff00241f; &:hover:not(:disabled), &:focus-visible { --rc-btn-edge: #ff0024; color: #fff; background: #ff002447; } }
 }
 
 // One control definition; density is an explicit variant, not import order.

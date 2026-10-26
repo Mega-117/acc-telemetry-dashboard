@@ -65,13 +65,13 @@ watch(() => props.nowMs, load)
       <small v-if="error" class="stability__error" role="alert">{{ error }}</small>
     </div>
     <div class="stability__actions">
-      <button v-if="!formOpen" type="button" class="stability__button" :disabled="!state" @click="formOpen = true">Azzera: bug critico</button>
+      <button v-if="!formOpen" type="button" class="rc-btn rc-btn--compact rc-btn--danger" :disabled="!state" @click="formOpen = true">Azzera: bug critico</button>
       <form v-else class="stability__form" @submit.prevent="confirmReset">
         <label>Bug critico<input v-model="reason" maxlength="240" required placeholder="es. HUD bloccato senza recupero"></label>
         <label>Task<input v-model="task" maxlength="40" placeholder="PIP-…"></label>
         <div class="stability__row">
-          <button type="submit" class="stability__button stability__button--danger" :disabled="saving || !reason.trim()">{{ saving ? 'Salvataggio…' : 'Azzera la settimana' }}</button>
-          <button type="button" class="stability__button" @click="formOpen = false">Annulla</button>
+          <button type="submit" class="rc-btn rc-btn--compact rc-btn--danger" :disabled="saving || !reason.trim()">{{ saving ? 'Salvataggio…' : 'Azzera la settimana' }}</button>
+          <button type="button" class="rc-btn rc-btn--compact" @click="formOpen = false">Annulla</button>
         </div>
       </form>
     </div>
@@ -91,7 +91,4 @@ watch(() => props.nowMs, load)
 .stability__form label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: rgba(255, 255, 255, 0.7); }
 .stability__form input { background: #0b0b0f; color: #fff; border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 6px; padding: 5px 8px; }
 .stability__row { display: flex; gap: 6px; }
-.stability__button { padding: 7px 12px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.25); background: rgba(255, 255, 255, 0.06); color: #fff; cursor: pointer; font-size: 13px; }
-.stability__button:disabled { opacity: .5; cursor: default; }
-.stability__button--danger { border-color: #ef4444; background: rgba(239, 68, 68, 0.18); }
 </style>
