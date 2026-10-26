@@ -220,14 +220,15 @@ async function nextPage() {
 .pagination--racing {
   padding: 0; margin-top: 24px; background: transparent; border: 0; border-radius: 0; gap: 16px;
   .pagination-info { color: var(--racing-data-muted); font: inherit; }
-  // Quadrati staccati come i bottoni rc-btn: angolo alto-destra smussato, bordino interno, attivo rosso.
+  // Quadrati semplici (niente angolo smussato): bordino leggero, attivo rosso.
   .pagination-controls, .pagination-pages { gap: 4px; }
   .pagination-controls { max-width: 100%; padding: 4px; }
   .pagination-pages { flex-wrap: wrap; justify-content: center; }
-  .page-btn, .pagination-btn { flex-shrink: 0; min-width: 32px; width: auto; height: 32px; padding: 0 10px; border: 0; border-radius: 0; background: #ffffff08; box-shadow: inset 0 0 0 1px #ffffff40; color: #ededf0; font: italic 700 13px/1 'Racer Display', sans-serif; clip-path: polygon(-1px -1px, calc(100% - 7px) -1px, calc(100% + 1px) 7px, calc(100% + 1px) calc(100% + 1px), -1px calc(100% + 1px)); }
-  // Diagonale del bordino sull'angolo smussato (come rc-btn).
-  .page-btn, .pagination-btn { position: relative; }
-  .page-btn:not(.pagination-gap)::after, .pagination-btn::after { content: ''; position: absolute; top: 0; right: 0; width: 7px; height: 7px; pointer-events: none; background: linear-gradient(to bottom left, transparent 50%, #ffffff40 50%, #ffffff40 calc(50% + 1.4px), transparent calc(50% + 1.4px)); }
+  .page-btn, .pagination-btn { flex-shrink: 0; min-width: 32px; width: auto; height: 32px; padding: 0 10px; border: 0; border-radius: 0; background: #ffffff08; box-shadow: inset 0 0 0 1px #ffffff40; color: #ededf0; font: italic 700 13px/1 'Racer Display', sans-serif; }
+  // Frecce ben leggibili: bianche, e anche da spente restano visibili (solo piu' tenui).
+  .pagination-btn { padding: 0 6px; svg { color: #fff; } }
+  .pagination-btn:disabled { opacity: 1; box-shadow: inset 0 0 0 1px #ffffff26; svg { color: #8a8a8a; } }
+  .pagination-btn:hover:not(:disabled) { background: var(--racing-data-hover); box-shadow: inset 0 0 0 1px #ffffffb3; }
   .page-btn--active { background: var(--racing-data-accent, #ff0024); }
   .page-btn:hover:not(:disabled):not(.page-btn--active) { background: var(--racing-data-hover); }
   .page-btn:disabled { cursor: default; opacity: .5; }
