@@ -41,5 +41,17 @@ describe('LapPicker', () => {
     expect(w.find('[role="listbox"]').exists()).toBe(false)
     w.unmount()
   })
-it('runs the actions under the list and closes, skipping disabled ones', async () => {    const w = mount(LapPicker, { props: { modelValue: 'b', groups, name: 'Riferimento', color: '#fbbf24', actions: [{ id: 'shared', label: '+ Giro di un altro pilota' }, { id: 'off', label: 'Spento', disabled: true }] }, attachTo: document.body })    await w.get('.lap-picker__button').trigger('click')    const buttons = w.findAll('.lap-picker__actions button')    await buttons[1]!.trigger('click')    expect(w.emitted('action')).toBeUndefined()    await buttons[0]!.trigger('click')    expect(w.emitted('action')?.[0]).toEqual(['shared'])    expect(w.find('.lap-picker__pop').exists()).toBe(false)    w.unmount()  })
+
+  it('runs the actions under the list and closes, skipping disabled ones', async () => {
+    const actions = [{ id: 'shared', label: '+ Giro di un altro pilota' }, { id: 'off', label: 'Spento', disabled: true }]
+    const w = mount(LapPicker, { props: { modelValue: 'b', groups, name: 'Riferimento', color: '#fbbf24', actions }, attachTo: document.body })
+    await w.get('.lap-picker__button').trigger('click')
+    const buttons = w.findAll('.lap-picker__actions button')
+    await buttons[1]!.trigger('click')
+    expect(w.emitted('action')).toBeUndefined()
+    await buttons[0]!.trigger('click')
+    expect(w.emitted('action')?.[0]).toEqual(['shared'])
+    expect(w.find('.lap-picker__pop').exists()).toBe(false)
+    w.unmount()
+  })
 })
