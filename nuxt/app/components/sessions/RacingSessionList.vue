@@ -141,8 +141,8 @@ function openSession(event: MouseEvent, id: string) {
 @use '@/assets/scss/racing-settings' as controls;
 .racing-session-list { @include controls.tokens; }
 .session-open { text-decoration: none; }
-// Tipo di sessione: riquadrino nel colore della sessione, con il font delle etichette del sito.
-.session-kind { display: inline-flex; justify-content: center; align-items: center; min-width: 74px; min-height: 24px; padding: 0 6px; border: 1px solid currentColor; border-radius: 2px; font: 600 10px/1 'Inter', sans-serif; letter-spacing: .5px; text-transform: uppercase; }
+// Tipo di sessione: riquadrino ad angoli vivi nel colore della sessione, fondo dello stesso colore trasparente (come gli interruttori dello Spotter).
+.session-kind { display: inline-flex; justify-content: center; align-items: center; min-width: 74px; min-height: 24px; padding: 0 6px; border: 1px solid currentColor; border-radius: 0; background: color-mix(in srgb, currentColor 16%, transparent); font: 600 10px/1 'Inter', sans-serif; letter-spacing: .5px; text-transform: uppercase; }
 .session-kind--practice { color: var(--racing-practice); } .session-kind--qualify { color: var(--racing-qualify); } .session-kind--race { color: var(--racing-race); } .session-kind--unknown { color: var(--racing-data-muted); }
 // Date come titoli di sezione; tempi nel corsivo sportivo, non in grassetto.
 .racing-day-table caption { @include controls.section-title; font-size: 15px; letter-spacing: .04em; padding: 0 0 10px; }
@@ -164,7 +164,8 @@ function openSession(event: MouseEvent, id: string) {
 .session-type { position: relative; }
 .session-type::after { content: ''; position: absolute; right: 0; top: 9px; bottom: 9px; border-right: 1px solid var(--racing-data-line); }
 .session-time, .session-stat { text-align: center; }
-.session-stat span { margin-left: 6px; }
+// Giri / stint in maiuscolo, piccoli, come le altre etichette del sito.
+.session-stat span { margin-left: 6px; font-size: 11px; letter-spacing: .5px; text-transform: uppercase; }
 .session-row .session-stat--stints { text-align: right; padding-right: 24px; }
 .session-row .session-best--qualify { padding-left: 24px; }
 .session-car, .session-stat span { color: var(--racing-data-muted); }
