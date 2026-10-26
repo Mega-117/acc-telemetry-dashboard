@@ -463,7 +463,7 @@ function goToSession(id: string) {
 @media (min-width: 1201px) and (min-height: 850px) {
   .sidebar { position: sticky; top: 24px; }
 }
-.section-title { font-size: 18px; font-weight: 600; margin: 0 0 20px; }
+.section-title { @include controls.section-title; margin: 0 0 20px; }
 .sidebar .section-title { margin-bottom: 16px; }
 .best-reference-stack { display: flex; flex-direction: column; gap: 16px; }
 .race-reference-card { border-top: 1px solid var(--rc-line); padding-top: 20px; margin-top: 4px; }

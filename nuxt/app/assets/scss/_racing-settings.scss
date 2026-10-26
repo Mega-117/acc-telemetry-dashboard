@@ -61,7 +61,9 @@
   --rc-selection: linear-gradient(90deg,#ffffff20,#ffffff05);
   font-family: var(--rc-font), 'Segoe UI', sans-serif; color: #ededf0;
 }
-@mixin title { margin: 0 0 8px; font: 650 34px/1.2 var(--rc-font), 'Segoe UI', sans-serif; @media(max-width:700px) { font-size: 28px; } }
+// Titoli di pagina e di sezione nello stile sportivo dei titoli (corsivo, maiuscolo), uguali in tutto il sito.
+@mixin title { margin: 0 0 8px; font: italic 700 clamp(28px, 2.6vw, 40px)/1.1 'Racer Display', sans-serif; text-transform: uppercase; letter-spacing: -.01em; @media(max-width:700px) { font-size: 28px; } }
+@mixin section-title { margin: 0; font: italic 700 18px/1.2 'Racer Display', sans-serif; text-transform: uppercase; }
 @mixin select {
   @include field;
   appearance: none; min-width: 0; max-width: 100%; border-radius: 0; padding: 8px 36px 8px 12px;

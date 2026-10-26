@@ -89,8 +89,8 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
         <fieldset>
           <legend>Scala</legend>
           <div class="track-times__toggle">
-            <button type="button" :aria-pressed="scale === 'focus'" @click="scale = 'focus'">Focus</button>
-            <button type="button" :aria-pressed="scale === 'complete'" @click="scale = 'complete'">Completa</button>
+            <button type="button" class="rc-btn rc-btn--compact rc-btn--toggle" :aria-pressed="scale === 'focus'" @click="scale = 'focus'">Focus</button>
+            <button type="button" class="rc-btn rc-btn--compact rc-btn--toggle" :aria-pressed="scale === 'complete'" @click="scale = 'complete'">Completa</button>
           </div>
         </fieldset>
       </div>
@@ -123,19 +123,18 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
   @include controls.tokens;
   margin-bottom: 0;
   &__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
-  h2 { margin: 0; font-size: 18px; font-weight: 700; }
+  h2 { @include controls.section-title; }
   &__controls { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; }
   label, legend { font-size: 11px; color: #aaaab5; }
   label { display: flex; flex-direction: column; gap: 6px; }
   fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
   legend { padding: 0; margin-bottom: 6px; }
-  select, &__toggle { background: transparent; border: 1px solid var(--rc-line); border-radius: 0; color: #eeeef4; }
+  select { background: transparent; border: 1px solid var(--rc-line); border-radius: 0; color: #eeeef4; }
   select { @include controls.select; --rc-control-height: 34px; background-color: transparent; }
-  &__toggle { display: flex; overflow: hidden; }
-  &__toggle button { border: 0; padding: 8px 10px; min-height: 33px; color: #a8a8b4; }
-  &__toggle button[aria-pressed='true'] { color: #fff; background: #ffffff14; }
-  button { background: transparent; color: #e0b96e; cursor: pointer; font: inherit; font-size: 12px; border: 0; }
-  button:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid #ffc400; outline-offset: 3px; }
+  // Focus / Completa: interruttori rc-btn--toggle (tema racing), neutri in bianco.
+  &__toggle { display: flex; gap: 4px; --rc-toggle-color: #ffffff; }
+  button:not(.rc-btn) { background: transparent; color: #e0b96e; cursor: pointer; font: inherit; font-size: 12px; border: 0; }
+  button:not(.rc-btn):focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid #ffc400; outline-offset: 3px; }
   &__card { padding: 16px; border: 1px solid rgba(255,255,255,.07); border-radius: 0; background: transparent; }
   &__canvas { position: relative; height: 280px; }
   &__legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 20px; margin: 12px 0; color: #b7b7c1; font-size: 12px; }

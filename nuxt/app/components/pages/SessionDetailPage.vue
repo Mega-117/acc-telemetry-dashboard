@@ -3035,14 +3035,14 @@ const gripZones = computed(() => {
             <!-- Tabs with COMPARE option in comparison modes -->
             <!-- Tabs with COMPARE option in comparison modes -->
             <div v-if="isCompareMode || isCrossSessionCompare || isBuilderSameSessionCompare" class="laps-tabs">
-              <button :class="['lap-tab lap-tab--compare', { 'lap-tab--active': activeTableTab === 'COMPARE' }]" @click="activeTableTab = 'COMPARE'">
+              <button :class="['rc-btn rc-btn--compact rc-btn--toggle lap-tab lap-tab--compare', { 'is-active': activeTableTab === 'COMPARE' }]" :aria-pressed="activeTableTab === 'COMPARE'" @click="activeTableTab = 'COMPARE'">
                 Confronto
               </button>
               <!-- All stints from Strategy A -->
               <button
                 v-for="stint in strategyAStints"
                 :key="'tab-a-' + stint.number"
-                :class="['lap-tab lap-tab--a', { 'lap-tab--active': activeTableTab === 'A-' + stint.number }]"
+                :class="['rc-btn rc-btn--compact rc-btn--toggle lap-tab lap-tab--a', { 'is-active': activeTableTab === 'A-' + stint.number }]" :aria-pressed="activeTableTab === 'A-' + stint.number"
                 @click="activeTableTab = 'A-' + stint.number"
               >
                 A: Stint #{{ stint.number }}
@@ -3051,7 +3051,7 @@ const gripZones = computed(() => {
               <button
                 v-for="stint in strategyBStints"
                 :key="'tab-b-' + stint.number"
-                :class="['lap-tab lap-tab--b', { 'lap-tab--active': activeTableTab === 'B-' + stint.number }]"
+                :class="['rc-btn rc-btn--compact rc-btn--toggle lap-tab lap-tab--b', { 'is-active': activeTableTab === 'B-' + stint.number }]" :aria-pressed="activeTableTab === 'B-' + stint.number"
                 @click="activeTableTab = 'B-' + stint.number"
               >
                 B: Stint #{{ stint.number }}
@@ -4324,19 +4324,11 @@ const gripZones = computed(() => {
 .detail-tabs { display: flex; gap: 3px; width: max-content; margin: 0 0 12px; padding: 3px; border: 1px solid #ffffff1f; background: #0a0a0feb;
   button { height: 30px; padding: 0 18px; border: 0; background: transparent; color: #b3b3b8; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; cursor: pointer;
     &.active { background: #ffffff14; color: #fff; box-shadow: inset 0 -2px #ff0024; } } }
-.lap-tab {
-  padding: 6px 12px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 4px;
-  font-size: 11px; font-weight: 600;
-  color: rgba(255,255,255,0.5);
-  cursor: pointer;
-  transition: all 0.15s;
-  &:hover { color: rgba(255,255,255,0.8); }
-  &--active { background: rgba(#3b82f6,0.15); border-color: rgba(#3b82f6,0.4); color: #3b82f6; }
-  &:last-child.lap-tab--active { background: rgba(#8b5cf6,0.15); border-color: rgba(#8b5cf6,0.4); color: #8b5cf6; }
-}
+// Schede del confronto: interruttori rc-btn--toggle (tema racing), qui solo il colore di ciascuna.
+.lap-tab { min-height: 30px; font-size: 12px; }
+.lap-tab--compare { --rc-toggle-color: #ffffff; }
+.lap-tab--a { --rc-toggle-color: #3b82f6; }
+.lap-tab--b { --rc-toggle-color: #8b5cf6; }
 
 .toggle-btn { padding: 5px 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; font-size: 10px; color: rgba(255,255,255,0.6); cursor: pointer; &:hover { color: #fff; } }
 .laps-table-wrap { flex: 1; overflow-y: auto; background: rgba(0,0,0,0.25); border-radius: 8px; }
@@ -6456,18 +6448,6 @@ const gripZones = computed(() => {
         color: rgba(255, 255, 255, 0.6);
       }
     }
-  }
-}
-
-// Tab styling for Confronto
-.lap-tab--compare {
-  border-color: rgba(255, 255, 255, 0.3) !important;
-  color: rgba(255, 255, 255, 0.7) !important;
-
-  &.lap-tab--active {
-    background: rgba(255, 255, 255, 0.1) !important;
-    border-color: rgba(255, 255, 255, 0.5) !important;
-    color: #fff !important;
   }
 }
 
