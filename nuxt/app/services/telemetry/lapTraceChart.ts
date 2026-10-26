@@ -22,12 +22,40 @@ export interface LapTraceView {
   complete: boolean
   valid: boolean | null
   fuelL: number | null
+  /** PIP-619: aria/asfalto dal file della sessione, grip anche dal giro stesso. */
+  conditions: LapConditions | null
   gridStepM: number
   lengthM: number
   channels: Record<string, number[]>
 }
 
 const CORE_CHANNELS = ['time_s', 'speed_kmh', 'brake_pct', 'throttle_pct']
+
+export interface LapConditions { airC: number | null, roadC: number | null, grip: string | null }
+
+const finiteTemp = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value > -40 && value < 80 ? value : null
+const gripWord = (value: unknown) => typeof value === 'string' && /^[A-Za-z]{2,16}$/.test(value) ? value : null
+
+/** Condizioni da campi grezzi (giro della sessione o `meta.extra.conditions`); `null` se vuote. */
+export function lapConditions(source: { air?: unknown, road?: unknown, grip?: unknown }): LapConditions | null {
+  const out = { airC: finiteTemp(source.air), roadC: finiteTemp(source.road), grip: gripWord(source.grip) }
+  return out.airC === null && out.roadC === null && out.grip === null ? null : out
+}
+
+/** Condizioni del giro, completate con la riga della sessione (`air_temp`, `road_temp`, `track_grip_status`). */
+export function mergeLapConditions(own: LapConditions | null, row?: { air_temp?: unknown, road_temp?: unknown, track_grip_status?: unknown }): LapConditions | null {
+  const fallback = row ? lapConditions({ air: row.air_temp, road: row.road_temp, grip: row.track_grip_status }) : null
+  if (!own && !fallback) return null
+  return { airC: own?.airC ?? fallback?.airC ?? null, roadC: own?.roadC ?? fallback?.roadC ?? null, grip: own?.grip ?? fallback?.grip ?? null }
+}
+
+/** "15°/18° OPT" (aria/asfalto e grip abbreviato come in Panoramica): corto, la barra resta su una riga. */
+export function formatLapConditions(c: LapConditions | null): string {
+  if (!c) return ''
+  const temps = c.airC !== null || c.roadC !== null
+    ? `${c.airC !== null ? Math.round(c.airC) + '°' : '–'}/${c.roadC !== null ? Math.round(c.roadC) + '°' : '–'}` : ''
+  return [temps, c.grip ? c.grip.slice(0, 3).toUpperCase() : ''].filter(Boolean).join(' ')
+}
 
 export function normalizeLapTrace(raw: unknown): LapTraceView | null {
   const data = raw as Record<string, any> | null
@@ -64,6 +92,7 @@ export function normalizeLapTrace(raw: unknown): LapTraceView | null {
     complete: meta.complete === true,
     valid: typeof meta.valid === 'boolean' ? meta.valid : null,
     fuelL: typeof meta.fuel_l === 'number' && Number.isFinite(meta.fuel_l) ? meta.fuel_l : null,
+    conditions: lapConditions({ air: meta.extra?.conditions?.air_c, road: meta.extra?.conditions?.road_c, grip: meta.extra?.conditions?.grip ?? meta.grip_status }),
     gridStepM: gridStep,
     lengthM: (length! - 1) * gridStep,
     channels: out,

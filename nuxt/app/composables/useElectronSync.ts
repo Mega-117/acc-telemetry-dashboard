@@ -53,6 +53,7 @@ import {
 } from '~/services/sync/syncMirrorService'
 import { notifyOwnerCacheChanged } from '~/services/cache/ownerCacheSignals'
 import { recordFirebaseJournalEvent } from '~/services/monitoring/firebaseOpsJournal'
+import { refreshOwnStats } from '~/repositories/statsRepository'
 import { createRuntimeBootstrapCoordinator } from '~/services/runtime/runtimeBootstrapCoordinator'
 import {
     buildRendererBootstrapContext,
@@ -850,6 +851,13 @@ export function useElectronSync() {
         if (synced.length > 0) {
             console.log(`[SYNC] Auto-sync completed: ${synced.length} files synced to Firebase`)
             pendingNotification.value = results
+            // PIP-619: nuove sessioni -> riepilogo Statistiche dai file locali (una scrittura solo se cambia).
+            const uid = currentUser.value?.uid
+            if (uid) {
+                void refreshOwnStats({ uid, electronAPI: getElectronApi() })
+                    .then(result => { if (result?.written) console.log('[STATS] summary written', result.summary?.sessionsCounted) })
+                    .catch(error => console.warn('[STATS] summary refresh failed', error))
+            }
         }
     }
 

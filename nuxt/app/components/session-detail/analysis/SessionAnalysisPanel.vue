@@ -13,12 +13,12 @@ import { LapsArchiveError } from '~/services/telemetry/lapsArchiveClient'
 import { lapShareErrorMessage } from '~/services/telemetry/lapShareLink'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { compareCorners, cornerAdvice, detectCorners, formatDelta, sectorBounds } from '~/services/telemetry/lapAnalysis'
-import { normalizeLapTrace, type LapTraceView } from '~/services/telemetry/lapTraceChart'
+import { formatLapConditions, mergeLapConditions, normalizeLapTrace, type LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { formatLapTime } from '~/utils/telemetryFormat'
 
 const props = defineProps<{
   sessionToken: string | null
-  laps: { lap_number: number, lap_time_ms: number | null, is_valid: boolean | null, sector_times_ms?: (number | null)[] | null }[]
+  laps: { lap_number: number, lap_time_ms: number | null, is_valid: boolean | null, sector_times_ms?: (number | null)[] | null, air_temp?: number | null, road_temp?: number | null, track_grip_status?: string | null }[]
   /** Lap to open as "Tu", when the driver picked it in the Sessione table. */
   initialLap?: number | null
   /** PIP-623: coach view of a linked pilot: the laps come from the online archive. */
@@ -291,9 +291,8 @@ onMounted(() => window.addEventListener("keydown", onEscape))
 onBeforeUnmount(() => window.removeEventListener("keydown", onEscape))
 // Garage 61 sectors: the official sector times of the reference, placed on its trace.
 // Sector times exist only for laps of the shown session (not for "own" or "shared" references).
-const sectorTimes = (e: Entry | null) => e && (e.origin === 'local' || e.origin === 'pilot') && e.sessionToken === props.sessionToken
-  ? props.laps.find(l => l.lap_number === e.lapNumber)?.sector_times_ms ?? null
-  : null
+const sessionRow = (e: Entry) => (e.origin === 'local' || e.origin === 'pilot') && e.sessionToken === props.sessionToken ? props.laps.find(l => l.lap_number === e.lapNumber) : undefined
+const sectorTimes = (e: Entry | null) => e ? sessionRow(e)?.sector_times_ms ?? null : null
 const sectorList = computed(() => {
   const frame = reference.value ?? lap.value
   const bounds = frame ? sectorBounds(frame, (sectorTimes(refEntry.value ?? lapEntry.value) ?? undefined) as number[] | undefined) : null
@@ -355,7 +354,7 @@ watch(corners, () => { if (layout.value !== 'tracce') selectFirst() })
 watch(layout, value => { if (value === 'tracce') selectedCorner.value = null; else selectFirst() })
 
 function emptyTrace(): LapTraceView {
-  return { gameId: 'acc', variant: null, sessionId: null, track: '', car: '', lapTimeS: 0, source: '', complete: false, valid: null, fuelL: null, gridStepM: 2, lengthM: 0, channels: {} }
+  return { gameId: 'acc', variant: null, sessionId: null, track: '', car: '', lapTimeS: 0, source: '', complete: false, valid: null, fuelL: null, conditions: null, gridStepM: 2, lengthM: 0, channels: {} }
 }
 const has = (name: string) => !!lap.value?.channels[name]
 const deltaRow = computed<ChartRow[]>(() => reference.value ? [{ key: 'delta', title: 'Delta', unit: 's', channels: [], delta: true, height: 70 }] : [])
@@ -381,7 +380,9 @@ const pilotRowHeight = computed(() => Math.max(80, Math.floor((traceHeight.value
 // Garage 61: the delta sits under the map; the channels on the right are speed, pedals, steering, gear.
 const traceRows = computed(() => [speedRow, ...pedalRows, steerRow, gearRow, ...(allChannels.value ? extraRows.value : [])])
 
-const lapLabel = (e: Entry) => e.label ?? `Giro ${e.lapNumber} · ${formatLapTime(e.lapTimeMs)}${e.complete ? '' : ' · parziale'}${e.valid ? '' : ' · invalido'}`
+// PIP-619: air/road and grip of each lap (from the lap, else this session's laps): like for like.
+const lapLabel = (e: Entry) => [e.label ?? `Giro ${e.lapNumber} · ${formatLapTime(e.lapTimeMs)}${e.complete ? '' : ' · parziale'}${e.valid ? '' : ' · invalido'}`,
+  formatLapConditions(mergeLapConditions(traces.value[e.id]?.conditions ?? null, sessionRow(e)))].filter(Boolean).join(' · ')
 const sessionEntries = computed(() => entries.value.filter(e => e.origin === 'local' || e.origin === 'pilot'))
 const ownEntries = computed(() => entries.value.filter(e => e.origin === 'own'))
 const sharedEntries = computed(() => entries.value.filter(e => e.origin === 'shared'))
@@ -394,10 +395,10 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
     <div class="analysis-bar">
       <!-- Track Titan: each lap's select wears its colour, so a colour tells which lap it is. -->
       <label class="pick pick--lap" title="Il tuo giro: azzurro in grafici e mappa"><span class="pick-name">Tu</span>
-        <select v-model="lapId" :disabled="!sessionEntries.length"><option v-for="e in sessionEntries" :key="e.id" :value="e.id" :disabled="!e.complete">{{ lapLabel(e) }}</option></select>
+        <select v-model="lapId" :disabled="!sessionEntries.length" :title="lapEntry ? lapLabel(lapEntry) : ''"><option v-for="e in sessionEntries" :key="e.id" :value="e.id" :disabled="!e.complete">{{ lapLabel(e) }}</option></select>
       </label>
       <label class="pick pick--ref" title="Il giro di riferimento: ambra in grafici e mappa"><span class="pick-name">Riferimento</span>
-        <select v-model="refId" :disabled="!entries.length">
+        <select v-model="refId" :disabled="!entries.length" :title="refEntry ? lapLabel(refEntry) : ''">
           <optgroup :label="pilotUid ? 'Giri del pilota' : 'Questa sessione'"><option v-for="e in sessionEntries" :key="e.id" :value="e.id" :disabled="!e.complete">{{ lapLabel(e) }}</option></optgroup>
           <optgroup v-if="ownEntries.length" label="I miei giri"><option v-for="e in ownEntries" :key="e.id" :value="e.id">{{ lapLabel(e) }}</option></optgroup>
           <optgroup v-if="sharedEntries.length" label="Condiviso"><option v-for="e in sharedEntries" :key="e.id" :value="e.id">{{ lapLabel(e) }}</option></optgroup>
@@ -541,7 +542,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .pick { --c: #38bdf8; display: flex; align-items: stretch; height: 38px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 14%, #0a0a0f);
   &--ref { --c: #fbbf24; }
   .pick-name { display: grid; place-items: center; padding: 0 10px; background: var(--c); color: #0a0a0f; font: italic 700 13px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; }
-  select { min-width: 220px; height: 100%; padding: 0 8px; border: 0; background: transparent; color: #fff; font: 600 13px 'Inter', sans-serif; option { background: #0d0d12; color: #e6e6ea; } } }
+  select { min-width: 220px; max-width: 232px; height: 100%; padding: 0 8px; border: 0; background: transparent; color: #fff; font: 600 13px 'Inter', sans-serif; option { background: #0d0d12; color: #e6e6ea; } } }
 .delta-badge { display: flex; align-items: baseline; gap: 6px; height: 38px; margin: 0; padding: 0 10px; border: 1px solid #ffffff2e; background: #ffffff08; line-height: 38px; color: #e6e6ea;
   span { color: #8a8a90; font: 700 11px 'Inter', sans-serif; text-transform: uppercase; }
   strong { font: 700 17px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }

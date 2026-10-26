@@ -35,7 +35,7 @@ const isLoading = ref(true)
 const activeTab = ref<'panoramica' | 'sessioni' | 'piste' | 'lezioni'>('panoramica')
 
 // Detail view state (inline navigation within pilot context)
-const detailView = ref<'none' | 'track' | 'session'>('none')
+const detailView = ref<'none' | 'track' | 'session' | 'stats'>('none')
 const selectedTrackId = ref<string | null>(null)
 const selectedSessionId = ref<string | null>(null)
 watch(consultedGame, () => {
@@ -89,6 +89,13 @@ function handleGoToSession(sessionId: string) {
   selectedSessionId.value = sessionId
   selectedTrackId.value = null
   detailView.value = 'session'
+}
+
+// PIP-619: Statistiche of this pilot, inside the pilot context (the route would lose it).
+function handleGoToStats() {
+  selectedTrackId.value = null
+  selectedSessionId.value = null
+  detailView.value = 'stats'
 }
 
 function goBackToList() {
@@ -166,11 +173,15 @@ function goBackToList() {
           />
         </template>
 
+        <template v-else-if="detailView === 'stats'">
+          <PagesStatistichePage @back="goBackToList" />
+        </template>
+
         <!-- Show main tab content when no detail selected -->
         <template v-else>
           <!-- Panoramica -->
           <div v-if="activeTab === 'panoramica'" class="tab-content">
-            <PagesPanoramicaPage @go-to-track="handleGoToTrack" @go-to-session="handleGoToSession" />
+            <PagesPanoramicaPage @go-to-track="handleGoToTrack" @go-to-session="handleGoToSession" @go-to-stats="handleGoToStats" />
           </div>
 
           <!-- Sessioni -->

@@ -49,6 +49,9 @@ export default defineConfig({
         // PIP-591: esito del salvataggio attrezzatura.
         'app/utils/equipmentSaveOutcome.ts',
         'app/utils/sessionShareUrl.ts',
+        // PIP-619: Statistiche di attivita' (calcoli e riepilogo dal PC).
+        'app/services/telemetry/activityStats.ts',
+        'app/services/sync/statsSummaryService.ts',
         // PIP-623: giri online (Condividi giro, coach, archivio).
         'app/services/telemetry/lapShareLink.ts',
         'app/services/telemetry/lapsArchiveClient.ts',

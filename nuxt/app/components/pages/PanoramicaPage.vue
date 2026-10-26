@@ -112,6 +112,7 @@ const performanceColumns = computed(() => overviewProjection.value?.performanceC
 const emit = defineEmits<{
   'go-to-track': [trackId: string]
   'go-to-session': [sessionId: string]
+  'go-to-stats': []
 }>()
 const router = useRouter()
 function goToTrack() {
@@ -123,6 +124,11 @@ function goToSession() {
   if (!lastSession.value?.id) return
   if (pilotContext.value) emit('go-to-session', lastSession.value.id)
   else router.push(`/sessioni/${encodeURIComponent(lastSession.value.id)}`)
+}
+// PIP-619: the coach stays inside the pilot page (explicit pilot context), the pilot gets the route.
+function goToStats() {
+  if (pilotContext.value) emit('go-to-stats')
+  else router.push('/statistiche')
 }
 </script>
 
@@ -164,6 +170,7 @@ function goToSession() {
           <div class="last-drive__actions">
             <button class="racing-button" :disabled="!lastTrack" @click="goToTrack">Dettaglio pista</button>
             <button class="racing-button racing-button--primary" :disabled="!lastSession?.id" @click="goToSession">Ultima sessione</button>
+            <button v-if="consultedGame === 'acc'" class="racing-button" @click="goToStats">Statistiche</button>
           </div>
         </div>
         <span v-if="isOverviewPlaceholder" class="overview-loading-label" role="status">Caricamento dati…</span>
