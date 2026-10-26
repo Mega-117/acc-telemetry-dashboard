@@ -2,6 +2,7 @@
 import { Info } from '@lucide/vue'
 import { stintTypeLabel, gripAbbreviation, lapPointAppearance } from '~/services/session-detail/sessionPresentation'
 import { useHeaderBack } from '~/composables/useHeaderBack'
+import { noteFeatureUse } from '~/services/usage/featureUseNote'
 // ============================================
 // SessionDetailPage - Master / Detail Layout
 // Now connected to Firebase for real data
@@ -204,6 +205,8 @@ const analysisToken = computed(() => analysisSessionToken(
 const analysisLaps = computed(() => (fullSession.value?.stints ?? []).flatMap(stint => stint.laps ?? [])
   .map(lap => ({ lap_number: lap.lap_number, lap_time_ms: lap.lap_time_ms ?? null, is_valid: lap.is_valid ?? null, sector_times_ms: lap.sectors_reliable ? lap.sector_times_ms ?? null : null,
     air_temp: lap.air_temp ?? null, road_temp: lap.road_temp ?? null, track_grip_status: lap.track_grip_status ?? null })))
+// PIP-632: traccia d'uso nel diario quando si apre la Telemetria (solo il numero di giri).
+watch(detailTab, tab => { if (tab === 'avanzata' && !isEvoSession.value) noteFeatureUse({ event: 'telemetry.opened', laps: analysisLaps.value.length }) })
 
 const isLoading = ref(true)
 const loadError = ref<string | null>(null)

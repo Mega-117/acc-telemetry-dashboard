@@ -8,6 +8,7 @@ import { fetchSharedLap, LapsArchiveError, type LapsArchiveDeps } from '~/servic
 import { normalizeLapTrace, type LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { loadPublicNickname } from '~/repositories/publicProfileRepository'
 import { formatLapTime } from '~/utils/telemetryFormat'
+import { noteFeatureUse } from '~/services/usage/featureUseNote'
 
 export interface SharedLapLoaded { id: string, trace: LapTraceView, label: string, lapNumber: number, lapTimeMs: number, carMismatch: boolean }
 
@@ -53,6 +54,7 @@ async function load() {
       label: `${nickname} · Giro ${lapNumber} · ${formatLapTime(lapTimeMs)}`,
       carMismatch: !!current && trace.car !== current.car,
     })
+    noteFeatureUse({ event: 'laps.share_pasted', laps: 1 })
     text.value = ''
   } catch (e) {
     if (mine === attempt) error.value = e instanceof LapsArchiveError ? e.message : 'Impossibile caricare il giro.'

@@ -4,6 +4,7 @@
 import { useTargetUserId, usePilotContext } from '~/composables/usePilotContext'
 import { useHeaderBack } from '~/composables/useHeaderBack'
 import { loadStatsSummary, refreshOwnStats } from '~/repositories/statsRepository'
+import { noteFeatureUse } from '~/services/usage/featureUseNote'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import {
   AIR_BANDS, GRIP_ORDER, compareCars, filterCombos, filterSessions, idealLapMs, timeByCar, timeByWeek,
@@ -83,6 +84,7 @@ async function load() {
     sessions.value = list ?? []
     summary.value = stats
     status.value = 'ready'
+    noteFeatureUse({ event: 'stats.opened', sessions: sessions.value.length })
   } catch {
     status.value = 'error'
     return
