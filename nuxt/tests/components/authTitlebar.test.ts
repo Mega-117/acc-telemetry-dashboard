@@ -13,8 +13,11 @@ vi.mock('~/composables/useRuntimeCapabilityGate', () => ({ useRuntimeCapabilityG
   gate: () => ref({ allowed: true }), snapshot: ref({ lifecycle: 'ready' }), connect: () => vi.fn(),
 }) }))
 vi.mock('~/services/cache/telemetryCacheInvalidationService', () => ({ invalidateTelemetryCaches: vi.fn() }))
+// PIP-625: the manual sync button is for admins (and development) only.
+const admin = ref(false)
+vi.mock('~/composables/useFirebaseAuth', () => ({ useFirebaseAuth: () => ({ isAdmin: admin }) }))
 
-afterEach(() => { vi.unstubAllGlobals(); delete window.electronAPI })
+afterEach(() => { vi.unstubAllGlobals(); delete window.electronAPI; admin.value = false })
 
 it('uses the login Racer Core branding everywhere while preserving every window control', async () => {
   vi.stubGlobal('useRuntimeConfig', () => ({ app: { baseURL: '/suite/' } }))
@@ -31,7 +34,7 @@ it('uses the login Racer Core branding everywhere while preserving every window 
   try {
     await flushPromises()
     const controls = w.findAll('button').map(button => button.attributes('title'))
-    expect(controls).toHaveLength(4)
+    expect(controls).toHaveLength(3) // pilot: minimize, maximize, close; no manual sync
     expect(w.get('.titlebar-title').text()).toBe('Racer Core')
     expect(w.get('.titlebar-title img').attributes('src')).toBe('/suite/branding/auth/racercore-rc.svg')
     expect(w.findAll('button').map(button => button.attributes('title'))).toEqual(controls)
@@ -65,6 +68,19 @@ it('uses the compiled Develop identity and icon without changing controls', asyn
     await flushPromises()
     expect(w.get('.titlebar-title').text()).toBe('Racer Core Develop')
     expect(w.get('.titlebar-title img').attributes('src')).toBe('data:image/x-icon;base64,AA==')
+    expect(w.findAll('button')).toHaveLength(3)
+  } finally { w.unmount() }
+})
+
+it('shows the manual sync button to admins only (PIP-625)', async () => {
+  vi.stubGlobal('useRuntimeConfig', () => ({ app: { baseURL: '/' } }))
+  vi.stubGlobal('useRoute', () => ({ params: {}, fullPath: '/' }))
+  Object.defineProperty(window, 'electronAPI', { configurable: true, value: { windowIsMaximized: vi.fn().mockResolvedValue(false) } })
+  admin.value = true
+  const w = mount(ElectronTitlebar, { global: { stubs: { ElectronSyncNotification: true, ElectronDataMaintenanceNotification: true } } })
+  try {
+    await flushPromises()
     expect(w.findAll('button')).toHaveLength(4)
+    expect(w.find('[aria-label="Avvia sincronizzazione cloud"]').exists()).toBe(true)
   } finally { w.unmount() }
 })

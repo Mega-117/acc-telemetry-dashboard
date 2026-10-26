@@ -328,7 +328,9 @@ const dashboardRoutePrefixes = [
   '/admin',
   '/admin-diagnostics',
   // PIP-623: link "Condividi giro" aperto nel browser (il frammento resta nella destinazione).
-  '/giro'
+  '/giro',
+  // PIP-619: Statistiche (senza questa voce un ricaricamento riportava alla Panoramica).
+  '/statistiche'
 ]
 
 const isDashboardRoute = (path: string) => {

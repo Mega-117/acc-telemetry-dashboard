@@ -5,8 +5,9 @@
 // This component is only visible when running inside Electron
 // It provides: Refresh, Sync, Minimize, Maximize, Close buttons
 
-import { computed, ref, onBeforeUnmount, onMounted, nextTick, watch } from 'vue'
+import { computed, ref, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useElectronSync } from '~/composables/useElectronSync'
+import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useRuntimeCapabilityGate } from '~/composables/useRuntimeCapabilityGate'
 import { invalidateTelemetryCaches } from '~/services/cache/telemetryCacheInvalidationService'
 
@@ -15,12 +16,15 @@ const distributionName = ref('Racer Core')
 const distributionIcon = ref(`${brandBase}branding/auth/racercore-rc.svg`)
 
 const route = useRoute()
-const router = useRouter()
 
 const isElectronVisible = ref(false)
 const isMaximized = ref(false)
 const isRefreshing = ref(false)
 const developerRefreshVisible = import.meta.dev
+// Decisione utente 26/10 (PIP-625): la sincronizzazione parte da sola; il tasto manuale resta
+// solo per admin e in sviluppo, come strumento quando quella automatica si inceppa.
+const { isAdmin } = useFirebaseAuth()
+const manualSyncVisible = computed(() => import.meta.dev || isAdmin.value)
 
 // Sync composable
 const { isSyncing, syncTelemetryFiles, syncResults, pendingNotification, dataMaintenance } = useElectronSync()
@@ -92,47 +96,15 @@ watch(dataMaintenance.status, (status) => {
   }
 })
 
-// Check if current route is dynamic (has parameters)
-const isDynamicRoute = () => {
-  // Routes like /sessioni/abc123, /piste/valencia have params
-  return Object.keys(route.params).length > 0
-}
-
 // Window control handlers
-const handleRefresh = async () => {
+// PIP-625: the button exists only in development (Nuxt dev server), where every route reloads
+// directly. The old "soft refresh" (bounce through /panoramica, for GitHub Pages) emptied the page
+// on dynamic routes and the pageRefresh redirect brought /sessioni back to Panoramica.
+const handleRefresh = () => {
   invalidateTelemetryCaches({ scope: 'manual-refresh' })
-
-  // For dynamic routes, use soft refresh to avoid 404 on GitHub Pages
-  if (isDynamicRoute()) {
-    console.log('[TITLEBAR] Soft refresh for dynamic route:', route.fullPath)
-    isRefreshing.value = true
-    
-    try {
-      // Force route re-evaluation by navigating away and back
-      const currentPath = route.fullPath
-      
-      // Navigate to a safe base route momentarily
-      await router.replace({ path: '/panoramica', query: { _refresh: Date.now() } })
-      await nextTick()
-      
-      // Navigate back to original route
-      await router.replace(currentPath)
-      
-      console.log('[TITLEBAR] Soft refresh complete')
-    } catch (e) {
-      console.error('[TITLEBAR] Soft refresh failed:', e)
-      // Fallback to hard refresh
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-      ;(window as any).electronAPI?.pageRefresh()
-    } finally {
-      isRefreshing.value = false
-    }
-  } else {
-    // For static routes, hard refresh is safe
-    console.log('[TITLEBAR] Hard refresh for static route:', route.fullPath)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-    ;(window as any).electronAPI?.pageRefresh()
-  }
+  isRefreshing.value = true
+  console.warn('[TITLEBAR] Reload of the current page:', route.fullPath)
+  window.location.reload()
 }
 
 const handleSync = async () => {
@@ -184,7 +156,7 @@ const closeMaintenanceNotification = () => {
       <button v-if="developerRefreshVisible"
         class="titlebar-btn" 
         :class="{ 'refreshing': isRefreshing }"
-        :title="isRefreshing ? 'Aggiornamento in corso...' : 'Aggiorna pagina (Smart Refresh)'"
+        :title="isRefreshing ? 'Aggiornamento in corso...' : 'Aggiorna pagina'"
         :disabled="isRefreshing"
         @click="handleRefresh"
       >
@@ -193,8 +165,8 @@ const closeMaintenanceNotification = () => {
           <path d="M21 3v5h-5" />
         </svg>
       </button>
-      <button 
-        class="titlebar-btn" 
+      <button v-if="manualSyncVisible"
+        class="titlebar-btn"
         :class="{ 'syncing': isSyncing }"
         :title="isSyncing ? 'Sincronizzazione in corso...' : syncGate.allowed ? `Force Sync via RuntimeWindow (${runtimeLifecycle})` : syncGate.message"
         :aria-label="syncGate.allowed ? 'Avvia sincronizzazione cloud' : `Sincronizzazione non disponibile: ${syncGate.message}`"

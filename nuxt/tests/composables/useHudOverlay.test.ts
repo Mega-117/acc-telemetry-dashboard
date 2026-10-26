@@ -70,7 +70,7 @@ describe('useHudOverlay', () => {
   })
 
   it('espone i range per-ID senza cambiare gli overlay esistenti', () => {
-    expect(getHudOverlayScaleMin('tyres')).toBe(0.5)
+    expect(getHudOverlayScaleMin('tyres')).toBe(0.35) // PIP-624
     expect(getHudOverlayScaleMin('sectors')).toBe(0.6)
     expect(getHudOverlayScaleMin('info')).toBe(0.6)
     expect(getHudOverlayScaleMin('standings')).toBe(0.3)
@@ -96,7 +96,7 @@ describe('useHudOverlay', () => {
     cbs.scale!(1.3)
     expect(hud.scale.value).toBe(1.3)
     cbs.scale!(0.1)
-    expect(hud.scale.value).toBe(0.5)
+    expect(hud.scale.value).toBe(0.35)
     const sectors = useHudOverlay('sectors', () => api)
     sectors.start(0.1)
     expect(sectors.scale.value).toBe(0.6)
