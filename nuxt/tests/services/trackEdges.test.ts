@@ -37,3 +37,16 @@ describe('trackEdges', () => {
     expect(await loadWebTrackEdges('zolder', 'acc', null, { fetch: flaky, publicPath: p => p })).not.toBeNull()
   })
 })
+
+describe('trackEdges retries', () => {
+  it('does not keep a temporary server error, only a missing track', async () => {
+    const edges2 = { left: [[0, 0], [1, 1]], right: [[0, 1], [1, 2]] }
+    const fetchFn = vi.fn()
+      .mockResolvedValueOnce(new Response('', { status: 503 }))
+      .mockImplementation(() => Promise.resolve(new Response(JSON.stringify(edges2), { status: 200 }))) as unknown as typeof fetch
+    const deps = { fetch: fetchFn, publicPath: (p: string) => p }
+    expect(await loadWebTrackEdges('kyalami', 'acc', null, deps)).toBeNull()
+    expect(await loadWebTrackEdges('kyalami', 'acc', null, deps)).not.toBeNull()
+    expect(fetchFn).toHaveBeenCalledTimes(2)
+  })
+})

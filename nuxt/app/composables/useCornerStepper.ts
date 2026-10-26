@@ -20,7 +20,8 @@ export function useCornerStepper(o: {
     o.zoomRange.value = null
   }
   function onKey(event: KeyboardEvent) {
-    if (!o.active()) return
+    // A key already handled by a control (a lap menu closing on Escape) is not a page shortcut.
+    if (!o.active() || event.defaultPrevented) return
     if (event.key === 'Escape') { o.wholeLap(); return }
     if ((event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') || o.selectedCorner.value === null) return
     // Le frecce restano ai campi e agli switcher quando sono loro ad avere il fuoco.

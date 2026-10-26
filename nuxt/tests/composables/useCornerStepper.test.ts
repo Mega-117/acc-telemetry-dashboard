@@ -48,4 +48,13 @@ describe('useCornerStepper', () => {
     expect(api().cursorCorner.value).toBeNull()
     wrapper.unmount()
   })
+
+  it('ignores keys a control already handled', () => {
+    const { state, wrapper } = setup()
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true })
+    escape.preventDefault()
+    window.dispatchEvent(escape)
+    expect(state.whole).toBe(0)
+    wrapper.unmount()
+  })
 })

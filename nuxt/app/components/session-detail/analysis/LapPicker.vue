@@ -11,55 +11,76 @@ export interface LapAction { id: string, label: string, disabled?: boolean, hint
 
 const props = defineProps<{ modelValue: string, groups: LapGroup[], name: string, color: string, disabled?: boolean, hint?: string, actions?: LapAction[] }>()
 const emit = defineEmits<{ 'update:modelValue': [id: string], 'action': [id: string] }>()
-function runAction(action: LapAction) {
-  if (action.disabled) return
-  close()
-  emit('action', action.id)
-}
 
 const open = ref(false)
 const active = ref('')
+const root = ref<HTMLElement | null>(null)
+const button = ref<HTMLButtonElement | null>(null)
 const list = ref<HTMLElement | null>(null)
 const all = computed(() => props.groups.flatMap(g => g.options))
 const choosable = computed(() => all.value.filter(o => o.complete))
 const current = computed(() => all.value.find(o => o.id === props.modelValue) ?? null)
 const uid = useId()
 
+// Keyboard (WAI-ARIA select-only pattern): opening moves the focus to the listbox, which carries the active
+// option; Tab goes on to the actions under it; Escape or a choice gives the focus back to the button.
 function show() {
   if (props.disabled || !all.value.length) return
   open.value = true
   active.value = current.value?.id ?? choosable.value[0]?.id ?? ''
-  void nextTick(() => list.value?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest' }))
+  void nextTick(() => {
+    list.value?.focus()
+    list.value?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest' })
+  })
 }
-function close() { open.value = false }
+function close(refocus = false) {
+  open.value = false
+  if (refocus) void nextTick(() => button.value?.focus())
+}
 function pick(option: LapOption) {
   if (!option.complete) return
   emit('update:modelValue', option.id)
-  close()
+  close(true)
 }
-function move(step: 1 | -1) {
+function runAction(action: LapAction) {
+  if (action.disabled) return
+  close(true)
+  emit('action', action.id)
+}
+function move(step: 1 | -1 | 'first' | 'last') {
   const options = choosable.value
   if (!options.length) return
   const i = options.findIndex(o => o.id === active.value)
-  active.value = options[(i + step + options.length) % options.length]!.id
+  const next = step === 'first' ? 0 : step === 'last' ? options.length - 1 : (i + step + options.length) % options.length
+  active.value = options[next]!.id
   void nextTick(() => list.value?.querySelector<HTMLElement>(`[data-id="${active.value}"]`)?.scrollIntoView?.({ block: 'nearest' }))
 }
-function onKey(event: KeyboardEvent) {
-  if (!open.value) {
-    if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(event.key)) { event.preventDefault(); show() }
-    return
-  }
+// Escape is consumed here: it closes this menu and must not also reach the page shortcuts (whole lap).
+function onEscape(event: KeyboardEvent) {
+  event.preventDefault()
+  event.stopPropagation()
+  close(true)
+}
+function onButtonKey(event: KeyboardEvent) {
+  if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(event.key)) { event.preventDefault(); show() }
+}
+function onListKey(event: KeyboardEvent) {
   if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); move(event.key === 'ArrowDown' ? 1 : -1) }
+  else if (event.key === 'Home' || event.key === 'End') { event.preventDefault(); move(event.key === 'Home' ? 'first' : 'last') }
   else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); const o = all.value.find(x => x.id === active.value); if (o) pick(o) }
-  else if (event.key === 'Escape' || event.key === 'Tab') close()
+  else if (event.key === 'Escape') onEscape(event)
+}
+// The menu closes when the focus leaves the whole picker (Tab past the last action, a click elsewhere).
+function onFocusOut(event: FocusEvent) {
+  if (open.value && !root.value?.contains(event.relatedTarget as Node | null)) close()
 }
 </script>
 
 <template>
-  <div v-click-outside="close" class="lap-picker" :style="{ '--c': color }" :title="hint">
+  <div ref="root" v-click-outside="() => close()" class="lap-picker" :style="{ '--c': color }" :title="hint" @focusout="onFocusOut">
     <span class="lap-picker__name">{{ name }}</span>
-    <button type="button" class="lap-picker__button" :disabled="disabled || !all.length" aria-haspopup="listbox" :aria-expanded="open" :aria-controls="`${uid}-list`"
-      :aria-activedescendant="open && active ? `${uid}-${active}` : undefined" :aria-label="`${name}: ${current ? `${current.title} ${current.time}` : 'nessun giro'}`" @click="open ? close() : show()" @keydown="onKey">
+    <button ref="button" type="button" class="lap-picker__button" :disabled="disabled || !all.length" aria-haspopup="listbox" :aria-expanded="open" :aria-controls="`${uid}-list`"
+      :aria-label="`${name}: ${current ? `${current.title} ${current.time}` : 'nessun giro'}`" @click="open ? close() : show()" @keydown="onButtonKey">
       <template v-if="current">
         <span class="lap-picker__title">{{ current.title }}</span>
         <span class="lap-picker__time" :class="{ 'is-invalid': !current.valid, 'is-best': current.best }">{{ current.time }}</span>
@@ -69,7 +90,7 @@ function onKey(event: KeyboardEvent) {
       <svg class="lap-picker__chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
     </button>
     <div v-if="open" class="lap-picker__pop">
-    <div :id="`${uid}-list`" ref="list" class="lap-picker__list" role="listbox" :aria-label="name">
+    <div :id="`${uid}-list`" ref="list" class="lap-picker__list" role="listbox" tabindex="0" :aria-label="name" :aria-activedescendant="active ? `${uid}-${active}` : undefined" @keydown="onListKey">
       <template v-for="group in groups" :key="group.label">
         <p v-if="groups.length > 1 || group.label" class="lap-picker__group" role="presentation">{{ group.label }}</p>
         <div v-for="o in group.options" :id="`${uid}-${o.id}`" :key="o.id" :data-id="o.id" role="option" class="lap-row"
@@ -85,7 +106,7 @@ function onKey(event: KeyboardEvent) {
         </div>
       </template>
     </div>
-    <div v-if="actions?.length" class="lap-picker__actions">
+    <div v-if="actions?.length" class="lap-picker__actions" @keydown.esc="onEscape">
       <button v-for="a in actions" :key="a.id" type="button" :disabled="a.disabled" :title="a.hint" @click="runAction(a)">{{ a.label }}</button>
     </div>
     </div>
@@ -107,7 +128,9 @@ function onKey(event: KeyboardEvent) {
 // Le condizioni (aria/asfalto, grip) si leggono sempre intere: niente puntini.
 .lap-picker__cond { flex-shrink: 0; color: #b3b3b8; font-weight: 500; font-size: 12px; }
 .lap-picker__pop { position: absolute; top: calc(100% + 4px); left: -1px; z-index: 30; width: calc(100% + 2px); box-sizing: border-box; border: 1px solid #ffffff40; background: #0b0b10f7; box-shadow: 0 14px 34px #000c; }
-.lap-picker__list { max-height: 360px; overflow-y: auto; padding: 4px; }
+.lap-picker__list { max-height: 360px; overflow-y: auto; padding: 4px; outline: none;
+  // The focus is on the list: the option you would choose wears the ring.
+  &:focus-visible .lap-row.is-active { outline: 2px solid #fff; outline-offset: -2px; } }
 .lap-picker__actions { display: grid; gap: 2px; padding: 4px; border-top: 1px solid #ffffff1f;
   button { height: 32px; padding: 0 10px; border: 0; background: transparent; color: #e6e6ea; font: 600 13px 'Inter', sans-serif; text-align: left; cursor: pointer;
     &:hover:not(:disabled) { background: #ffffff12; color: #fff; } &:disabled { opacity: .45; cursor: default; } &:focus-visible { outline: 2px solid #fff; outline-offset: -2px; } } }

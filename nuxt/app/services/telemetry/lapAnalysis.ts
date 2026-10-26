@@ -148,9 +148,13 @@ export function cornerAt(corners: Corner[], fraction: number | null): Corner | n
  * animation frame moves the centre a share `k` of the way to the dot, the zoom stays. `done` once it
  * is closer than a hundredth of the view, so the animation can stop.
  */
-export function glideFrame(frame: { cx: number, cy: number, span: number }, point: { x: number, y: number }, k = 0.25): { frame: { cx: number, cy: number, span: number }, done: boolean } {
-  const dx = point.x - frame.cx, dy = point.y - frame.cy
-  if (Math.hypot(dx, dy) <= frame.span * 0.01) return { frame: { cx: point.x, cy: point.y, span: frame.span }, done: true }
+export function glideFrame(frame: { cx: number, cy: number, span: number }, point: { x: number, y: number }, k = 0.25,
+  bounds?: { x0: number, x1: number, y0: number, y1: number }): { frame: { cx: number, cy: number, span: number }, done: boolean } {
+  // The map's centre is kept inside the track's bounds: aim at the reachable point, or it never settles.
+  const tx = bounds ? Math.min(Math.max(point.x, bounds.x0), bounds.x1) : point.x
+  const ty = bounds ? Math.min(Math.max(point.y, bounds.y0), bounds.y1) : point.y
+  const dx = tx - frame.cx, dy = ty - frame.cy
+  if (Math.hypot(dx, dy) <= frame.span * 0.01) return { frame: { cx: tx, cy: ty, span: frame.span }, done: true }
   return { frame: { cx: frame.cx + dx * k, cy: frame.cy + dy * k, span: frame.span }, done: false }
 }
 

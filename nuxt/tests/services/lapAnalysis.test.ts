@@ -226,3 +226,13 @@ describe('time lost over a stretch (PIP-635)', () => {
     expect(stretchDelta(fast, slow, [1 / 3, 2 / 3])).toBeCloseTo(-middle, 6)
   })
 })
+
+describe('map glide inside the track bounds (PIP-635)', () => {
+  it('settles on the reachable point when the dot is outside the bounds the centre can take', () => {
+    const bounds = { x0: 0, x1: 100, y0: 0, y1: 100 }
+    let f = { cx: 90, cy: 50, span: 8 }, steps = 0
+    for (let r = glideFrame(f, { x: 102, y: 50 }, 0.25, bounds); !r.done && steps < 200; r = glideFrame(f, { x: 102, y: 50 }, 0.25, bounds)) { f = r.frame; steps++ }
+    expect(steps).toBeLessThan(40)
+    expect(glideFrame(f, { x: 102, y: 50 }, 0.25, bounds).frame.cx).toBe(100)
+  })
+})

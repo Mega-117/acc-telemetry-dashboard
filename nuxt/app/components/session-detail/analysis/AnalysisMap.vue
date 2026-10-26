@@ -95,7 +95,7 @@ let glideTarget: MapPoint | null = null
 function glideStep() {
   glide = 0
   if (!glideTarget) return
-  const { frame, done } = glideFrame(frameNow.value, glideTarget)
+  const { frame, done } = glideFrame(frameNow.value, glideTarget, 0.25, bounds.value)
   setView(frame)
   if (!done) glide = requestAnimationFrame(glideStep)
 }

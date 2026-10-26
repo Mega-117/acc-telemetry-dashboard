@@ -359,7 +359,8 @@ function selectFirst() {
   if (selectedCorner.value === null || selectedCorner.value > corners.value.length) selectedCorner.value = worst.value[0]?.corner.number ?? 1
 }
 watch(corners, () => { if (layout.value !== 'tracce') selectFirst() })
-watch(layout, value => { if (value === 'tracce') selectedCorner.value = null; else selectFirst() })
+// Changing view starts clean: no sector or zoom carried over, so the Delta note matches what is shown.
+watch(layout, value => { selectedSector.value = null; zoomRange.value = null; if (value === 'tracce') selectedCorner.value = null; else selectFirst() })
 
 function emptyTrace(): LapTraceView {
   return { gameId: 'acc', variant: null, sessionId: null, track: '', car: '', lapTimeS: 0, source: '', complete: false, valid: null, fuelL: null, conditions: null, gridStepM: 2, lengthM: 0, channels: {} }
@@ -542,6 +543,8 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
   strong { font: 700 16px 'Inter', sans-serif; font-variant-numeric: tabular-nums; color: #e6e6ea; }
   em { font-style: normal; font-size: 11px; }
   &.gain strong { color: #3ddc5a; } &.loss strong { color: #ff5a6e; } }
+// Narrow screens: the two laps one under the other, the gap between them (they need about 620 px side by side).
+@media (max-width: 860px) { .compare { flex-wrap: wrap; } .compare > .lap-picker { flex: 1 1 100%; } .compare-gap { flex: 1 1 100%; height: 30px; display: flex; gap: 6px; justify-content: center; align-items: baseline; } }
 .analysis-empty { padding: 30px 0; color: #aaa; }
 .analysis-note { margin: 4px 0 0; color: #77777d; font-size: 11px; }
 .gain { color: #3ddc5a; }

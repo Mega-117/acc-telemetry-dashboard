@@ -35,7 +35,8 @@ export function loadWebTrackEdges(
   const id = `${simKey}/${key}`
   if (!cache.has(id)) {
     cache.set(id, deps.fetch(deps.publicPath(`/track-edges/${id}.json`))
-      .then(response => (response.ok ? response.json() : null))
+      // A missing track (404) is final; any other failure (503, 429…) is retried at the next opening.
+      .then((response) => { if (response.ok) return response.json(); if (response.status === 404) return null; throw new Error(`track edges ${response.status}`) })
       .then(parseTrackEdges)
       // Un errore di rete non resta in memoria: alla prossima apertura si riprova.
       .catch(() => { cache.delete(id); return null }))

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // PIP-635: scelta del giro nello stile del sito: best in fucsia, giri non validi in rosso.
 import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import LapPicker, { type LapGroup } from '~/components/session-detail/analysis/LapPicker.vue'
 
 const groups: LapGroup[] = [{ label: '', options: [
@@ -27,18 +27,35 @@ describe('LapPicker', () => {
     w.unmount()
   })
 
-  it('picks with the keyboard, skipping partial laps, and ignores clicks on them', async () => {
+  it('picks with the keyboard on the focused list, skipping partial laps, and ignores clicks on them', async () => {
     const w = render()
     const button = w.get('.lap-picker__button')
     await button.trigger('keydown', { key: 'ArrowDown' })
-    await button.trigger('keydown', { key: 'ArrowDown' })
-    await button.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    const list = w.get('[role="listbox"]')
+    expect(document.activeElement).toBe(list.element)
+    expect(list.attributes('aria-activedescendant')).toContain('b')
+    await list.trigger('keydown', { key: 'ArrowDown' })
+    await list.trigger('keydown', { key: 'Enter' })
     expect(w.emitted('update:modelValue')?.[0]).toEqual(['c'])
+    await flushPromises()
+    expect(document.activeElement).toBe(button.element)
     await button.trigger('click')
     await w.findAll('[role="option"]')[0]!.trigger('click')
     expect(w.emitted('update:modelValue')).toHaveLength(1)
-    await button.trigger('keydown', { key: 'Escape' })
+    w.unmount()
+  })
+
+  it('consumes Escape: closes the menu without reaching the page shortcuts', async () => {
+    const w = render()
+    let pageSawEscape = false
+    const onWindow = (e: KeyboardEvent) => { if (e.key === 'Escape') pageSawEscape = true }
+    window.addEventListener('keydown', onWindow)
+    await w.get('.lap-picker__button').trigger('click')
+    await w.get('[role="listbox"]').trigger('keydown', { key: 'Escape' })
     expect(w.find('[role="listbox"]').exists()).toBe(false)
+    expect(pageSawEscape).toBe(false)
+    window.removeEventListener('keydown', onWindow)
     w.unmount()
   })
 
