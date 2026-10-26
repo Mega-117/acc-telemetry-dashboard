@@ -212,7 +212,8 @@ watch(() => lap.value ? `${lap.value.gameId}/${lap.value.track}/${lap.value.vari
 }, { immediate: true })
 const reference = computed(() => refId.value && refId.value !== lapId.value ? traces.value[refId.value] ?? null : null)
 const lapEntry = computed(() => entries.value.find(e => e.id === lapId.value) ?? null)
-const refEntry = computed(() => reference.value ? entries.value.find(e => e.id === refId.value) ?? null : null)
+// Also when Tu and Riferimento are the same lap (one lap only): the sector times still show, with zero gaps.
+const refEntry = computed(() => refId.value ? entries.value.find(e => e.id === refId.value) ?? null : null)
 const corners = computed(() => detectCorners(reference.value ?? lap.value ?? emptyTrace()))
 const comparison = computed(() => lap.value && reference.value ? compareCorners(lap.value, reference.value, corners.value) : [])
 const worst = computed(() => [...comparison.value].sort((a, b) => b.timeLostS - a.timeLostS).filter(c => c.timeLostS >= 0.03).slice(0, 3))
