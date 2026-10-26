@@ -17,6 +17,7 @@ import { compareCorners, cornerAdvice, detectCorners, formatDelta, sectorBounds 
 import { useCornerStepper } from '~/composables/useCornerStepper'
 import { formatLapConditions, mergeLapConditions, normalizeLapTrace, type LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { formatLapTime } from '~/utils/telemetryFormat'
+import { useTrackEdges } from '~/composables/useTrackEdges'
 
 const props = defineProps<{
   sessionToken: string | null
@@ -206,14 +207,8 @@ watch(() => [props.sessionToken, props.pilotUid], () => { void load() })
 onMounted(() => { void load() })
 
 const lap = computed(() => traces.value[lapId.value] ?? null)
-// Track edges (ACC Drive _L/_R) for the maps; null on tracks without them, the map then draws the plain line.
-const edges = ref<{ left: [number, number][], right: [number, number][] } | null>(null)
-watch(() => lap.value ? `${lap.value.gameId}/${lap.value.track}/${lap.value.variant ?? ''}` : '', async () => {
-  edges.value = null
-  const current = lap.value
-  if (!current) return
-  try { edges.value = (await api()?.hudOverlayGetTrackEdges?.(current.track, current.gameId, current.variant)) ?? null } catch { edges.value = null }
-}, { immediate: true })
+// Track edges for the maps: desktop app or, in the browser, the site's files (PIP-636).
+const edges = useTrackEdges(lap, api)
 const reference = computed(() => refId.value && refId.value !== lapId.value ? traces.value[refId.value] ?? null : null)
 const lapEntry = computed(() => entries.value.find(e => e.id === lapId.value) ?? null)
 // Also when Tu and Riferimento are the same lap (one lap only): the sector times still show, with zero gaps.

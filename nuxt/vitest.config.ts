@@ -56,6 +56,8 @@ export default defineConfig({
         // PIP-635: vista di partenza del dettaglio sessione.
         'app/utils/sessionDetailTab.ts',
         'app/composables/useCornerStepper.ts',
+        // PIP-636: bordi della pista dal sito.
+        'app/services/telemetry/trackEdges.ts',
         // PIP-632: tracce d'uso delle funzioni nuove.
         'app/services/usage/featureUseNote.ts',
         // PIP-615 / PIP-631: settimana di stabilita' e problemi per versione.
