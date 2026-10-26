@@ -98,7 +98,8 @@
 // Selettore a due o piu' viste (Sessione / Telemetria, Focus / Completa): un unico riquadro scuro,
 // la voce scelta schiarita con la linea rossa sotto. Scelta: .active, aria-selected o aria-pressed.
 .rc-switch {
-  display: flex; gap: 3px; width: max-content; padding: 3px; border: 1px solid #ffffff1f; background: #0a0a0feb;
+  // Fondo trasparente come il resto della grafica (niente riquadro pieno), bordino come i menu a tendina.
+  display: flex; gap: 3px; width: max-content; padding: 3px; border: 1px solid #ffffff40; background: #ffffff05;
   button {
     height: 30px; padding: 0 18px; border: 0; background: transparent; color: #b3b3b8; cursor: pointer;
     font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase;
