@@ -61,7 +61,14 @@ const weeks = computed(() => timeByWeek(filtered.value, Math.min(26, Math.max(4,
 const weekMax = computed(() => Math.max(1, ...weeks.value.map(w => w.timeMs)))
 // Colori del sito (azzurro prove, giallo qualifica, rosso gara) piu' ciano e viola: un colore per auto.
 const CAR_COLORS = ['#0076ff', '#ffc400', '#00c2d6', '#8b5cf6', '#ff7a1a', '#ff0024']
-const weekLabel =(iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
+const weekLabel = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
+// "1h50", "2h", "15m": corto, come sopra le colonne del grafico Attivita'.
+const compactHours = (ms: number) => {
+  const minutes = Math.round(ms / 60_000)
+  if (minutes < 60) return `${minutes}m`
+  const h = Math.floor(minutes / 60), m = minutes % 60
+  return m ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`
+}
 
 const carA = ref('')
 const carB = ref('')
@@ -166,10 +173,13 @@ watch(targetUserId, (uid, previous) => { if (uid && uid !== previous) void load(
             <li v-if="!cars.length" class="empty">Nessuna sessione nel periodo.</li>
           </ul>
           <h3 class="stats__h3">Ore per settimana</h3>
+          <!-- Come il grafico Attivita' della Panoramica: valore sopra la colonna, settimane vuote come slot leggeri. -->
           <div class="weeks" role="img" :aria-label="`Ore per settimana, massimo ${hours(weekMax)}`">
-            <div v-for="(w, i) in weeks" :key="w.weekStart" class="weeks__col" :title="`Settimana dal ${weekLabel(w.weekStart)} · ${hours(w.timeMs)}`">
-              <span class="weeks__bar" :style="{ height: `${(w.timeMs / weekMax) * 100}%` }" />
-              <small v-if="i === 0 || i === weeks.length - 1 || i % 4 === 0">{{ weekLabel(w.weekStart) }}</small>
+            <div v-for="(w, i) in weeks" :key="w.weekStart" class="weeks__col" :class="{ 'weeks__col--empty': !w.timeMs }" :title="`Settimana dal ${weekLabel(w.weekStart)} · ${hours(w.timeMs)}`">
+              <div class="weeks__slot">
+                <span v-if="w.timeMs" class="weeks__bar" :style="{ height: `${Math.max(8, (w.timeMs / weekMax) * 100)}%` }"><em>{{ compactHours(w.timeMs) }}</em></span>
+              </div>
+              <small :class="{ 'weeks__date--hidden': weeks.length > 9 && i % 2 === 1 && i !== weeks.length - 1 }">{{ weekLabel(w.weekStart) }}</small>
             </div>
           </div>
         </section>
@@ -277,10 +287,15 @@ select { background: #0b0b0b; color: #f5f5f5; border: 1px solid #ffffff55; paddi
 .car-bars small { font-size: 12px; color: #a8a8a8; }
 .car-bars .empty { color: #9a9a9a; font-size: 13px; }
 .stats__h3 { margin: 4px 0 8px; font: 400 12px/1.2 'Arial Narrow', 'Segoe UI', sans-serif; text-transform: uppercase; color: #cfcfcf; }
-.weeks { display: flex; align-items: flex-end; gap: 4px; height: 84px; padding-bottom: 18px; border-bottom: 1px solid #ffffff30; }
-.weeks__col { position: relative; flex: 1; height: 100%; display: flex; align-items: flex-end; }
-.weeks__bar { display: block; width: 100%; min-height: 1px; border-radius: 3px 3px 0 0; background: linear-gradient(180deg, #4da3ff, #0076ff); }
-.weeks__col small { position: absolute; top: calc(100% + 4px); left: 0; font-size: 10px; color: #a8a8a8; white-space: nowrap; }
+.weeks { display: flex; gap: 6px; height: 150px; }
+.weeks__col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+// Lo slot e' la colonna intera, leggera: anche le settimane vuote restano al loro posto, senza trattini.
+.weeks__slot { position: relative; flex: 1; display: flex; align-items: flex-end; padding-top: 18px; border-bottom: 1px solid #ffffff40;
+  background: repeating-linear-gradient(to top, #ffffff0a 0 1px, transparent 1px 33.33%); }
+.weeks__bar { position: relative; display: block; width: 100%; border-radius: 3px 3px 0 0; background: linear-gradient(180deg, #4da3ff, #0076ff); box-shadow: 0 0 10px #0076ff55; }
+.weeks__bar em { position: absolute; bottom: calc(100% + 3px); left: 50%; transform: translateX(-50%); font: 600 11px/1 'Arial Narrow', 'Segoe UI', sans-serif; font-style: normal; color: #fff; white-space: nowrap; }
+.weeks__col small { text-align: center; font-size: 10px; color: #a8a8a8; white-space: nowrap; }
+.weeks__date--hidden { visibility: hidden; }
 // Barra del distacco nel confronto tra auto.
 .gap-cell { position: relative; min-width: 110px; }
 .gap-cell__bar { display: inline-block; vertical-align: middle; height: 6px; max-width: 60px; margin-right: 8px; background: currentColor; opacity: .7; }
