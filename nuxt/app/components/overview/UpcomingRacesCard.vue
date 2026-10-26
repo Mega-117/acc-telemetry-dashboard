@@ -501,8 +501,8 @@ onBeforeUnmount(() => {
   .race-action svg, summary svg { display: block; flex-shrink: 0; }
   .featured-race { position: relative; border: 0; background: transparent; border-radius: 0; padding: 0 0 8px; min-height: 116px;
     grid-template-columns: minmax(86px,.32fr) minmax(0,1fr); grid-template-areas: 'countdown main'; gap: 16px; }
-  // La linea che separa il conto alla rovescia e' rossa: il colore della gara in tutto il sito.
-  .race-countdown { padding-right: 16px; align-items: center; border-right: 2px solid var(--racing-race); }
+  // Linea bianca tra il conto alla rovescia e i dati della gara.
+  .race-countdown { padding-right: 16px; align-items: center; border-right: 1px solid #ffffff80; }
   // Basta il numero con "giorni" sotto: "Mancano" sopra e' superfluo (resta nell'aria-label).
   .race-countdown__label { display: none; }
   .race-countdown__metric { margin: 0; flex-direction: column; align-items: center; gap: 5px; }
@@ -551,8 +551,7 @@ onBeforeUnmount(() => {
   .race-list { max-height: none; overflow: visible; padding: 0; }
   .compact-race { background: transparent; border: 0; border-radius: 0; padding: 0; min-width: 0; }
   .compact-race > div:first-child { min-width: 0; }
-  // Gare successive: lineetta rossa a sinistra (come le sessioni in Attività) e quanto manca accanto al titolo.
-  .compact-race { border-left: 2px solid var(--racing-race); padding-left: 10px; }
+  // Gare successive: quanto manca accanto al titolo.
   .compact-race__in { font-style: normal; font-weight: 500; color: #aaa; font-size: 12px; }
   .race-options--compact { position: relative; bottom: auto; right: auto; }
   .race-options--compact .race-options__menu { top: auto; bottom: calc(100% + 6px); }
