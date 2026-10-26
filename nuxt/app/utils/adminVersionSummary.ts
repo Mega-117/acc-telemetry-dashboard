@@ -38,8 +38,9 @@ export function compareVersions(a: string, b: string): number {
 export function summarizeByVersion(input: VersionInput): VersionRow[] {
   const rows = new Map<string, VersionRow>()
   const row = (version: string | null | undefined, channel: string | null | undefined) => {
-    const v = version || 'sconosciuta'
-    const c = channel || 'sconosciuto'
+    // Pacchetti di versioni vecchie (prima del 23/10) non dichiarano versione e canale.
+    const v = version || 'non dichiarata'
+    const c = channel || 'versioni vecchie'
     const key = `${c}|${v}`
     let r = rows.get(key)
     if (!r) {

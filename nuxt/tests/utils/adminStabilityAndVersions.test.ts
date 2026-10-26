@@ -56,7 +56,7 @@ describe('summarizeByVersion', () => {
     expect(rows.map(r => [r.channel, r.version, r.installations, r.crashes, r.stalls, r.otherAnomalies, r.errors])).toEqual([
       ['develop', '0.5.2-dev.1', 1, 0, 1, 1, 0],
       ['main', '0.5.1', 2, 1, 0, 0, 1],
-      ['sconosciuto', 'sconosciuta', 0, 0, 0, 0, 1],
+      ['versioni vecchie', 'non dichiarata', 0, 0, 0, 0, 1],
     ])
     expect(channelLabel('main')).toBe('Produzione')
   })

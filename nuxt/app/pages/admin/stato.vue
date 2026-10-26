@@ -77,9 +77,12 @@ const versionRows = computed(() => {
   const installations = (snapshot.value?.rows || []).flatMap((row) => (row.installation ? [row.installation] : []))
   const ownerByInstallation = new Map(installations.map((item) => [item.installationId, item.ownerUid]))
   const real = (uid: string | null | undefined) => !uid || !isTestOwner(uid)
+  // L'elenco R2 prende un giorno in piu' per i fusi: qui, come nel riepilogo, conta l'invio nel periodo.
+  const fromMs = nowMs.value - periodDays.value * 86_400_000
   return summarizeByVersion({
     installations: installations.filter((item) => real(item.ownerUid) && isActiveWithinDays(item, nowMs.value, periodDays.value)),
-    bundles: bundles.value.filter((bundle) => real(bundle.uploaderUid || ownerByInstallation.get(bundle.installationId))),
+    bundles: bundles.value.filter((bundle) => Date.parse(bundle.uploadedAt) >= fromMs
+      && real(bundle.uploaderUid || ownerByInstallation.get(bundle.installationId))),
     errors: errors.value.filter((event) => real(event.userId)),
   })
 })
