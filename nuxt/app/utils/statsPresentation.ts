@@ -44,6 +44,55 @@ export function rowBest(values: (number | null | undefined)[]): number | null {
   return valid.length ? Math.min(...valid) : null
 }
 
+// ---- Frasi in parole semplici: una per riquadro, per chi non legge le tabelle ----
+
+type Name = (raw: string) => string
+const secs = (ms: number) => (Math.abs(ms) / 1000).toFixed(1).replace('.', ',')
+
+export function carInsight(cars: CarTime[], carName: Name): string | null {
+  const total = cars.reduce((s, c) => s + c.timeMs, 0)
+  const top = cars[0]
+  if (!top || !total) return null
+  if (cars.length === 1) return `Hai guidato solo la ${carName(top.car)}.`
+  return `Usi soprattutto la ${carName(top.car)}: ${Math.round((top.timeMs / total) * 100)}% del tempo in pista.`
+}
+
+export function compareInsight(rows: { track: string, gapMs: number | null }[], nameA: string, nameB: string, trackName: Name): string {
+  const both = rows.filter((r): r is { track: string, gapMs: number } => r.gapMs !== null)
+  if (!both.length) return 'Nessuna pista guidata con entrambe le auto: per confrontarle serve almeno una pista in comune.'
+  const fasterB = both.filter(r => r.gapMs < 0).length
+  const biggest = [...both].sort((a, b) => Math.abs(b.gapMs) - Math.abs(a.gapMs))[0]!
+  const winner = biggest.gapMs < 0 ? nameB : nameA
+  const head = both.length === 1 ? 'Sull\'unica pista in comune' : `Su ${both.length} piste in comune la ${nameB} è più veloce in ${fasterB}.`
+  return both.length === 1
+    ? `${head}, ${trackName(biggest.track)}, la ${winner} è più veloce di ${secs(biggest.gapMs)} s.`
+    : `${head} Differenza più grande: ${trackName(biggest.track)}, ${secs(biggest.gapMs)} s a favore della ${winner}.`
+}
+
+export function idealInsight(rows: { track: string, car: string, marginMs: number | null }[], trackName: Name, carName: Name): string | null {
+  const top = rows.find(r => r.marginMs !== null)
+  if (!top || top.marginMs === null) return null
+  if (-top.marginMs <= 100) return 'I tuoi giri migliori sono già vicini al giro ideale: settori costanti.'
+  return `Dove puoi guadagnare di più: ${trackName(top.track)} con la ${carName(top.car)}, ${secs(top.marginMs)} s mettendo insieme i tuoi settori migliori.`
+}
+
+/** In quale fascia d'aria fai il tuo miglior tempo piu' spesso (tra le combinazioni con almeno due fasce). */
+export function airInsight(combos: { byAir: Partial<Record<string, number>> }[], bands: readonly { id: string, label: string }[]): string | null {
+  const wins = new Map<string, number>()
+  for (const c of combos) {
+    const timed = bands.filter(b => typeof c.byAir[b.id] === 'number')
+    if (timed.length < 2) continue
+    const best = timed.reduce((a, b) => (c.byAir[b.id] as number) < (c.byAir[a.id] as number) ? b : a)
+    wins.set(best.id, (wins.get(best.id) ?? 0) + 1)
+  }
+  const top = [...wins.entries()].sort((a, b) => b[1] - a[1])[0]
+  if (!top) return null
+  const words: Record<string, string> = { lt15: 'sotto i 15°', ge30: 'sopra i 30°' }
+  const band = bands.find(b => b.id === top[0])!
+  const when = words[band.id] ?? `tra ${band.label.replace('–', ' e ')}`
+  return `Vai più forte con aria ${when}: è la tua condizione migliore su ${top[1]} ${top[1] === 1 ? 'combinazione' : 'combinazioni'} pista-auto.`
+}
+
 /** Larghezza della barra del distacco, in percentuale del distacco piu' grande della tabella (minimo visibile 4%). */
 export function gapBarPct(gapMs: number | null, maxAbsMs: number): number {
   if (gapMs === null || !maxAbsMs) return 0

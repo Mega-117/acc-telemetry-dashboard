@@ -5,6 +5,7 @@
 // ============================================
 
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { ChartColumnIncreasing, ChevronRight } from '@lucide/vue'
 
 // Types
 type DayData = {
@@ -104,7 +105,9 @@ const formatYLabel = (minutes: number): string => {
     <!-- Title -->
     <div class="card-head">
       <h2 class="card-title">{{ racing ? 'Attività · ultimi 7 giorni' : 'Attività (ultimi 7 giorni)' }}</h2>
-      <button v-if="statsLink" type="button" class="stats-link" @click="emit('open-stats')">Statistiche complete →</button>
+      <button v-if="statsLink" type="button" class="stats-link" title="Apri le statistiche complete" @click="emit('open-stats')">
+        <ChartColumnIncreasing :size="18" :stroke-width="1.8" aria-hidden="true" /><span>Statistiche</span><ChevronRight :size="16" :stroke-width="2" aria-hidden="true" />
+      </button>
     </div>
 
     <!-- Main Content: Chart + Legend Side by Side; il grafico apre le Statistiche (il link resta la via da tastiera) -->
@@ -248,11 +251,21 @@ $color-race: $racing-red;         // Red
   }
 }
 
-.card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+// Titolo e bottone sulla stessa riga, centrati: lo spazio sotto lo da' la riga, non il titolo.
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+.card-head .card-title { margin: 0; }
+// Senza cornice: fondo trasparente leggero, icona + testo + freccia; al passaggio si accende.
 .stats-link {
-  background: none; border: 0; padding: 0; cursor: pointer; white-space: nowrap;
-  font: 600 13px/1.2 'Outfit', $font-primary; color: #ff4d45;
-  &:hover, &:focus-visible { color: #fff; text-decoration: underline; }
+  display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; white-space: nowrap; cursor: pointer;
+  min-height: 34px; padding: 6px 10px 6px 12px; border: 0; border-radius: 2px;
+  background: #ffffff12; color: #fff; font: 500 13px/1.2 'Arial Narrow', 'Segoe UI', sans-serif; text-transform: uppercase; letter-spacing: .04em;
+  transition: background-color .15s ease, color .15s ease;
+  svg { display: block; flex-shrink: 0; }
+  svg:first-child { color: #0076ff; }
+  svg:last-child { transition: transform .15s ease; }
+  &:hover, &:focus-visible { background: #ffffff24; }
+  &:hover svg:last-child, &:focus-visible svg:last-child { transform: translateX(3px); }
+  &:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 }
 .card-content--link { cursor: pointer; }
 .card-title {
@@ -501,7 +514,8 @@ $color-race: $racing-red;         // Red
 .activity-card--racing {
   padding: 18px; min-height: 320px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.3960784314); border-radius: 0; overflow: visible;
   &::before, .accent-glow { display: none; }
-  .card-title { font: italic 700 19px/1.3 'Racer Display', sans-serif; text-transform: uppercase; margin-bottom: var(--overview-chart-title-gap, 26px); }
+  .card-title { font: italic 700 19px/1.3 'Racer Display', sans-serif; text-transform: uppercase; margin: 0; }
+  .card-head { margin-bottom: var(--overview-chart-title-gap, 26px); }
   .card-content { flex-direction: column; gap: 18px; }
   .chart-area { min-height: var(--overview-chart-min-height, 165px); flex: 1; }
   .y-axis { padding-bottom: 32px; min-width: 30px; span { color: #ccc; font-size: 11px; } }

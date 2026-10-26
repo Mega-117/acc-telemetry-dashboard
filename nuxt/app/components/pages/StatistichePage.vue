@@ -12,7 +12,9 @@ import {
 } from '~/services/telemetry/activityStats'
 import { normalizeSessionListKey } from '~/services/sync/sessionListProjectionService'
 import { formatCarName, formatDriveTime, formatLapTime, formatTrackName } from '~/utils/telemetryFormat'
-import { byIdealMargin, gapBarPct, heatLevel, marginLevel, rowBest, statsTotals } from '~/utils/statsPresentation'
+import {
+  airInsight, byIdealMargin, carInsight, compareInsight, gapBarPct, heatLevel, idealInsight, marginLevel, rowBest, statsTotals,
+} from '~/utils/statsPresentation'
 import type { SessionDocument } from '~/types/telemetry'
 
 const emit = defineEmits<{ back: [] }>()
@@ -57,8 +59,8 @@ const totals = computed(() => statsTotals(cars.value))
 const carMax = computed(() => Math.max(1, ...cars.value.map(c => c.timeMs)))
 const weeks = computed(() => timeByWeek(filtered.value, Math.min(26, Math.max(4, Math.ceil((periodDays.value || 182) / 7))), Date.now()))
 const weekMax = computed(() => Math.max(1, ...weeks.value.map(w => w.timeMs)))
-// Grafici vivaci: il rosso del marchio resta un accento, ogni auto ha il suo colore.
-const CAR_COLORS = ['#3b82f6', '#14b8a6', '#f59e0b', '#a855f7', '#ec4899', '#84cc16']
+// Colori del sito (azzurro prove, giallo qualifica, rosso gara) piu' ciano e viola: un colore per auto.
+const CAR_COLORS = ['#0076ff', '#ffc400', '#00c2d6', '#8b5cf6', '#ff7a1a', '#ff0024']
 const weekLabel =(iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`
 
 const carA = ref('')
@@ -74,7 +76,15 @@ const gapMax = computed(() => Math.max(0, ...comparison.value.map(r => Math.abs(
 const combos = computed(() => filterCombos(summary.value, filter.value))
 // Prima le piste dove il giro ideale lascia piu' tempo da guadagnare.
 const idealRows = computed(() => byIdealMargin(combos.value))
-const heatClass = (value: number | null | undefined, best: number | null) => {
+// Una frase per riquadro, in parole semplici.
+const carName = (key: string) => formatCarName(cars.value.find(c => c.carKey === key)?.car ?? key)
+const insights = computed(() => ({
+  cars: carInsight(cars.value, formatCarName),
+  compare: compareInsight(comparison.value, carName(carA.value), carName(carB.value), formatTrackName),
+  ideal: idealInsight(idealRows.value, formatTrackName, formatCarName),
+  air: airInsight(combos.value, AIR_BANDS),
+}))
+const heatClass =(value: number | null | undefined, best: number | null) => {
   const level = heatLevel(value, best)
   return level === null ? null : `heat--${level}`
 }
@@ -146,6 +156,7 @@ watch(targetUserId, (uid, previous) => { if (uid && uid !== previous) void load(
       <div class="stats__grid">
         <section class="stats-panel" aria-labelledby="stats-time">
           <h2 id="stats-time">Tempo in pista per auto</h2>
+          <p v-if="insights.cars" class="insight">{{ insights.cars }}</p>
           <ul class="car-bars">
             <li v-for="(c, i) in cars" :key="c.carKey">
               <div class="car-bars__label"><span>{{ formatCarName(c.car) }}</span><strong>{{ hours(c.timeMs) }}</strong></div>
@@ -165,6 +176,7 @@ watch(targetUserId, (uid, previous) => { if (uid && uid !== previous) void load(
 
         <section class="stats-panel" aria-labelledby="stats-compare">
           <h2 id="stats-compare">Confronto tra due auto</h2>
+          <p v-if="cars.length > 1" class="insight">{{ insights.compare }}</p>
           <div class="stats__pair">
             <select v-model="carA" aria-label="Prima auto"><option v-for="c in cars" :key="c.carKey" :value="c.carKey">{{ formatCarName(c.car) }}</option></select>
             <span>contro</span>
@@ -187,7 +199,8 @@ watch(targetUserId, (uid, previous) => { if (uid && uid !== previous) void load(
 
         <section class="stats-panel" aria-labelledby="stats-sectors">
           <h2 id="stats-sectors">Settori migliori e giro ideale</h2>
-          <p class="stats__sub">Su tutto lo storico: il giro ideale somma i tuoi tre settori migliori. Prima le piste dove hai più da guadagnare.</p>
+          <p v-if="insights.ideal" class="insight">{{ insights.ideal }}</p>
+          <p class="stats__sub">Il giro ideale mette insieme i tuoi tre settori migliori: il margine è quanto potresti guadagnare. In alto le piste con più margine.</p>
           <table class="stats-table">
             <thead><tr><th>Pista · auto</th><th>S1</th><th>S2</th><th>S3</th><th>Ideale</th><th>Migliore</th><th title="Ideale meno migliore: quanto puoi guadagnare mettendo insieme i settori migliori">Margine</th></tr></thead>
             <tbody>
@@ -203,7 +216,8 @@ watch(targetUserId, (uid, previous) => { if (uid && uid !== previous) void load(
 
         <section class="stats-panel" aria-labelledby="stats-conditions">
           <h2 id="stats-conditions">Tempi per temperatura dell'aria e grip</h2>
-          <p class="stats__sub">Miglior giro valido in ogni condizione, su tutto lo storico. Colore: distacco dal tuo migliore della riga.</p>
+          <p v-if="insights.air" class="insight">{{ insights.air }}</p>
+          <p class="stats__sub">Il tuo miglior giro valido in ogni condizione. Verde dove vai più forte, rosso dove perdi di più.</p>
           <p class="heat-legend" aria-hidden="true"><span class="heat--0">migliore</span><span class="heat--1">≤ 0,3 s</span><span class="heat--2">≤ 1 s</span><span class="heat--3">≤ 2 s</span><span class="heat--4">oltre</span></p>
           <table class="stats-table">
             <thead><tr><th>Pista · auto</th><th v-for="b in AIR_BANDS" :key="b.id">{{ b.label }}</th></tr></thead>
@@ -241,13 +255,15 @@ select { background: #0b0b0b; color: #f5f5f5; border: 1px solid #ffffff55; paddi
 .stats-panel { border: 1px solid rgba(255, 255, 255, 0.3960784314); padding: 14px 16px; min-width: 0; overflow-x: auto; }
 .stats-panel h2 { margin: 0 0 4px; font: italic 700 18px/1.2 'Racer Display', sans-serif; text-transform: uppercase; }
 .stats__sub { margin: 0 0 10px; font-size: 12px; color: #bdbdbd; }
+// La frase-sintesi: si legge prima di tutto il resto.
+.insight { margin: 6px 0 10px; padding: 8px 12px; border-left: 3px solid #0076ff; background: linear-gradient(90deg, #0076ff1f, transparent 70%); font-size: 14px; line-height: 1.4; color: #f5f5f5; }
 .stats__pair { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12px; color: #bdbdbd; }
 // PIP-633: numeri grandi in testa.
 .stats-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 0; }
 .stats-kpis div { border: 1px solid rgba(255, 255, 255, 0.3960784314); border-left: 3px solid var(--kpi, #3b82f6); padding: 12px 16px; background: linear-gradient(90deg, color-mix(in srgb, var(--kpi, #3b82f6) 14%, transparent), transparent 60%); }
-.stats-kpis div:nth-child(1) { --kpi: #3b82f6; }
-.stats-kpis div:nth-child(2) { --kpi: #14b8a6; }
-.stats-kpis div:nth-child(3) { --kpi: #a855f7; }
+.stats-kpis div:nth-child(1) { --kpi: #0076ff; }
+.stats-kpis div:nth-child(2) { --kpi: #00c2d6; }
+.stats-kpis div:nth-child(3) { --kpi: #ffc400; }
 .stats-kpis div:nth-child(4) { --kpi: #22c55e; }
 .stats-kpis dt { font: 400 12px/1.2 'Arial Narrow', 'Segoe UI', sans-serif; text-transform: uppercase; color: #cfcfcf; }
 .stats-kpis dd { margin: 4px 0 0; font: italic 700 clamp(24px, 2.2vw, 34px)/1.1 'Racer Display', sans-serif; font-variant-numeric: tabular-nums; }
@@ -263,7 +279,7 @@ select { background: #0b0b0b; color: #f5f5f5; border: 1px solid #ffffff55; paddi
 .stats__h3 { margin: 4px 0 8px; font: 400 12px/1.2 'Arial Narrow', 'Segoe UI', sans-serif; text-transform: uppercase; color: #cfcfcf; }
 .weeks { display: flex; align-items: flex-end; gap: 4px; height: 84px; padding-bottom: 18px; border-bottom: 1px solid #ffffff30; }
 .weeks__col { position: relative; flex: 1; height: 100%; display: flex; align-items: flex-end; }
-.weeks__bar { display: block; width: 100%; min-height: 1px; border-radius: 3px 3px 0 0; background: linear-gradient(180deg, #22d3ee, #3b82f6); }
+.weeks__bar { display: block; width: 100%; min-height: 1px; border-radius: 3px 3px 0 0; background: linear-gradient(180deg, #4da3ff, #0076ff); }
 .weeks__col small { position: absolute; top: calc(100% + 4px); left: 0; font-size: 10px; color: #a8a8a8; white-space: nowrap; }
 // Barra del distacco nel confronto tra auto.
 .gap-cell { position: relative; min-width: 110px; }
