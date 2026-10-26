@@ -1374,7 +1374,9 @@ async function toggleTraining() {
   .hud-info-group + .hud-info-group { padding: 16px 0 0; border-left: 0; border-top: 1px solid var(--hud-border); }
 }
 @media(max-width:680px) {
-  .hud-workspace { height: 760px; grid-template-rows: auto minmax(0,1fr); }
+  // PIP-639: one column on phones (the 240 px list + settings columns above would squeeze the text to a letter).
+  .hud-workspace { height: auto; grid-template-columns: 1fr; grid-template-rows: auto auto; }
+  .hud-workspace > .hud-overlay-list, .hud-workspace > .hud-settings { overflow: visible; }
   .test-hud__global { margin-bottom: 24px; }
 }
 </style>

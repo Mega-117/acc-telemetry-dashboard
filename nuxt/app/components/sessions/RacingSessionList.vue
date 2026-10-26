@@ -199,5 +199,28 @@ function openSession(event: MouseEvent, id: string) {
 .session-type { white-space: nowrap; }
 .best-label { text-decoration: none; }
 .session-best--race { color: color-mix(in srgb,var(--racing-race) 80%,white); }
+// PIP-639: phones and portrait tablets - each session is a compact block instead of a wide table row:
+// type, time and track on top, the car below, laps / stints / Q / G at the bottom.
+@media (max-width: 960px) {
+  .racing-day-table, .racing-session-list--track .racing-day-table { min-width: 0; }
+  .racing-day-table colgroup { display: none; }
+  .racing-day-table tbody { display: block; }
+  .session-row { display: grid; grid-template-columns: 84px 56px minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: 'type time track track' 'car car car car' 'laps stints q g'; column-gap: 8px; row-gap: 4px; padding: 10px 6px; border-bottom: 1px solid var(--racing-data-line); }
+  .session-row td { display: block; height: auto; padding: 0; border: 0; }
+  .session-type { grid-area: type; &::after { display: none; } }
+  .session-time { grid-area: time; text-align: left; }
+  .session-track { grid-area: track; }
+  .session-car { grid-area: car; }
+  .racing-session-list--track .session-car { grid-area: track; }
+  .session-stat:not(.session-stat--stints) { grid-area: laps; text-align: left; }
+  .session-row .session-stat--stints { grid-area: stints; text-align: left; padding-right: 0; }
+  .session-row .session-best--qualify { grid-area: q; padding-left: 0; &::before { display: none; } }
+  .session-best--race { grid-area: g; }
+}
+// Portrait tablets have room for two lines: who / where / with what, then the numbers.
+@media (min-width: 640px) and (max-width: 960px) {
+  .session-row { grid-template-columns: 84px 56px minmax(0, 1fr) minmax(0, 1.3fr); grid-template-areas: 'type time track car' 'laps stints q g'; }
+  .racing-session-list--track .session-row { grid-template-areas: 'type time car car' 'laps stints q g'; }
+}
 
 </style>

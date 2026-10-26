@@ -55,4 +55,6 @@ function toggle(mode: SpotterSessionMode) {
 .session-mode-buttons .mode-qualify { --rc-toggle-color: var(--racing-qualify); }
 .session-mode-buttons .mode-race { --rc-toggle-color: var(--racing-race); }
 @media(max-width:700px) { .session-mode-buttons { gap: 8px; }.session-mode-buttons button { padding-inline: 8px; } }
+// PIP-639: phones - "Prove libere" must fit its third of the row.
+@media(max-width:420px) { .session-mode-buttons { gap: 6px; } .session-mode-buttons button { padding-inline: 4px; font-size: 11px; } }
 </style>
