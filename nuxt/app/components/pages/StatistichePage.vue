@@ -3,7 +3,8 @@
 // calcolato sul PC; per il coach gli stessi dati del pilota (contesto esplicito dalla pagina pilota).
 import { useTargetUserId, usePilotContext } from '~/composables/usePilotContext'
 import { useHeaderBack } from '~/composables/useHeaderBack'
-import { loadStatsSessions, loadStatsSummary, refreshOwnStats } from '~/repositories/statsRepository'
+import { loadStatsSummary, refreshOwnStats } from '~/repositories/statsRepository'
+import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import {
   AIR_BANDS, GRIP_ORDER, compareCars, filterCombos, filterSessions, idealLapMs, timeByCar, timeByWeek,
   type StatsFilter, type StatsSummary,
@@ -15,6 +16,7 @@ import type { SessionDocument } from '~/types/telemetry'
 const emit = defineEmits<{ back: [] }>()
 const targetUserId = useTargetUserId()
 const pilotContext = usePilotContext()
+const gateway = useTelemetryGateway('acc')
 useHeaderBack(() => emit('back'), () => 'Torna alla Panoramica')
 
 const sessions = shallowRef<SessionDocument[]>([])
@@ -76,7 +78,8 @@ async function load() {
   if (!uid) { status.value = 'error'; return }
   status.value = 'loading'
   try {
-    const [list, stats] = await Promise.all([loadStatsSessions(uid), loadStatsSummary(uid)])
+    // Lista dal gateway (cache della proiezione + sessioni del PC non ancora caricate), come le altre pagine.
+    const [list, stats] = await Promise.all([gateway.getVehicleHistory(uid), loadStatsSummary(uid)])
     sessions.value = list ?? []
     summary.value = stats
     status.value = 'ready'
