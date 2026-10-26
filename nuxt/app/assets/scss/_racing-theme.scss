@@ -56,7 +56,9 @@
     background: linear-gradient(to bottom left, transparent 50%, var(--rc-btn-edge, #ffffff59) 50%, var(--rc-btn-edge, #ffffff59) calc(50% + 1.4px), transparent calc(50% + 1.4px));
   }
   font: italic 700 14px/1 'Racer Display', sans-serif; text-transform: uppercase; letter-spacing: .02em;
-  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  // Ritaglio 1 px oltre i bordi (stessa diagonale): con larghezze a decimali il ritaglio esatto
+  // rifilava il bordino destro a meta' pixel e spariva (visto sul bottone rosso).
+  clip-path: polygon(-1px -1px, calc(100% - 11px) -1px, calc(100% + 1px) 11px, calc(100% + 1px) calc(100% + 1px), -1px calc(100% + 1px));
   transition: background-color .15s ease, color .15s ease;
   svg { display: block; flex-shrink: 0; }
   .rc-btn__arrow { transition: transform .15s ease; }
