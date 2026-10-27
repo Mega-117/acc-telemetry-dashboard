@@ -11,15 +11,18 @@ describe('session file actions', () => {
     expect(canShareOwnedSession('a', 'b')).toBe(false)
     expect(canShareOwnedSession(undefined)).toBe(false)
   })
-  it('offers sharing only to the owner, no export; shows errors and completion', async () => {
-    const wrapper = mount(SessionFileActions, { props: { canShare: false, sharing: false, success: false, error: null } })
+  it('offers sharing only to the owner, no export; the outcome is not shown beside the button', async () => {
+    const wrapper = mount(SessionFileActions, { props: { canShare: false, sharing: false }, global: { stubs: { UiRacingIcon: { template: '<svg />' } } } })
     expect(wrapper.findAll('button')).toHaveLength(0)
     await wrapper.setProps({ canShare: true })
+    expect(wrapper.get('button').text()).toBe('Condividi')
+    expect(wrapper.find('svg').exists()).toBe(true)
     await wrapper.get('button').trigger('click')
     expect(wrapper.emitted('share')).toHaveLength(1)
-    await wrapper.setProps({ sharing: true, success: true, error: 'Non riuscita' })
+    await wrapper.setProps({ sharing: true })
     expect(wrapper.get('button').attributes('disabled')).toBeDefined()
-    expect(wrapper.get('[role=status]').text()).toContain('copiato')
-    expect(wrapper.get('[role=alert]').text()).toBe('Non riuscita')
+    expect(wrapper.get('button').text()).toBe('Condivisione…')
+    // PIP-653: no inline status/alert: it moved Condividi and Confronta sideways.
+    expect(wrapper.find('[role=status], [role=alert]').exists()).toBe(false)
   })
 })

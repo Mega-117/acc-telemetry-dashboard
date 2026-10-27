@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // PIP-633: icone del motorsport per i bottoni .rc-btn: bandiera a scacchi, cronometro da giro,
 // contagiri, barre delle statistiche. Tratto spesso, terminali squadrati, angoli vivi.
-withDefaults(defineProps<{ name: 'flag' | 'stopwatch' | 'gauge' | 'chart' | 'chevron', size?: number }>(), { size: 20 })
+// PIP-653: condividi (freccia che esce dalla scatola) e confronta (due frecce opposte), stesso tratto.
+withDefaults(defineProps<{ name: 'flag' | 'stopwatch' | 'gauge' | 'chart' | 'chevron' | 'share' | 'compare', size?: number }>(), { size: 20 })
 </script>
 
 <template>
@@ -28,6 +29,16 @@ withDefaults(defineProps<{ name: 'flag' | 'stopwatch' | 'gauge' | 'chart' | 'che
     <template v-else-if="name === 'chart'">
       <path d="M5 19v-6M10 19V8M15 19v-4M20 19V5" stroke-width="2.8" />
       <path d="M3 21.5h18" stroke-width="1.6" />
+    </template>
+    <!-- Condividi: freccia verso l'alto che esce da una scatola aperta. -->
+    <template v-else-if="name === 'share'">
+      <path d="M12 15V3.5M7 8l5-5 5 5" />
+      <path d="M4 12.5V21h16v-8.5" stroke-width="1.8" />
+    </template>
+    <!-- Confronta: due frecce opposte, una sopra l'altra (il tuo giro contro un altro). -->
+    <template v-else-if="name === 'compare'">
+      <path d="M3.5 8h15M15 4l4 4-4 4" />
+      <path d="M20.5 16h-15M9 12l-4 4 4 4" />
     </template>
     <!-- Freccia a punta viva. -->
     <template v-else>

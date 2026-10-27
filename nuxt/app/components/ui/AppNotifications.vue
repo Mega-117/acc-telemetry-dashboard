@@ -9,7 +9,8 @@ const { notifications, dismiss } = useAppNotifications()
     <!-- One column of small messages, top right. The slot hosts the runtime status and the sync result
          (teleported in by their components) above the notifications, so nothing overlaps and no bar
          across the page pushes the content down. -->
-    <div class="app-notifications">
+    <!-- Polite live region: screen readers announce each message (e.g. "Link copiato") without moving focus. -->
+    <div class="app-notifications" role="status" aria-live="polite">
       <div id="app-toast-slot" class="app-notifications__slot" />
       <TransitionGroup name="app-notification" tag="div" class="app-notifications__list">
         <button

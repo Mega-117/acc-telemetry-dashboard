@@ -223,8 +223,7 @@ const loadError = ref<string | null>(null)
 // SESSION SHARING
 // ========================================
 const isSharing = ref(false)
-const shareSuccess = ref(false)
-const fileActionError = ref<string | null>(null)
+const { push: pushNotice } = useAppNotifications()
 const canShare = computed(() => canShareOwnedSession(comparisonCurrentUser.value?.uid, props.externalUserId || targetUserId.value))
 const showAutoSelectToast = ref(false)
 let autoSelectToastTimer: ReturnType<typeof setTimeout> | null = null
@@ -233,8 +232,6 @@ async function shareSession() {
   if (!props.sessionId || isSharing.value || !canShare.value) return
 
   isSharing.value = true
-  shareSuccess.value = false
-  fileActionError.value = null
 
   try {
     // PIP-651: one link for the whole session (Sessione and Telemetria); it opens on the tab you share from.
@@ -242,15 +239,11 @@ async function shareSession() {
       sessionId: props.sessionId,
       generateShareLink: (id) => generateShareLink(id, { tab: detailTab.value === 'avanzata' ? 'telemetria' : 'sessione' })
     })
-    shareSuccess.value = true
+    // PIP-653: the outcome in the site's notification column, never beside the buttons.
+    pushNotice('Link copiato: chi lo apre vede la sessione e la sua Telemetria.', 'success')
     console.log('[SHARE] Link copied:', link)
-
-    // Reset success state after 2 seconds
-    setTimeout(() => {
-      shareSuccess.value = false
-    }, 2000)
   } catch (e) {
-    fileActionError.value = 'Condivisione non riuscita. Riprova dalla tua sessione sincronizzata.'
+    pushNotice('Condivisione non riuscita. Riprova dalla tua sessione sincronizzata.', 'error')
     console.error('[SHARE] Error sharing session:', e)
   } finally {
     isSharing.value = false
@@ -2420,26 +2413,18 @@ const gripZones = computed(() => {
 <template>
   <CommonSessionDetail v-if="commonSession" :session="commonSession" :owner-id="externalUserId">
     <template #actions>
-      <SessionFileActions :can-share="canShare" :sharing="isSharing" :success="shareSuccess" :error="fileActionError" @share="shareSession" />
+      <SessionFileActions :can-share="canShare" :sharing="isSharing" @share="shareSession" />
     </template>
   </CommonSessionDetail>
   <div v-else class="session-detail-wrapper">
-  <!-- Share Success Notification (teleported to body for fixed position) -->
-  <Teleport to="body">
-    <Transition name="slide-notification">
-      <div v-if="shareSuccess" class="share-notification">
-        <span class="share-notification-icon">✓</span>
-        <span class="share-notification-text">Link copiato nella clipboard!</span>
-      </div>
-    </Transition>
-    <Transition name="slide-notification">
+  <!-- PIP-653: the share outcome goes to the site's notification column (useAppNotifications); this one keeps
+       its "Cambia" action, so it joins the same column with the same racing-toast look. -->
+  <Teleport defer to="#app-toast-slot">
+    <Transition name="autoselect-toast">
       <div v-if="showAutoSelectToast" class="autoselect-notification">
-        <span class="autoselect-notification-icon">✓</span>
-        <span class="autoselect-notification-text">
-          Confronto attivato con i migliori stint
-        </span>
-        <button class="autoselect-notification-action" @click="showAutoSelectToast = false; resetBuilder()">Cambia</button>
-        <button class="autoselect-notification-close" @click="showAutoSelectToast = false">✕</button>
+        <span class="autoselect-notification-text">Confronto attivato con i migliori stint</span>
+        <button type="button" class="autoselect-notification-action" @click="showAutoSelectToast = false; resetBuilder()">Cambia</button>
+        <button type="button" class="autoselect-notification-close" aria-label="Chiudi" @click="showAutoSelectToast = false">✕</button>
       </div>
     </Transition>
   </Teleport>
@@ -2485,8 +2470,8 @@ const gripZones = computed(() => {
         </div>
       </div>
       <div class="header-actions">
-        <button v-if="!isEvoSession" type="button" class="rc-btn rc-btn--compact" title="Le tue sessioni, oppure il link di una sessione o di un giro ricevuto" @click="openSessionPicker">Confronta</button>
-        <SessionFileActions :can-share="canShare" :sharing="isSharing" :success="shareSuccess" :error="fileActionError" @share="shareSession" />
+        <button v-if="!isEvoSession" type="button" class="rc-btn rc-btn--compact" title="Le tue sessioni, oppure il link di una sessione o di un giro ricevuto" @click="openSessionPicker"><UiRacingIcon name="compare" :size="16" />Confronta</button>
+        <SessionFileActions :can-share="canShare" :sharing="isSharing" @share="shareSession" />
         <div v-if="!isEvoSession" v-rc-switch class="detail-tabs rc-switch" role="tablist" aria-label="Vista della sessione">
           <button type="button" role="tab" :aria-selected="detailTab === 'sessione'" :class="{ active: detailTab === 'sessione' }" @click="chooseTab('sessione')">Sessione</button>
           <button type="button" role="tab" :aria-selected="detailTab === 'avanzata'" :class="{ active: detailTab === 'avanzata' }" title="Il giro contro un riferimento: delta, curve, traiettorie e telemetria" @click="chooseTab('avanzata')">Telemetria</button>
@@ -3310,55 +3295,6 @@ const gripZones = computed(() => {
 .start-cond { display: flex; gap: 14px; font-size: 12px; color: rgba(255,255,255,0.7); }
 .cond-label { font-size: 9px; font-weight: 700; letter-spacing: 1px; color: rgba(255,255,255,0.5); padding: 3px 8px; background: rgba(255,255,255,0.05); border-radius: 4px; }
 
-// === SHARE NOTIFICATION BANNER (Fixed top-right viewport) ===
-.share-notification {
-  position: fixed;
-  top: 80px;
-  right: 24px;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 20px;
-  background: rgba(20, 30, 20, 0.95);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(34, 197, 94, 0.5);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 20px rgba(34, 197, 94, 0.2);
-}
-
-.share-notification-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  background: rgba(34, 197, 94, 0.25);
-  border-radius: 50%;
-  color: #22c55e;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.share-notification-text {
-  color: #22c55e;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-// Transition animation (slide from right)
-.slide-notification-enter-active,
-.slide-notification-leave-active {
-  transition: all 0.3s ease;
-}
-.slide-notification-enter-from {
-  opacity: 0;
-  transform: translateX(30px);
-}
-.slide-notification-leave-to {
-  opacity: 0;
-  transform: translateX(30px);
-}
 
 // === KPI SESSIONE CON DELTA ===
 .summary { display: flex; gap: 16px; margin-bottom: 20px; }
@@ -7015,126 +6951,28 @@ const gripZones = computed(() => {
 
 </style>
 
-<!-- Global styles for Teleported notification banner -->
+<!-- Global styles for the teleported "Confronto attivato" toast (it lives in AppNotifications' column). -->
 <style lang="scss">
-// === SHARE NOTIFICATION BANNER (Teleported to body) ===
-.share-notification {
-  position: fixed;
-  top: 80px;
-  right: 24px;
-  z-index: 99999;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 20px;
-  background: rgba(20, 30, 20, 0.95);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(34, 197, 94, 0.5);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 20px rgba(34, 197, 94, 0.2);
-}
+@use '~/assets/scss/racing-toast' as toast;
 
-.share-notification-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  background: rgba(34, 197, 94, 0.25);
-  border-radius: 50%;
-  color: #22c55e;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.share-notification-text {
-  color: #22c55e;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-// Transition animation (slide from right)
-.slide-notification-enter-active,
-.slide-notification-leave-active {
-  transition: all 0.3s ease;
-}
-.slide-notification-enter-from {
-  opacity: 0;
-  transform: translateX(30px);
-}
-.slide-notification-leave-to {
-  opacity: 0;
-  transform: translateX(30px);
-}
-// === AUTO-SELECT TOAST NOTIFICATION ===
+// PIP-653: the site's racing toast (see-through, cut corner, colour bar), no rounded card.
 .autoselect-notification {
-  position: fixed;
-  top: 80px;
-  right: 24px;
-  z-index: 99999;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 20px;
-  background: rgba(15, 30, 30, 0.95);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(20, 184, 166, 0.5);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 20px rgba(20, 184, 166, 0.15);
+  @include toast.toast;
+  --toast-tone: #22c55e;
 }
-
-.autoselect-notification-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  background: rgba(20, 184, 166, 0.25);
-  border-radius: 50%;
-  color: #14b8a6;
-  font-size: 14px;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.autoselect-notification-text {
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 13px;
-  font-weight: 500;
-}
-
+.autoselect-notification-text { flex: 1 1 auto; }
 .autoselect-notification-action {
-  background: rgba(20, 184, 166, 0.15);
-  border: 1px solid rgba(20, 184, 166, 0.35);
-  border-radius: 6px;
-  color: #5eead4;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 4px 12px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.15s ease;
-
-  &:hover {
-    background: rgba(20, 184, 166, 0.25);
-    border-color: rgba(20, 184, 166, 0.5);
-  }
+  padding: 4px 10px; border: 1px solid #ffffff40; border-radius: 0; background: transparent; color: #fff;
+  font: 600 12px 'Inter', sans-serif; white-space: nowrap; cursor: pointer; transition: background-color 140ms ease, border-color 140ms ease;
+  &:hover { background: #ffffff14; border-color: #ffffffa6; }
+  &:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 }
-
 .autoselect-notification-close {
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.4);
-  font-size: 14px;
-  cursor: pointer;
-  padding: 2px 4px;
-  margin-left: 4px;
-  transition: color 0.15s ease;
-
-  &:hover {
-    color: rgba(255, 255, 255, 0.8);
-  }
+  padding: 2px 4px; border: 0; background: none; color: #ffffff80; font-size: 14px; cursor: pointer; transition: color 140ms ease;
+  &:hover { color: #fff; }
+  &:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 }
+@include toast.toast-motion(autoselect-toast);
 
 .coach-insight-banner {
   display: flex;
