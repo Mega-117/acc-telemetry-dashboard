@@ -74,7 +74,7 @@ defineExpose({
       </p>
       <p class="reset-success__hint">Controlla anche la cartella spam.</p>
       <UiBaseButton variant="primary" :disabled="loading" @click="emit('back')">
-        <span>Torna al login</span><AuthIcon name="arrow" />
+        <span>Torna al login</span><UiRacingIcon name="chevron" :size="26" class="auth-btn-arrow" />
       </UiBaseButton>
     </div>
 
@@ -108,7 +108,7 @@ defineExpose({
         variant="primary"
         :loading="loading"
       >
-        <span>INVIA LINK</span><AuthIcon name="arrow" />
+        <span>INVIA LINK</span><UiRacingIcon name="chevron" :size="26" class="auth-btn-arrow" />
       </UiBaseButton>
 
       </form>

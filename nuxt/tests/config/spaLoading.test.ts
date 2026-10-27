@@ -5,7 +5,7 @@ import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BOOT_LEAVE_MS, BOOT_SCREEN_ID, spaLoadingHtml } from '../../shared/spaLoading'
 import { RACING_BACKDROP_BACKGROUND, RACING_SPARK_FROM, RACING_SPARK_TO, RACING_SPARKS, sparkDelay } from '../../shared/racingBackdrop'
-import { dismissBootScreen, handBootBackdropToApp, logoGlideStart } from '../../app/utils/bootScreen'
+import { BOOT_GLIDE_MS, BOOT_MIN_VISIBLE_MS, bootHoldLeft, dismissBootScreen, glideBootLogoTo, handBootBackdropToApp, logoGlideStart } from '../../app/utils/bootScreen'
 
 describe('spaLoadingHtml', () => {
   it('shows the login logo under the site base path, with a high fetch priority', () => {
@@ -107,5 +107,40 @@ describe('logoGlideStart', () => {
 
   it('does nothing while the loader logo has no size yet', () => {
     expect(logoGlideStart({ left: 0, top: 0, width: 100, height: 50 }, { left: 0, top: 0, width: 0, height: 0 })).toBe('')
+  })
+})
+
+describe('bootHoldLeft', () => {
+  afterEach(() => { document.body.innerHTML = '' })
+
+  it('keeps the start loader up to its minimum time since the page opened, only while it exists', () => {
+    expect(bootHoldLeft(document, 300)).toBe(0)
+    document.body.innerHTML = `<div id="${BOOT_SCREEN_ID}"></div>`
+    expect(bootHoldLeft(document, 300)).toBe(BOOT_MIN_VISIBLE_MS - 300)
+    expect(bootHoldLeft(document, BOOT_MIN_VISIBLE_MS + 500)).toBe(0)
+  })
+})
+
+describe('glideBootLogoTo', () => {
+  afterEach(() => { vi.useRealTimers(); document.body.innerHTML = '' })
+
+  it('moves the loader logo onto the login logo, then removes the loading screen', () => {
+    vi.useFakeTimers()
+    document.body.innerHTML = `<div id="${BOOT_SCREEN_ID}"><div class="rc-boot__inner"><img></div></div><img id="target">`
+    const logo = document.querySelector<HTMLElement>(`#${BOOT_SCREEN_ID} img`)!
+    logo.getBoundingClientRect = () => ({ left: 500, top: 300, width: 400, height: 200 }) as DOMRect
+    const target = document.getElementById('target')!
+    target.getBoundingClientRect = () => ({ left: 450, top: 50, width: 500, height: 250 }) as DOMRect
+    glideBootLogoTo(target)
+    expect(document.getElementById(BOOT_SCREEN_ID)!.classList.contains('is-gliding')).toBe(true)
+    expect(logo.style.transform).toBe('translate(0.0px, -225.0px) scale(1.2500)')
+    vi.advanceTimersByTime(BOOT_GLIDE_MS + 300)
+    expect(document.getElementById(BOOT_SCREEN_ID)).toBeNull()
+  })
+
+  it('falls back to the fade when there is no login logo to reach', () => {
+    document.body.innerHTML = `<div id="${BOOT_SCREEN_ID}"><div class="rc-boot__inner"><img></div></div>`
+    glideBootLogoTo(null)
+    expect(document.getElementById(BOOT_SCREEN_ID)!.classList.contains('is-leaving')).toBe(true)
   })
 })

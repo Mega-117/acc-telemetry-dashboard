@@ -5,7 +5,6 @@
 
 import { ref } from 'vue'
 import AuthField from './AuthField.vue'
-import AuthIcon from './AuthIcon.vue'
 
 withDefaults(defineProps<{
   loading?: boolean
@@ -93,7 +92,7 @@ defineExpose({
       variant="primary"
       :loading="loading"
     >
-      <span aria-live="polite">{{ loading ? 'ACCESSO IN CORSO…' : 'ACCEDI' }}</span><AuthIcon name="arrow" />
+      <span aria-live="polite">{{ loading ? 'ACCESSO IN CORSO…' : 'ACCEDI' }}</span><UiRacingIcon name="chevron" :size="26" class="auth-btn-arrow" />
     </UiBaseButton>
 
 

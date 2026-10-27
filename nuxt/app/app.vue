@@ -5,7 +5,7 @@ const { consultedGame } = useGameContext()
 // App.vue - Main Application with Auth Flow
 // ============================================
 
-import { ref, shallowRef, computed, onMounted, onBeforeMount, onBeforeUnmount, watch, provide } from 'vue'
+import { ref, shallowRef, computed, nextTick, onMounted, onBeforeMount, onBeforeUnmount, watch, provide } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { usePitwallDriverPresence } from '~/composables/usePitwallDriverPresence'
 import { useConfirmedLogout } from '~/composables/useConfirmedLogout'
@@ -23,7 +23,7 @@ import { useOwnerDataMaintenance } from '~/composables/useOwnerDataMaintenance'
 import { useOwnerCacheLifecycle } from '~/composables/useOwnerCacheLifecycle'
 import { AUTH_EMAIL_VERIFICATION_REQUIRED } from '~/config/authPolicy'
 import { canUseDevTools } from '~/utils/devToolsAccess'
-import { toAuthStartupOutcome, describeAuthRecovery, type AuthSessionStatus } from '~/services/auth/authSessionPolicy'
+import { toAuthStartupOutcome, describeAuthRecovery, AUTH_RECOVERY_DEFAULT_MESSAGE, type AuthSessionStatus } from '~/services/auth/authSessionPolicy'
 import { publishAuthStartupOutcome } from '~/services/auth/localIdentityBridge'
 import { useWheelInputBridge } from '~/composables/useWheelInputBridge'
 import { useWindowPresentationVisibility } from '~/composables/usePresentationVisibility'
@@ -40,7 +40,7 @@ import { getOverviewCarImage } from '~/utils/overviewCarImage'
 import { createDashboardEntryRecovery, EMPTY_ENTRY_STATE } from '~/services/auth/dashboardEntryRecovery'
 import { createAuthRevisionLeaseCoordinator } from '~/services/auth/authRevisionLease'
 import { loadRaceCalendarEvents } from '~/repositories/raceCalendarRepository'
-import { dismissBootScreen, handBootBackdropToApp, logoGlideStart, LOGIN_LOADER_MIN_MS, LOGO_GLIDE_MS } from '~/utils/bootScreen'
+import { bootHoldLeft, dismissBootScreen, glideBootLogoTo, handBootBackdropToApp, logoGlideStart, LOGIN_LOADER_MIN_MS, LOGO_GLIDE_MS } from '~/utils/bootScreen'
 import { BOOT_LOADER_CSS, bootLogoSrc } from '../shared/spaLoading'
 
 // === NUXT ROUTER ===
@@ -268,6 +268,8 @@ const loadingMessage = computed(() => dashboardEntryState.value.status === 'fail
     ? 'Apertura della dashboard non riuscita. Riprovo...'
     : authRecovery.value.message)
 const canRetryLoading = computed(() => dashboardEntryState.value.status === 'failed' || authRecovery.value.canRetry)
+// PIP-640: the laser already says "loading"; words appear only when something is wrong or being retried.
+const loadingNote = computed(() => loadingMessage.value === AUTH_RECOVERY_DEFAULT_MESSAGE ? '' : loadingMessage.value)
 const retryLoading = () => dashboardEntryState.value.status === 'failed'
   ? enterDashboard() : retryRecoverableAuthSession()
 const overviewEntry = shallowRef<OverviewEntry | null>(null)
@@ -312,17 +314,32 @@ watch(
 // === CONFIG ===
 const transitionName = 'shell-motion'
 // PIP-640: in the browser the loading screen of index.html stays over the app until the first real screen is
-// ready, then fades out while that screen fades in (one loader, no blank step between them). The first change
-// from 'initializing' is a crossfade, so the login does not wait for the empty start screen to leave.
+// ready (and at least BOOT_MIN_VISIBLE_MS since the page opened, so a fast reload does not flash it). Then the
+// logo fades out and the dashboard fades in, or, for the login, the logo glides up into the login logo's place
+// and the form fades in around it. The shell shows `shellState`: appState, with that first hand-over held back.
+const shellState = ref<AppState>(appState.value)
+let shellHold: ReturnType<typeof setTimeout> | undefined
+watch(appState, state => {
+  clearTimeout(shellHold)
+  const holding = (shellState.value === 'initializing' || shellState.value === 'loading') && (state === 'auth' || state === 'dashboard')
+  const wait = holding ? bootHoldLeft() : 0
+  if (wait > 0) shellHold = setTimeout(() => { shellState.value = appState.value }, wait)
+  else shellState.value = state
+})
+// The first change from 'initializing' is a crossfade, so the login does not wait for the empty start screen.
 const leftStart = ref(false)
 const usesShell = computed(() => !(isProtectedRuntimeRoute.value && !canMountProtectedRuntime.value)
   && !isStandaloneRuntimeRoute.value && !isTrainingOverlayIntent.value && !isHudOverlayRoute.value && !isStandaloneDevRoute.value)
 const firstScreenReady = computed(() => !usesShell.value
-  || (appState.value !== 'initializing' && (appState.value !== 'loading' || canRetryLoading.value)))
-watch(appState, (state, previous) => { if (previous === 'initializing' && state !== 'initializing') requestAnimationFrame(() => { leftStart.value = true }) })
+  || (shellState.value !== 'initializing' && (shellState.value !== 'loading' || canRetryLoading.value)))
+watch(shellState, (state, previous) => { if (previous === 'initializing' && state !== 'initializing') requestAnimationFrame(() => { leftStart.value = true }) })
 onMounted(() => {
   handBootBackdropToApp()
-  watch(firstScreenReady, ready => { if (ready) dismissBootScreen() }, { immediate: true })
+  watch(firstScreenReady, ready => {
+    if (!ready) return
+    if (usesShell.value && shellState.value === 'auth') void nextTick(() => glideBootLogoTo(document.querySelector('.racer-auth__logo-viewport img')))
+    else dismissBootScreen()
+  }, { immediate: true })
 })
 // PIP-640: after "Accedi" the login logo itself glides to the loader's place while the form fades away and the
 // laser lights up under it (FLIP: the loader logo starts where the login logo was, then moves home). The loader
@@ -330,7 +347,7 @@ onMounted(() => {
 let authLogoRect: DOMRect | null = null
 function onShellBeforeLeave(el: Element) {
   el.setAttribute('inert', '')
-  authLogoRect = el.classList.contains('racer-auth') && appState.value === 'loading'
+  authLogoRect = el.classList.contains('racer-auth') && shellState.value === 'loading'
     ? el.querySelector('.racer-auth__logo-viewport img')?.getBoundingClientRect() ?? null
     : null
 }
@@ -683,15 +700,15 @@ provide('goToSettings', handleGoToSettings)
       <NuxtRouteAnnouncer />
 
       <!-- Main Content with Transitions -->
-      <Transition :name="transitionName" :mode="leftStart && appState === 'auth' ? 'out-in' : undefined" @before-leave="onShellBeforeLeave" @before-enter="onShellBeforeEnter" @enter="onShellEnter">
+      <Transition :name="transitionName" :mode="leftStart && shellState === 'auth' ? 'out-in' : undefined" @before-leave="onShellBeforeLeave" @before-enter="onShellBeforeEnter" @enter="onShellEnter">
         <!-- Initializing - waiting for Firebase auth check -->
-        <div v-if="appState === 'initializing'" key="initializing" class="initializing-screen" role="status" aria-label="Caricamento">
+        <div v-if="shellState === 'initializing'" key="initializing" class="initializing-screen" role="status" aria-label="Caricamento">
           <div class="rc-boot__inner"><img :src="bootLogo" alt="Racer Core" width="410" height="205"><div class="rc-boot__laser" /></div>
         </div>
 
         <!-- Auth Overlay -->
         <AuthOverlay 
-          v-else-if="appState === 'auth' && authState !== 'register-success'"
+          v-else-if="shellState === 'auth' && authState !== 'register-success'"
           key="auth"
           :busy="preparingDashboard"
           @login-success="handleLoginSuccess"
@@ -700,7 +717,7 @@ provide('goToSettings', handleGoToSettings)
 
         <!-- Registration Success -->
         <AuthScene
-          v-else-if="appState === 'auth' && authState === 'register-success'"
+          v-else-if="shellState === 'auth' && authState === 'register-success'"
           key="register-success"
         >
             <AuthRegistrationSuccess
@@ -712,23 +729,19 @@ provide('goToSettings', handleGoToSettings)
         </AuthScene>
 
         <!-- Loading Screen -->
-        <div v-else-if="appState === 'loading'" key="loading" class="loading-screen">
+        <div v-else-if="shellState === 'loading'" key="loading" class="loading-screen">
           <div class="loading-content">
-            <div v-if="!canRetryLoading" class="rc-boot__inner"><img :src="bootLogo" alt="Racer Core" width="410" height="205"><div class="rc-boot__laser" /></div>
-            <p v-if="loadingMessage" class="loading-text">{{ loadingMessage }}</p>
-            <button
-              v-if="canRetryLoading"
-              type="button"
-              class="loading-retry"
-              @click="retryLoading()"
-            >
-              Riprova
+            <!-- The logo stays; on a failure the laser goes dark and the reason and Riprova appear under it. -->
+            <div class="rc-boot__inner" :class="{ 'is-stalled': canRetryLoading }"><img :src="bootLogo" alt="Racer Core" width="410" height="205"><div class="rc-boot__laser" /></div>
+            <p v-if="loadingNote" class="loading-text" :class="{ 'is-problem': canRetryLoading }">{{ loadingNote }}</p>
+            <button v-if="canRetryLoading" type="button" class="rc-btn rc-btn--primary loading-retry" @click="retryLoading()">
+              Riprova<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" />
             </button>
           </div>
         </div>
 
         <!-- Dashboard -->
-        <div v-else-if="appState === 'dashboard'" key="dashboard" class="dashboard-wrapper">
+        <div v-else-if="shellState === 'dashboard'" key="dashboard" class="dashboard-wrapper">
           <NuxtLayout>
             <!-- Overview owns its game-change sequence; remounting skips the logo hold. -->
       <NuxtPage :page-key="route => ['panoramica', 'sessioni', 'piste'].includes(String(route.name)) ? route.fullPath : `${consultedGame}:${route.fullPath}`" />
@@ -934,21 +947,20 @@ body:has(.sessions-page),
 }
 
 .loading-text {
-  font-family: $font-family;
-  font-size: 16px;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.loading-retry {
-  margin-top: 20px;
-  padding: 10px 28px;
+  margin: 22px 0 0;
   font-family: $font-family;
   font-size: 15px;
-  color: #fff;
-  background: $color-racing-red;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
+  color: rgba(255, 255, 255, 0.6);
+  animation: rc-text-in 400ms ease-out both;
+  &.is-problem { color: #fff; }
+}
+
+.loading-retry { margin-top: 18px; }
+
+// Failure: the beam stops and the logo stops breathing; the track stays as a dim line.
+.rc-boot__inner.is-stalled {
+  img { animation: none; }
+  .rc-boot__laser::after { animation: none; opacity: 0; }
 }
 
 // === INITIALIZING SCREEN (minimal, fast) ===
@@ -1028,6 +1040,10 @@ body:has(.sessions-page),
 // the first interface waits for its logo to fade before fading in, slowly: logo out, then the content.
 body:has(#rc-boot) #app :is(.rc-boot__inner, .loading-text) { visibility: hidden; }
 body:has(#rc-boot.is-leaving) #app .shell-motion-enter-active { transition-duration: 700ms; transition-delay: 450ms; }
+// First screen = login: its logo stays hidden until the loader logo has glided into its place; the form fades in.
+body:has(#rc-boot) #app .racer-auth__logo-viewport img { visibility: hidden; }
+body:has(#rc-boot.is-gliding) #app .racer-auth.shell-motion-enter-from { transform: none; }
+body:has(#rc-boot.is-gliding) #app .racer-auth.shell-motion-enter-active { transition-duration: 700ms; transition-delay: 300ms; }
 // The shared dashboard owns scrolling below its header on every route.
 html:has(.dashboard-layout), body:has(.dashboard-layout) { overflow: hidden; scrollbar-gutter: auto; }
 #app:has(.electron-titlebar) > .dashboard-wrapper:has(.dashboard-layout) {

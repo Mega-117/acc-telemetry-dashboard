@@ -5,7 +5,6 @@
 
 import { computed, ref } from 'vue'
 import AuthField from './AuthField.vue'
-import AuthIcon from './AuthIcon.vue'
 import { emailDomainHintMessage } from '~/utils/emailDomainHint'
 
 withDefaults(defineProps<{
@@ -170,7 +169,7 @@ defineExpose({
       variant="primary"
       :loading="loading"
     >
-      <span>REGISTRATI</span><AuthIcon name="arrow" />
+      <span>REGISTRATI</span><UiRacingIcon name="chevron" :size="26" class="auth-btn-arrow" />
     </UiBaseButton>
   </form>
 </template>

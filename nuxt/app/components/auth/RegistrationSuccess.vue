@@ -231,7 +231,7 @@ onMounted(() => {
         <span class="spinner"></span> Controllo...
       </template>
       <template v-else>
-        <span>Ho confermato l'email</span><AuthIcon name="arrow" />
+        <span>Ho confermato l'email</span><UiRacingIcon name="chevron" :size="26" class="auth-btn-arrow" />
       </template>
     </button>
 

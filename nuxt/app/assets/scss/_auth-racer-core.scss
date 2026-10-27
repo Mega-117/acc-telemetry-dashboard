@@ -76,6 +76,17 @@
   .auth-icon { width: 34px; height: 34px; flex-shrink: 0; }
   &:focus-visible { outline: none; box-shadow: inset 0 0 0 3px #fff; }
 }
+// PIP-640: the site's chevron, as on the other buttons; while signing in a white laser runs along the bottom
+// edge instead of the round spinner (the same language as the loader that follows).
+.racer-auth :deep(.auth-btn-arrow) { flex-shrink: 0; transition: transform 160ms ease-out; }
+.racer-auth :deep(.btn--primary:hover:not(:disabled) .auth-btn-arrow) { transform: translateX(3px); }
+.racer-auth :deep(.btn--primary.btn--loading) { opacity: 1; overflow: hidden; }
+.racer-auth :deep(.btn--primary.btn--loading::after) {
+  top: auto; right: auto; left: 0; bottom: 0; width: 40%; height: 3px; border: 0; border-radius: 0;
+  background: linear-gradient(90deg, transparent, #ffffffaa 70%, #fff); box-shadow: 0 0 8px 2px #ffffff80;
+  animation: racer-btn-laser 1.2s cubic-bezier(.45, 0, .25, 1) infinite;
+}
+@keyframes racer-btn-laser { from { transform: translateX(-100%); } to { transform: translateX(260%); } }
 .racer-auth :deep(.btn--link), .racer-auth :deep(.resend-btn), .racer-auth :deep(.email-fix__toggle) {
   border: 0; border-radius: 0; background: none; color: #eee; padding: 0; min-height: 28px;
   box-shadow: none; cursor: pointer; font-size: 16px;
@@ -146,6 +157,6 @@
 @media (prefers-reduced-motion: reduce) {
   .racer-auth.dissolve-fade-zoom-enter-active,
   .racer-auth.dissolve-fade-zoom-leave-active { transition: none; }
-  .racer-auth :deep(.spinner) { animation: none; }
+  .racer-auth :deep(.spinner), .racer-auth :deep(.btn--primary.btn--loading::after) { animation: none; }
   .racer-auth__height, .racer-auth :deep(.racer-enter-active), .racer-auth :deep(.racer-leave-active) { transition: none; }
 }

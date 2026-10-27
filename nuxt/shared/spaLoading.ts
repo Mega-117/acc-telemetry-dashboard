@@ -41,6 +41,9 @@ const BOOT_SCREEN_CSS = [
   `${id}.has-app .rc-boot__bg{display:none}`,
   `${id} .rc-boot__bg i{position:absolute;width:3px;height:3px;border-radius:50%;background:#ff7188;box-shadow:0 0 5px #f4002870;animation:rc-spark 18s linear infinite}`,
   `${id}.is-leaving .rc-boot__inner{opacity:0;transform:scale(1.05);filter:blur(4px)}`,
+  // Gliding into the login logo: the glow and the laser fade, the logo itself stays fully visible.
+  `${id}.is-gliding img{animation:none;filter:drop-shadow(0 0 0 #ff002400)}`,
+  `${id}.is-gliding .rc-boot__laser{opacity:0;transition:opacity 300ms ease-out}`,
   `@keyframes rc-spark{0%{transform:${RACING_SPARK_FROM};opacity:0}20%,70%{opacity:.7}100%{transform:${RACING_SPARK_TO};opacity:0}}`,
   `@media (prefers-reduced-motion:reduce){${id} .rc-boot__bg i{animation:none;opacity:.5}}`,
 ].join('')
