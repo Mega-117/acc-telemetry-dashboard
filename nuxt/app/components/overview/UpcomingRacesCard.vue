@@ -17,6 +17,9 @@ import {
 import { gameLabel } from '~/services/telemetry/gameCatalog'
 import { preparePage } from '~/services/ui/pagePreparation'
 import { getRaceCalendarCountdown } from '~/utils/raceCalendarCountdown'
+import { validateRaceForm, type RaceFormErrors, type RaceFormField } from '~/utils/raceCalendarForm'
+import RaceDateTimePicker from './RaceDateTimePicker.vue'
+import RaceFieldError from './RaceFieldError.vue'
 
 const props = defineProps<{
   userId: string | null | undefined
@@ -112,6 +115,7 @@ function countdownText(event: RaceCalendarEvent): string {
 }
 
 function resetForm() {
+  fieldErrors.value = {}
   form.value = {
     title: '',
     startsAt: '',
@@ -123,6 +127,7 @@ function resetForm() {
 }
 
 function hydrateForm(event: RaceCalendarEvent) {
+  fieldErrors.value = {}
   form.value = {
     title: event.title || '',
     startsAt: event.startsAt || '',
@@ -173,11 +178,23 @@ function resetClosedModal() {
   resetForm()
 }
 
-function validateForm(): RaceCalendarEventInput | null {
-  if (!form.value.title.trim() || !form.value.startsAt || !form.value.trackName.trim()) {
-    errorMessage.value = 'Titolo, data e pista sono obbligatori.'
-    return null
+// PIP-641: a field's error sits under that field and goes away as soon as the field changes; errorMessage is
+// left for the general ones (cloud unavailable, save failed), shown in the footer next to the buttons.
+const fieldErrors = ref<RaceFormErrors>({})
+watch(() => ({ ...form.value }), (now, before) => {
+  for (const key of Object.keys(fieldErrors.value) as RaceFormField[]) {
+    if (now[key] !== before[key]) delete fieldErrors.value[key]
   }
+})
+const fieldProps = (key: RaceFormField) => ({
+  class: { 'is-invalid': !!fieldErrors.value[key] },
+  'aria-invalid': fieldErrors.value[key] ? 'true' as const : undefined,
+  'aria-describedby': `race-${key}-error`,
+})
+
+function validateForm(): RaceCalendarEventInput | null {
+  fieldErrors.value = validateRaceForm(form.value, Date.now())
+  if (Object.keys(fieldErrors.value).length) return null
   return {
     gameId: selectedEvent.value?.gameId || props.gameId || 'acc',
     title: form.value.title,
@@ -372,7 +389,7 @@ onBeforeUnmount(() => {
     <Teleport to="body">
       <Transition name="race-modal-motion" @after-leave="resetClosedModal">
       <div v-if="isModalOpen" class="race-modal-backdrop" :class="{ 'race-modal-backdrop--racing': racing }" @click.self="closeModal">
-        <form class="race-modal" :class="{ 'race-modal--racing': racing }" role="dialog" aria-modal="true" :aria-label="modalTitle" @keydown.esc="closeModal" @submit.prevent="submitModal">
+        <form class="race-modal" :class="{ 'race-modal--racing': racing }" novalidate role="dialog" aria-modal="true" :aria-label="modalTitle" @keydown.esc="closeModal" @submit.prevent="submitModal">
           <header>
             <div>
               <span class="eyebrow">Calendario pilota<span v-if="gameId"> · {{ gameLabel(gameId) }}</span></span>
@@ -390,16 +407,19 @@ onBeforeUnmount(() => {
           <template v-else>
             <label>
               <span>Titolo gara</span>
-              <input v-model="form.title" type="text" placeholder="Es. Endurance Sprint" />
+              <input v-model="form.title" type="text" placeholder="Es. Endurance Sprint" v-bind="fieldProps('title')" />
+              <RaceFieldError id="race-title-error" :message="fieldErrors.title" />
             </label>
             <div class="form-row">
-              <label>
-                <span>Data e ora</span>
-                <input v-model="form.startsAt" type="datetime-local" />
-              </label>
+              <div class="race-field">
+                <span id="race-startsAt-label">Data e ora</span>
+                <RaceDateTimePicker v-model="form.startsAt" :invalid="!!fieldErrors.startsAt" describedby="race-startsAt-label race-startsAt-error" />
+                <RaceFieldError id="race-startsAt-error" :message="fieldErrors.startsAt" />
+              </div>
               <label>
                 <span>Pista</span>
-                <input v-model="form.trackName" type="text" placeholder="Es. Spa-Francorchamps" />
+                <input v-model="form.trackName" type="text" placeholder="Es. Spa-Francorchamps" v-bind="fieldProps('trackName')" />
+                <RaceFieldError id="race-trackName-error" :message="fieldErrors.trackName" />
               </label>
             </div>
             <label>
@@ -411,21 +431,21 @@ onBeforeUnmount(() => {
               <div class="form-row">
               <label>
                 <span>SimGrid</span>
-                <input v-model="form.simGridUrl" type="url" placeholder="https://www.thesimgrid.com/..." />
+                <input v-model="form.simGridUrl" type="url" placeholder="https://www.thesimgrid.com/..." v-bind="fieldProps('simGridUrl')" />
+                <RaceFieldError id="race-simGridUrl-error" :message="fieldErrors.simGridUrl" />
               </label>
               <label>
                 <span>Link gara</span>
-                <input v-model="form.raceUrl" type="url" placeholder="Briefing, Discord, sito evento..." />
+                <input v-model="form.raceUrl" type="url" placeholder="Briefing, Discord, sito evento..." v-bind="fieldProps('raceUrl')" />
+                <RaceFieldError id="race-raceUrl-error" :message="fieldErrors.raceUrl" />
               </label>
               </div>
             </fieldset>
           </template>
 
-          <div v-if="racing || errorMessage" class="race-error-slot" :class="{ 'race-error-slot--reserved': racing }" aria-live="polite" aria-atomic="true">
-            <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
-          </div>
-
           <footer>
+            <!-- General errors (cloud, save failed) next to the buttons the user just pressed. -->
+            <p class="footer-error" role="alert" aria-atomic="true"><Transition name="footer-error"><span v-if="errorMessage" class="form-error">{{ errorMessage }}</span></Transition></p>
             <button type="button" :class="racing ? 'rc-btn' : 'secondary-action'" :disabled="isSaving" @click="closeModal">Annulla</button>
             <button :class="racing ? 'rc-btn rc-btn--primary' : ['primary-action', { danger: modalMode === 'delete' }]" type="submit" :disabled="isSaving || !cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? modalSubmitLabel : cloudWriteGate.message">
               {{ modalSubmitLabel }}
@@ -441,141 +461,4 @@ onBeforeUnmount(() => {
 <style src="../../assets/scss/components/upcoming-races-card.scss" lang="scss" scoped>.upcoming-races-card--racing .race-empty { border: 0; background: transparent; border-radius: 0; padding: 12px 0; }
 </style>
 
-<style scoped lang="scss">
-@use '@/assets/scss/racing-settings' as controls;
-.race-modal-motion-enter-active { transition: opacity 220ms ease; }
-.race-modal-motion-leave-active { transition: opacity 160ms ease; }
-.race-modal-motion-enter-active .race-modal { transition: transform 220ms cubic-bezier(.2,.7,.2,1); }
-.race-modal-motion-leave-active .race-modal { transition: transform 160ms ease; }
-.race-modal-motion-enter-from, .race-modal-motion-leave-to { opacity: 0; }
-.race-modal-motion-enter-from .race-modal, .race-modal-motion-leave-to .race-modal { transform: translateY(10px) scale(.98); }
-.race-error-slot--reserved { height: 56px; min-height: 56px; overflow: auto; }
-@media (prefers-reduced-motion: reduce) {
-  .race-modal-motion-enter-active, .race-modal-motion-leave-active,
-  .race-modal-motion-enter-active .race-modal, .race-modal-motion-leave-active .race-modal { transition-duration: 1ms; }
-  .race-modal-motion-enter-from .race-modal, .race-modal-motion-leave-to .race-modal { transform: none; }
-}
-.race-links { min-width: 0; margin: 0; padding: 14px 0 0; border: 0; border-top: 1px solid var(--rc-section-line); }
-.race-links legend { padding: 0 10px 0 0; color: #ddd; font-size: 12px; text-transform: uppercase; }
-.field-optional { margin-left: 8px; color: #888; font-size: 11px; font-weight: 400; text-transform: none; letter-spacing: 0; }
-.race-modal-backdrop--racing { background: #000b; backdrop-filter: blur(5px); }
-:global(body:has(.electron-titlebar) .race-modal-backdrop--racing) { top: 36px; }
-.race-modal--racing {
-  width: min(680px, 100%); max-height: calc(100dvh - 84px); padding: 28px; gap: 20px;
-  border-radius: 0; border-color: #ffffff65;
-  background: radial-gradient(ellipse at top right, #6b001b30, transparent 65%), #090909;
-  box-shadow: 0 24px 90px #000b;
-  header { align-items: flex-start; padding-bottom: 20px; border-bottom: 1px solid #ffffff24; }
-  .eyebrow { display: block; margin-bottom: 7px; color: #aaa; font-size: 11px; letter-spacing: 1.5px; font-weight: 500; }
-  h2 { font: italic 700 28px/1.2 'Racer Display', sans-serif; text-transform: uppercase; }
-  .modal-close { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; border: 1px solid #ffffff65; border-radius: 0; background: transparent; }
-  .modal-close:hover { color: #ff0024; border-color: #ff0024; }
-  .form-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-  label { min-width: 0; gap: 8px; }
-  label > span { color: #ccc; font-size: 12px; font-weight: 500; letter-spacing: .3px; }
-  input { width: 100%; min-width: 0; height: 46px; border-radius: 0; border-color: #ffffff30; background: #ffffff04; font-size: 14px; font-weight: 400; }
-  input::placeholder { color: #888; }
-  input:hover { border-color: #ffffff65; }
-  input:focus { border-color: #ff0024; outline: 1px solid #ff0024; outline-offset: 1px; }
-  button:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
-  footer { flex-direction: row; justify-content: flex-end; gap: 12px; padding-top: 20px; border-top: 1px solid #ffffff24; }
-  footer .rc-btn { min-width: 156px; min-height: 46px; }
-  .delete-confirm { border-radius: 0; border-color: #ff002450; background: #ff00240a; padding: 18px; gap: 12px; }
-  .form-error { color: #ff9aaa; padding: 12px; border-left: 2px solid #ff0024; background: #ff00240a; }
-}
-@media (max-width: 560px) {
-  .race-modal-backdrop--racing { padding: 14px; }
-  .race-modal--racing {
-    max-height: calc(100dvh - 64px); padding: 20px; gap: 16px;
-    .form-row { grid-template-columns: 1fr; }
-    footer .rc-btn { min-width: 0; flex: 1; padding-inline: 12px; }
-    h2 { font-size: 24px; }
-  }
-}
-.upcoming-races-card--racing {
-  border: 1px solid var(--rc-section-line); border-radius: 0; background: transparent; box-shadow: none;
-  min-height: var(--overview-race-min-height, 192px); max-height: none; padding: 18px; overflow: visible;
-  .coach-title { font: italic 700 19px/1.3 'Racer Display', sans-serif; text-transform: uppercase; }
-  .race-header { margin-bottom: 14px; }
-  .race-action { display: grid; place-items: center; width: 40px; height: 40px; min-height: 40px; padding: 4px; border: 0; border-radius: 0; color: #fff; background: none; line-height: 1; }
-  .race-action svg, summary svg { display: block; flex-shrink: 0; }
-  .featured-race { position: relative; border: 0; background: transparent; border-radius: 0; padding: 0 0 8px; min-height: 116px;
-    grid-template-columns: minmax(86px,.32fr) minmax(0,1fr); grid-template-areas: 'countdown main'; gap: 16px; }
-  // Linea bianca tra il conto alla rovescia e i dati della gara.
-  .race-countdown { padding-right: 16px; align-items: center; border-right: 1px solid #ffffff80; }
-  // Basta il numero con "giorni" sotto: "Mancano" sopra e' superfluo (resta nell'aria-label).
-  .race-countdown__label { display: none; }
-  .race-countdown__metric { margin: 0; flex-direction: column; align-items: center; gap: 5px; }
-  .race-countdown__value { font: italic 700 76px/.9 'Racer Display', sans-serif; }
-  .race-countdown__label, .race-countdown__unit, .race-countdown__suffix { color: #ddd; font-size: 10px; letter-spacing: 2px; font-weight: 500; }
-  .race-countdown__suffix { display: none; }
-  .race-countdown--today .race-countdown__value { font-size: 38px; color: #fff; }
-  .race-date { font-size: 12px; color: #ddd; font-weight: 400; margin-bottom: 8px; }
-  .featured-race h3 { font: italic 700 clamp(19px,1.8vw,29px)/1.15 'Racer Display', sans-serif; }
-  .featured-race p { color: #ccc; font-size: 13px; margin-top: 8px; padding-right: 22px; }
-  .race-options { position: absolute; bottom: -8px; right: 0; z-index: 10; }
-  summary { display: grid; place-items: center; list-style: none; cursor: pointer; padding: 7px; width: 40px; height: 40px; }
-  summary::-webkit-details-marker { display: none; }
-  .race-options[open] > summary { color: #ff0024; background: #ff002412; }
-  .race-options[open] .race-options__menu { animation: race-menu-in 180ms ease-out both; }
-  @keyframes race-menu-in {
-    from { opacity: 0; transform: translateY(-6px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .race-options[open] .race-options__menu { animation: none; }
-  }
-  .race-options__menu {
-    position: absolute; right: 0; top: calc(100% + 6px); width: 216px;
-    max-width: calc(100vw - 48px); display: grid; gap: 2px;
-    border: 1px solid #ffffff65; padding: 6px;
-    background: radial-gradient(ellipse at top right, #62001628, transparent 75%), #090909;
-    box-shadow: 0 12px 32px #000b;
-  }
-  .race-options__menu a, .race-options__menu button {
-    display: flex; align-items: center; gap: 12px; min-height: 44px; width: 100%;
-    text-align: left; padding: 10px 12px; color: #eee; background: transparent;
-    border: 0; border-left: 2px solid transparent; border-radius: 0;
-    text-decoration: none; font: 500 14px/1.3 'Segoe UI', sans-serif; cursor: pointer;
-    transition: background-color 140ms ease, border-color 140ms ease;
-  }
-  .race-options__menu svg { flex-shrink: 0; color: #b4b4b4; }
-  .race-options__menu a + .race-options__edit { border-top: 1px solid #ffffff24; margin-top: 4px; }
-  .race-options__menu .race-options__delete { color: #ff7a8e; }
-  .race-options__menu .race-options__delete svg { color: currentColor; }
-  .race-options__menu a:hover, .race-options__menu button:hover:not(:disabled) { background: #ff002418; border-left-color: #ff0024; }
-  .race-options__menu a:focus-visible, .race-options__menu button:focus-visible { outline: 1px solid #fff; outline-offset: -2px; background: #ffffff0a; }
-  button:disabled { opacity: .4; cursor: default; }
-  summary:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid white; outline-offset: 2px; }
-  .race-list-block { border-top: 1px solid var(--rc-section-line); padding-top: 8px; }
-  .race-list { max-height: none; overflow: visible; padding: 0; }
-  .compact-race { background: transparent; border: 0; border-radius: 0; padding: 0; min-width: 0; }
-  .compact-race > div:first-child { min-width: 0; }
-  // Gare successive: quanto manca accanto al titolo.
-  .compact-race__in { font-style: normal; font-weight: 500; color: #aaa; font-size: 12px; }
-  .race-options--compact { position: relative; bottom: auto; right: auto; }
-  .race-options--compact .race-options__menu { top: auto; bottom: calc(100% + 6px); }
-  .race-options--compact .race-options__menu span { overflow: visible; font: inherit; color: inherit; }
-  .race-list--multiple { max-height: 140px; overflow-y: auto; }
-  // Keep menus reachable inside the bounded list when many races are planned.
-  .race-list--multiple .race-options[open] { grid-column: 1 / -1; }
-  .race-list--multiple .race-options[open] > summary { margin-left: auto; }
-  .race-list--multiple .race-options__menu { position: static; width: 100%; box-sizing: border-box; }
-}
-// Spend the normal desktop height on race information, not duplicated headings
-// and action rows. Smaller screens still retain natural document scrolling.
-@media (min-width: 1051px) and (max-height: 900px) {
-  .upcoming-races-card--racing {
-    padding: 14px 18px;
-    .race-header { margin-bottom: 8px; }
-    .race-content { gap: 8px; }
-    .featured-race { min-height: 88px; padding-bottom: 0; }
-    .race-countdown__value { font-size: 56px; }
-    .race-countdown__metric { gap: 3px; }
-    .race-date { margin-bottom: 6px; }
-    .featured-race p { margin-top: 6px; }
-  }
-}
-.race-modal--racing { @include controls.tokens; }
-.upcoming-races-card--racing .race-empty { border: 0; background: transparent; border-radius: 0; padding: 12px 0; }
-</style>
+<style src="../../assets/scss/components/upcoming-races-card-racing.scss" lang="scss" scoped></style>

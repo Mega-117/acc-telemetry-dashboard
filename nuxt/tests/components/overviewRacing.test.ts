@@ -3,6 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Calendar from '~/components/overview/UpcomingRacesCard.vue'
+import RaceDateTimePicker from '~/components/overview/RaceDateTimePicker.vue'
 import Activity from '~/components/cards/ActivityCard.vue'
 import { overviewEntryKey } from '~/services/auth/overviewEntryPreparation'
 
@@ -67,22 +68,42 @@ describe('racing overview components', () => {
     expect(wrapper.get('[aria-label="Aggiungi gara"] svg circle').exists()).toBe(true)
     expect(wrapper.get('[aria-label="Opzioni prossima gara"] svg').exists()).toBe(true)
     await wrapper.get('[aria-label="Aggiungi gara"]').trigger('click')
-    const errorSlot = wrapper.get('.race-error-slot--reserved').element
-    expect(wrapper.find('.form-error').exists()).toBe(false)
+    // PIP-641: no space kept for errors; each missing field says so under itself.
+    expect(wrapper.find('.race-error-slot--reserved').exists()).toBe(false)
+    expect(wrapper.find('.field-error.is-open').exists()).toBe(false)
     await wrapper.get('form').trigger('submit')
-    expect(wrapper.get('.race-error-slot--reserved').element).toBe(errorSlot)
-    expect(wrapper.get('.race-error-slot--reserved').attributes('aria-live')).toBe('polite')
-    expect(wrapper.text()).toContain('Titolo, data e pista sono obbligatori')
+    expect(wrapper.get('#race-title-error').text()).toBe('Scrivi il titolo della gara.')
+    expect(wrapper.get('#race-startsAt-error').text()).toBe('Scegli data e ora.')
+    expect(wrapper.get('#race-trackName-error').text()).toBe('Scrivi la pista.')
+    expect(wrapper.findAll('input')[0]!.attributes('aria-invalid')).toBe('true')
     const fields = wrapper.findAll('input')
     await fields[0]!.setValue('Nuova gara')
-    await fields[1]!.setValue('2099-10-02T18:00')
-    await fields[2]!.setValue('Spa')
-    await fields[3]!.setValue('Ferrari 296 GT3')
-    await fields[4]!.setValue('https://www.thesimgrid.com/championships/123')
-    await fields[5]!.setValue('https://example.com/race')
+    expect(wrapper.findAll('input')[0]!.attributes('aria-invalid')).toBeUndefined()
+    wrapper.findComponent(RaceDateTimePicker).vm.$emit('update:modelValue', '2099-10-02T18:00')
+    await fields[1]!.setValue('Spa')
+    await fields[2]!.setValue('Ferrari 296 GT3')
+    await fields[3]!.setValue('www.thesimgrid.com/championships/123')
     await wrapper.get('form').trigger('submit'); await flushPromises()
-    expect(mocks.create).toHaveBeenCalledWith('qa', expect.objectContaining({ title: 'Nuova gara', trackName: 'Spa', carName: 'Ferrari 296 GT3', simGridUrl: 'https://www.thesimgrid.com/championships/123', raceUrl: 'https://example.com/race' }))
+    expect(mocks.create).not.toHaveBeenCalled()
+    expect(wrapper.get('#race-simGridUrl-error').text()).toBe('Il link deve iniziare con https://')
+    await fields[3]!.setValue('https://www.thesimgrid.com/championships/123')
+    await fields[4]!.setValue('https://example.com/race')
+    await wrapper.get('form').trigger('submit'); await flushPromises()
+    expect(mocks.create).toHaveBeenCalledWith('qa', expect.objectContaining({ title: 'Nuova gara', startsAt: '2099-10-02T18:00', trackName: 'Spa', carName: 'Ferrari 296 GT3', simGridUrl: 'https://www.thesimgrid.com/championships/123', raceUrl: 'https://example.com/race' }))
     expect(wrapper.find('form').exists()).toBe(false)
+    wrapper.unmount()
+  })
+  it('shows a failed save in the footer, next to the buttons', async () => {
+    mocks.create.mockRejectedValueOnce(new Error('Salvataggio non riuscito.'))
+    const wrapper = mount(Calendar, { props: { userId: 'qa', racing: true }, global: { stubs: { teleport: true } } })
+    await flushPromises()
+    await wrapper.get('[aria-label="Aggiungi gara"]').trigger('click')
+    const fields = wrapper.findAll('input')
+    await fields[0]!.setValue('Gara'); await fields[1]!.setValue('Monza')
+    wrapper.findComponent(RaceDateTimePicker).vm.$emit('update:modelValue', '2099-10-02T18:00')
+    await wrapper.get('form').trigger('submit'); await flushPromises()
+    expect(wrapper.get('footer .footer-error').text()).toBe('Salvataggio non riuscito.')
+    expect(wrapper.find('form').exists()).toBe(true)
     wrapper.unmount()
   })
   it('offers edit and delete from the race menu, retaining confirmation', async () => {
@@ -133,7 +154,7 @@ it('scopes races, closes a draft on switch, and saves the selected game', async 
  expect(wrapper.text()).toContain('EVO race'); expect(wrapper.text()).not.toContain('Gara QA')
  await wrapper.get('[aria-label="Aggiungi gara"]').trigger('click')
  const fields=wrapper.findAll('input')
- await fields[0]!.setValue('New EVO'); await fields[1]!.setValue('2099-10-02T18:00'); await fields[2]!.setValue('Monza')
+ await fields[0]!.setValue('New EVO'); wrapper.findComponent(RaceDateTimePicker).vm.$emit('update:modelValue','2099-10-02T18:00'); await fields[1]!.setValue('Monza')
  await wrapper.get('form').trigger('submit'); await flushPromises()
  expect(mocks.create).toHaveBeenCalledWith('qa',expect.objectContaining({gameId:'evo'}))
  wrapper.unmount()
