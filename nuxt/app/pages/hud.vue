@@ -106,6 +106,9 @@ const sectorVariant = ref<'classic' | 'compact'>('classic')
 const showSectorReference = ref(true)
 const showSectorBest = ref(true)
 const showSectorCurrentLap = ref(true)
+// Classic has its own lap-tile option (default off); the checkbox shows the active layout's.
+const showSectorClassicLap = ref(false)
+const sectorLapShown = computed(() => sectorVariant.value === 'compact' ? showSectorCurrentLap.value : showSectorClassicLap.value)
 const sectorDeltaReference = ref<SectorDeltaReference>('bestSector')
 const sectorReferenceEditorOpen = ref(false)
 function sectorReferencesSaved(settings: HudOverlaySettings) {
@@ -305,6 +308,7 @@ async function refreshState() {
       if (overlay.id === 'sectors' && typeof settings?.showReference === 'boolean') showSectorReference.value = settings.showReference
       if (overlay.id === 'sectors' && typeof settings?.showBest === 'boolean') showSectorBest.value = settings.showBest
       if (overlay.id === 'sectors' && typeof settings?.showCurrentLap === 'boolean') showSectorCurrentLap.value = settings.showCurrentLap
+      if (overlay.id === 'sectors') showSectorClassicLap.value = settings?.showClassicLap === true
       if (overlay.id === 'sectors') sectorDeltaReference.value = normalizeSectorDeltaReference(settings?.deltaReference)
       if (overlay.id === 'dashboard') {
         dashboardSettings.electronicsReference = settings?.electronicsReference === true
@@ -549,7 +553,13 @@ async function setSectorVariant(value: string) {
 async function toggleSectorCurrentLap() {
   const api = getApi()
   if (!apiReady.value || !api?.hudOverlaySaveSettings) return
-  const next = !showSectorCurrentLap.value
+  const next = !sectorLapShown.value
+  if (sectorVariant.value !== 'compact') {
+    showSectorClassicLap.value = next
+    const saved = await api.hudOverlaySaveSettings('sectors', { showClassicLap: next })
+    if (typeof saved?.showClassicLap === 'boolean') showSectorClassicLap.value = saved.showClassicLap
+    return
+  }
   showSectorCurrentLap.value = next
   const settings = await api.hudOverlaySaveSettings('sectors', { showCurrentLap: next })
   if (typeof settings?.showCurrentLap === 'boolean') showSectorCurrentLap.value = settings.showCurrentLap
@@ -1023,7 +1033,7 @@ async function toggleTraining() {
                     <span><strong>{{ t('hud.sectorsShowLap') }}</strong></span>
                     <input
                       type="checkbox"
-                      :checked="showSectorCurrentLap"
+                      :checked="sectorLapShown"
                       :disabled="selectedSettingsDisabled"
                       @change="toggleSectorCurrentLap"
                     />

@@ -17,7 +17,8 @@ export const HUD_OVERLAY_PRESENTATION_CAPABILITIES: PresentationRegistry = {
     race: ['layout'],
   },
   sectors: {
-    classic: ['layout', 'deltaReference', 'sectorPrevious', 'sectorBest'],
+    // The lap tile is optional in both layouts, each with its own saved setting.
+    classic: ['layout', 'deltaReference', 'sectorCurrentLap', 'sectorPrevious', 'sectorBest'],
     compact: ['layout', 'deltaReference', 'sectorCurrentLap'],
   },
   dashboard: {

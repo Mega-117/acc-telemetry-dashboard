@@ -36,8 +36,13 @@ describe('Shared HUD overlay window contract', () => {
   })
 
   it('keeps fluid HUD pages inside the content area instead of the full window', () => {
-    for (const route of ['tyres-overlay', 'sectors-overlay']) {
-      const page = readFileSync(resolve(process.cwd(), `app/pages/${route}.vue`), 'utf8')
+    // The sectors page keeps its styles in an scss file next to the other component sheets.
+    const sources: Record<string, string> = {
+      'tyres-overlay': 'app/pages/tyres-overlay.vue',
+      'sectors-overlay': 'app/assets/scss/components/sectors-overlay.scss',
+    }
+    for (const [route, file] of Object.entries(sources)) {
+      const page = readFileSync(resolve(process.cwd(), file), 'utf8')
       expect(page, route).toMatch(/\.hud-overlay\s*\{[^}]*position:\s*absolute;/s)
       expect(page, route).not.toMatch(/\.hud-overlay\s*\{[^}]*position:\s*fixed;/s)
     }

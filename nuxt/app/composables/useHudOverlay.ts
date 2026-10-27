@@ -12,6 +12,8 @@ export interface HudOverlaySettings {
   showReference?: boolean
   showBest?: boolean
   showCurrentLap?: boolean
+  // Sectors Classic lap tile; separate from Compact's `showCurrentLap`, default off.
+  showClassicLap?: boolean
   deltaReference?: 'bestSector' | 'custom'
   normalDeltaReference?: 'bestSector'
   customSectorReferences?: CustomSectorReferences

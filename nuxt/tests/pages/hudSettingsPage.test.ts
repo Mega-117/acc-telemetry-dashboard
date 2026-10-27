@@ -68,6 +68,11 @@ describe('HUD settings page layout contract', () => {
     // Sectors shares the transparency slider; 0% keeps today's opaque panel.
     expect(source).toMatch(/backgroundTransparency = reactive<[^>]*>>\(\{[^}]*sectors: 0,/)
     expect(source).toContain("v-if=\"sectorSupports('sectorCurrentLap')\"")
+    // One lap checkbox, bound to the active layout: Classic saves its own key, default off.
+    expect(source).toContain(':checked="sectorLapShown"')
+    expect(source).toContain('const showSectorClassicLap = ref(false)')
+    expect(source).toContain("showSectorClassicLap.value = settings?.showClassicLap === true")
+    expect(source).toContain("api.hudOverlaySaveSettings('sectors', { showClassicLap: next })")
     expect(source).toContain(':disabled="selectedSettingsDisabled || !option.supported"')
     expect(source).toContain("key: 'showStintTimer', labelKey: 'hud.standings.stintTime', supported: true")
   })

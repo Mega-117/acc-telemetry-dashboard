@@ -91,6 +91,8 @@ let removeTargetListener: (() => void) | null = null
 const showReference = computed(() => settings.value?.showReference !== false)
 const showBest = computed(() => settings.value?.showBest !== false)
 const showCurrentLap = computed(() => settings.value?.showCurrentLap !== false)
+// Classic keeps its own lap-tile option, off unless the pilot turns it on (27/10).
+const showClassicLap = computed(() => settings.value?.showClassicLap === true)
 const deltaReference = computed(() => normalizeSectorDeltaReference(settings.value?.deltaReference))
 const customSectorTimes = computed(() => fastState.value.isFresh
   ? resolveCustomSectorTimes(settings.value?.customSectorReferences, { ...fastState.value.context,
@@ -117,6 +119,12 @@ const liveSectorHud = computed(() => telemetry.source.value === 'focused'
 const compactDisplayLap = useHudPresentationMemory(liveCompactDisplayLap, fastState)
 const liveCurrentLapTimeMs = useHudPresentationMemory(currentLapTimeMs, fastState)
 const visibleSectorHud = useHudPresentationMemory(liveSectorHud, fastState)
+// Classic lap tile delta (mock 27/10): the Info live delta, hidden while a finished lap is held.
+const liveLapDeltaMs = computed(() => {
+  const delta = fastState.value.info?.delta
+  return !heldLap.value && delta?.available ? delta.ms : null
+})
+const lapDeltaMs = useHudPresentationMemory(liveLapDeltaMs, fastState)
 function contextualTargetTimeMs(): number {
   const contextual = fastState.value.info?.bestLapTimeMs
     || fastState.value.info?.lastLapTimeMs
@@ -320,230 +328,17 @@ onBeforeUnmount(() => {
         :idle-sector-count="hudSourcePolicy(fastState).sectorCount"
         :show-reference="showReference"
         :show-best="showBest"
-        :show-current-lap="showCurrentLap"
+        :show-current-lap="showClassicLap"
         :delta-reference="deltaReference"
         :custom-sector-times="customSectorTimes"
         variant="classic"
         :live-current-lap-time-ms="liveCurrentLapTimeMs"
         :compact-display-lap="compactDisplayLap"
+        :lap-delta-ms="lapDeltaMs"
       />
     </div>
   </div>
   </div>
 </template>
 
-<style lang="scss">
-@use '~/assets/scss/training-overlay' as *;
-
-.hud-sectors-scope {
-
-// Regole scopate sotto .hud-overlay per non toccare l'overlay allenamento.
-.hud-overlay {
-  --hud-scale: 1;
-  --overlay-accent-rgb: 34, 197, 94;
-  position: absolute;
-  inset: 0;
-  display: flex;
-  padding: calc(6px * var(--hud-scale));
-  background: transparent;
-  box-sizing: border-box;
-  color: #f4f8ff;
-}
-
-.hud-overlay--web { background: #0d0d12; }
-
-.hud-overlay__panel {
-  position: relative;
-  box-sizing: border-box;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  -webkit-app-region: drag;
-  padding: calc(12px * var(--hud-scale));
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 12px;
-  // Pannello stile v2 senza ombra: solo lo sfondo segue l'opacita' scelta, testo pieno.
-  background: rgba(13, 14, 18, var(--hud-sectors-bg-opacity, 1));
-}
-
-// ── L'HUD riempie il pannello ────────────────────────────────────────────────
-.hud-overlay__panel--compact {
-  padding: calc(8px * var(--hud-scale)) calc(14px * var(--hud-scale)) calc(10px * var(--hud-scale));
-  border-radius: calc(12px * var(--hud-scale));
-}
-
-// HUD style v2 (27/10): title bar "SETTORI vs BEST", lap tile in yellow, then one tile per
-// sector with time, delta and the boxed PREV/BEST minis. The tile tint keeps the sector colour.
-.hud-overlay .sector-delta-hud {
-  flex: 1;
-  width: 100%;
-  display: flex;
-  min-height: 0;
-  overflow: hidden;
-  flex-direction: column;
-  gap: calc(8px * var(--hud-scale));
-  background: transparent;
-  border: none;
-  padding: 0;
-  font-family: var(--hud-font-label);
-}
-
-.hud-overlay .sector-delta-hud__body {
-  flex: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: calc(8px * var(--hud-scale));
-  min-height: 0;
-}
-
-.hud-overlay .sector-delta-hud__grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: calc(8px * var(--hud-scale));
-  min-height: 0;
-}
-
-.hud-overlay .sector-delta-hud__header--classic {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: calc(8px * var(--hud-scale));
-
-  &::before,
-  &::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: rgba(255, 255, 255, 0.15);
-  }
-}
-
-.hud-overlay .sector-delta-hud__header span,
-.hud-overlay .sector-delta-hud__header em {
-  overflow: visible;
-  font: 700 calc(12px * var(--hud-scale))/1 var(--hud-font-label);
-  letter-spacing: .14em;
-  text-transform: uppercase;
-}
-
-.hud-overlay .sector-delta-hud__title {
-  color: #f4f4f6;
-}
-
-.hud-overlay .sector-delta-hud__comparison {
-  color: #a3a5ae;
-  font-style: normal;
-}
-
-.hud-overlay .sector-delta-hud__lap,
-.hud-overlay .sector-delta {
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: calc(3px * var(--hud-scale));
-  padding: calc(6px * var(--hud-scale)) calc(8px * var(--hud-scale));
-  overflow: hidden;
-  border: 0;
-  border-radius: 0;
-}
-
-.hud-overlay .sector-delta-hud__lap {
-  background: rgba(255, 255, 255, 0.045);
-}
-
-.hud-overlay .sector-delta__label {
-  overflow: hidden;
-  color: #a3a5ae;
-  font: 700 calc(12px * var(--hud-scale))/1 var(--hud-font-label);
-  letter-spacing: .08em;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.hud-overlay .sector-delta-hud__lap-time {
-  overflow: hidden;
-  color: #facc15;
-  font: italic 700 calc(21px * var(--hud-scale))/1 var(--hud-font-num);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hud-overlay .sector-delta-hud__lap-time.sector-compact__lap--invalid { color: #dc1010; }
-.hud-overlay .sector-delta-hud__lap-time.sector-compact__lap--unknown { color: #6f7277; }
-
-.hud-overlay .sector-delta strong {
-  color: #f4f4f6;
-  font: italic 700 calc(20px * var(--hud-scale))/1 var(--hud-font-num);
-}
-
-.hud-overlay .sector-delta .sector-delta__delta {
-  align-self: flex-start;
-  color: #f4f4f6;
-  font: italic 700 calc(15px * var(--hud-scale))/1 var(--hud-font-num);
-}
-
-.hud-overlay .sector-delta--purple .sector-delta__delta { color: rgb(217, 70, 239); }
-.hud-overlay .sector-delta--green .sector-delta__delta { color: rgb(34, 197, 94); }
-.hud-overlay .sector-delta--yellow .sector-delta__delta { color: rgb(250, 204, 21); }
-.hud-overlay .sector-delta--red .sector-delta__delta { color: rgb(239, 68, 68); }
-.hud-overlay .sector-delta .sector-delta__delta--placeholder { color: #a3a5ae; text-transform: uppercase; }
-
-.hud-overlay .sector-delta__minis {
-  display: grid;
-  gap: calc(2px * var(--hud-scale));
-  margin-top: calc(1px * var(--hud-scale));
-}
-
-.hud-overlay .sector-delta__ref,
-.hud-overlay .sector-delta__best {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: calc(4px * var(--hud-scale));
-  min-width: 0;
-  padding: calc(2px * var(--hud-scale)) calc(5px * var(--hud-scale));
-  background: rgba(255, 255, 255, 0.06);
-
-  b {
-    color: #a3a5ae;
-    font: 700 calc(10px * var(--hud-scale))/1 var(--hud-font-label);
-    letter-spacing: .1em;
-    text-transform: uppercase;
-  }
-
-  em {
-    overflow: hidden;
-    color: #f4f4f6;
-    font: italic 600 calc(12px * var(--hud-scale))/1 var(--hud-font-num);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-}
-.hud-overlay--target {
-  padding: 6px;
-}
-
-.hud-overlay__panel--target {
-  padding: 8px;
-  border-radius: 12px;
-}
-
-.hud-overlay__panel--target .hud-timed-pager__content,
-.hud-overlay__panel--target .info-target-setup {
-  width: 100%;
-  height: 100%;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .hud-overlay--target *,
-  .hud-overlay--target *::before,
-  .hud-overlay--target *::after {
-    transition: none !important;
-  }
-}
-}
-</style>
+<style lang="scss" src="../assets/scss/components/sectors-overlay.scss"></style>

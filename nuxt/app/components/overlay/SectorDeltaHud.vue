@@ -20,7 +20,8 @@ const props = withDefaults(defineProps<{
   showReference?: boolean
   // Mostra anche il best settore persistente del contesto corrente (PIP-181).
   showBest?: boolean
-  // Mostra il tempo giro hero soltanto nel layout Compatto.
+  // Mostra il riquadro del tempo giro. La pagina passa l'opzione del layout attivo:
+  // Compatto `showCurrentLap` (default on), Classico `showClassicLap` (default off).
   showCurrentLap?: boolean
   // Per il settore in corso mostra il tempo parziale "live" invece di "--" (PIP-175).
   liveRunning?: boolean
@@ -38,10 +39,14 @@ const props = withDefaults(defineProps<{
   }
   // Esito congelato sullo stesso snapshot del giro trattenuto per 7 secondi.
   targetOutcome?: InfoTargetOutcome
+  // Delta live del giro (stesso dato dell'overlay Info), sotto il tempo nel riquadro
+  // giro del Classico; null quando manca o durante l'hold del giro concluso.
+  lapDeltaMs?: number | null
 }>(), {
   showCurrentLap: true,
   targetOutcome: 'neutral',
   idleSectorCount: 3,
+  lapDeltaMs: null,
 })
 
 const idleSectors = computed<SectorHudEntry[]>(() => Array.from({ length: props.idleSectorCount }, (_, offset) => ({
@@ -91,6 +96,15 @@ const compactLapTime = computed(() => {
 const titleText = computed(() => {
   if (props.sectorHud?.mode !== 'last_lap') return t('overlays.sectors.title')
   return props.variant === 'compact' ? t('overlays.sectors.lastLap') : t('overlays.sectors.titleLastLap')
+})
+
+// Green when ahead of the reference, red when behind, as in the approved mock.
+const lapDeltaClass = computed(() => {
+  const ms = props.lapDeltaMs ?? null
+  if (ms === null) return 'sector-delta-hud__lap-delta--placeholder'
+  const rounded = Math.round(ms)
+  if (rounded < 0) return 'sector-delta-hud__lap-delta--faster'
+  return rounded > 0 ? 'sector-delta-hud__lap-delta--slower' : ''
 })
 
 function formatTime(ms: number | null): string {
@@ -172,7 +186,7 @@ const { t } = useI18n()
     <template v-if="variant === 'compact'">
       <div class="sector-compact__header">
         <div class="sector-compact__title">
-          <span><b>{{ titleText }}</b> VS {{ comparisonToken }}</span>
+          <span><b>{{ titleText }}</b> <span class="sector-title__versus">{{ t('overlays.sectors.versus') }}</span> <b class="sector-title__reference">{{ comparisonToken }}</b></span>
         </div>
         <div
           v-if="showCurrentLap !== false"
@@ -218,11 +232,12 @@ const { t } = useI18n()
     <template v-else>
       <div class="sector-delta-hud__header sector-delta-hud__header--classic">
         <span class="sector-delta-hud__title">{{ titleText }}</span>
-        <em class="sector-delta-hud__comparison">VS {{ comparisonToken }}</em>
+        <em class="sector-delta-hud__comparison"><span class="sector-title__versus">{{ t('overlays.sectors.versus') }}</span> <b class="sector-title__reference">{{ comparisonToken }}</b></em>
       </div>
       <div
         class="sector-delta-hud__body"
-        :style="showCurrentLap !== false ? { gridTemplateColumns: `minmax(0, 1.35fr) minmax(0, ${visibleSectors.length}fr)` } : undefined"
+        :class="{ 'sector-delta-hud__body--with-lap': showCurrentLap !== false }"
+        :style="showCurrentLap !== false ? { gridTemplateColumns: `minmax(0, 1.25fr) repeat(${visibleSectors.length}, minmax(0, 1fr))` } : undefined"
       >
         <div v-if="showCurrentLap !== false" class="sector-delta-hud__lap">
           <strong
@@ -232,6 +247,10 @@ const { t } = useI18n()
               'sector-compact__lap--unknown': compactCurrentLapValid === null,
             }"
           ><HudFixedDigits :value="compactLapTime" /></strong>
+          <small
+            class="sector-delta-hud__lap-delta"
+            :class="lapDeltaClass"
+          ><HudFixedDigits :value="formatDelta(lapDeltaMs ?? null)" /></small>
         </div>
         <div class="sector-delta-hud__grid" :style="{ gridTemplateColumns: `repeat(${visibleSectors.length}, minmax(0, 1fr))` }">
           <div
@@ -316,6 +335,13 @@ const { t } = useI18n()
 
 .sector-compact__title b { color: #f4f4f6; }
 
+/* "SETTORI vs BEST": title and reference word bold, the link word lowercase and light. */
+.sector-compact__title .sector-title__versus {
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
 /* The lap block keeps the in/out target backgrounds; neutral is a plain cell. */
 .sector-compact__lap-block {
   display: grid;
@@ -348,10 +374,13 @@ const { t } = useI18n()
   overflow: hidden;
 }
 
+/* Label, time and delta/live/wait sit on one shared baseline; the line itself is
+   centred vertically in the row (align-content), so the three read as one row. */
 .sector-compact__row {
   display: grid;
-  grid-template-columns: calc(32px * var(--hud-scale, 1)) minmax(0, 1fr) max-content;
-  align-items: center;
+  grid-template-columns: calc(36px * var(--hud-scale, 1)) minmax(0, 1fr) max-content;
+  align-items: baseline;
+  align-content: center;
   gap: calc(8px * var(--hud-scale, 1));
   box-sizing: border-box;
   min-height: 0;
@@ -361,24 +390,26 @@ const { t } = useI18n()
   background: rgba(255, 255, 255, 0.045);
 }
 
+/* Same face as the times and the live/wait words, so "S1" belongs to the row. */
 .sector-compact__label {
   color: #a3a5ae;
-  font: 700 calc(15px * var(--hud-scale, 1))/1 var(--hud-font-label);
-  letter-spacing: 0.08em;
+  font: italic 700 calc(20px * var(--hud-scale, 1))/1 var(--hud-font-num);
+  letter-spacing: 0.02em;
 }
 
+/* overflow: clip (not hidden) keeps the content baseline for the row alignment. */
 .sector-compact__row .sector-compact__time,
 .sector-compact__row .sector-compact__time > span {
-  overflow: hidden;
+  overflow: clip;
   color: #f4f4f6;
-  font: italic 700 calc(28px * var(--hud-scale, 1))/1 var(--hud-font-num);
+  font: italic 700 calc(32px * var(--hud-scale, 1))/1 var(--hud-font-num);
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .sector-compact__row .sector-compact__time > .sector-compact__time-value--long {
-  font-size: calc(23px * var(--hud-scale, 1));
+  font-size: calc(26px * var(--hud-scale, 1));
 }
 
 .sector-compact__delta {

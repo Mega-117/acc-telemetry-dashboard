@@ -19,8 +19,8 @@ describe('hudOverlayPresentationCapabilities', () => {
     }
   })
 
-  it('espone il controllo current lap soltanto nel Compatto', () => {
-    expect(supportsHudOverlayPresentationControl('sectors', 'classic', 'sectorCurrentLap')).toBe(false)
+  it('espone il controllo tempo giro in entrambi i layout (opzioni salvate separate)', () => {
+    expect(supportsHudOverlayPresentationControl('sectors', 'classic', 'sectorCurrentLap')).toBe(true)
     expect(supportsHudOverlayPresentationControl('sectors', 'compact', 'sectorCurrentLap')).toBe(true)
   })
 
