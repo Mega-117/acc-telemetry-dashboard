@@ -5,6 +5,8 @@ export type FeatureUseNote =
   | { event: 'stats.opened', sessions: number }
   | { event: 'telemetry.opened', laps: number }
   | { event: 'laps.share_pasted', laps: number }
+  /** PIP-650: other drivers' laps loaded as references, and those discarded as not believable. */
+  | { event: 'laps.library_loaded', laps: number, rejected: number }
 
 type Bridge = { noteFeatureUse?: (note: FeatureUseNote) => void }
 

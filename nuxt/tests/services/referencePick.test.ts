@@ -6,6 +6,9 @@ import { getLibraryPreference, listLibrary, setLibraryPreference, type LibraryEn
 import { useReferenceLibrary, type Entry } from '~/composables/useReferenceLibrary'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
+const notes = vi.hoisted(() => [] as unknown[])
+vi.mock('~/services/usage/featureUseNote', () => ({ noteFeatureUse: (n: unknown) => { notes.push(n) } }))
+
 const mine: ReferenceConditions = { grip: 'Optimum', airC: 22, roadC: 30, fuelL: 40 }
 const e = (libId: string, uid: string, lapTimeMs: number, c: Partial<ReferenceConditions> = {}): LibraryEntry =>
   ({ libId: libId.padEnd(24, '0'), uid, lapTimeMs, recordedAt: null, grip: 'Optimum', airC: 22, roadC: 30, fuelL: 40, ...c })
@@ -83,5 +86,10 @@ describe('library client and loading (PIP-650)', () => {
     await useReferenceLibrary({ entries: stale, traces: ref({}), sessionToken: () => 't', sectorTimesOf: () => null })
       .loadOtherDrivers(() => false, deps(fetchImpl), { game: 'acc', track: 'Hungaroring', car: 'ferrari_296_gt3', variant: null }, { myUid: 'me', myBestMs: 103000, mine })
     expect(stale.value).toEqual([])
+    // R2 check (fix_signals PIP-650): loaded and discarded laps; a stale load notes nothing.
+    expect(notes).toEqual([
+      { event: 'laps.library_loaded', laps: 2, rejected: 0 },
+      { event: 'laps.library_loaded', laps: 0, rejected: 2 },
+    ])
   })
 })

@@ -7,6 +7,7 @@ import { formatLapTime } from '~/utils/telemetryFormat'
 import { fetchLibraryLap, listLibrary, type LapsArchiveDeps } from '~/services/telemetry/lapsArchiveClient'
 import { pickReferences, type ReferenceConditions } from '~/services/telemetry/referencePick'
 import { loadPublicNickname } from '~/repositories/publicProfileRepository'
+import { noteFeatureUse } from '~/services/usage/featureUseNote'
 
 /** One lap of the Telemetria menus. Only "local"/"pilot" laps of the shown session can be "Tu". */
 export interface Entry { id: string, lapNumber: number, lapTimeMs: number, valid: boolean, complete: boolean, origin: LapOrigin, sessionToken: string, label?: string, note?: string }
@@ -130,6 +131,11 @@ export function useReferenceLibrary(o: {
       if (!isCurrent()) return null
       const ok = loaded.filter((r): r is Loaded => r !== null)
       add(ok)
+      // R2 check (fix_signals): laps offered by the library, loaded or discarded. Nothing when there were none.
+      // The suggested lap can also be the fastest: count distinct laps.
+      const offered = new Set(picked.flatMap(([e]) => (e ? [e.libId] : []))).size
+      const usable = new Set(ok.map(r => r.entry.id)).size
+      if (offered) noteFeatureUse({ event: 'laps.library_loaded', laps: usable, rejected: offered - usable })
       // The suggested lap's id, so the page can propose it as the reference (user decision: automatic).
       return suggested && ok.some(r => r.entry.id === `library:${suggested.libId}`) ? `library:${suggested.libId}` : null
     } catch { return null /* other drivers' laps are an extra */ }
