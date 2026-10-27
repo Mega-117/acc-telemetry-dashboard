@@ -455,7 +455,7 @@ onBeforeUnmount(() => {
   .race-modal-motion-enter-active .race-modal, .race-modal-motion-leave-active .race-modal { transition-duration: 1ms; }
   .race-modal-motion-enter-from .race-modal, .race-modal-motion-leave-to .race-modal { transform: none; }
 }
-.race-links { min-width: 0; margin: 0; padding: 14px 0 0; border: 0; border-top: 1px solid #ffffff24; }
+.race-links { min-width: 0; margin: 0; padding: 14px 0 0; border: 0; border-top: 1px solid var(--rc-section-line); }
 .race-links legend { padding: 0 10px 0 0; color: #ddd; font-size: 12px; text-transform: uppercase; }
 .field-optional { margin-left: 8px; color: #888; font-size: 11px; font-weight: 400; text-transform: none; letter-spacing: 0; }
 .race-modal-backdrop--racing { background: #000b; backdrop-filter: blur(5px); }
@@ -493,7 +493,7 @@ onBeforeUnmount(() => {
   }
 }
 .upcoming-races-card--racing {
-  border: 1px solid rgba(255, 255, 255, 0.3960784314); border-radius: 0; background: transparent; box-shadow: none;
+  border: 1px solid var(--rc-section-line); border-radius: 0; background: transparent; box-shadow: none;
   min-height: var(--overview-race-min-height, 192px); max-height: none; padding: 18px; overflow: visible;
   .coach-title { font: italic 700 19px/1.3 'Racer Display', sans-serif; text-transform: uppercase; }
   .race-header { margin-bottom: 14px; }
@@ -547,7 +547,7 @@ onBeforeUnmount(() => {
   .race-options__menu a:focus-visible, .race-options__menu button:focus-visible { outline: 1px solid #fff; outline-offset: -2px; background: #ffffff0a; }
   button:disabled { opacity: .4; cursor: default; }
   summary:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid white; outline-offset: 2px; }
-  .race-list-block { border-top: 1px solid #ffffff25; padding-top: 8px; }
+  .race-list-block { border-top: 1px solid var(--rc-section-line); padding-top: 8px; }
   .race-list { max-height: none; overflow: visible; padding: 0; }
   .compact-race { background: transparent; border: 0; border-radius: 0; padding: 0; min-width: 0; }
   .compact-race > div:first-child { min-width: 0; }

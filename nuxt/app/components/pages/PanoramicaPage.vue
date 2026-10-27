@@ -191,7 +191,7 @@ function goToStats() {
 <style scoped lang="scss">
 @use '@/assets/scss/racing-settings' as controls;
 .racing-overview { display: grid; grid-template-columns: minmax(0, 1.42fr) minmax(0, 1fr); gap: 16px; color: #f5f5f5; }
-.racing-panel { border: 1px solid rgba(255, 255, 255, 0.3960784314); background: transparent; min-width: 0; }
+.racing-panel { border: 1px solid var(--rc-section-line); background: transparent; min-width: 0; }
 .last-drive { display: flex; flex-direction: column; position: relative; }
 // The image fades onto black, not onto the animated background behind the card.
 .last-drive__hero { position: relative; isolation: isolate; background: #020202; flex: 1; min-height: 340px; }
@@ -205,7 +205,7 @@ function goToStats() {
 .last-drive__identity p { margin: 8px 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 2px; }
 .last-drive__results { padding: 0 22px 18px; }
 .performance-table { width: 100%; table-layout: fixed; border-collapse: collapse; background: transparent; }
-.performance-table tr { border-bottom: 1px solid #ffffff24; }
+.performance-table tr { border-bottom: 1px solid var(--rc-section-line); }
 .performance-table td { position: relative; padding: 14px 18px; vertical-align: top; }
 .performance-table td + td::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 1px; background: #ffffff65; }
 // Etichette dei tempi nel font del sito (Inter), come le scritte di Attività: uguali su ogni PC.
