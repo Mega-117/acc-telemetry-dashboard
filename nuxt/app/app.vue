@@ -40,6 +40,8 @@ import { getOverviewCarImage } from '~/utils/overviewCarImage'
 import { createDashboardEntryRecovery, EMPTY_ENTRY_STATE } from '~/services/auth/dashboardEntryRecovery'
 import { createAuthRevisionLeaseCoordinator } from '~/services/auth/authRevisionLease'
 import { loadRaceCalendarEvents } from '~/repositories/raceCalendarRepository'
+import { dismissBootScreen, handBootBackdropToApp } from '~/utils/bootScreen'
+import { BOOT_LOADER_CSS, bootLogoSrc } from '../shared/spaLoading'
 
 // === NUXT ROUTER ===
 const route = useRoute()
@@ -309,13 +311,22 @@ watch(
 
 // === CONFIG ===
 const transitionName = 'shell-motion'
-// PIP-640: the first screen after the start (login or dashboard) appears at once, without the fade: content
-// that first paints at opacity 0 is never counted by Chrome as first contentful paint (PageSpeed fails with
-// NO_FCP) and the user waits for nothing. Later login/logout changes keep the crossfade.
-const shellAnimated = ref(false)
-watch(appState, (state, previous) => {
-  if (previous === 'initializing' && state !== 'initializing') requestAnimationFrame(() => requestAnimationFrame(() => { shellAnimated.value = true }))
+// PIP-640: in the browser the loading screen of index.html stays over the app until the first real screen is
+// ready, then fades out while that screen fades in (one loader, no blank step between them). The first change
+// from 'initializing' is a crossfade, so the login does not wait for the empty start screen to leave.
+const leftStart = ref(false)
+const usesShell = computed(() => !(isProtectedRuntimeRoute.value && !canMountProtectedRuntime.value)
+  && !isStandaloneRuntimeRoute.value && !isTrainingOverlayIntent.value && !isHudOverlayRoute.value && !isStandaloneDevRoute.value)
+const firstScreenReady = computed(() => !usesShell.value
+  || (appState.value !== 'initializing' && (appState.value !== 'loading' || canRetryLoading.value)))
+watch(appState, (state, previous) => { if (previous === 'initializing' && state !== 'initializing') requestAnimationFrame(() => { leftStart.value = true }) })
+onMounted(() => {
+  handBootBackdropToApp()
+  watch(firstScreenReady, ready => { if (ready) dismissBootScreen() }, { immediate: true })
 })
+// The app's own loading screens show the same logo and laser, never a spinner (also in the desktop app).
+useHead({ style: [{ key: 'rc-boot-loader', textContent: BOOT_LOADER_CSS }] })
+const bootLogo = bootLogoSrc(appBaseURL)
 const dashboardRoutePrefixes = [
   '/panoramica',
   '/sessioni',
@@ -642,12 +653,10 @@ provide('goToSettings', handleGoToSettings)
       <NuxtRouteAnnouncer />
 
       <!-- Main Content with Transitions -->
-      <Transition :name="shellAnimated ? transitionName : 'shell-instant'" :mode="shellAnimated && appState === 'auth' ? 'out-in' : undefined" @before-leave="el => el.setAttribute('inert', '')">
+      <Transition :name="transitionName" :mode="leftStart && appState === 'auth' ? 'out-in' : undefined" @before-leave="el => el.setAttribute('inert', '')">
         <!-- Initializing - waiting for Firebase auth check -->
-        <div v-if="appState === 'initializing'" key="initializing" class="initializing-screen">
-          <div class="initializing-content">
-            <div class="initializing-spinner"></div>
-          </div>
+        <div v-if="appState === 'initializing'" key="initializing" class="initializing-screen" role="status" aria-label="Caricamento">
+          <div class="rc-boot__inner"><img :src="bootLogo" alt="Racer Core" width="410" height="205"><div class="rc-boot__laser" /></div>
         </div>
 
         <!-- Auth Overlay -->
@@ -675,8 +684,8 @@ provide('goToSettings', handleGoToSettings)
         <!-- Loading Screen -->
         <div v-else-if="appState === 'loading'" key="loading" class="loading-screen">
           <div class="loading-content">
-            <div v-if="!canRetryLoading" class="loading-spinner"></div>
-            <p class="loading-text">{{ loadingMessage }}</p>
+            <div v-if="!canRetryLoading" class="rc-boot__inner"><img :src="bootLogo" alt="Racer Core" width="410" height="205"><div class="rc-boot__laser" /></div>
+            <p v-if="loadingMessage" class="loading-text">{{ loadingMessage }}</p>
             <button
               v-if="canRetryLoading"
               type="button"
@@ -890,16 +899,6 @@ body:has(.sessions-page),
   text-align: center;
 }
 
-.loading-spinner {
-  width: 48px;
-  height: 48px;
-  margin: 0 auto 24px;
-  border: 3px solid rgba(255, 255, 255, 0.1);
-  border-top-color: $color-racing-red;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -981,6 +980,10 @@ body:has(.sessions-page),
 </style>
 
 <style lang="scss">
+// PIP-640: while the browser loading screen is up it is the only logo on screen (no double logo under it), and
+// the first interface waits for its logo to fade before fading in: logo out, then the content.
+body:has(#rc-boot) #app :is(.rc-boot__inner, .loading-text) { visibility: hidden; }
+body:has(#rc-boot.is-leaving) #app .shell-motion-enter-active { transition-delay: 250ms; }
 // The shared dashboard owns scrolling below its header on every route.
 html:has(.dashboard-layout), body:has(.dashboard-layout) { overflow: hidden; scrollbar-gutter: auto; }
 #app:has(.electron-titlebar) > .dashboard-wrapper:has(.dashboard-layout) {

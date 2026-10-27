@@ -1,24 +1,25 @@
 <script setup lang="ts">
-// Official app background, extracted from the original login scene.
-// Keep the upper-left region quieter without changing the other trajectories.
-const particles = Array.from({ length: 28 }, (_, i) => ({
-  left: `${8 + ((i * 37) % 90)}%`, top: `${(i * 23) % 100}%`,
-  animationDelay: `${-i * 1.7}s`, animationDuration: `${15 + i % 5 * 2}s`,
-})).filter((particle, i) => !(parseFloat(particle.left) < 45 && parseFloat(particle.top) < 35 && i % 18 !== 0))
+// Official app background, extracted from the original login scene. Look and sparks live in
+// shared/racingBackdrop.ts, shared with the browser loading screen that draws it before the app starts.
+import { RACING_BACKDROP_BACKGROUND, RACING_SPARKS, sparkDelay } from '../../../shared/racingBackdrop'
+
+const now = typeof performance === 'undefined' ? 0 : performance.now()
+const particles = RACING_SPARKS.map(spark => ({
+  left: spark.left, top: spark.top, animationDelay: sparkDelay(spark, now), animationDuration: `${spark.durationS}s`,
+}))
 </script>
 
 <template>
-  <div class="racing-backdrop" aria-hidden="true">
+  <div class="racing-backdrop" aria-hidden="true" :style="{ background: RACING_BACKDROP_BACKGROUND }">
     <i v-for="(particle, i) in particles" :key="i" :style="particle" />
   </div>
 </template>
 
 <style scoped>
-.racing-backdrop { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none;
-  background: repeating-linear-gradient(135deg, transparent 0 148px, #ffffff04 149px, transparent 150px),
-    radial-gradient(ellipse at 92% 95%, #62001677, #27000833 36%, transparent 68%), #020202; }
+.racing-backdrop { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
 i { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: #ff7188;
   box-shadow: 0 0 5px #f4002870; animation: racing-spark 18s linear infinite; will-change: transform, opacity; }
+/* Same values as RACING_SPARK_FROM / RACING_SPARK_TO in shared/racingBackdrop.ts (checked by a test). */
 @keyframes racing-spark {
   0% { transform: translate3d(110px,-110px,0); opacity: 0; }
   20%,70% { opacity: .7; }
