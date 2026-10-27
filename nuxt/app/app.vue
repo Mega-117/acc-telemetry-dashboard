@@ -333,6 +333,11 @@ const usesShell = computed(() => !(isProtectedRuntimeRoute.value && !canMountPro
 const firstScreenReady = computed(() => !usesShell.value
   || (shellState.value !== 'initializing' && (shellState.value !== 'loading' || canRetryLoading.value)))
 watch(shellState, (state, previous) => { if (previous === 'initializing' && state !== 'initializing') requestAnimationFrame(() => { leftStart.value = true }) })
+// The loading screens are as tall as the window measured here, before their first paint: a window that
+// changes size while it opens (desktop app) moves the logo with a glide (CSS transition), never a jump.
+const setShellHeight = () => document.documentElement.style.setProperty('--rc-shell-h', `${window.innerHeight}px`)
+onBeforeMount(() => { setShellHeight(); window.addEventListener('resize', setShellHeight) })
+onBeforeUnmount(() => window.removeEventListener('resize', setShellHeight))
 onMounted(() => {
   handBootBackdropToApp()
   watch(firstScreenReady, ready => {
@@ -733,10 +738,13 @@ provide('goToSettings', handleGoToSettings)
           <div class="loading-content">
             <!-- The logo stays; on a failure the laser goes dark and the reason and Riprova appear under it. -->
             <div class="rc-boot__inner" :class="{ 'is-stalled': canRetryLoading }"><img :src="bootLogo" alt="Racer Core" width="410" height="205"><div class="rc-boot__laser" /></div>
-            <p v-if="loadingNote" class="loading-text" :class="{ 'is-problem': canRetryLoading }">{{ loadingNote }}</p>
-            <button v-if="canRetryLoading" type="button" class="rc-btn rc-btn--primary loading-retry" @click="retryLoading()">
-              Riprova<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" />
-            </button>
+            <!-- Under the logo without moving it: the logo stays at the centre of the window whatever appears here. -->
+            <div class="loading-below">
+              <p v-if="loadingNote" class="loading-text" :class="{ 'is-problem': canRetryLoading }">{{ loadingNote }}</p>
+              <button v-if="canRetryLoading" type="button" class="rc-btn rc-btn--primary loading-retry" @click="retryLoading()">
+                Riprova<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -929,9 +937,16 @@ body:has(.sessions-page),
 }
 
 // === LOADING SCREEN ===
+// The logo is locked at the centre of the window: the screens take the window height measured by the app
+// (--rc-shell-h, see onMounted) and glide to a new one when the window changes size (a window restored or
+// maximised while it opens), instead of jumping; what appears under the logo never moves it.
 .loading-screen {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--rc-shell-h, 100vh);
+  transition: height 350ms cubic-bezier(.4, 0, .2, 1);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -939,7 +954,16 @@ body:has(.sessions-page),
 }
 
 .loading-content {
+  position: relative;
   text-align: center;
+}
+
+.loading-below {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: min(560px, 90vw);
+  transform: translateX(-50%);
 }
 
 @keyframes spin {
@@ -966,7 +990,11 @@ body:has(.sessions-page),
 // === INITIALIZING SCREEN (minimal, fast) ===
 .initializing-screen {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--rc-shell-h, 100vh);
+  transition: height 350ms cubic-bezier(.4, 0, .2, 1);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1003,6 +1031,9 @@ body:has(.sessions-page),
   position: absolute; inset: 0; z-index: 1; pointer-events: none;
 }
 #app:has(.electron-titlebar) > .shell-motion-leave-active { top: 36px; }
+// Desktop app: the loading screens sit under the title bar from the start, as login and dashboard do. Centred
+// on the whole window, their leave transition (the rule above) moved them down 36 px at once: the logo jumped.
+#app:has(.electron-titlebar) > :is(.loading-screen, .initializing-screen) { top: 36px; height: calc(var(--rc-shell-h, 100vh) - 36px); }
 .shell-motion-enter-from, .shell-motion-leave-to { opacity: 0; }
 .dashboard-wrapper.shell-motion-enter-from,
 .dashboard-wrapper.shell-motion-leave-to { transform: scale(.97); }
