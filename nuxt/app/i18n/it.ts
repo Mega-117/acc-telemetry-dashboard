@@ -1,33 +1,7 @@
-// PIP-665: Italian, the source language. Add keys here first; en.ts must follow (the test lists gaps).
+// PIP-665: Italian, the source language. One file per area under it/ (max-lines); add keys there
+// first, then the same keys under en/ (the test lists any gap).
+import shell from './it/shell'
+
 export default {
-  nav: {
-    overview: 'PANORAMICA',
-    sessions: 'SESSIONI',
-    tracks: 'PISTE',
-    pitwall: 'PITWALL',
-    spotter: 'SPOTTER',
-    hud: 'HUD',
-    data: 'DATI',
-    back: 'Indietro',
-  },
-  userMenu: {
-    profile: 'Profilo',
-    settings: 'Impostazioni',
-    report: 'Segnala problema',
-    logout: 'Esci',
-  },
-  language: {
-    title: 'Lingua',
-    hint: "Lingua dell'interfaccia del programma e del sito.",
-    label: 'Lingua',
-  },
-  settings: {
-    title: 'Impostazioni',
-    subtitle: 'Personalizza il programma e i controlli della tua postazione.',
-    sections: 'Sezioni impostazioni',
-    commands: 'Comandi',
-    startup: 'Avvio',
-    intro: 'Introduzione',
-    language: 'Lingua',
-  },
+  ...shell,
 } as const
