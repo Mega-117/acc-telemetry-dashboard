@@ -30,8 +30,9 @@ describe('spaLoadingHtml', () => {
     expect(html).toContain('if(/Electron/.test(navigator.userAgent)){b.remove();return}')
     expect(html).toContain('document.body.appendChild(b)')
     expect(html).toContain("document.head.appendChild(document.getElementById('rc-boot-style'))")
-    // The whole window, so the scrollbar space reserved later does not shift it.
-    expect(html).toContain('width:100vw')
+    // Sized from the whole window (innerWidth), so the scrollbar space reserved later does not shift it.
+    expect(html).toContain('width:var(--rc-boot-w,100vw)')
+    expect(html).toContain("b.style.setProperty('--rc-boot-w',innerWidth+'px')")
   })
 
   it('is the Nuxt loading template', () => {
