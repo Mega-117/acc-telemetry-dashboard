@@ -5,31 +5,33 @@
 import { onMounted, ref } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { getLibraryPreference, setLibraryPreference } from '~/services/telemetry/lapsArchiveClient'
+import { useI18n } from '~/i18n'
 
 const { currentUser } = useFirebaseAuth()
+const { t } = useI18n()
 const deps = { getToken: async () => (await currentUser.value?.getIdToken()) ?? null }
 const enabled = ref<boolean | null>(null), busy = ref(false), message = ref('')
 async function load() {
   busy.value = true
   try { enabled.value = await getLibraryPreference(deps); message.value = '' }
-  catch { message.value = 'Preferenza non disponibile. Riprova.' }
+  catch { message.value = t('privacy.preference.unavailable') }
   finally { busy.value = false }
 }
 async function change(event: Event) {
   const next = (event.target as HTMLInputElement).checked
   busy.value = true; message.value = ''
   try { enabled.value = await setLibraryPreference(next, deps) }
-  catch { message.value = next ? 'Attivazione non confermata. Riprova.' : 'Disattivazione non confermata: riprova, i tuoi giri restano condivisi finché non va a buon fine.' }
+  catch { message.value = next ? t('privacy.preference.enableNotConfirmed') : t('privacy.library.disableNotConfirmed') }
   finally { busy.value = false }
 }
 onMounted(() => { void load() })
 </script>
 <template>
   <section class="lap-library-preference">
-    <label><input type="checkbox" :checked="enabled === true" :disabled="busy || enabled === null" @change="change"> Condividi i miei giri come riferimento</label>
-    <p>Il tuo giro migliore su ogni pista e auto può comparire, con il tuo nickname, tra i riferimenti degli altri piloti nella Telemetria. Solo giri validi e completi.</p>
-    <p>Se la togli, i tuoi giri escono subito dai riferimenti. L'archivio dei tuoi giri resta tuo come prima.</p>
-    <p v-if="message" role="status">{{ message }} <button v-if="enabled === null" :disabled="busy" @click="load">Riprova</button></p>
+    <label><input type="checkbox" :checked="enabled === true" :disabled="busy || enabled === null" @change="change"> {{ t('privacy.library.label') }}</label>
+    <p>{{ t('privacy.library.text') }}</p>
+    <p>{{ t('privacy.library.offText') }}</p>
+    <p v-if="message" role="status">{{ message }} <button v-if="enabled === null" :disabled="busy" @click="load">{{ t('privacy.preference.retry') }}</button></p>
   </section>
 </template>
 <style scoped>

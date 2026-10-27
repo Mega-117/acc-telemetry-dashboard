@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { setLocale, translate } from '~/i18n'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import OnboardingIntro from '~/components/onboarding/OnboardingIntro.vue'
@@ -49,6 +50,9 @@ beforeEach(() => {
 })
 afterEach(() => { vi.unstubAllGlobals(); delete (window as any).electronAPI; document.body.innerHTML = '' })
 
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
+
 describe('OnboardingIntro (PIP-571)', () => {
   it('asks to open itself on mount in the desktop program and renders nothing while hidden', async () => {
     Object.assign(window, { electronAPI: {} })
@@ -68,7 +72,7 @@ describe('OnboardingIntro (PIP-571)', () => {
   it('walks the two video cards, then hands over to the key setup (PIP-612)', async () => {
     const wrapper = mountIntro(); await open()
     expect(document.body.querySelectorAll('[data-rail-step]').length).toBe(ONBOARDING_STEPS.length + 1)
-    expect(q('[aria-current="step"]')!.textContent).toContain(ONBOARDING_STEPS[0]!.label)
+    expect(q('[aria-current="step"]')!.textContent).toContain(translate('it', ONBOARDING_STEPS[0]!.label))
     for (const step of ONBOARDING_STEPS) {
       if (step.scene === 'panel') {
         expect(q('[data-onboarding-showcase]')).not.toBeNull()
@@ -77,7 +81,7 @@ describe('OnboardingIntro (PIP-571)', () => {
         expect(q('video')!.getAttribute('src')).toBe(`/base${step.video}`)
         expect(q('video')!.getAttribute('poster')).toBe(`/base${step.poster}`)
       }
-      expect(q('[data-onboarding-intro]')!.textContent).toContain(step.accent)
+      expect(q('[data-onboarding-intro]')!.textContent).toContain(translate('it', step.accent))
       await click('[data-onboarding-next]')
     }
     expect(q('[data-stub-commands]')).not.toBeNull()
@@ -87,14 +91,14 @@ describe('OnboardingIntro (PIP-571)', () => {
     expect(mock.close).not.toHaveBeenCalled()
     // The rail jumps back to any step.
     ;(document.body.querySelectorAll('[data-rail-step]')[1] as HTMLElement).click(); await flushPromises()
-    expect(q('[data-onboarding-intro]')!.textContent).toContain(ONBOARDING_STEPS[1]!.accent)
+    expect(q('[data-onboarding-intro]')!.textContent).toContain(translate('it', ONBOARDING_STEPS[1]!.accent))
     wrapper.unmount()
   })
 
   it('Indietro steps back; Salta and Esc jump to the commands instead of closing', async () => {
     const wrapper = mountIntro(); await open()
     await click('[data-onboarding-next]'); await click('[data-onboarding-prev]')
-    expect(q('[data-onboarding-intro]')!.textContent).toContain(ONBOARDING_STEPS[0]!.accent)
+    expect(q('[data-onboarding-intro]')!.textContent).toContain(translate('it', ONBOARDING_STEPS[0]!.accent))
     await click('[data-onboarding-skip]')
     expect(q('[data-stub-commands]')).not.toBeNull()
     expect(mock.close).not.toHaveBeenCalled()

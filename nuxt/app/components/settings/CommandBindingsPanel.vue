@@ -5,16 +5,16 @@ import { useWheelInputBridge } from '~/composables/useWheelInputBridge'
 import { captureSourceReady, commandErrorText } from '~/services/controls/commandCapture'
 import {
   formatWheelBinding,
-  type WheelControlAction,
+  WHEEL_CONTROL_ACTIONS,
 } from '~/services/controls/wheelBindingModel'
+import { useI18n } from '~/i18n'
 
-const actions: Array<{ id: WheelControlAction; title: string; description: string }> = [
-  { id: 'togglePalette', title: 'Apri / chiudi pannello rapido', description: 'Mostra o nasconde il pannello rapido (Ctrl+K).' },
-  { id: 'nextAction', title: 'Voce successiva', description: 'Passa alla voce successiva; dentro un valore lo aumenta. Tienilo premuto per ripetere.' },
-  { id: 'previousAction', title: 'Voce precedente', description: 'Passa alla voce precedente; dentro un valore lo diminuisce. Tienilo premuto per ripetere.' },
-  { id: 'activateAction', title: 'Conferma', description: 'Attiva la voce selezionata.' },
-  { id: 'mainMenu', title: 'Indietro', description: 'Esce dal valore che stai modificando, poi dal pannello aperto, poi chiude Ctrl+K.' },
-]
+const { t } = useI18n()
+
+// PIP-665: titles and descriptions in the dictionary (commands.action.<id>).
+const actions = computed(() => WHEEL_CONTROL_ACTIONS.map(id => ({
+  id, title: t(`commands.action.${id}.title`), description: t(`commands.action.${id}.description`),
+})))
 
 const bridge = useWheelInputBridge()
 const {
@@ -33,7 +33,7 @@ const selectedDevice = ref('')
 const { keyHint, reset: resetKeyCapture } = useKeyboardCapture(bridge)
 const devices = computed(() => state.value.devices.map((device, index) => ({
   id: device.deviceId,
-  label: `${device.deviceLabel}${device.buttonCount ? ` · ${device.buttonCount} pulsanti` : ''}${state.value.devices.filter(d => d.deviceLabel === device.deviceLabel && d.buttonCount === device.buttonCount).length > 1 ? ` · ${index + 1}` : ''}`,
+  label: `${device.deviceLabel}${device.buttonCount ? ` · ${t('commands.buttons', { count: device.buttonCount })}` : ''}${state.value.devices.filter(d => d.deviceLabel === device.deviceLabel && d.buttonCount === device.buttonCount).length > 1 ? ` · ${index + 1}` : ''}`,
 })))
 watch(selectedDevice, () => { resetKeyCapture(); if (state.value.capture) void cancelCapture() })
 const selectedSource = computed(() => selectedDevice.value === 'keyboard:system' ? 'keyboard' : selectedDevice.value ? 'controller' : null)
@@ -41,16 +41,16 @@ const sourceReady = computed(() => captureSourceReady(state.value, selectedSourc
 const failedSources = computed(() => (['keyboard', 'controller'] as const).filter(source => state.value.sources?.[source].status === 'unavailable'))
 
 const statusText = computed(() => {
-  if (!state.value.available) return 'Runtime comandi non disponibile'
+  if (!state.value.available) return t('commands.status.runtimeUnavailable')
   if (state.value.sources && selectedSource.value) {
     const source = state.value.sources[selectedSource.value]
-    if (source.status === 'starting') return 'Avvio lettore…'
-    if (source.status === 'unavailable') return selectedSource.value === 'keyboard' ? 'Lettore tastiera non disponibile.' : 'Lettore controller non disponibile.'
+    if (source.status === 'starting') return t('commands.status.starting')
+    if (source.status === 'unavailable') return selectedSource.value === 'keyboard' ? t('commands.status.keyboardUnavailable') : t('commands.status.controllerUnavailable')
   }
-  if (state.value.inputStatus === 'starting') return 'Ricerca delle periferiche…'
-  if (state.value.inputStatus === 'unavailable') return 'Lettura dei comandi non disponibile. Riavvia la Suite per riprovare.'
-  if (!state.value.devices.length) return 'Nessun controller collegato. Puoi usare la tastiera.'
-  return `${state.value.devices.length} periferiche rilevate. Scegli un comando e premi Assegna.`
+  if (state.value.inputStatus === 'starting') return t('commands.status.searching')
+  if (state.value.inputStatus === 'unavailable') return t('commands.status.inputUnavailable')
+  if (!state.value.devices.length) return t('commands.status.noDevices')
+  return t('commands.status.devices', { count: state.value.devices.length })
 })
 const errorText = computed(() => commandErrorText(state.value.operation?.reason || state.value.lastError))
 
@@ -61,9 +61,9 @@ onBeforeUnmount(() => { void finishConfiguration() })
   <section class="commands-panel" aria-labelledby="commands-title">
     <header class="commands-panel__header">
       <div>
-        <p class="eyebrow">VOLANTE, TASTIERA E BUTTON BOX</p>
-        <h2 id="commands-title">Comandi</h2>
-        <p>Scegli Assegna e premi il tasto o il pulsante da usare.</p>
+        <p class="eyebrow">{{ t('commands.eyebrow') }}</p>
+        <h2 id="commands-title">{{ t('commands.title') }}</h2>
+        <p>{{ t('commands.lead') }}</p>
       </div>
       <button
         type="button"
@@ -72,37 +72,37 @@ onBeforeUnmount(() => { void finishConfiguration() })
         :disabled="!state.available || !!state.capture"
         @click="setTestMode(!testMode)"
       >
-        {{ testMode ? 'Termina prova' : 'Prova comandi' }}
+        {{ testMode ? t('commands.endTest') : t('commands.test') }}
       </button>
     </header>
 
     <div class="device-row">
-      <label for="command-device">Dispositivo</label>
+      <label for="command-device">{{ t('commands.device') }}</label>
       <select id="command-device" v-model="selectedDevice" :disabled="testMode">
-        <option value="">Rileva automaticamente</option>
-        <option v-if="state.inputBackend === 'native'" value="keyboard:system">Tastiera / tastierino / button box</option>
+        <option value="">{{ t('commands.autoDetect') }}</option>
+        <option v-if="state.inputBackend === 'native'" value="keyboard:system">{{ t('commands.keyboardDevice') }}</option>
         <option v-for="device in devices" :key="device.id" :value="device.id">{{ device.label }}</option>
-        <option v-if="selectedDevice && selectedDevice !== 'keyboard:system' && !devices.some(d => d.id === selectedDevice)" :value="selectedDevice">Dispositivo scollegato</option>
+        <option v-if="selectedDevice && selectedDevice !== 'keyboard:system' && !devices.some(d => d.id === selectedDevice)" :value="selectedDevice">{{ t('commands.disconnected') }}</option>
       </select>
       <span :class="['device-status', { 'is-connected': !!state.devices.length }]">{{ statusText }}</span>
       <div v-for="source in failedSources" :key="source" role="status">
-        {{ source === 'keyboard' ? 'Lettore tastiera non avviato.' : 'Lettore controller non avviato.' }}
-        <button type="button" class="rc-btn rc-btn--compact" :disabled="!state.available || !!state.capture" @click="retrySource(source)">Riprova {{ source === 'keyboard' ? 'tastiera' : 'controller' }}</button>
+        {{ source === 'keyboard' ? t('commands.keyboardNotStarted') : t('commands.controllerNotStarted') }}
+        <button type="button" class="rc-btn rc-btn--compact" :disabled="!state.available || !!state.capture" @click="retrySource(source)">{{ source === 'keyboard' ? t('commands.retryKeyboard') : t('commands.retryController') }}</button>
       </div>
-      <span v-if="state.inputBackend === 'native' && !state.sources" class="device-status">La separazione dei lettori richiede l’aggiornamento della Suite desktop.</span>
+      <span v-if="state.inputBackend === 'native' && !state.sources" class="device-status">{{ t('commands.needsUpdate') }}</span>
     </div>
 
     <p v-if="errorText" class="command-error" role="alert">{{ errorText }}</p>
     <p v-if="state.ambiguousDeviceIds?.length" class="command-error" role="alert">
-      Più periferiche hanno lo stesso identificativo: {{ state.ambiguousDeviceIds.join(', ') }}.
-      Seleziona il dispositivo e assegna nuovamente il pulsante.
+      {{ t('commands.ambiguousBefore', { ids: state.ambiguousDeviceIds.join(', ') }) }}
+      {{ t('commands.ambiguousAfter') }}
     </p>
-    <p v-if="state.unavailableKeys?.length" class="command-error" role="alert">Un tasto assegnato non è disponibile per la Suite. Premi Assegna e scegli un altro tasto.</p>
+    <p v-if="state.unavailableKeys?.length" class="command-error" role="alert">{{ t('commands.keyUnavailable') }}</p>
     <p v-if="state.capture" class="capture-hint" role="status">
-      {{ keyHint || 'Premi il pulsante o il tasto da assegnare. Esc per annullare.' }}
+      {{ keyHint || t('commands.captureHint') }}
     </p>
-    <p v-if="testMode" class="capture-hint" role="status">Premi i comandi: si illumineranno qui senza azionare il pannello.</p>
-    <p v-if="selectedDevice === 'keyboard:system' || Object.values(state.bindings).some(b => b?.deviceId === 'keyboard:system')" class="keyboard-note">Scegli un tasto libero: mentre la Suite è attiva viene riservato al comando. Le button box che inviano tasti usano questa voce.</p>
+    <p v-if="testMode" class="capture-hint" role="status">{{ t('commands.testHint') }}</p>
+    <p v-if="selectedDevice === 'keyboard:system' || Object.values(state.bindings).some(b => b?.deviceId === 'keyboard:system')" class="keyboard-note">{{ t('commands.keyboardNote') }}</p>
 
     <div class="command-list">
       <article
@@ -120,7 +120,7 @@ onBeforeUnmount(() => { void finishConfiguration() })
         </div>
         <div class="binding-copy">
           <code>{{ formatWheelBinding(state.bindings[action.id]) }}</code>
-          <span v-if="state.disconnectedActions?.includes(action.id)">{{ state.bindings[action.id]?.deviceId.startsWith('raw:') ? 'Dispositivo scollegato. Ricollegalo oppure premi Assegna.' : 'Premi Assegna per confermare la periferica di questo comando.' }}</span>
+          <span v-if="state.disconnectedActions?.includes(action.id)">{{ state.bindings[action.id]?.deviceId.startsWith('raw:') ? t('commands.rawDisconnected') : t('commands.confirmDevice') }}</span>
         </div>
         <div class="command-row__actions">
           <button
@@ -130,16 +130,16 @@ onBeforeUnmount(() => { void finishConfiguration() })
             :disabled="!state.available || !sourceReady || (!state.devices.length && state.inputBackend !== 'native') || !!state.capture || testMode"
             @click="beginCapture(action.id, selectedDevice)"
           >
-            Assegna
+            {{ t('commands.assign') }}
           </button>
-          <button v-else class="rc-btn rc-btn--compact" type="button" @click="cancelCapture">Annulla</button>
+          <button v-else class="rc-btn rc-btn--compact" type="button" @click="cancelCapture">{{ t('commands.cancel') }}</button>
           <button
             type="button"
             class="rc-btn rc-btn--danger rc-btn--compact"
             :disabled="!state.bindings[action.id] || !!state.capture || testMode"
             @click="clearBinding(action.id)"
           >
-            Rimuovi
+            {{ t('commands.remove') }}
           </button>
         </div>
       </article>

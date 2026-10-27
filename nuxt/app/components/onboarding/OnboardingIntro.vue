@@ -9,31 +9,33 @@ import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useOnboardingIntro, type OnboardingPhase, type OnboardingResult } from '~/composables/useOnboardingIntro'
 import { usePublicPath } from '~/composables/usePublicPath'
 import { ONBOARDING_STEPS } from '~/services/onboarding/onboardingSteps'
+import { useI18n } from '~/i18n'
 
 const intro = useOnboardingIntro()
 const { currentUser } = useFirebaseAuth()
 const { getPublicPath } = usePublicPath()
+const { t } = useI18n()
 
 // PIP-612: a short racing title and, instead of a sentence, the one thing to remember:
 // the key that opens the menu (the one just chosen, and Ctrl+K). Any simulator.
-const FINISH: Record<OnboardingResult, { title: string; accent: string; text: string }> = {
-  done: { title: 'Pronto', accent: 'per la pista', text: '' },
-  later: { title: 'Pronto', accent: 'per la pista', text: 'I tasti del volante li imposti quando vuoi in Impostazioni → Comandi.' },
-}
+const FINISH = computed<Record<OnboardingResult, { title: string; accent: string; text: string }>>(() => ({
+  done: { title: t('onboarding.finishTitle'), accent: t('onboarding.finishAccent'), text: '' },
+  later: { title: t('onboarding.finishTitle'), accent: t('onboarding.finishAccent'), text: t('onboarding.finishLater') },
+}))
 const menuKey = ref<string | null>(null)
 
 const steps = ONBOARDING_STEPS
-const railLabels = [...steps.map(s => s.label), 'Comandi']
+const railLabels = computed(() => [...steps.map(s => t(s.label)), t('onboarding.commandsStep')])
 const index = ref(0)
 const phase = ref<OnboardingPhase | 'finish'>('tour')
 const result = ref<OnboardingResult>('done')
 const direction = ref<'next' | 'prev'>('next')
 const root = ref<HTMLElement | null>(null)
 const step = computed(() => steps[index.value]!)
-const finish = computed(() => FINISH[result.value])
-const current = computed(() => ({ tour: index.value, commands: steps.length, finish: railLabels.length })[phase.value])
+const finish = computed(() => FINISH.value[result.value])
+const current = computed(() => ({ tour: index.value, commands: steps.length, finish: railLabels.value.length })[phase.value])
 // The fill reaches the end of the current step (equal columns), full on the last screen.
-const progress = computed(() => `${Math.min(1, (current.value + 1) / railLabels.length) * 100}%`)
+const progress = computed(() => `${Math.min(1, (current.value + 1) / railLabels.value.length) * 100}%`)
 const commands = ref<{ postpone: () => void; pause: () => void; resume: () => void } | null>(null)
 const confirmLater = ref(false)
 // The confirmation owns the keyboard while it is open: the key list stops listening.
@@ -101,7 +103,7 @@ onMounted(showFirstTime)
       class="onboarding"
       role="dialog"
       aria-modal="true"
-      aria-label="Introduzione a Racer Core"
+      :aria-label="t('onboarding.dialog')"
       tabindex="-1"
       data-onboarding-intro
       @keydown.esc.prevent="onEscape"
@@ -109,7 +111,7 @@ onMounted(showFirstTime)
       <div class="onboarding__modal">
         <header class="onboarding__rail-wrap">
           <div class="onboarding__rail-track">
-            <ol class="onboarding__rail" :style="{ '--rail-n': railLabels.length }" aria-label="Passi dell'introduzione">
+            <ol class="onboarding__rail" :style="{ '--rail-n': railLabels.length }" :aria-label="t('onboarding.rail')">
               <li
                 v-for="(label, i) in railLabels"
                 :key="label"
@@ -130,15 +132,15 @@ onMounted(showFirstTime)
                commands. Its confirmation opens right under it, nothing moves elsewhere. -->
           <span class="onboarding__skip-slot">
             <Transition name="onb-fade" mode="out-in">
-              <button v-if="phase === 'tour'" key="skip" type="button" class="onboarding__skip" data-onboarding-skip @click="toCommands">Salta</button>
-              <button v-else-if="phase === 'commands' && wheelAvailable" key="later" type="button" class="onboarding__skip" data-cmd-later @click="confirmLater = !confirmLater">Lo faccio dopo</button>
+              <button v-if="phase === 'tour'" key="skip" type="button" class="onboarding__skip" data-onboarding-skip @click="toCommands">{{ t('onboarding.skip') }}</button>
+              <button v-else-if="phase === 'commands' && wheelAvailable" key="later" type="button" class="onboarding__skip" data-cmd-later @click="confirmLater = !confirmLater">{{ t('onboarding.later') }}</button>
             </Transition>
             <Transition name="onb-fade">
-              <span v-if="confirmLater && phase === 'commands'" class="onboarding__confirm" role="dialog" aria-label="Rimandare i tasti?" data-later-confirm>
-                <span>Senza tasti il menu in pista si apre solo con Ctrl+K. Li imposti quando vuoi in Impostazioni → Comandi.</span>
+              <span v-if="confirmLater && phase === 'commands'" class="onboarding__confirm" role="dialog" :aria-label="t('onboarding.laterDialog')" data-later-confirm>
+                <span>{{ t('onboarding.laterText') }}</span>
                 <span class="onboarding__confirm-actions">
-                  <button type="button" class="onboarding__link" data-later-cancel @click="confirmLater = false">Li imposto ora</button>
-                  <button type="button" class="onboarding__confirm-go" data-cmd-later-confirm @click="commands?.postpone(); confirmLater = false">Sì, dopo</button>
+                  <button type="button" class="onboarding__link" data-later-cancel @click="confirmLater = false">{{ t('onboarding.laterCancel') }}</button>
+                  <button type="button" class="onboarding__confirm-go" data-cmd-later-confirm @click="commands?.postpone(); confirmLater = false">{{ t('onboarding.laterConfirm') }}</button>
                 </span>
               </span>
             </Transition>
@@ -163,15 +165,15 @@ onMounted(showFirstTime)
             </div>
             <div class="onboarding__body">
               <div class="onboarding__text">
-                <h2 class="onboarding__title">{{ step.title }} <em>{{ step.accent }}</em></h2>
-                <p class="onboarding__copy">{{ step.text }}</p>
+                <h2 class="onboarding__title">{{ t(step.title) }} <em>{{ t(step.accent) }}</em></h2>
+                <p class="onboarding__copy">{{ t(step.text) }}</p>
                 <ul v-if="step.chips?.length" class="onboarding__chips" data-onboarding-chips>
-                  <li v-for="chip in step.chips" :key="chip">{{ chip }}</li>
+                  <li v-for="chip in step.chips" :key="chip">{{ t(chip) }}</li>
                 </ul>
               </div>
-              <nav class="onboarding__nav" aria-label="Navigazione">
-                <button type="button" class="onboarding__link" :class="{ 'is-hidden': index === 0 }" :disabled="index === 0" data-onboarding-prev @click="previous">Indietro</button>
-                <button type="button" class="onboarding__next" data-onboarding-next @click="next">Avanti</button>
+              <nav class="onboarding__nav" :aria-label="t('onboarding.navigation')">
+                <button type="button" class="onboarding__link" :class="{ 'is-hidden': index === 0 }" :disabled="index === 0" data-onboarding-prev @click="previous">{{ t('onboarding.previous') }}</button>
+                <button type="button" class="onboarding__next" data-onboarding-next @click="next">{{ t('onboarding.next') }}</button>
               </nav>
             </div>
           </div>
@@ -183,10 +185,10 @@ onMounted(showFirstTime)
             </svg>
             <h2 class="onboarding__title onboarding__finish-title">{{ finish.title }} <em>{{ finish.accent }}</em></h2>
             <p class="onboarding__copy onboarding__finish-copy onboarding__finish-keys" data-onboarding-keys>
-              <span>Menu</span><kbd v-if="menuKey">{{ menuKey }}</kbd><span v-if="menuKey" aria-hidden="true">·</span><kbd>Ctrl+K</kbd>
+              <span>{{ t('onboarding.menu') }}</span><kbd v-if="menuKey">{{ menuKey }}</kbd><span v-if="menuKey" aria-hidden="true">·</span><kbd>Ctrl+K</kbd>
             </p>
             <p v-if="finish.text" class="onboarding__copy onboarding__finish-copy onboarding__finish-note">{{ finish.text }}</p>
-            <button type="button" class="onboarding__next onboarding__finish-go" data-onboarding-start @click="intro.close(result)">Inizia</button>
+            <button type="button" class="onboarding__next onboarding__finish-go" data-onboarding-start @click="intro.close(result)">{{ t('onboarding.start') }}</button>
           </div>
 
           <OnboardingCommands

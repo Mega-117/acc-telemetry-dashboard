@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { setLocale } from '~/i18n'
 import { mount, flushPromises } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import LoginForm from '~/components/auth/LoginForm.vue'
@@ -22,6 +23,9 @@ beforeEach(() => {
   api.checkEmailVerified.mockResolvedValue({ verified: false })
 })
 afterEach(() => { wrappers.splice(0).forEach(w => w.unmount()); vi.useRealTimers(); vi.unstubAllGlobals() })
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('Racer Core authentication presentation', () => {
   it('toggles password presentation without changing its value or submitting', async () => {

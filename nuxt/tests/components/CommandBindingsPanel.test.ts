@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { setLocale } from '~/i18n'
 import { mount } from '@vue/test-utils'
 import { ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -14,6 +15,9 @@ beforeEach(() => {
     testMode: ref(false), testedActions: ref([]), beginCapture: vi.fn(), cancelCapture: vi.fn(), clearBinding: vi.fn(), setTestMode: vi.fn(), finishConfiguration: vi.fn().mockResolvedValue(undefined),
   }
 })
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('CommandBindingsPanel', () => {
   it('offers previous item with its own assignment and removal', async () => {

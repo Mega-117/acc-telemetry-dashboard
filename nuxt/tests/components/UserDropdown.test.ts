@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
+import { setLocale } from '~/i18n'
 import { afterEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import UserDropdown from '../../app/components/ui/UserDropdown.vue'
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('UserDropdown settings entry', () => {
   afterEach(() => {

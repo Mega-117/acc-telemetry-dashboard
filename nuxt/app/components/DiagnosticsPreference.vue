@@ -7,8 +7,10 @@ import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { db } from '~/config/firebase'
 import { loadOwnerDocument, rememberOwnerDocumentPatch } from '~/repositories/ownerDocumentRepository'
 import { setDesktopDiagnosticsConsent } from '~/services/usage/diagnosticsConsent'
+import { useI18n } from '~/i18n'
 
 const { currentUser } = useFirebaseAuth()
+const { t } = useI18n()
 const enabled = ref<boolean | null>(null), busy = ref(false), message = ref('')
 let consent: Record<string, unknown> = {}
 
@@ -18,7 +20,7 @@ onMounted(async () => {
   try {
     consent = ((await loadOwnerDocument(uid)).data as { consent?: Record<string, unknown> } | null)?.consent ?? {}
     enabled.value = consent.diagnostics !== false
-  } catch { message.value = 'Preferenza non disponibile. Riprova più tardi.' }
+  } catch { message.value = t('privacy.preference.unavailableLater') }
 })
 
 async function change(event: Event) {
@@ -34,7 +36,7 @@ async function change(event: Event) {
     enabled.value = next
     setDesktopDiagnosticsConsent(next)
   } catch {
-    message.value = 'Modifica non salvata. Riprova.'
+    message.value = t('privacy.preference.notSaved')
     ;(event.target as HTMLInputElement).checked = !next
   } finally { busy.value = false }
 }
@@ -42,8 +44,8 @@ async function change(event: Event) {
 
 <template>
   <section class="diagnostics-preference">
-    <label><input type="checkbox" :checked="enabled === true" :disabled="busy || enabled === null" @change="change"> Invia la diagnostica tecnica in automatico</label>
-    <p>Errori e blocchi del programma, per correggerli in fretta. Se la spegni restano sul tuo PC e li mandi tu con "Segnala problema".</p>
+    <label><input type="checkbox" :checked="enabled === true" :disabled="busy || enabled === null" @change="change"> {{ t('privacy.diagnostics.label') }}</label>
+    <p>{{ t('privacy.diagnostics.text') }}</p>
     <p v-if="message" role="status">{{ message }}</p>
   </section>
 </template>

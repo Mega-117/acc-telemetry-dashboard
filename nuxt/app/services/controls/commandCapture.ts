@@ -2,6 +2,7 @@
 // onboarding command setup (PIP-571), so both read the same readiness and the same messages.
 import type { DeepReadonly } from 'vue'
 import type { WheelControlsState } from '~/services/controls/wheelBindingModel'
+import { useI18n, type TranslationKey } from '~/i18n'
 
 export type CaptureSource = 'keyboard' | 'controller'
 type ControlsView = DeepReadonly<WheelControlsState>
@@ -19,21 +20,16 @@ export function canBeginAutoCapture(state: ControlsView, testMode: boolean): boo
     && !state.capture && !testMode
 }
 
-const ERROR_TEXT: Record<string, string> = {
-  binding_conflict: 'Questo pulsante è già assegnato a un altro comando.',
-  settings_corrupt: 'Le impostazioni locali non erano valide: sono stati caricati binding vuoti.',
-  settings_write_failed: 'Il comando non è stato salvato su disco. Riprova.',
-  capture_ambiguous: 'Sono arrivati più pulsanti o ingressi insieme. Scegli il dispositivo nella tendina e premi nuovamente Assegna.',
-  controls_unavailable: 'Collegamento ai comandi non disponibile. Riprova.',
-  source_unavailable: 'Il lettore del dispositivo scelto non è disponibile.',
-  key_unavailable: 'Questo tasto non è disponibile. Scegline un altro: il comando precedente è stato conservato.',
-  device_disconnected: 'La periferica è stata scollegata. Ricollegala e premi Assegna.',
-}
+// PIP-665: texts in the dictionary (commands.error.<reason>), in the interface language.
+const ERROR_REASONS = new Set(['binding_conflict', 'settings_corrupt', 'settings_write_failed', 'capture_ambiguous',
+  'controls_unavailable', 'source_unavailable', 'key_unavailable', 'device_disconnected'])
 
 export function commandErrorText(reason: string | null | undefined): string {
   if (!reason) return ''
-  return ERROR_TEXT[reason] || 'Comando non salvato. Riprova.'
+  const key = (ERROR_REASONS.has(reason) ? `commands.error.${reason}` : 'commands.error.fallback') as TranslationKey
+  return useI18n().t(key)
 }
 
-export const KEY_HINT_INVALID = 'Usa un solo tasto: una lettera, un numero, F1–F24 o una freccia.'
-export const KEY_HINT_RELEASE = 'Rilascia il tasto per salvarlo.'
+/** Dictionary keys of the key-capture hints (translated where shown, useKeyboardCapture). */
+export const KEY_HINT_INVALID: TranslationKey = 'commands.keyHintInvalid'
+export const KEY_HINT_RELEASE: TranslationKey = 'commands.keyHintRelease'

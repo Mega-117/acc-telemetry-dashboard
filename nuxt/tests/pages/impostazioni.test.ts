@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { setLocale } from '~/i18n'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import Impostazioni from '~/pages/impostazioni.vue'
@@ -16,6 +17,9 @@ beforeEach(() => {
     windowsStartupSet: vi.fn(async () => ({ supported: true, enabled: false })) } })
 })
 afterEach(() => { vi.unstubAllGlobals(); delete (window as any).electronAPI })
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('Impostazioni navigation', () => {
   it('keeps a transition root while the desktop bridge is loading', async () => {
@@ -51,7 +55,7 @@ describe('Impostazioni navigation', () => {
         SettingsIntroPanel: { template: '<button data-intro @click="open()">Rivedi</button>', setup: () => ({ open }) } } } })
     await flushPromises()
     const tabs = wrapper.findAll('aside button')
-    expect(tabs.map(t => t.text())).toEqual(['Comandi', 'Avvio', 'Introduzione'])
+    expect(tabs.map(t => t.text())).toEqual(['Comandi', 'Avvio', 'Introduzione', 'Lingua'])
     await tabs[2]!.trigger('click'); await flushPromises()
     expect(tabs[2]!.attributes('aria-pressed')).toBe('true')
     await wrapper.get('[data-intro]').trigger('click')

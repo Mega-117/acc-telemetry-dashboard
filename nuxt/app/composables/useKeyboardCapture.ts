@@ -4,6 +4,7 @@
 import { onBeforeUnmount, onMounted, ref, type DeepReadonly, type Ref } from 'vue'
 import { KEY_HINT_INVALID, KEY_HINT_RELEASE } from '~/services/controls/commandCapture'
 import { keyboardButton, type WheelControlsState } from '~/services/controls/wheelBindingModel'
+import { useI18n } from '~/i18n'
 
 interface KeyboardCaptureBridge {
   state: Readonly<Ref<DeepReadonly<WheelControlsState>>>
@@ -25,7 +26,7 @@ export function useKeyboardCapture(bridge: KeyboardCaptureBridge) {
     event.stopImmediatePropagation()
     if (event.repeat) return
     pendingKey = keyboardButton(event)
-    keyHint.value = pendingKey === null ? KEY_HINT_INVALID : KEY_HINT_RELEASE
+    keyHint.value = useI18n().t(pendingKey === null ? KEY_HINT_INVALID : KEY_HINT_RELEASE)
   }
   const onKeyUp = (event: KeyboardEvent) => {
     if (pendingKey === null || !bridge.state.value.capture) return

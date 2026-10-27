@@ -5,8 +5,11 @@
 
 import { computed, ref } from 'vue'
 import AuthField from './AuthField.vue'
+import { useI18n } from '~/i18n'
 import { emailDomainHintMessage } from '~/utils/emailDomainHint'
 import { PRIVACY_VERSION, TERMS_VERSION, legalPageUrl, type RegisterConsent } from '~/utils/legalVersions'
+
+const { t } = useI18n()
 
 withDefaults(defineProps<{
   loading?: boolean
@@ -40,43 +43,43 @@ const handleSubmit = () => {
 
   // Validazione client-side
   if (!firstName.value.trim()) {
-    error.value = 'Inserisci il tuo nome.'
+    error.value = t('auth.errors.firstNameRequired')
     return
   }
   if (!lastName.value.trim()) {
-    error.value = 'Inserisci il tuo cognome.'
+    error.value = t('auth.errors.lastNameRequired')
     return
   }
   if (!nickname.value.trim()) {
-    error.value = 'Scegli un nickname.'
+    error.value = t('auth.errors.nicknameRequired')
     return
   }
   if (nickname.value.trim().length < 3) {
-    error.value = 'Il nickname deve essere di almeno 3 caratteri.'
+    error.value = t('auth.errors.nicknameShort')
     return
   }
   if (!email.value.trim()) {
-    error.value = 'Inserisci la tua email.'
+    error.value = t('auth.errors.emailRequired')
     return
   }
   if (!password.value) {
-    error.value = 'Inserisci una password.'
+    error.value = t('auth.errors.newPasswordRequired')
     return
   }
   if (password.value.length < 6) {
-    error.value = 'La password deve essere di almeno 6 caratteri.'
+    error.value = t('auth.errors.passwordShort')
     return
   }
   if (!confirmPassword.value) {
-    error.value = 'Conferma la password.'
+    error.value = t('auth.errors.confirmRequired')
     return
   }
   if (password.value !== confirmPassword.value) {
-    error.value = 'Le password non coincidono.'
+    error.value = t('auth.errors.passwordMismatch')
     return
   }
   if (!acceptTerms.value || !acceptPrivacy.value) {
-    error.value = 'Per creare l\'account accetta i Termini della beta e conferma di aver letto l\'Informativa privacy.'
+    error.value = t('auth.errors.consentRequired')
     return
   }
 
@@ -116,17 +119,17 @@ defineExpose({
     <div class="name-row">
       <AuthField
         v-model="firstName"
-        label="Nome"
+        :label="t('auth.field.firstName')"
         type="text"
-        placeholder="Nome"
+        :placeholder="t('auth.field.firstName')"
         autocomplete="given-name"
         @input="clearError"
       />
       <AuthField
         v-model="lastName"
-        label="Cognome"
+        :label="t('auth.field.lastName')"
         type="text"
-        placeholder="Cognome"
+        :placeholder="t('auth.field.lastName')"
         autocomplete="family-name"
         @input="clearError"
       />
@@ -134,9 +137,9 @@ defineExpose({
 
     <AuthField
       v-model="nickname"
-      label="Nickname"
+      :label="t('auth.field.nickname')"
       type="text"
-      placeholder="Visibile agli altri"
+      :placeholder="t('auth.field.nicknamePlaceholder')"
       autocomplete="username"
       :maxlength="20"
       @input="clearError"
@@ -144,9 +147,9 @@ defineExpose({
 
     <AuthField
       v-model="email"
-      label="Email"
+      :label="t('auth.field.email')"
       type="email"
-      placeholder="nome@esempio.it"
+      :placeholder="t('auth.field.emailPlaceholder')"
       autocomplete="email"
       @input="clearError"
     />
@@ -160,18 +163,18 @@ defineExpose({
 
     <AuthField
       v-model="password"
-      label="Password"
+      :label="t('auth.field.password')"
       type="password"
-      placeholder="Almeno 6 caratteri"
+      :placeholder="t('auth.field.newPasswordPlaceholder')"
       autocomplete="new-password"
       @input="clearError"
     />
 
     <AuthField
       v-model="confirmPassword"
-      label="Conferma password"
+      :label="t('auth.field.confirmPassword')"
       type="password"
-      placeholder="Conferma Password"
+      :placeholder="t('auth.field.confirmPasswordPlaceholder')"
       autocomplete="new-password"
       @input="clearError"
     />
@@ -179,11 +182,11 @@ defineExpose({
     <div class="consent">
       <label class="consent__row">
         <input v-model="acceptTerms" type="checkbox" required @change="clearError">
-        <span>Accetto i <a :href="termsUrl" target="_blank" rel="noopener">Termini della beta</a></span>
+        <span>{{ t('auth.consent.termsBefore') }}<a :href="termsUrl" target="_blank" rel="noopener">{{ t('auth.consent.termsLink') }}</a></span>
       </label>
       <label class="consent__row">
         <input v-model="acceptPrivacy" type="checkbox" required @change="clearError">
-        <span>Ho letto l'<a :href="privacyUrl" target="_blank" rel="noopener">Informativa privacy</a></span>
+        <span>{{ t('auth.consent.privacyBefore') }}<a :href="privacyUrl" target="_blank" rel="noopener">{{ t('auth.consent.privacyLink') }}</a></span>
       </label>
     </div>
 
@@ -194,7 +197,7 @@ defineExpose({
       variant="primary"
       :loading="loading"
     >
-      <span>REGISTRATI</span><UiRacingIcon name="chevron" :size="26" class="auth-btn-arrow" />
+      <span>{{ t('auth.register.submit') }}</span><UiRacingIcon name="chevron" :size="26" class="auth-btn-arrow" />
     </UiBaseButton>
   </form>
 </template>

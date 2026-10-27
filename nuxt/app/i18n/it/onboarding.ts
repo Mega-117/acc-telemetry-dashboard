@@ -1,0 +1,42 @@
+// The introduction window (OnboardingIntro) and its cards (onboardingSteps.ts).
+export default {
+  onboarding: {
+    dialog: 'Introduzione a Racer Core',
+    rail: "Passi dell'introduzione",
+    commandsStep: 'Comandi',
+    skip: 'Salta',
+    later: 'Lo faccio dopo',
+    laterDialog: 'Rimandare i tasti?',
+    laterText: 'Senza tasti il menu in pista si apre solo con Ctrl+K. Li imposti quando vuoi in Impostazioni → Comandi.',
+    laterCancel: 'Li imposto ora',
+    laterConfirm: 'Sì, dopo',
+    navigation: 'Navigazione',
+    previous: 'Indietro',
+    next: 'Avanti',
+    finishTitle: 'Pronto',
+    finishAccent: 'per la pista',
+    finishLater: 'I tasti del volante li imposti quando vuoi in Impostazioni → Comandi.',
+    menu: 'Menu',
+    start: 'Inizia',
+    steps: {
+      benvenuto: {
+        label: 'Racer Core',
+        title: 'Ti aiuta',
+        accent: 'in pista',
+        text: 'Ti mostra quello che serve mentre guidi, e uno spotter ti avvisa a voce.',
+        chipHud: 'HUD',
+        chipVoice: 'Avvisi vocali',
+        chipPitwall: 'Pitwall con un amico',
+      },
+      automazioni: {
+        label: 'Automazioni',
+        title: 'Racer Core',
+        accent: 'clicca per te',
+        text: 'Premi un tasto e Racer Core fa le regolazioni nel gioco al posto tuo.',
+        chipPressures: 'Correggi pressioni',
+        chipFuelMinutes: 'Benzina a minuti',
+        chipFuelSession: 'Benzina per la sessione',
+      },
+    },
+  },
+} as const

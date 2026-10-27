@@ -5,6 +5,7 @@
 import { ref } from 'vue'
 import { X } from '@lucide/vue'
 import { useAppNotifications } from '~/composables/useAppNotifications'
+import { useI18n } from '~/i18n'
 
 const emit = defineEmits<{ close: [] }>()
 type Bridge = { reportProblem?: (note: string) => Promise<{ ok: boolean, code?: string, delivered?: boolean, reason?: string }> }
@@ -13,6 +14,7 @@ const inDesktopApp = typeof bridge?.reportProblem === 'function'
 const note = ref(''), busy = ref(false), error = ref('')
 const result = ref<{ code: string, delivered: boolean } | null>(null)
 const { push } = useAppNotifications()
+const { t } = useI18n()
 
 async function send() {
   if (!inDesktopApp || busy.value) return
@@ -20,15 +22,15 @@ async function send() {
   try {
     const answer = await bridge!.reportProblem!(note.value.trim())
     if (answer.ok && answer.code) result.value = { code: answer.code, delivered: answer.delivered === true }
-    else error.value = answer.reason || 'Invio non riuscito. Riprova.'
-  } catch { error.value = 'Invio non riuscito. Riprova.' }
+    else error.value = answer.reason || t('privacy.report.sendFailed')
+  } catch { error.value = t('privacy.report.sendFailed') }
   finally { busy.value = false }
 }
 
 async function copyCode() {
   if (!result.value) return
-  try { await navigator.clipboard.writeText(result.value.code); push('Codice copiato: incollalo su Discord nel canale #bug.', 'success') }
-  catch { push('Copia non riuscita: seleziona il codice e copialo a mano.', 'error') }
+  try { await navigator.clipboard.writeText(result.value.code); push(t('privacy.report.copied'), 'success') }
+  catch { push(t('privacy.report.copyFailed'), 'error') }
 }
 </script>
 
@@ -37,23 +39,23 @@ async function copyCode() {
     <div class="rp-backdrop" @click.self="emit('close')">
       <div class="rp-modal" role="dialog" aria-modal="true" aria-labelledby="rp-title" @keydown.esc="emit('close')">
         <header>
-          <div><span class="eyebrow">Assistenza</span><h2 id="rp-title">Segnala un problema</h2></div>
-          <button type="button" class="modal-close" aria-label="Chiudi" @click="emit('close')"><X :size="20" aria-hidden="true" /></button>
+          <div><span class="eyebrow">{{ t('privacy.report.eyebrow') }}</span><h2 id="rp-title">{{ t('privacy.report.title') }}</h2></div>
+          <button type="button" class="modal-close" :aria-label="t('privacy.report.close')" @click="emit('close')"><X :size="20" aria-hidden="true" /></button>
         </header>
 
         <template v-if="!inDesktopApp">
-          <p>La segnalazione con i dati tecnici si fa dal programma Racer Core: apri il menu del tuo nome e scegli "Segnala problema". Dal browser descrivi il problema su Discord, nel canale #bug.</p>
+          <p>{{ t('privacy.report.browserOnly') }}</p>
         </template>
         <template v-else-if="result">
-          <p>{{ result.delivered ? 'Ricevuto. Ecco il tuo codice:' : 'Pacchetto pronto: partirà appena c\'è connessione. Ecco il tuo codice:' }}</p>
-          <div class="rp-code"><code class="rc-selectable">{{ result.code }}</code><button type="button" class="rc-btn rc-btn--compact" @click="copyCode">Copia</button></div>
-          <p class="rp-help">Incollalo su Discord nel canale #bug, con due righe su cosa stavi facendo. Ci serve per trovare i dati del tuo problema.</p>
+          <p>{{ result.delivered ? t('privacy.report.received') : t('privacy.report.queued') }}</p>
+          <div class="rp-code"><code class="rc-selectable">{{ result.code }}</code><button type="button" class="rc-btn rc-btn--compact" @click="copyCode">{{ t('privacy.report.copy') }}</button></div>
+          <p class="rp-help">{{ t('privacy.report.help') }}</p>
         </template>
         <template v-else>
-          <p>Racconta in breve cosa è successo. Inviamo in privato i dati tecnici dell'ultima mezz'ora del programma (errori, stato, versioni), mai le tue password.</p>
-          <label class="rp-field"><span>Cosa è successo?</span><textarea v-model="note" rows="4" maxlength="240" placeholder="Es. al box ho premuto Correggi pressioni e non è cambiato nulla" :disabled="busy" /></label>
+          <p>{{ t('privacy.report.intro') }}</p>
+          <label class="rp-field"><span>{{ t('privacy.report.question') }}</span><textarea v-model="note" rows="4" maxlength="240" :placeholder="t('privacy.report.placeholder')" :disabled="busy" /></label>
           <p v-if="error" class="rp-error" role="alert">{{ error }}</p>
-          <footer><button type="button" class="rc-btn rc-btn--primary" :disabled="busy" @click="send">{{ busy ? 'Invio…' : 'Invia segnalazione' }}</button></footer>
+          <footer><button type="button" class="rc-btn rc-btn--primary" :disabled="busy" @click="send">{{ busy ? t('privacy.report.sending') : t('privacy.report.send') }}</button></footer>
         </template>
       </div>
     </div>

@@ -7,12 +7,14 @@ import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { db } from '~/config/firebase'
 import { deleteAccountEverywhere, type DeletionStep } from '~/services/auth/accountDeletion'
 import { usageOrigin } from '~/services/usage/usageClient'
+import { useI18n } from '~/i18n'
 
 const { currentUser, logout } = useFirebaseAuth()
+const { t } = useI18n()
+// The word to type follows the interface language (CANCELLA / DELETE); compared only, never stored.
+const confirmWord = computed(() => t('privacy.deletion.confirmWord'))
 const open = ref(false), password = ref(''), typed = ref(''), busy = ref(false), error = ref(''), step = ref<DeletionStep | null>(null)
-const ready = computed(() => !busy.value && password.value.length > 0 && typed.value.trim().toUpperCase() === 'CANCELLA')
-const STEP_LABEL: Record<DeletionStep, string> = { verify: 'Verifico la password…', archive: 'Cancello i giri online e le statistiche…',
-  documents: 'Cancello sessioni e dati…', profile: 'Cancello il profilo…', account: "Chiudo l'account…", done: 'Fatto.' }
+const ready = computed(() => !busy.value && password.value.length > 0 && typed.value.trim().toUpperCase() === confirmWord.value)
 
 function close() { if (!busy.value) { open.value = false; password.value = ''; typed.value = ''; error.value = '' } }
 
@@ -26,33 +28,33 @@ async function confirm() {
   } catch (e) {
     const code = (e as { code?: string })?.code || ''
     error.value = code.includes('wrong-password') || code.includes('invalid-credential')
-      ? 'Password non corretta.'
-      : "Cancellazione interrotta. Quello che è già stato cancellato resta cancellato: riprova per completarla."
+      ? t('privacy.deletion.wrongPassword')
+      : t('privacy.deletion.interrupted')
   } finally { busy.value = false }
 }
 </script>
 
 <template>
   <section class="danger">
-    <h3>Cancella account</h3>
-    <p>Elimina l'account e tutti i dati online: sessioni, giri, riferimenti condivisi, statistiche. Non si può annullare. I file sul tuo PC restano tuoi.</p>
-    <button type="button" class="rc-btn rc-btn--compact danger__open" @click="open = true">Cancella account</button>
+    <h3>{{ t('privacy.deletion.title') }}</h3>
+    <p>{{ t('privacy.deletion.text') }}</p>
+    <button type="button" class="rc-btn rc-btn--compact danger__open" @click="open = true">{{ t('privacy.deletion.open') }}</button>
 
     <Teleport to="body">
       <div v-if="open" class="del-backdrop" @click.self="close">
         <div class="del-modal" role="dialog" aria-modal="true" aria-labelledby="del-title" @keydown.esc="close">
           <header>
-            <h2 id="del-title">Cancellare l'account?</h2>
-            <button type="button" class="modal-close" aria-label="Chiudi" :disabled="busy" @click="close"><X :size="20" aria-hidden="true" /></button>
+            <h2 id="del-title">{{ t('privacy.deletion.dialogTitle') }}</h2>
+            <button type="button" class="modal-close" :aria-label="t('privacy.deletion.close')" :disabled="busy" @click="close"><X :size="20" aria-hidden="true" /></button>
           </header>
-          <p>Vengono eliminati in modo definitivo l'account e tutti i dati online. Per confermare inserisci la password e scrivi <strong>CANCELLA</strong>.</p>
-          <label class="del-field"><span>Password</span><input v-model="password" type="password" autocomplete="current-password" :disabled="busy"></label>
-          <label class="del-field"><span>Scrivi CANCELLA</span><input v-model="typed" type="text" autocomplete="off" spellcheck="false" :disabled="busy"></label>
-          <p v-if="busy && step" class="del-step" role="status">{{ STEP_LABEL[step] }}</p>
+          <p>{{ t('privacy.deletion.confirmBefore') }}<strong>{{ confirmWord }}</strong>{{ t('privacy.deletion.confirmAfter') }}</p>
+          <label class="del-field"><span>{{ t('privacy.deletion.password') }}</span><input v-model="password" type="password" autocomplete="current-password" :disabled="busy"></label>
+          <label class="del-field"><span>{{ t('privacy.deletion.typeWord', { word: confirmWord }) }}</span><input v-model="typed" type="text" autocomplete="off" spellcheck="false" :disabled="busy"></label>
+          <p v-if="busy && step" class="del-step" role="status">{{ t(`privacy.deletion.step.${step}`) }}</p>
           <p v-if="error" class="del-error" role="alert">{{ error }}</p>
           <footer>
-            <button type="button" class="rc-btn rc-btn--compact" :disabled="busy" @click="close">Annulla</button>
-            <button type="button" class="rc-btn rc-btn--primary" :disabled="!ready" @click="confirm">{{ busy ? 'Cancello…' : 'Cancella definitivamente' }}</button>
+            <button type="button" class="rc-btn rc-btn--compact" :disabled="busy" @click="close">{{ t('privacy.deletion.cancel') }}</button>
+            <button type="button" class="rc-btn rc-btn--primary" :disabled="!ready" @click="confirm">{{ busy ? t('privacy.deletion.deleting') : t('privacy.deletion.submit') }}</button>
           </footer>
         </div>
       </div>

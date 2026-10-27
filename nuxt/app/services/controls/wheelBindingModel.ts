@@ -1,3 +1,5 @@
+import { useI18n } from '~/i18n'
+
 export const WHEEL_CONTROL_ACTIONS = ['togglePalette', 'nextAction', 'previousAction', 'activateAction', 'mainMenu'] as const
 export type WheelControlAction = typeof WHEEL_CONTROL_ACTIONS[number]
 
@@ -107,8 +109,9 @@ export function matchingWheelActions(
 }
 
 export function formatWheelBinding(binding: WheelBinding | null): string {
-  if (!binding) return 'Non assegnato'
-  return `${binding.deviceLabel} · ${binding.buttonLabel || `Pulsante ${binding.button + 1}`}`
+  const { t } = useI18n()
+  if (!binding) return t('commands.unassigned')
+  return `${binding.deviceLabel} · ${binding.buttonLabel || t('commands.buttonNumber', { number: binding.button + 1 })}`
 }
 
 /** A single supported key, captured only in the focused assignment page. */

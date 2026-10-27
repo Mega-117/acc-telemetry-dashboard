@@ -5,6 +5,9 @@
 
 import { ref } from 'vue'
 import AuthField from './AuthField.vue'
+import { useI18n } from '~/i18n'
+
+const { t } = useI18n()
 
 withDefaults(defineProps<{
   loading?: boolean
@@ -27,11 +30,11 @@ const handleSubmit = () => {
 
   // Validazione client-side
   if (!email.value.trim()) {
-    error.value = 'Inserisci la tua email.'
+    error.value = t('auth.errors.emailRequired')
     return
   }
   if (!password.value) {
-    error.value = 'Inserisci la password.'
+    error.value = t('auth.errors.passwordRequired')
     return
   }
 
@@ -60,9 +63,9 @@ defineExpose({
   <form class="auth-form" @submit.prevent="handleSubmit">
     <AuthField
       v-model="email"
-      label="Email"
+      :label="t('auth.field.email')"
       type="email"
-      placeholder="nome@esempio.it"
+      :placeholder="t('auth.field.emailPlaceholder')"
       autocomplete="email"
       :error="!!error && error.includes('email')"
       @input="clearError"
@@ -70,9 +73,9 @@ defineExpose({
 
     <AuthField
       v-model="password"
-      label="Password"
+      :label="t('auth.field.password')"
       type="password"
-      placeholder="Password"
+      :placeholder="t('auth.field.passwordPlaceholder')"
       autocomplete="current-password"
       :error="!!error && error.includes('password')"
       @input="clearError"
@@ -85,14 +88,14 @@ defineExpose({
       :disabled="loading"
       @click="emit('forgotPassword')"
     >
-      Password dimenticata?
+      {{ t('auth.login.forgot') }}
     </UiBaseButton>
     <UiBaseButton
       type="submit"
       variant="primary"
       :loading="loading"
     >
-      <span aria-live="polite">{{ loading ? 'ACCESSO IN CORSO…' : 'ACCEDI' }}</span><UiRacingIcon name="chevron" :size="26" class="auth-btn-arrow" />
+      <span aria-live="polite">{{ loading ? t('auth.login.submitting') : t('auth.login.submit') }}</span><UiRacingIcon name="chevron" :size="26" class="auth-btn-arrow" />
     </UiBaseButton>
 
 

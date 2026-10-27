@@ -261,7 +261,7 @@ describe('Pitwall wiring', () => {
   it('monta la pagina nel layout dashboard e nella navbar', () => {
     expect(page).toContain("import PitwallPage from '~/components/pages/PitwallPage.vue'")
     expect(route).toContain("layout: 'dashboard'")
-    expect(tabsBar).toContain("{ id: 'pitwall', label: 'PITWALL', to: '/pitwall' }")
+    expect(tabsBar).toContain("{ id: 'pitwall', label: 'nav.pitwall', to: '/pitwall' }")
     expect(dashboardLayout).toContain("if (path.startsWith('/pitwall')) return 'pitwall'")
   })
 

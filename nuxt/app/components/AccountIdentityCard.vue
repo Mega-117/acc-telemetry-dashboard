@@ -8,8 +8,10 @@ import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { loadOwnerDocument } from '~/repositories/ownerDocumentRepository'
 import { saveProfileNames, validateProfileNames } from '~/services/auth/profileIdentityService'
+import { useI18n } from '~/i18n'
 
 const { currentUser, changeVerificationEmail, resetPassword, updateCachedUserProfile } = useFirebaseAuth()
+const { t } = useI18n()
 const firstName = ref(''), lastName = ref(''), nickname = ref(''), savedNickname = ref<string | null>(null)
 const newEmail = ref(''), emailPassword = ref('')
 const busy = ref<'names' | 'email' | 'password' | null>(null)
@@ -25,7 +27,7 @@ async function load(uid: string) {
     lastName.value = String(data.lastName ?? '')
     nickname.value = String(data.nickname ?? currentUser.value?.displayName ?? '')
     savedNickname.value = nickname.value || null
-  } catch { notice.value = { area: 'names', ok: false, text: 'Dati del profilo non disponibili. Riprova più tardi.' } }
+  } catch { notice.value = { area: 'names', ok: false, text: t('profile.identity.loadError') } }
 }
 
 async function saveNames() {
@@ -39,26 +41,26 @@ async function saveNames() {
     const patch = await saveProfileNames(user, input, savedNickname.value)
     savedNickname.value = patch.nickname
     updateCachedUserProfile(user.uid, { firstName: patch.firstName, lastName: patch.lastName, nickname: patch.nickname })
-    notice.value = { area: 'names', ok: true, text: 'Salvato.' }
-  } catch { notice.value = { area: 'names', ok: false, text: 'Salvataggio non riuscito. Riprova.' } }
+    notice.value = { area: 'names', ok: true, text: t('profile.identity.saved') }
+  } catch { notice.value = { area: 'names', ok: false, text: t('profile.identity.saveError') } }
   finally { busy.value = null }
 }
 
 async function changeEmail() {
   const user = currentUser.value
   if (!user?.email || busy.value) return
-  if (!emailPassword.value) { notice.value = { area: 'email', ok: false, text: 'Inserisci la password attuale.' }; return }
+  if (!emailPassword.value) { notice.value = { area: 'email', ok: false, text: t('profile.identity.passwordRequired') }; return }
   busy.value = 'email'; notice.value = null
   try {
     await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, emailPassword.value))
     const result = await changeVerificationEmail(newEmail.value)
     notice.value = result.success
-      ? { area: 'email', ok: true, text: `Ti abbiamo mandato un link a ${newEmail.value.trim()}: l'indirizzo cambia quando lo apri.` }
-      : { area: 'email', ok: false, text: result.error || 'Invio non riuscito.' }
+      ? { area: 'email', ok: true, text: t('profile.identity.emailLinkSent', { email: newEmail.value.trim() }) }
+      : { area: 'email', ok: false, text: result.error || t('profile.identity.sendFailed') }
     if (result.success) { emailPassword.value = ''; newEmail.value = '' }
   } catch (e) {
     const code = (e as { code?: string })?.code || ''
-    notice.value = { area: 'email', ok: false, text: code.includes('wrong-password') || code.includes('invalid-credential') ? 'Password non corretta.' : 'Invio non riuscito. Riprova.' }
+    notice.value = { area: 'email', ok: false, text: code.includes('wrong-password') || code.includes('invalid-credential') ? t('profile.identity.wrongPassword') : t('profile.identity.sendFailedRetry') }
   } finally { busy.value = null }
 }
 
@@ -68,47 +70,47 @@ async function sendPasswordReset() {
   busy.value = 'password'; notice.value = null
   const result = await resetPassword(email)
   notice.value = result.success
-    ? { area: 'password', ok: true, text: `Ti abbiamo mandato un'email a ${email} per scegliere una nuova password.` }
-    : { area: 'password', ok: false, text: result.error || 'Invio non riuscito.' }
+    ? { area: 'password', ok: true, text: t('profile.identity.resetSent', { email }) }
+    : { area: 'password', ok: false, text: result.error || t('profile.identity.sendFailed') }
   busy.value = null
 }
 </script>
 
 <template>
   <section class="profile-card identity-card" aria-labelledby="identity-title">
-    <div class="card-head"><h3 id="identity-title" class="card-title">Account e sicurezza</h3></div>
+    <div class="card-head"><h3 id="identity-title" class="card-title">{{ t('profile.identity.title') }}</h3></div>
 
     <div class="identity-grid">
     <form class="identity-block" @submit.prevent="saveNames">
-      <h4>Dati personali</h4>
+      <h4>{{ t('profile.identity.personal') }}</h4>
       <div class="identity-row">
-        <label class="identity-field"><span>Nome</span><input v-model="firstName" type="text" autocomplete="given-name" :disabled="busy !== null"></label>
-        <label class="identity-field"><span>Cognome</span><input v-model="lastName" type="text" autocomplete="family-name" :disabled="busy !== null"></label>
+        <label class="identity-field"><span>{{ t('profile.identity.firstName') }}</span><input v-model="firstName" type="text" autocomplete="given-name" :disabled="busy !== null"></label>
+        <label class="identity-field"><span>{{ t('profile.identity.lastName') }}</span><input v-model="lastName" type="text" autocomplete="family-name" :disabled="busy !== null"></label>
       </div>
-      <label class="identity-field"><span>Nickname <small>visibile agli altri</small></span><input v-model="nickname" type="text" maxlength="20" autocomplete="username" :disabled="busy !== null"></label>
+      <label class="identity-field"><span>{{ t('profile.identity.nickname') }} <small>{{ t('profile.identity.nicknameHint') }}</small></span><input v-model="nickname" type="text" maxlength="20" autocomplete="username" :disabled="busy !== null"></label>
       <div class="identity-actions">
         <p v-if="notice?.area === 'names'" :class="notice.ok ? 'is-ok' : 'is-error'" role="status">{{ notice.text }}</p>
-        <button type="submit" class="rc-btn rc-btn--compact" :disabled="busy !== null">{{ busy === 'names' ? 'Salvo…' : 'Salva' }}</button>
+        <button type="submit" class="rc-btn rc-btn--compact" :disabled="busy !== null">{{ busy === 'names' ? t('profile.identity.saving') : t('profile.identity.save') }}</button>
       </div>
     </form>
 
     <form class="identity-block" @submit.prevent="changeEmail">
-      <h4>Email</h4>
-      <p class="identity-help">Attuale: <strong>{{ currentUser?.email || '—' }}</strong>. L'indirizzo cambia quando apri il link che ti mandiamo.</p>
-      <label class="identity-field"><span>Nuovo indirizzo</span><input v-model="newEmail" type="email" placeholder="nome@esempio.it" autocomplete="email" :disabled="busy !== null"></label>
-      <label class="identity-field"><span>Password attuale</span><input v-model="emailPassword" type="password" autocomplete="current-password" :disabled="busy !== null"></label>
+      <h4>{{ t('profile.identity.email') }}</h4>
+      <p class="identity-help">{{ t('profile.identity.currentBefore') }}<strong>{{ currentUser?.email || '—' }}</strong>{{ t('profile.identity.currentAfter') }}</p>
+      <label class="identity-field"><span>{{ t('profile.identity.newAddress') }}</span><input v-model="newEmail" type="email" :placeholder="t('auth.field.emailPlaceholder')" autocomplete="email" :disabled="busy !== null"></label>
+      <label class="identity-field"><span>{{ t('profile.identity.currentPassword') }}</span><input v-model="emailPassword" type="password" autocomplete="current-password" :disabled="busy !== null"></label>
       <div class="identity-actions">
         <p v-if="notice?.area === 'email'" :class="notice.ok ? 'is-ok' : 'is-error'" role="status">{{ notice.text }}</p>
-        <button type="submit" class="rc-btn rc-btn--compact" :disabled="busy !== null || !newEmail.trim()">{{ busy === 'email' ? 'Invio…' : 'Cambia email' }}</button>
+        <button type="submit" class="rc-btn rc-btn--compact" :disabled="busy !== null || !newEmail.trim()">{{ busy === 'email' ? t('profile.identity.sending') : t('profile.identity.changeEmail') }}</button>
       </div>
     </form>
 
     <div class="identity-block">
-      <h4>Password</h4>
-      <p class="identity-help">Ricevi un'email con il link per sceglierne una nuova.</p>
+      <h4>{{ t('profile.identity.password') }}</h4>
+      <p class="identity-help">{{ t('profile.identity.passwordHelp') }}</p>
       <div class="identity-actions">
         <p v-if="notice?.area === 'password'" :class="notice.ok ? 'is-ok' : 'is-error'" role="status">{{ notice.text }}</p>
-        <button type="button" class="rc-btn rc-btn--compact" :disabled="busy !== null" @click="sendPasswordReset">{{ busy === 'password' ? 'Invio…' : 'Reimposta password' }}</button>
+        <button type="button" class="rc-btn rc-btn--compact" :disabled="busy !== null" @click="sendPasswordReset">{{ busy === 'password' ? t('profile.identity.sending') : t('profile.identity.resetPassword') }}</button>
       </div>
     </div>
     </div>

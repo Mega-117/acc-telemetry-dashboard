@@ -1,3 +1,4 @@
+import { setLocale } from '~/i18n'
 import { describe, expect, it } from 'vitest'
 import { canBeginAutoCapture, captureSourceReady, commandErrorText } from '~/services/controls/commandCapture'
 import { EMPTY_WHEEL_BINDINGS, type WheelControlsState } from '~/services/controls/wheelBindingModel'
@@ -5,6 +6,9 @@ import { EMPTY_WHEEL_BINDINGS, type WheelControlsState } from '~/services/contro
 const base = (over: Partial<WheelControlsState> = {}): WheelControlsState => ({
   available: true, bindings: { ...EMPTY_WHEEL_BINDINGS }, devices: [], capture: null, lastError: null, ambiguousDeviceIds: [], ...over,
 })
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('commandCapture (PIP-571)', () => {
   it('source readiness follows the per-source readers, or the global status when absent', () => {

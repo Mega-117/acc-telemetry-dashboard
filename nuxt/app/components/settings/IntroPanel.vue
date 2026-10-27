@@ -1,15 +1,17 @@
 <script setup lang="ts">
 // PIP-571: la voce di Impostazioni che riapre l'introduzione a 5 schede.
 import { useOnboardingIntro } from '~/composables/useOnboardingIntro'
+import { useI18n } from '~/i18n'
 
 const intro = useOnboardingIntro()
+const { t } = useI18n()
 </script>
 
 <template>
   <section class="intro-panel" aria-labelledby="intro-title">
-    <h2 id="intro-title">Introduzione</h2>
-    <p>Le cinque schede che vedi al primo avvio: cosa fa Racer Core in pista, il pannello Ctrl+K, le automazioni, gli HUD e i comandi al volante.</p>
-    <button class="rc-btn" type="button" @click="intro.open()">Rivedi l'introduzione</button>
+    <h2 id="intro-title">{{ t('introPanel.title') }}</h2>
+    <p>{{ t('introPanel.text') }}</p>
+    <button class="rc-btn" type="button" @click="intro.open()">{{ t('introPanel.replay') }}</button>
   </section>
 </template>
 

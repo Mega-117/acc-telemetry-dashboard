@@ -8,8 +8,10 @@ import { computed, ref, onMounted } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useDevToolsAccess } from '~/composables/useDevToolsAccess'
 import PitwallConceptBell from '~/components/pitwall/concept/PitwallConceptBell.vue'
+import { useI18n } from '~/i18n'
 
 const brandBase = useRuntimeConfig().app.baseURL
+const { t } = useI18n()
 
 const props = defineProps<{
   userName?: string
@@ -24,7 +26,7 @@ const emit = defineEmits<{
 const { isCoach, isAdmin } = useFirebaseAuth()
 // Accesso DEV (PIP-114): visibile solo admin + localhost/dev, mai in produzione.
 const { canAccessDevTools } = useDevToolsAccess()
-const displayName = computed(() => props.userName ?? 'Utente')
+const displayName = computed(() => props.userName ?? t('topBar.user'))
 const showVoiceControls = false
 const showNotificationBell = false
 
@@ -161,13 +163,13 @@ onMounted(() => {
       <!-- Spacer -->
       <div class="topbar__spacer"></div>
 
-      <div v-if="canAccessDevTools || isCoach || isAdmin" class="topbar__role-tools" role="group" aria-label="Strumenti riservati">
+      <div v-if="canAccessDevTools || isCoach || isAdmin" class="topbar__role-tools" role="group" :aria-label="t('topBar.roleTools')">
       <!-- Accesso strumenti DEV (solo admin + localhost/dev) -->
       <NuxtLink
         v-if="canAccessDevTools"
         to="/dev"
         class="dev-button rc-btn"
-        title="Strumenti sviluppo (solo admin, in locale)"
+        :title="t('topBar.devTools')"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <circle cx="12" cy="12" r="3" />
@@ -181,9 +183,9 @@ onMounted(() => {
         v-if="isCoach || isAdmin" 
         class="coach-button" 
         type="button"
-        :aria-label="isAdmin ? 'Cockpit amministratore' : 'I miei piloti'"
+        :aria-label="isAdmin ? t('topBar.adminCockpit') : t('topBar.myDrivers')"
         @click="goToCoachArea"
-        :title="isAdmin ? 'Cockpit amministratore' : 'I miei piloti'"
+        :title="isAdmin ? t('topBar.adminCockpit') : t('topBar.myDrivers')"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <circle cx="9" cy="7" r="4"/>

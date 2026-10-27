@@ -9,16 +9,17 @@ import { rememberOwnerDocumentPatch } from '~/repositories/ownerDocumentReposito
 import { rememberPublicNickname } from '~/repositories/publicProfileRepository'
 import { repairPilotDirectoryFromUser } from '~/services/pilotDirectoryProjectionService'
 import { buildPilotDirectoryFields } from '~/utils/pilotDirectoryFields'
+import { useI18n } from '~/i18n'
 
 export interface ProfileNames { firstName: string, lastName: string, nickname: string }
 
 /** The same checks as registration, so a profile cannot become something registration would refuse. */
 export function validateProfileNames(input: ProfileNames): string | null {
-  if (!input.firstName.trim()) return 'Inserisci il tuo nome.'
-  if (!input.lastName.trim()) return 'Inserisci il tuo cognome.'
+  if (!input.firstName.trim()) return useI18n().t('auth.errors.firstNameRequired')
+  if (!input.lastName.trim()) return useI18n().t('auth.errors.lastNameRequired')
   const nick = input.nickname.trim()
-  if (nick.length < 3) return 'Il nickname deve essere di almeno 3 caratteri.'
-  if (nick.length > 20) return 'Il nickname può avere al massimo 20 caratteri.'
+  if (nick.length < 3) return useI18n().t('auth.errors.nicknameShort')
+  if (nick.length > 20) return useI18n().t('auth.errors.nicknameLong')
   return null
 }
 

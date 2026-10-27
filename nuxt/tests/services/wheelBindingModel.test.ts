@@ -1,3 +1,4 @@
+import { setLocale } from '~/i18n'
 import { describe, expect, it } from 'vitest'
 import {
   createGamepadSnapshot,
@@ -8,6 +9,9 @@ import {
   wheelSnapshotSignature,
   keyboardButton,
 } from '../../app/services/controls/wheelBindingModel'
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('wheelBindingModel', () => {
   it('accepts single keys, distinguishes numpad and rejects combinations/repeat/unsupported keys', () => {

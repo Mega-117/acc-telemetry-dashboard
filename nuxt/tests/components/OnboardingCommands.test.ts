@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { setLocale } from '~/i18n'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import OnboardingCommands from '~/components/onboarding/OnboardingCommands.vue'
@@ -45,6 +46,9 @@ async function tap(action: WheelControlAction) {
   mock.bridge.testedActions.value = [action]; await flushPromises()
   mock.bridge.testedActions.value = []; await flushPromises()
 }
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('OnboardingCommands (PIP-571)', () => {
   it('wheel path: assigns the five commands one at a time, practises the panel and finishes', async () => {

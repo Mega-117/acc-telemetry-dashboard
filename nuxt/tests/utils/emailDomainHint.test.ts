@@ -1,6 +1,10 @@
+import { setLocale } from '~/i18n'
 import { describe, expect, it } from 'vitest'
 
 import { emailDomainHintMessage, suggestEmailDomain } from '~/utils/emailDomainHint'
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('suggestEmailDomain', () => {
   it.each([

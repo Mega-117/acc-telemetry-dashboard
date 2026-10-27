@@ -4,31 +4,44 @@
 import { computed, ref } from 'vue'
 import it from './it'
 import en from './en'
+import type { TranslationKey } from './types'
 
 export type Locale = 'it' | 'en'
 export const LOCALES: readonly { id: Locale, name: string }[] = [{ id: 'it', name: 'Italiano' }, { id: 'en', name: 'English' }]
 export const LOCALE_STORAGE_KEY = 'rc:locale'
 
 type Tree = { [key: string]: string | Tree }
-type DeepPartial<T> = { [K in keyof T]?: T[K] extends string ? string : DeepPartial<T[K]> }
-type Paths<T, P extends string = ''> = { [K in keyof T & string]: T[K] extends string ? `${P}${K}` : Paths<T[K], `${P}${K}.`> }[keyof T & string]
-export type Dictionary = typeof it
-export type TranslationKey = Paths<Dictionary>
-export type PartialDictionary = DeepPartial<Dictionary>
+export type { Dictionary, PartialDictionary, TranslationKey } from './types'
 
 const DICTIONARIES: Record<Locale, Tree> = { it: it as Tree, en: en as Tree }
 const isLocale = (value: unknown): value is Locale => value === 'it' || value === 'en'
 
-/** Saved choice first; otherwise the system language (Italian systems stay Italian, the rest English). */
-export function initialLocale(saved: string | null | undefined, systemLanguage: string | null | undefined): Locale {
+/**
+ * Saved choice first. Someone who already used the app before languages existed stays Italian
+ * (an English Windows must not switch them); a first run follows the system language.
+ */
+export function initialLocale(saved: string | null | undefined, systemLanguage: string | null | undefined, usedBefore = false): Locale {
   if (isLocale(saved)) return saved
+  if (usedBefore) return 'it'
   return String(systemLanguage ?? 'it').toLowerCase().startsWith('it') ? 'it' : 'en'
 }
 
-function readSaved(): string | null {
-  try { return typeof localStorage === 'undefined' ? null : localStorage.getItem(LOCALE_STORAGE_KEY) } catch { return null }
+function readStored(): { saved: string | null, usedBefore: boolean } {
+  try {
+    if (typeof localStorage === 'undefined') return { saved: null, usedBefore: false }
+    let usedBefore = false
+    for (let i = 0; i < localStorage.length; i++) if (localStorage.key(i)?.startsWith('rc:')) { usedBefore = true; break }
+    return { saved: localStorage.getItem(LOCALE_STORAGE_KEY), usedBefore }
+  } catch { return { saved: null, usedBefore: false } }
 }
-const locale = ref<Locale>(initialLocale(readSaved(), typeof navigator === 'undefined' ? 'it' : navigator.language))
+const stored = readStored()
+const locale = ref<Locale>(initialLocale(stored.saved, typeof navigator === 'undefined' ? 'it' : navigator.language, stored.usedBefore))
+
+type LocaleBridge = { setUiLocale?: (locale: Locale) => void }
+/** The desktop program shows a few texts itself (Windows notifications): it follows the same choice. */
+export function syncDesktopLocale() {
+  try { (globalThis as { electronAPI?: LocaleBridge }).electronAPI?.setUiLocale?.(locale.value) } catch { /* Browser or older program. */ }
+}
 
 function lookup(tree: Tree, key: string): string | undefined {
   let node: string | Tree | undefined = tree
@@ -50,6 +63,7 @@ export function setLocale(next: Locale) {
   locale.value = next
   try { localStorage.setItem(LOCALE_STORAGE_KEY, next) } catch { /* Storage can be disabled. */ }
   if (typeof document !== 'undefined') document.documentElement.lang = next
+  syncDesktopLocale()
 }
 
 /** Reactive translator for components: `t('nav.sessions')` follows the language switch. */

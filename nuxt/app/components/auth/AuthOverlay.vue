@@ -8,6 +8,9 @@ import AuthScene from './AuthScene.vue'
 import AuthIcon from './AuthIcon.vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import type { RegisterConsent } from '~/utils/legalVersions'
+import { useI18n } from '~/i18n'
+
+const { t } = useI18n()
 
 type AuthView = 'login' | 'register' | 'reset'
 
@@ -61,7 +64,7 @@ const handleLogin = async (credentials: { email: string; password: string }) => 
       loginFormRef.value?.setError(result.error)
     }
   } catch {
-    loginFormRef.value?.setError('Errore di autenticazione')
+    loginFormRef.value?.setError(t('auth.service.generic'))
   } finally {
     isSubmitting.value = false
   }
@@ -79,7 +82,7 @@ const handleRegister = async (data: { firstName: string; lastName: string; nickn
       registerFormRef.value?.setError(result.error)
     }
   } catch {
-    registerFormRef.value?.setError('Errore di autenticazione')
+    registerFormRef.value?.setError(t('auth.service.generic'))
   } finally {
     isSubmitting.value = false
   }
@@ -97,7 +100,7 @@ const handleResetPassword = async (email: string) => {
       resetFormRef.value?.setError(result.error)
     }
   } catch {
-    resetFormRef.value?.setError('Errore di autenticazione')
+    resetFormRef.value?.setError(t('auth.service.generic'))
   } finally {
     isSubmitting.value = false
   }
@@ -106,15 +109,15 @@ const handleResetPassword = async (email: string) => {
 
 <template>
   <AuthScene :wide="currentView === 'register'">
-    <nav class="auth-nav" aria-label="Accesso o registrazione">
+    <nav class="auth-nav" :aria-label="t('auth.nav.label')">
       <button v-if="currentView === 'reset'" class="auth-back" :disabled="isBusy" @click="backToLogin">
-        <AuthIcon name="back" /> Torna al login
+        <AuthIcon name="back" /> {{ t('auth.nav.backToLogin') }}
       </button>
       <template v-else>
       <button class="auth-nav__item" :class="{ 'is-active': currentTab === 'login' }" :aria-current="currentTab === 'login' ? 'page' : undefined"
-        :disabled="isBusy" @click="handleTabChange('login')">ACCEDI</button>
+        :disabled="isBusy" @click="handleTabChange('login')">{{ t('auth.nav.login') }}</button>
       <button class="auth-nav__item" :class="{ 'is-active': currentTab === 'register' }" :aria-current="currentTab === 'register' ? 'page' : undefined"
-        :disabled="isBusy" @click="handleTabChange('register')">REGISTRATI</button>
+        :disabled="isBusy" @click="handleTabChange('register')">{{ t('auth.nav.register') }}</button>
       </template>
     </nav>
         <!-- Forms with Transition -->

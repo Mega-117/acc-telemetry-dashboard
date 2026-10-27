@@ -30,4 +30,11 @@ export default {
     intro: 'Introduzione',
     language: 'Lingua',
   },
+  topBar: {
+    user: 'Utente',
+    roleTools: 'Strumenti riservati',
+    devTools: 'Strumenti sviluppo (solo admin, in locale)',
+    adminCockpit: 'Cockpit amministratore',
+    myDrivers: 'I miei piloti',
+  },
 } as const

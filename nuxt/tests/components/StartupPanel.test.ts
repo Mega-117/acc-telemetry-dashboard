@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { setLocale } from '~/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import StartupPanel from '~/components/settings/StartupPanel.vue'
@@ -12,6 +13,9 @@ function setup(enabled = true) {
   return api
 }
 afterEach(() => { delete (window as any).electronAPI })
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('StartupPanel', () => {
   it('loads the OS state and saves disable and enable', async () => {

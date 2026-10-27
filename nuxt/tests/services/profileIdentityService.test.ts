@@ -1,3 +1,4 @@
+import { setLocale } from '~/i18n'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // PIP-659: names and nickname change everywhere they appear, from one patch.
@@ -16,6 +17,9 @@ vi.mock('~/services/pilotDirectoryProjectionService', () => ({ repairPilotDirect
 
 const { saveProfileNames, validateProfileNames, profileNamesPatch } = await import('~/services/auth/profileIdentityService')
 const user = { uid: 'u1', email: 'u1@example.com' } as never
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('profile identity (PIP-659)', () => {
   beforeEach(() => { writes.length = 0; repair.mockClear() })

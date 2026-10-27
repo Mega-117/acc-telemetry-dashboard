@@ -9,8 +9,10 @@ import { trackedUpdateDoc } from '~/composables/useFirebaseTracker'
 import { db } from '~/config/firebase'
 import { invalidateTelemetryCaches } from '~/services/cache/telemetryCacheInvalidationService'
 import { resolveEquipmentSaveOutcome } from '~/utils/equipmentSaveOutcome'
+import { useI18n } from '~/i18n'
 
 const brandBase = useRuntimeConfig().app.baseURL
+const { t } = useI18n()
 
 const props = defineProps<{
   embedded?: boolean
@@ -89,10 +91,10 @@ const wheelSettingDefinitions = [
 ] as const
 
 const hardwareSummaryRows = computed(() => [
-  { label: 'Volante / base', value: equipment.value.volante },
-  { label: 'Corona', value: equipment.value.corona },
-  { label: 'Pedaliera', value: equipment.value.pedaliera },
-  { label: 'Rig', value: equipment.value.struttura }
+  { label: t('profile.equipment.wheelSummary'), value: equipment.value.volante },
+  { label: t('profile.equipment.rimSummary'), value: equipment.value.corona },
+  { label: t('profile.equipment.pedals'), value: equipment.value.pedaliera },
+  { label: t('profile.equipment.rigSummary'), value: equipment.value.struttura }
 ].filter((row) => hasDisplayValue(row.value)))
 
 const setupSummaryRows = computed(() => {
@@ -117,10 +119,12 @@ const setupSummaryRows = computed(() => {
 
 const hasEquipmentSummary = computed(() => hardwareSummaryRows.value.length > 0 || setupSummaryRows.value.length > 0)
 const isCoachProfile = computed(() => (props.userRole || 'pilot') === 'coach')
-const sharedSessionsStatus = computed(() => sharedSessionsCount.value > 0 ? `${sharedSessionsCount.value} ${sharedSessionsCount.value === 1 ? 'pubblica' : 'pubbliche'}` : 'Nessuna pubblica')
+const sharedSessionsStatus = computed(() => sharedSessionsCount.value > 0
+  ? t(sharedSessionsCount.value === 1 ? 'profile.shared.publicOne' : 'profile.shared.publicMany', { count: sharedSessionsCount.value })
+  : t('profile.shared.noPublic'))
 
 const tabs = computed<Array<{ id: ProfileTab; label: string }>>(() => [
-  { id: 'account', label: 'Profilo' }
+  { id: 'account', label: t('profile.tab') }
 ])
 
 watch(tabs, (availableTabs) => {
@@ -131,26 +135,26 @@ watch(tabs, (availableTabs) => {
 
 const displayName = computed((): string => {
   if (props.userNickname) return props.userNickname
-  if (props.userEmail) return props.userEmail.split('@')[0] ?? 'Utente'
-  return 'Utente'
+  if (props.userEmail) return props.userEmail.split('@')[0] ?? t('profile.user')
+  return t('profile.user')
 })
 
 const pageTitle = computed((): string => {
   const titles: Record<string, string> = {
-    pilot: 'Profilo Pilota',
-    coach: 'Profilo Coach',
-    admin: 'Profilo Admin'
+    pilot: t('profile.title.pilot'),
+    coach: t('profile.title.coach'),
+    admin: t('profile.title.admin')
   }
-  return titles[props.userRole || 'pilot'] ?? 'Profilo Pilota'
+  return titles[props.userRole || 'pilot'] ?? t('profile.title.pilot')
 })
 
 const roleLabel = computed((): string => {
   const labels: Record<string, string> = {
-    pilot: 'PILOTA',
-    coach: 'COACH',
-    admin: 'ADMIN'
+    pilot: t('profile.role.pilot'),
+    coach: t('profile.role.coach'),
+    admin: t('profile.role.admin')
   }
-  return labels[props.userRole || 'pilot'] ?? 'PILOTA'
+  return labels[props.userRole || 'pilot'] ?? t('profile.role.pilot')
 })
 
 function cloneEquipment(source: ReturnType<typeof createDefaultEquipment>) {
@@ -244,7 +248,7 @@ async function revokeAll() {
 async function resetHistoricalBests() {
   if (isResettingBests.value || !cloudWriteGate.value.allowed) return
 
-  if (!confirm('Sei sicuro di voler eliminare tutti i tempi storici? I best verranno ricalcolati automaticamente alla prossima sincronizzazione.')) {
+  if (!confirm(t('profile.maintenance.confirm'))) {
     return
   }
 
@@ -311,7 +315,7 @@ watch(
           <svg viewBox="0 0 20 20" fill="none">
             <path d="M12 4L6 10L12 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
-          Dashboard
+          {{ t('profile.back') }}
         </button>
 
         <div class="header-brand">
@@ -348,7 +352,7 @@ watch(
             <div class="hero-meta">
               <span class="role-badge" :class="`role-badge--${userRole || 'pilot'}`">{{ roleLabel }}</span>
               <span>{{ displayName }}</span>
-              <span>{{ userEmail || 'Email non disponibile' }}</span>
+              <span>{{ userEmail || t('profile.emailUnavailable') }}</span>
             </div>
           </div>
         </div>
@@ -370,24 +374,24 @@ watch(
           <AccountIdentityCard />
           <div class="profile-card equipment-card account-equipment-card" :class="{ 'equipment-card--coach': isCoachProfile }">
             <div class="card-head">
-              <h3 class="card-title">Attrezzatura</h3>
+              <h3 class="card-title">{{ t('profile.equipment.title') }}</h3>
               <div class="card-actions">
                 <template v-if="isEditingEquipment">
-                  <button class="rc-btn rc-btn--compact" type="button" :disabled="isSaving" @click="cancelEquipmentEdit">Annulla</button>
+                  <button class="rc-btn rc-btn--compact" type="button" :disabled="isSaving" @click="cancelEquipmentEdit">{{ t('profile.equipment.cancel') }}</button>
                   <button
                     class="rc-btn rc-btn--primary rc-btn--compact"
                     :class="{ 'primary-action--success': saveSuccess }"
                     :disabled="isSaving || !cloudWriteGate.allowed"
-                    :title="cloudWriteGate.allowed ? 'Salva attrezzatura' : cloudWriteGate.message"
+                    :title="cloudWriteGate.allowed ? t('profile.equipment.saveTitle') : cloudWriteGate.message"
                     @click="handleSaveEquipment"
                   >
-                    <template v-if="isSaving">Salvataggio...</template>
-                    <template v-else-if="saveSuccess">Salvato</template>
-                    <template v-else>Salva</template>
+                    <template v-if="isSaving">{{ t('profile.equipment.saving') }}</template>
+                    <template v-else-if="saveSuccess">{{ t('profile.equipment.saved') }}</template>
+                    <template v-else>{{ t('profile.equipment.save') }}</template>
                   </button>
                 </template>
                 <button v-else class="rc-btn rc-btn--primary rc-btn--compact" type="button" @click="startEquipmentEdit">
-                  {{ hasEquipmentSummary ? 'Modifica' : 'Configura' }}
+                  {{ hasEquipmentSummary ? t('profile.equipment.edit') : t('profile.equipment.configure') }}
                 </button>
               </div>
             </div>
@@ -395,7 +399,7 @@ watch(
             <div v-if="!isEditingEquipment" class="equipment-summary">
               <div v-if="hasEquipmentSummary" class="equipment-summary-sections">
                 <section v-if="hardwareSummaryRows.length" class="summary-section">
-                  <h4>Hardware</h4>
+                  <h4>{{ t('profile.equipment.hardware') }}</h4>
                   <div class="summary-grid">
                     <div v-for="row in hardwareSummaryRows" :key="row.label" class="summary-cell">
                       <span>{{ row.label }}</span>
@@ -412,7 +416,7 @@ watch(
                     aria-controls="equipment-setup-summary"
                     @click="isSetupSummaryOpen = !isSetupSummaryOpen"
                   >
-                    <span>Setup base</span>
+                    <span>{{ t('profile.equipment.setupBase') }}</span>
                     <span
                       class="summary-toggle__chevron"
                       :class="{ 'summary-toggle__chevron--open': isSetupSummaryOpen }"
@@ -434,36 +438,36 @@ watch(
                   </Transition>
                 </section>
               </div>
-              <div v-else class="empty-equipment">Attrezzatura non configurata.</div>
+              <div v-else class="empty-equipment">{{ t('profile.equipment.empty') }}</div>
             </div>
 
             <div v-else class="equipment-sections">
               <div class="equipment-section">
-                <h4>Hardware</h4>
+                <h4>{{ t('profile.equipment.hardware') }}</h4>
                 <div class="form-grid">
                   <label class="form-group">
-                    <span>Volante / Base</span>
-                    <input v-model="equipment.volante" type="text" placeholder="Es. Fanatec CSL DD 8Nm" />
+                    <span>{{ t('profile.equipment.wheel') }}</span>
+                    <input v-model="equipment.volante" type="text" :placeholder="t('profile.equipment.examplePrefix', { value: 'Fanatec CSL DD 8Nm' })" />
                   </label>
                   <label class="form-group">
-                    <span>Corona / Rim</span>
-                    <input v-model="equipment.corona" type="text" placeholder="Es. ClubSport Formula V2" />
+                    <span>{{ t('profile.equipment.rim') }}</span>
+                    <input v-model="equipment.corona" type="text" :placeholder="t('profile.equipment.examplePrefix', { value: 'ClubSport Formula V2' })" />
                   </label>
                   <label class="form-group">
-                    <span>Pedaliera</span>
-                    <input v-model="equipment.pedaliera" type="text" placeholder="Es. CSL Pedals + Load Cell" />
+                    <span>{{ t('profile.equipment.pedals') }}</span>
+                    <input v-model="equipment.pedaliera" type="text" :placeholder="t('profile.equipment.examplePrefix', { value: 'CSL Pedals + Load Cell' })" />
                   </label>
                   <label class="form-group">
-                    <span>Struttura / Rig</span>
-                    <input v-model="equipment.struttura" type="text" placeholder="Es. Next Level Racing 2.0" />
+                    <span>{{ t('profile.equipment.rig') }}</span>
+                    <input v-model="equipment.struttura" type="text" :placeholder="t('profile.equipment.examplePrefix', { value: 'Next Level Racing 2.0' })" />
                   </label>
                 </div>
               </div>
 
               <div class="equipment-section">
                 <button class="settings-toggle" type="button" @click="isWheelSettingsOpen = !isWheelSettingsOpen">
-                  <span>Impostazioni base Fanatec</span>
-                  <strong>{{ isWheelSettingsOpen ? 'Chiudi' : 'Apri' }}</strong>
+                  <span>{{ t('profile.equipment.fanatec') }}</span>
+                  <strong>{{ isWheelSettingsOpen ? t('profile.equipment.close') : t('profile.equipment.open') }}</strong>
                 </button>
                 <Transition name="equipment-expand">
                   <div v-if="isWheelSettingsOpen" class="fanatec-settings">
@@ -511,15 +515,15 @@ watch(
               </div>
 
               <div class="equipment-section equipment-section--compact">
-                <h4>Setup vettura</h4>
+                <h4>{{ t('profile.equipment.carSetup') }}</h4>
                 <div class="form-grid form-grid--assist">
                   <label class="form-group">
                     <span>TC default</span>
-                    <input v-model="equipment.tcDefault" type="text" placeholder="Es. 3" />
+                    <input v-model="equipment.tcDefault" type="text" :placeholder="t('profile.equipment.examplePrefix', { value: '3' })" />
                   </label>
                   <label class="form-group">
                     <span>ABS default</span>
-                    <input v-model="equipment.absDefault" type="text" placeholder="Es. 4" />
+                    <input v-model="equipment.absDefault" type="text" :placeholder="t('profile.equipment.examplePrefix', { value: '4' })" />
                   </label>
                 </div>
               </div>
@@ -529,46 +533,46 @@ watch(
           <div class="profile-card profile-card--secondary privacy-card">
             <div class="secondary-card-head">
               <div>
-                <span class="section-kicker section-kicker--neutral">Privacy dati</span>
-                <h3 class="card-title">Sessioni condivise</h3>
+                <span class="section-kicker section-kicker--neutral">{{ t('profile.shared.kicker') }}</span>
+                <h3 class="card-title">{{ t('profile.shared.title') }}</h3>
               </div>
               <span class="status-pill">{{ sharedSessionsStatus }}</span>
             </div>
             <p v-if="sharedSessionsCount > 0" class="muted-text">
-              <strong>{{ sharedSessionsCount }}</strong> {{ sharedSessionsCount === 1 ? 'sessione condivisa pubblicamente' : 'sessioni condivise pubblicamente' }}.
+              <strong>{{ sharedSessionsCount }}</strong> {{ sharedSessionsCount === 1 ? t('profile.shared.countOne') : t('profile.shared.countMany') }}.
             </p>
-            <p v-else class="muted-text">Nessuna sessione condivisa.</p>
+            <p v-else class="muted-text">{{ t('profile.shared.none') }}</p>
             <button
               v-if="sharedSessionsCount > 0"
               class="rc-btn rc-btn--danger rc-btn--compact"
               :class="{ 'danger-action--success': revokeSuccess }"
               :disabled="isRevoking || !cloudWriteGate.allowed"
-              :title="cloudWriteGate.allowed ? 'Revoca tutte le condivisioni' : cloudWriteGate.message"
+              :title="cloudWriteGate.allowed ? t('profile.shared.revokeTitle') : cloudWriteGate.message"
               @click="revokeAll"
             >
-              <template v-if="isRevoking">Revocando...</template>
-              <template v-else-if="revokeSuccess">Revocate</template>
-              <template v-else>Revoca tutte</template>
+              <template v-if="isRevoking">{{ t('profile.shared.revoking') }}</template>
+              <template v-else-if="revokeSuccess">{{ t('profile.shared.revoked') }}</template>
+              <template v-else>{{ t('profile.shared.revoke') }}</template>
             </button>
           </div>
 
           <div class="profile-card profile-card--secondary"><LanguagePicker /><UsagePreference /><DiagnosticsPreference /><LapLibraryPreference /><AccountDeletion /></div>
           <div class="profile-card profile-card--secondary maintenance-card">
-            <span class="section-kicker">Manutenzione dati</span>
-            <h3 class="card-title">Tempi migliori</h3>
+            <span class="section-kicker">{{ t('profile.maintenance.kicker') }}</span>
+            <h3 class="card-title">{{ t('profile.maintenance.title') }}</h3>
             <p class="muted-text">
-              Cancella i best storici salvati e li ricalcola alla prossima sincronizzazione.
+              {{ t('profile.maintenance.text') }}
             </p>
             <button
               class="rc-btn rc-btn--danger rc-btn--compact"
               :class="{ 'danger-action--success': resetBestsSuccess }"
               :disabled="isResettingBests || !cloudWriteGate.allowed"
-              :title="cloudWriteGate.allowed ? 'Elimina i best storici cloud' : cloudWriteGate.message"
+              :title="cloudWriteGate.allowed ? t('profile.maintenance.buttonTitle') : cloudWriteGate.message"
               @click="resetHistoricalBests"
             >
-              <template v-if="isResettingBests">Eliminando...</template>
-              <template v-else-if="resetBestsSuccess">Eliminati {{ resetBestsCount }} tracciati</template>
-              <template v-else>Elimina tutti i best</template>
+              <template v-if="isResettingBests">{{ t('profile.maintenance.deleting') }}</template>
+              <template v-else-if="resetBestsSuccess">{{ t('profile.maintenance.deleted', { count: resetBestsCount }) }}</template>
+              <template v-else>{{ t('profile.maintenance.delete') }}</template>
             </button>
           </div>
         </section>

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { setLocale } from '~/i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
@@ -9,6 +10,9 @@ async function mountDialog() {
   const { default: Dialog } = await import('~/components/ReportProblemDialog.vue')
   return mount(Dialog, { global: { stubs: { Teleport: true } } })
 }
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('Segnala problema (PIP-661)', () => {
   afterEach(() => { delete (window as { electronAPI?: unknown }).electronAPI; vi.resetModules() })

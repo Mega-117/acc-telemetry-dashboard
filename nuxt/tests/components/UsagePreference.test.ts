@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
+import { setLocale } from '~/i18n'
 import { mount, flushPromises } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 vi.mock('../../app/services/usage/usageClient', () => ({ usagePreference: vi.fn() }))
 import { usagePreference } from '../../app/services/usage/usageClient'
 import UsagePreference from '../../app/components/UsagePreference.vue'
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
+
 describe('usage preference', () => {
   it('loads the account preference and explains an offline opt-out', async () => {
     vi.mocked(usagePreference).mockResolvedValueOnce({ enabled: true, revision: 0 }).mockRejectedValueOnce(Error('offline'))

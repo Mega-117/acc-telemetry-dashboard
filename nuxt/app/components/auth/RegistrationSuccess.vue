@@ -7,6 +7,9 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AuthIcon from './AuthIcon.vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { emailDomainHintMessage } from '~/utils/emailDomainHint'
+import { useI18n } from '~/i18n'
+
+const { t } = useI18n()
 
 defineProps<{
   email: string
@@ -70,10 +73,10 @@ const handleChangeEmail = async () => {
       isEditingEmail.value = false
       newEmail.value = ''
     } else {
-      emailChangeError.value = result.error || 'Errore durante il cambio email'
+      emailChangeError.value = result.error || t('auth.verify.changeError')
     }
   } catch {
-    emailChangeError.value = 'Errore durante il cambio email'
+    emailChangeError.value = t('auth.verify.changeError')
   } finally {
     isSubmittingEmail.value = false
   }
@@ -84,10 +87,10 @@ const isResendDisabled = computed(() => (
 ))
 
 const resendButtonText = computed(() => {
-  if (isResending.value) return 'Invio in corso...'
-  if (resendSuccess.value) return '✓ Email inviata'
-  if (resendCooldown.value > 0) return `Rinvia tra ${resendCooldown.value}s`
-  return 'Rinvia email di verifica'
+  if (isResending.value) return t('auth.verify.sending')
+  if (resendSuccess.value) return t('auth.verify.resent')
+  if (resendCooldown.value > 0) return t('auth.verify.resendIn', { seconds: resendCooldown.value })
+  return t('auth.verify.resend')
 })
 
 const stopResendCooldown = () => {
@@ -137,12 +140,12 @@ const handleResendEmail = async () => {
       setTimeout(() => resendSuccess.value = false, 3000)
       startResendCooldown()
     } else {
-      resendError.value = result.error || 'Errore invio email'
+      resendError.value = result.error || t('auth.verify.resendError')
     }
 
     if (result.success) emit('resendEmail')
   } catch {
-    resendError.value = 'Errore invio email'
+    resendError.value = t('auth.verify.resendError')
   } finally {
     isResending.value = false
   }
@@ -161,11 +164,11 @@ const reconcileVerification = async ({ showError }: { showError: boolean }) => {
       emit('goToDashboard')
     } else if (showError) {
       verificationError.value = true
-      verificationMessage.value = result.error || 'Email non ancora verificata. Clicca il link ricevuto via email e riprova.'
+      verificationMessage.value = result.error || t('auth.verify.notVerified')
     }
     return result
   } catch {
-    const error = 'Errore durante il controllo della verifica'
+    const error = t('auth.verify.checkError')
     if (showError) {
       verificationError.value = true
       verificationMessage.value = error
@@ -199,15 +202,15 @@ onMounted(() => {
     <AuthIcon name="mail" class="verify-icon" />
 
     <!-- Title -->
-    <h2 class="verify-title">Verifica la tua email</h2>
+    <h2 class="verify-title">{{ t('auth.verify.title') }}</h2>
 
     <!-- Email -->
     <p class="verify-email">{{ email }}</p>
 
     <!-- Instructions -->
     <div class="verify-box">
-      <p class="verify-text">Apri il link nell'email per attivare l'account.</p>
-      <p class="verify-hint">Controlla anche la cartella spam.</p>
+      <p class="verify-text">{{ t('auth.verify.text') }}</p>
+      <p class="verify-hint">{{ t('auth.verify.spamHint') }}</p>
     </div>
 
     <!-- Error Message -->
@@ -228,10 +231,10 @@ onMounted(() => {
       @click="handleCheckVerification"
     >
       <template v-if="isChecking">
-        <span class="spinner"></span> Controllo...
+        <span class="spinner"></span> {{ t('auth.verify.checking') }}
       </template>
       <template v-else>
-        <span>Ho confermato l'email</span><UiRacingIcon name="chevron" :size="26" class="auth-btn-arrow" />
+        <span>{{ t('auth.verify.confirmed') }}</span><UiRacingIcon name="chevron" :size="26" class="auth-btn-arrow" />
       </template>
     </button>
 
@@ -247,9 +250,7 @@ onMounted(() => {
     <!-- Correzione indirizzo: l'uscita quando la posta non puo' arrivare -->
     <div class="email-fix">
       <p v-if="emailChangeSent" class="email-fix__sent">
-        Ti abbiamo inviato un link al nuovo indirizzo (controlla anche lo spam).
-        L'email dell'account cambierà solo dopo che avrai aperto quel link:
-        poi rientra con il nuovo indirizzo.
+        {{ t('auth.verify.changeSent') }}
       </p>
 
       <template v-else>
@@ -259,7 +260,7 @@ onMounted(() => {
           :disabled="isEmailChangeBusy"
           @click="toggleEmailEditor"
         >
-          Email sbagliata? Correggila
+          {{ t('auth.verify.fixToggle') }}
         </button>
 
         <form v-else class="email-fix__form" @submit.prevent="handleChangeEmail">
@@ -267,8 +268,8 @@ onMounted(() => {
             v-model="newEmail"
             class="email-fix__input"
             type="email"
-            placeholder="Nuovo indirizzo email"
-            aria-label="Nuovo indirizzo email"
+            :placeholder="t('auth.verify.newEmail')"
+            :aria-label="t('auth.verify.newEmail')"
             autocomplete="email"
             :disabled="isSubmittingEmail"
           >
@@ -278,7 +279,7 @@ onMounted(() => {
           <div v-if="emailChangeError" class="error-message">{{ emailChangeError }}</div>
 
           <button class="email-fix__submit" type="submit" :disabled="isEmailChangeBusy">
-            {{ isSubmittingEmail ? 'Invio in corso...' : 'Invia il link al nuovo indirizzo' }}
+            {{ isSubmittingEmail ? t('auth.verify.sending') : t('auth.verify.sendToNew') }}
           </button>
 
           <button
@@ -287,7 +288,7 @@ onMounted(() => {
             :disabled="isSubmittingEmail"
             @click="toggleEmailEditor"
           >
-            Annulla
+            {{ t('auth.verify.cancel') }}
           </button>
         </form>
       </template>

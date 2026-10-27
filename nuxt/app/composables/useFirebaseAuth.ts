@@ -18,6 +18,7 @@ import { createAuthRevisionLeaseCoordinator, type AuthRevisionLease } from '~/se
 import { createRetryableSingleFlightLoader } from '~/services/auth/retryableSingleFlightLoader'
 import { recordFirebaseCacheHit } from '~/services/monitoring/firebaseOpsJournal'
 import type { RegisterConsent } from '~/utils/legalVersions'
+import { useI18n, type TranslationKey } from '~/i18n'
 import {
     clearLocalUserIdentity,
     isSecondaryLocalRuntimeRenderer,
@@ -28,6 +29,9 @@ import {
     saveLocalUserIdentity,
     shouldObserveFirebaseAuth
 } from '~/services/auth/localIdentityBridge'
+
+// PIP-665: messages returned to the sign-in screens, in the interface language at the time they are produced.
+const authText = (key: TranslationKey) => useI18n().t(key)
 
 const currentUser = ref<User | null>(null)
 const localProfile = ref<LocalProfile | null>(null)
@@ -473,7 +477,7 @@ export function useFirebaseAuth() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         } catch (error: any) {
             console.error('[AUTH] Register error:', error?.code || 'initialization-failed')
-            authError.value = translateError?.(error?.code) || 'Errore di autenticazione'
+            authError.value = translateError?.(error?.code) || authText('auth.service.generic')
             return { success: false, error: authError.value }
         }
     })
@@ -486,7 +490,7 @@ export function useFirebaseAuth() {
         try {
             // A failed stop cannot be bypassed by submitting another login.
             if (localProfile.value && email.trim().toLowerCase() !== localProfile.value.email?.toLowerCase()) {
-                return { success: false, error: 'Esci dal profilo locale prima di accedere con un altro account.' }
+                return { success: false, error: authText('auth.service.localProfileFirst') }
             }
             if (!localProfile.value) await clearOwnedIdentity()
             const { auth, loginWithEmail, translateAuthError } = await getAuthDependencies()
@@ -506,7 +510,7 @@ export function useFirebaseAuth() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         } catch (error: any) {
             console.error('[AUTH] Login error:', error?.code || 'initialization-failed')
-            authError.value = translateError?.(error?.code) || error?.message || 'Errore di autenticazione'
+            authError.value = translateError?.(error?.code) || error?.message || authText('auth.service.generic')
             return { success: false, error: authError.value }
         }
     })
@@ -543,11 +547,11 @@ export function useFirebaseAuth() {
     const resendVerificationEmail = async () => {
         const lease = captureCurrentAuthLease()
         if (!lease) {
-            return { success: false, error: 'Utente non autenticato' }
+            return { success: false, error: authText('auth.service.notAuthenticated') }
         }
         const verification = await checkEmailVerified()
         if (!isCurrentAuthLease(lease)) {
-            return { success: false, error: 'La sessione è cambiata. Riprova con l’utente corrente.' }
+            return { success: false, error: authText('auth.service.sessionChanged') }
         }
         if (verification.verified) {
             return { success: true, alreadyVerified: true }
@@ -559,7 +563,7 @@ export function useFirebaseAuth() {
         try {
             const user = currentUser.value
             if (!user || !isCurrentAuthLease(lease)) {
-                return { success: false, error: 'La sessione è cambiata. Riprova con l’utente corrente.' }
+                return { success: false, error: authText('auth.service.sessionChanged') }
             }
             await resendCurrentVerificationEmail(user)
             console.log('[AUTH] Verification email resent')
@@ -584,21 +588,21 @@ export function useFirebaseAuth() {
         const lease = captureCurrentAuthLease()
         const user = currentUser.value
         if (!lease || !user) {
-            return { success: false, error: 'Utente non autenticato' }
+            return { success: false, error: authText('auth.service.notAuthenticated') }
         }
 
         const requestedEmail = newEmail.trim()
         if (!requestedEmail) {
-            return { success: false, error: 'Inserisci il nuovo indirizzo email' }
+            return { success: false, error: authText('auth.service.newEmailRequired') }
         }
         if (requestedEmail.toLowerCase() === (user.email ?? '').toLowerCase()) {
-            return { success: false, error: 'Questo e’ gia’ l’indirizzo del tuo account' }
+            return { success: false, error: authText('auth.service.sameEmail') }
         }
 
         const { sendVerificationToUpdatedEmail, translateAuthError } = await getAuthDependencies()
         try {
             if (!isCurrentAuthLease(lease)) {
-                return { success: false, error: 'La sessione è cambiata. Riprova con l’utente corrente.' }
+                return { success: false, error: authText('auth.service.sessionChanged') }
             }
             await sendVerificationToUpdatedEmail(user, requestedEmail)
             // Nessun indirizzo nei log: vale qui come per il resto del flusso auth.
@@ -627,7 +631,7 @@ export function useFirebaseAuth() {
         const lease = captureCurrentAuthLease()
         const user = currentUser.value
         if (!lease || !user) {
-            return { verified: false, error: 'Utente non autenticato' }
+            return { verified: false, error: authText('auth.service.notAuthenticated') }
         }
         const { refreshEmailVerificationState, translateAuthError } = await getAuthDependencies()
         try {
@@ -638,7 +642,7 @@ export function useFirebaseAuth() {
             if (!refreshed.user) {
                 await syncLoggedOutUser()
                 commitAuthSyncResult({ status: 'signed-out', user: null }, null)
-                return { verified: false, error: 'Sessione non più valida. Effettua nuovamente il login.' }
+                return { verified: false, error: authText('auth.service.sessionExpired') }
             }
             if (!AUTH_EMAIL_VERIFICATION_REQUIRED || refreshed.user.emailVerified) {
                 const result = await syncAuthenticatedUser(
@@ -652,7 +656,7 @@ export function useFirebaseAuth() {
                 if (result.status !== 'ready') {
                     return {
                         verified: false,
-                        error: 'Verifica completata, ma la sessione non è ancora disponibile. Controlla la connessione e riprova.',
+                        error: authText('auth.service.verifiedNoSession'),
                     }
                 }
             } else {

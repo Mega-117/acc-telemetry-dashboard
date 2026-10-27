@@ -1,4 +1,4 @@
-import type { PartialDictionary } from '../index'
+import type { PartialDictionary } from '../types'
 
 export default {
   nav: {
@@ -30,5 +30,12 @@ export default {
     startup: 'Startup',
     intro: 'Introduction',
     language: 'Language',
+  },
+  topBar: {
+    user: 'User',
+    roleTools: 'Restricted tools',
+    devTools: 'Developer tools (admin only, local)',
+    adminCockpit: 'Admin cockpit',
+    myDrivers: 'My drivers',
   },
 } satisfies PartialDictionary

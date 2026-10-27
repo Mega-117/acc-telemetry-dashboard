@@ -13,6 +13,7 @@ import { refreshUserCredentials } from './authSessionPolicy'
 import { createInitialUserDocument } from './userProvisioningService'
 import { observeFirebaseAuthOperation } from '~/services/monitoring/firebaseOpsJournal'
 import type { RegisterConsent } from '~/utils/legalVersions'
+import { useI18n, type TranslationKey } from '~/i18n'
 
 // Con la protezione anti-enumerazione attiva sul progetto - `accsuite117` la usa -
 // Firebase non distingue piu' "utente inesistente" da "password errata": nega
@@ -21,25 +22,26 @@ import type { RegisterConsent } from '~/utils/legalVersions'
 // quindi l'unica risposta onesta, e resta corretta anche se la protezione
 // venisse disattivata: i codici tornerebbero distinti ma direbbero comunque
 // all'utente la sola cosa utile, ossia che cosa controllare.
-const INVALID_LOGIN_MESSAGE = 'Email o password non corretti. Controlla anche il dominio dell\'indirizzo.'
+const INVALID_LOGIN_MESSAGE: TranslationKey = 'auth.service.invalidLogin'
 
+// PIP-665: codes map to dictionary keys; the text follows the interface language.
 export function translateAuthError(code: string): string {
-    const messages: Record<string, string> = {
-        'auth/email-already-in-use': 'Email gia registrata',
-        'auth/weak-password': 'Password troppo debole (min. 6 caratteri)',
-        'auth/invalid-email': 'Email non valida',
+    const messages: Record<string, TranslationKey> = {
+        'auth/email-already-in-use': 'auth.service.emailInUse',
+        'auth/weak-password': 'auth.service.weakPassword',
+        'auth/invalid-email': 'auth.service.invalidEmail',
         'auth/user-not-found': INVALID_LOGIN_MESSAGE,
         'auth/wrong-password': INVALID_LOGIN_MESSAGE,
         'auth/invalid-credential': INVALID_LOGIN_MESSAGE,
-        'auth/requires-recent-login': 'Per sicurezza esci e rientra, poi riprova',
-        'auth/too-many-requests': 'Troppi tentativi, riprova piu tardi',
-        'auth/network-request-failed': 'Errore di rete, controlla la connessione',
-        'auth/operation-not-allowed': 'Il recupero password non è disponibile al momento',
-        'auth/unauthorized-continue-uri': 'Il link di recupero non è configurato per questa app',
-        'auth/invalid-continue-uri': 'Il link di recupero non è configurato correttamente',
-        'auth/missing-continue-uri': 'Il link di recupero non è configurato correttamente'
+        'auth/requires-recent-login': 'auth.service.recentLogin',
+        'auth/too-many-requests': 'auth.service.tooManyRequests',
+        'auth/network-request-failed': 'auth.service.network',
+        'auth/operation-not-allowed': 'auth.service.resetUnavailable',
+        'auth/unauthorized-continue-uri': 'auth.service.continueUriUnauthorized',
+        'auth/invalid-continue-uri': 'auth.service.continueUriInvalid',
+        'auth/missing-continue-uri': 'auth.service.continueUriInvalid'
     }
-    return messages[code] || 'Errore di autenticazione'
+    return useI18n().t(messages[code] || 'auth.service.generic')
 }
 
 export async function registerWithEmail(params: {

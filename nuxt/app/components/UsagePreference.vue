@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref } from 'vue'
 import { usagePreference } from '~/services/usage/usageClient'
+import { useI18n } from '~/i18n'
+
+const { t } = useI18n()
 const enabled = ref<boolean | null>(null), busy = ref(false), message = ref('')
 async function load() {
   busy.value = true
   try { enabled.value = (await usagePreference()).enabled; message.value = '' }
-  catch { message.value = 'Preferenza non disponibile. Riprova.' }
+  catch { message.value = t('privacy.preference.unavailable') }
   finally { busy.value = false }
 }
 async function change(event: Event) {
@@ -13,7 +16,7 @@ async function change(event: Event) {
   busy.value = true; message.value = ''
   if (!next) enabled.value = false
   try { enabled.value = (await usagePreference(next)).enabled }
-  catch { message.value = next ? 'Attivazione non confermata. Riprova.' : 'Raccolta fermata su questo dispositivo. La preferenza sarà sincronizzata appena torna la connessione.' }
+  catch { message.value = next ? t('privacy.preference.enableNotConfirmed') : t('privacy.usage.stoppedOffline') }
   finally { busy.value = false }
 }
 function preferenceChanged(event: Event) {
@@ -32,10 +35,10 @@ onBeforeUnmount(() => {
 </script>
 <template>
   <section class="usage-preference">
-    <label><input type="checkbox" :checked="enabled === true" :disabled="busy || enabled === null" @change="change"> Condividi statistiche di utilizzo</label>
-    <p>Condividi tempi di utilizzo, sessioni e funzionalità usate, con i relativi esiti. La scelta vale per desktop e Pitwall web. I riepiloghi restano disponibili per 90 giorni.</p>
-    <p>Non vengono raccolti screenshot, testo degli avvisi o telemetria dettagliata. La diagnostica tecnica resta separata.</p>
-    <p v-if="message" role="status">{{ message }} <button v-if="enabled === null" :disabled="busy" @click="load">Riprova</button></p>
+    <label><input type="checkbox" :checked="enabled === true" :disabled="busy || enabled === null" @change="change"> {{ t('privacy.usage.label') }}</label>
+    <p>{{ t('privacy.usage.text') }}</p>
+    <p>{{ t('privacy.usage.notCollected') }}</p>
+    <p v-if="message" role="status">{{ message }} <button v-if="enabled === null" :disabled="busy" @click="load">{{ t('privacy.preference.retry') }}</button></p>
   </section>
 </template>
 <style scoped>

@@ -11,6 +11,9 @@ import { getLibraryPreference, setLibraryPreference } from '~/services/telemetry
 import { usagePreference } from '~/services/usage/usageClient'
 import { setDesktopDiagnosticsConsent } from '~/services/usage/diagnosticsConsent'
 import { PRIVACY_VERSION, TERMS_VERSION, hasCurrentConsent, legalPageUrl } from '~/utils/legalVersions'
+import { useI18n } from '~/i18n'
+
+const { t } = useI18n()
 
 const { currentUser } = useFirebaseAuth()
 const deps = { getToken: async () => (await currentUser.value?.getIdToken()) ?? null }
@@ -64,7 +67,7 @@ async function save() {
     rememberOwnerDocumentPatch(uid, { consent })
     open.value = false
   } catch {
-    error.value = 'Salvataggio non riuscito. Controlla la connessione e riprova.'
+    error.value = t('privacy.choices.saveError')
   } finally { busy.value = false }
 }
 </script>
@@ -73,31 +76,31 @@ async function save() {
   <Teleport to="body">
     <div v-if="open" class="pc-backdrop">
       <div class="pc-modal" role="dialog" aria-modal="true" aria-labelledby="pc-title">
-        <span class="eyebrow">Prima di iniziare</span>
-        <h2 id="pc-title">I tuoi dati, le tue scelte</h2>
-        <p class="lead">Scegli cosa condividere. Puoi cambiarlo quando vuoi dal Profilo.</p>
+        <span class="eyebrow">{{ t('privacy.choices.eyebrow') }}</span>
+        <h2 id="pc-title">{{ t('privacy.choices.title') }}</h2>
+        <p class="lead">{{ t('privacy.choices.lead') }}</p>
 
         <div v-if="needsTexts" class="pc-texts">
-          <label><input v-model="acceptTerms" type="checkbox"><span>Accetto i <a :href="legalPageUrl('termini', baseURL)" target="_blank" rel="noopener">Termini della beta</a></span></label>
-          <label><input v-model="acceptPrivacy" type="checkbox"><span>Ho letto l'<a :href="legalPageUrl('privacy', baseURL)" target="_blank" rel="noopener">Informativa privacy</a></span></label>
+          <label><input v-model="acceptTerms" type="checkbox"><span>{{ t('auth.consent.termsBefore') }}<a :href="legalPageUrl('termini', baseURL)" target="_blank" rel="noopener">{{ t('auth.consent.termsLink') }}</a></span></label>
+          <label><input v-model="acceptPrivacy" type="checkbox"><span>{{ t('auth.consent.privacyBefore') }}<a :href="legalPageUrl('privacy', baseURL)" target="_blank" rel="noopener">{{ t('auth.consent.privacyLink') }}</a></span></label>
         </div>
 
         <label class="pc-choice">
           <input v-model="usage" type="checkbox">
-          <span><strong>Statistiche d'uso</strong><small>Quali funzioni usi e quanto spesso, senza contenuti. Ci aiuta a capire cosa migliorare. Restano 90 giorni.</small></span>
+          <span><strong>{{ t('privacy.choices.usageTitle') }}</strong><small>{{ t('privacy.choices.usageText') }}</small></span>
         </label>
         <label class="pc-choice">
           <input v-model="diagnostics" type="checkbox">
-          <span><strong>Diagnostica tecnica</strong><small>Errori e blocchi del programma, inviati in automatico per correggerli in fretta. Se la spegni restano sul tuo PC e li mandi tu con "Segnala problema".</small></span>
+          <span><strong>{{ t('privacy.choices.diagnosticsTitle') }}</strong><small>{{ t('privacy.choices.diagnosticsText') }}</small></span>
         </label>
         <label class="pc-choice">
           <input v-model="library" type="checkbox">
-          <span><strong>Condividi i miei giri come riferimento</strong><small>Il tuo giro migliore su ogni pista e auto può comparire, con il tuo nickname, tra i riferimenti degli altri piloti. Mai la tua email.</small></span>
+          <span><strong>{{ t('privacy.choices.libraryTitle') }}</strong><small>{{ t('privacy.choices.libraryText') }}</small></span>
         </label>
 
         <p v-if="error" class="pc-error" role="alert">{{ error }}</p>
         <footer>
-          <button type="button" class="rc-btn rc-btn--primary" :disabled="!canSave" @click="save">{{ busy ? 'Salvo…' : 'Conferma' }}</button>
+          <button type="button" class="rc-btn rc-btn--primary" :disabled="!canSave" @click="save">{{ busy ? t('privacy.choices.saving') : t('privacy.choices.confirm') }}</button>
         </footer>
       </div>
     </div>

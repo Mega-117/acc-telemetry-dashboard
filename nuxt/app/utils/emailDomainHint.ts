@@ -13,6 +13,8 @@
 // Intercettare il refuso prima della registrazione costa una riga all'utente
 // invece di una procedura manuale.
 
+import { useI18n } from '~/i18n'
+
 /**
  * Domini di posta legittimi e diffusi tra i piloti del progetto.
  *
@@ -149,5 +151,6 @@ export function suggestEmailDomain(email: string): string | null {
 export function emailDomainHintMessage(email: string): string | null {
     const suggestion = suggestEmailDomain(email)
 
-    return suggestion ? `Controlla il dominio: forse intendevi @${suggestion}?` : null
+    // PIP-665: text in the dictionary (auth.domainHint), in the interface language.
+    return suggestion ? useI18n().t('auth.domainHint', { domain: suggestion }) : null
 }

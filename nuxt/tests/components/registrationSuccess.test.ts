@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { setLocale } from '~/i18n'
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -17,6 +18,9 @@ vi.mock('~/composables/useFirebaseAuth', () => ({
 }))
 
 enableAutoUnmount(afterEach)
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('RegistrationSuccess verification reconciliation', () => {
   beforeEach(() => {

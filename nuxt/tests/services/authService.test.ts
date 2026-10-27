@@ -1,3 +1,4 @@
+import { setLocale } from '~/i18n'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const sendPasswordResetEmailMock = vi.hoisted(() => vi.fn())
@@ -41,6 +42,9 @@ import {
   sendVerificationToUpdatedEmail,
   translateAuthError
 } from '~/services/auth/authService'
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('registration and account actions', () => {
   beforeEach(() => {
