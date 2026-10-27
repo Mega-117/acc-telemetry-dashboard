@@ -3,8 +3,8 @@
 :root {
   --app-content-max-width: 1400px;
   --app-content-top-space: 40px;
-  // Thin almost-transparent rule: the session list rows; the overview sections use it as their border too.
-  --rc-section-line: #ffffff16;
+  // Overview section borders and inner rows: lighter than the old 40% white, still clearly visible.
+  --rc-section-line: #ffffff40;
   --app-scroll-fade-size: 18px;
   // Add an opaque rail for the native scrollbar; only page content fades.
   --app-scroll-fade-mask: linear-gradient(to bottom, transparent, #000 var(--app-scroll-fade-size)), linear-gradient(to left, #000 16px, transparent 16px);
