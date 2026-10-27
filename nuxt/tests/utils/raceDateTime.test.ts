@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 // PIP-641: the site's date and time picker for a planned race, and the checks of the race form.
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import RaceDateTimePicker from '~/components/overview/RaceDateTimePicker.vue'
 import { validateRaceForm } from '~/utils/raceCalendarForm'
+import { placeFloating } from '~/utils/floatingPlacement'
 import { addDays, displayRaceDateTime, formatRaceDateTime, monthCells, parseRaceDateTime, parseTimePart } from '~/utils/raceDateTime'
 
 describe('race date helpers', () => {
@@ -47,7 +48,7 @@ describe('validateRaceForm', () => {
 
 describe('RaceDateTimePicker', () => {
   it('picks a day keeping the default evening time, then edits the time', async () => {
-    const view = mount(RaceDateTimePicker, { props: { modelValue: '' } })
+    const view = mount(RaceDateTimePicker, { props: { modelValue: '' }, global: { stubs: { teleport: true } } })
     expect(view.text()).toContain('Scegli data e ora')
     await view.get('.dt-picker__field').trigger('click')
     const day15 = view.findAll('.dt-picker__day').find(b => b.text() === '15' && !b.classes('is-out'))!
@@ -62,9 +63,10 @@ describe('RaceDateTimePicker', () => {
   })
 
   it('closes on Escape without letting the modal close too', async () => {
-    const view = mount(RaceDateTimePicker, { props: { modelValue: '2099-10-02T18:00' }, attachTo: document.body })
+    const view = mount(RaceDateTimePicker, { props: { modelValue: '2099-10-02T18:00' }, attachTo: document.body, global: { stubs: { teleport: true } } })
     await view.get('.dt-picker__field').trigger('click')
     expect(view.find('.dt-picker__panel').exists()).toBe(true)
+    await flushPromises()
     const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
     let reachedParent = false
     document.body.addEventListener('keydown', () => { reachedParent = true }, { once: true })
@@ -73,5 +75,23 @@ describe('RaceDateTimePicker', () => {
     expect(view.find('.dt-picker__panel').exists()).toBe(false)
     expect(reachedParent).toBe(false)
     view.unmount()
+  })
+})
+
+describe('placeFloating', () => {
+  const viewport = { width: 1440, height: 900 }
+  const anchor = { left: 400, top: 300, right: 700, bottom: 346, width: 300, height: 46 }
+  it('opens below the control, aligned to its start or end', () => {
+    expect(placeFloating(anchor, { width: 312, height: 360 }, viewport, { align: 'start' })).toEqual({ left: 400, top: 352, placement: 'below' })
+    expect(placeFloating(anchor, { width: 216, height: 150 }, viewport, { align: 'end' })).toEqual({ left: 484, top: 352, placement: 'below' })
+  })
+  it('opens above when there is no room below, and stays inside the window', () => {
+    const low = { ...anchor, top: 700, bottom: 746 }
+    expect(placeFloating(low, { width: 312, height: 360 }, viewport, { align: 'start' })).toEqual({ left: 400, top: 334, placement: 'above' })
+    expect(placeFloating({ ...anchor, left: 1300, right: 1420 }, { width: 312, height: 100 }, viewport, { align: 'start' }).left).toBe(1120)
+  })
+  it('becomes a full-width sheet at the bottom on a phone', () => {
+    expect(placeFloating(anchor, { width: 312, height: 400 }, { width: 390, height: 750 }, { align: 'start', sheetBelow: 560 }))
+      .toEqual({ left: 8, top: 342, width: 374, placement: 'sheet' })
   })
 })

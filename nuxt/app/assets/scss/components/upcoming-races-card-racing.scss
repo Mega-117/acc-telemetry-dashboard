@@ -68,7 +68,7 @@
   .coach-title { font: italic 700 19px/1.3 'Racer Display', sans-serif; text-transform: uppercase; }
   .race-header { margin-bottom: 14px; }
   .race-action { display: grid; place-items: center; width: 40px; height: 40px; min-height: 40px; padding: 4px; border: 0; border-radius: 0; color: #fff; background: none; line-height: 1; }
-  .race-action svg, summary svg { display: block; flex-shrink: 0; }
+  .race-action svg { display: block; flex-shrink: 0; }
   .featured-race { position: relative; border: 0; background: transparent; border-radius: 0; padding: 0 0 8px; min-height: 116px;
     grid-template-columns: minmax(86px,.32fr) minmax(0,1fr); grid-template-areas: 'countdown main'; gap: 16px; }
   // Linea bianca tra il conto alla rovescia e i dati della gara.
@@ -83,45 +83,10 @@
   .race-date { font-size: 12px; color: #ddd; font-weight: 400; margin-bottom: 8px; }
   .featured-race h3 { font: italic 700 clamp(19px,1.8vw,29px)/1.15 'Racer Display', sans-serif; }
   .featured-race p { color: #ccc; font-size: 13px; margin-top: 8px; padding-right: 22px; }
+  // The "…" button (RaceOptionsMenu); its menu floats in <body>.
   .race-options { position: absolute; bottom: -8px; right: 0; z-index: 10; }
-  // PIP-641: the open menu is above the other races and their own dots buttons.
-  .race-options[open] { z-index: 30; }
-  summary { display: grid; place-items: center; list-style: none; cursor: pointer; padding: 7px; width: 40px; height: 40px; }
-  summary::-webkit-details-marker { display: none; }
-  .race-options[open] > summary { color: #ff0024; background: #ff002412; }
-  .race-options[open] .race-options__menu { animation: race-menu-in 180ms ease-out both; }
-  @keyframes race-menu-in {
-    from { opacity: 0; transform: translateY(-6px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .race-options[open] .race-options__menu { animation: none; }
-  }
-  .race-options__menu {
-    position: absolute; right: 0; top: calc(100% + 6px); width: 216px;
-    max-width: calc(100vw - 48px); display: grid; gap: 2px;
-    border: 1px solid var(--rc-section-line); padding: 6px;
-    // Same see-through look as the race modal, a little denser: the blur does not reach the card behind here (an
-    // ancestor isolates it), so at the modal's 65% the dots and buttons under the menu read through.
-    background: #0a0a0deb; backdrop-filter: blur(16px);
-    box-shadow: 0 12px 32px #000b;
-  }
-  .race-options__menu a, .race-options__menu button {
-    display: flex; align-items: center; gap: 12px; min-height: 44px; width: 100%;
-    text-align: left; padding: 10px 12px; color: #eee; background: transparent;
-    border: 0; border-left: 2px solid transparent; border-radius: 0;
-    text-decoration: none; font: 500 14px/1.3 'Segoe UI', sans-serif; cursor: pointer;
-    transition: background-color 140ms ease, border-color 140ms ease;
-  }
-  .race-options__menu svg { flex-shrink: 0; color: #b4b4b4; }
-  .race-options__menu a + .race-options__edit { border-top: 1px solid #ffffff24; margin-top: 4px; }
-  .race-options__menu .race-options__delete { color: #ff7a8e; }
-  .race-options__menu .race-options__delete svg { color: currentColor; }
-  // Hover: a light white veil, no red fill or red edge.
-  .race-options__menu a:hover, .race-options__menu button:hover:not(:disabled) { background: #ffffff14; }
-  .race-options__menu a:focus-visible, .race-options__menu button:focus-visible { outline: 1px solid #ffffffa6; outline-offset: -2px; background: #ffffff14; }
   button:disabled { opacity: .4; cursor: default; }
-  summary:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid white; outline-offset: 2px; }
+  button:focus-visible, a:focus-visible { outline: 2px solid white; outline-offset: 2px; }
   .race-list-block { border-top: 1px solid var(--rc-section-line); padding-top: 8px; }
   .race-list { max-height: none; overflow: visible; padding: 0; }
   .compact-race { background: transparent; border: 0; border-radius: 0; padding: 0; min-width: 0; }
@@ -129,13 +94,7 @@
   // Gare successive: quanto manca accanto al titolo.
   .compact-race__in { font-style: normal; font-weight: 500; color: #aaa; font-size: 12px; }
   .race-options--compact { position: relative; bottom: auto; right: auto; }
-  .race-options--compact .race-options__menu { top: auto; bottom: calc(100% + 6px); }
-  .race-options--compact .race-options__menu span { overflow: visible; font: inherit; color: inherit; }
   .race-list--multiple { max-height: 140px; overflow-y: auto; }
-  // Keep menus reachable inside the bounded list when many races are planned.
-  .race-list--multiple .race-options[open] { grid-column: 1 / -1; }
-  .race-list--multiple .race-options[open] > summary { margin-left: auto; }
-  .race-list--multiple .race-options__menu { position: static; width: 100%; box-sizing: border-box; }
 }
 // Spend the normal desktop height on race information, not duplicated headings
 // and action rows. Smaller screens still retain natural document scrolling.

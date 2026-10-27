@@ -59,6 +59,7 @@ export default defineConfig({
         // PIP-641: date picker and checks of the race form.
         'app/utils/raceDateTime.ts',
         'app/utils/raceCalendarForm.ts',
+        'app/utils/floatingPlacement.ts',
         'app/composables/useCornerStepper.ts',
         // PIP-636: bordi della pista dal sito.
         'app/services/telemetry/trackEdges.ts',

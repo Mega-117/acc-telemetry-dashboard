@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CirclePlus, Ellipsis, ExternalLink, Pencil, Trash2, X } from '@lucide/vue'
+import { CirclePlus, X } from '@lucide/vue'
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { overviewEntryKey } from '~/services/auth/overviewEntryPreparation'
 import { usePresentationInterval } from '~/composables/usePresentationVisibility'
@@ -20,6 +20,7 @@ import { getRaceCalendarCountdown } from '~/utils/raceCalendarCountdown'
 import { validateRaceForm, type RaceFormErrors, type RaceFormField } from '~/utils/raceCalendarForm'
 import RaceDateTimePicker from './RaceDateTimePicker.vue'
 import RaceFieldError from './RaceFieldError.vue'
+import RaceOptionsMenu from './RaceOptionsMenu.vue'
 
 const props = defineProps<{
   userId: string | null | undefined
@@ -342,15 +343,10 @@ onBeforeUnmount(() => {
           <h3>{{ featuredEvent.title }}</h3>
           <p>{{ featuredEvent.trackName }}<span v-if="featuredEvent.carName"> - {{ featuredEvent.carName }}</span></p>
         </div>
-        <details v-if="racing" class="race-options">
-          <summary aria-label="Opzioni prossima gara" title="Opzioni prossima gara"><Ellipsis :size="26" :stroke-width="1.6" aria-hidden="true" /></summary>
-          <div class="race-options__menu">
-            <a v-if="featuredEvent.simGridUrl" :href="featuredEvent.simGridUrl" target="_blank" rel="noopener"><ExternalLink :size="17" aria-hidden="true" /><span>SimGrid</span></a>
-            <a v-if="featuredEvent.raceUrl" :href="featuredEvent.raceUrl" target="_blank" rel="noopener"><ExternalLink :size="17" aria-hidden="true" /><span>Link gara</span></a>
-            <button type="button" class="race-options__edit" :disabled="!cloudWriteGate.allowed" @click="openEditModal(featuredEvent)"><Pencil :size="17" aria-hidden="true" /><span>Modifica gara</span></button>
-            <button type="button" class="race-options__delete" :disabled="!cloudWriteGate.allowed" @click="openDeleteModal(featuredEvent)"><Trash2 :size="17" aria-hidden="true" /><span>Elimina gara</span></button>
-          </div>
-        </details>
+        <RaceOptionsMenu
+          v-if="racing" label="Opzioni prossima gara" :sim-grid-url="featuredEvent.simGridUrl" :race-url="featuredEvent.raceUrl"
+          :disabled="!cloudWriteGate.allowed" @edit="openEditModal(featuredEvent)" @delete="openDeleteModal(featuredEvent)"
+        />
         <div v-else class="race-row-actions">
           <a v-if="featuredEvent.simGridUrl" :href="featuredEvent.simGridUrl" target="_blank" rel="noopener">SimGrid</a>
           <a v-if="featuredEvent.raceUrl" :href="featuredEvent.raceUrl" target="_blank" rel="noopener">Link gara</a>
@@ -370,13 +366,10 @@ onBeforeUnmount(() => {
               <strong>{{ event.title }}<em v-if="countdownText(event)" class="compact-race__in"> · {{ countdownText(event) }}</em></strong>
               <span>{{ formatShortDate(event.startsAt) }} · {{ event.trackName }}</span>
             </div>
-            <details v-if="racing" class="race-options race-options--compact">
-              <summary :aria-label="`Opzioni gara ${event.title}`" :title="`Opzioni gara ${event.title}`"><Ellipsis :size="26" :stroke-width="1.6" aria-hidden="true" /></summary>
-              <div class="race-options__menu">
-                <button type="button" class="race-options__edit" :disabled="!cloudWriteGate.allowed" @click="openEditModal(event)"><Pencil :size="17" aria-hidden="true" /><span>Modifica gara</span></button>
-                <button type="button" class="race-options__delete" :disabled="!cloudWriteGate.allowed" @click="openDeleteModal(event)"><Trash2 :size="17" aria-hidden="true" /><span>Elimina gara</span></button>
-              </div>
-            </details>
+            <RaceOptionsMenu
+              v-if="racing" compact :label="`Opzioni gara ${event.title}`" :disabled="!cloudWriteGate.allowed"
+              @edit="openEditModal(event)" @delete="openDeleteModal(event)"
+            />
             <div v-else class="compact-actions">
               <button type="button" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Modifica gara' : cloudWriteGate.message" @click="openEditModal(event)">Modifica</button>
               <button type="button" class="danger" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Elimina gara' : cloudWriteGate.message" @click="openDeleteModal(event)">Elimina</button>

@@ -1,15 +1,16 @@
 <script setup lang="ts">
 import { CalendarDays, ChevronLeft, ChevronRight } from '@lucide/vue'
 import { computed, nextTick, ref, watch } from 'vue'
+import { useFloatingPanel } from '~/composables/useFloatingPanel'
 import {
   addDays, displayRaceDateTime, formatRaceDateTime, monthCells, monthLabel, parseRaceDateTime, parseTimePart,
   RACE_WEEKDAYS, sameDay, type RaceDay,
 } from '~/utils/raceDateTime'
 
-// PIP-641: date and time of a race in the site's style, instead of the browser's own picker. The calendar opens
-// over the fields below (absolute, inside the modal: on a short screen it extends the modal's scroll instead of being
-// cut, and it is brought into view); a click outside closes it; the arrow keys move the day, Escape closes it
-// without closing the modal.
+// PIP-641: date and time of a race in the site's style, instead of the browser's own picker. Like a professional
+// picker the calendar floats above everything, attached to the field (it never stretches the modal): below it, or
+// above when there is no room; on a phone it rises from the bottom at full width. Frosted glass, as the site's
+// panels. Focus goes to the chosen day; arrows move the day; a press outside or Escape closes it (not the modal).
 const props = defineProps<{ modelValue: string, invalid?: boolean, describedby?: string, fieldId?: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 // Most league races are in the evening; the time stays editable.
@@ -36,13 +37,15 @@ watch(value, (v) => {
   minuteText.value = pad(v?.minute ?? 0)
 }, { immediate: true })
 
+const floating = useFloatingPanel(field, panel, open, { align: 'start', sheetBelow: 560 }, () => { open.value = false })
+
 function toggle() {
   if (open.value) { open.value = false; return }
   const start = value.value ?? today
   view.value = { year: start.year, month: start.month }
   focusDay.value = { year: start.year, month: start.month, day: start.day }
   open.value = true
-  void nextTick(() => panel.value?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }))
+  void nextTick(() => grid.value?.querySelector<HTMLElement>('[tabindex="0"]')?.focus({ preventScroll: true }))
 }
 function shiftMonth(delta: number) {
   const date = new Date(view.value.year, view.value.month + delta, 1)
@@ -76,16 +79,14 @@ function onGridKey(event: KeyboardEvent) {
   if (next.month !== view.value.month || next.year !== view.value.year) view.value = { year: next.year, month: next.month }
   void nextTick(() => grid.value?.querySelector<HTMLElement>('[tabindex="0"]')?.focus())
 }
-function onEscape(event: KeyboardEvent) {
-  if (!open.value) return
-  event.stopPropagation()
+function done() {
   open.value = false
   field.value?.focus()
 }
 </script>
 
 <template>
-  <div v-click-outside="() => { open = false }" class="dt-picker" @keydown.esc="onEscape">
+  <div class="dt-picker">
     <button
       :id="fieldId" ref="field" type="button" class="dt-picker__field" :class="{ 'is-invalid': invalid, 'is-open': open }"
       :aria-expanded="open" :aria-invalid="invalid || undefined" :aria-describedby="describedby" @click="toggle"
@@ -93,8 +94,12 @@ function onEscape(event: KeyboardEvent) {
       <span :class="{ 'is-placeholder': !value }">{{ value ? displayRaceDateTime(value) : 'Scegli data e ora' }}</span>
       <CalendarDays :size="18" :stroke-width="1.6" aria-hidden="true" />
     </button>
+    <Teleport to="body">
     <Transition name="dt-drawer">
-      <div v-if="open" ref="panel" class="dt-picker__panel" role="group" aria-label="Scegli data e ora">
+      <div
+        v-if="open" ref="panel" class="dt-picker__panel" :class="`is-${floating.place.value?.placement ?? 'below'}`"
+        :style="floating.style()" role="dialog" aria-label="Scegli data e ora"
+      >
         <div class="dt-picker__head">
           <button type="button" aria-label="Mese precedente" @click="shiftMonth(-1)"><ChevronLeft :size="18" aria-hidden="true" /></button>
           <strong aria-live="polite">{{ monthLabel(view.year, view.month) }}</strong>
@@ -114,10 +119,11 @@ function onEscape(event: KeyboardEvent) {
           <input v-model="hourText" inputmode="numeric" maxlength="2" aria-label="Ora" @change="commitTime">
           <b aria-hidden="true">:</b>
           <input v-model="minuteText" inputmode="numeric" maxlength="2" aria-label="Minuti" @change="commitTime">
-          <button type="button" class="rc-btn dt-picker__done" @click="open = false">Fatto</button>
+          <button type="button" class="rc-btn dt-picker__done" @click="done">Fatto</button>
         </div>
       </div>
     </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -132,10 +138,12 @@ function onEscape(event: KeyboardEvent) {
   &.is-invalid { border-color: #ff0024; }
   .is-placeholder { color: #888; }
 }
-// Over the fields below: see-through like the modal, blurred so the fields under it do not read through.
+// Floating above the modal (z-index over its 1000): frosted glass, the fields under it show only as blurred shapes.
 .dt-picker__panel {
-  position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; width: max(100%, 300px); max-width: calc(100vw - 48px);
-  padding: 12px; border: 1px solid #ffffff40; background: #0a0a0dd9; backdrop-filter: blur(16px); box-shadow: 0 16px 40px #000c;
+  position: fixed; z-index: 1100; width: 312px; box-sizing: border-box;
+  padding: 12px; border: 1px solid #ffffff38; background: #16161c8c; backdrop-filter: blur(22px) saturate(1.2);
+  box-shadow: 0 18px 44px #000b;
+  &.is-sheet { padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
 }
 .dt-picker__head {
   display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
@@ -165,5 +173,7 @@ function onEscape(event: KeyboardEvent) {
 .dt-picker__done { margin-left: auto; min-height: 36px; padding-inline: 18px; }
 .dt-drawer-enter-active, .dt-drawer-leave-active { transition: opacity 180ms ease, transform 180ms ease; }
 .dt-drawer-enter-from, .dt-drawer-leave-to { opacity: 0; transform: translateY(-6px); }
+.dt-drawer-enter-from.is-above, .dt-drawer-leave-to.is-above { transform: translateY(6px); }
+.dt-drawer-enter-from.is-sheet, .dt-drawer-leave-to.is-sheet { transform: translateY(24px); }
 @media (prefers-reduced-motion: reduce) { .dt-drawer-enter-active, .dt-drawer-leave-active { transition: none; } }
 </style>
