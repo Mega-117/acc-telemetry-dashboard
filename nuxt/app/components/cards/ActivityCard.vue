@@ -219,9 +219,10 @@ const formatYLabel = (minutes: number): string => {
 .bar--other { background: #a78bfa; }
 .other-activity { font-size: 12px; color: #ccc; margin: 10px 0 0; }
 .other-activity span { display: inline-block; width: 8px; height: 8px; background: #a78bfa; margin-right: 7px; }
-$color-practice: $accent-info;    // Blue
-$color-qualify: $accent-warning;  // Yellow
-$color-race: $racing-red;         // Red
+// PIP-654: the site-wide session colours (assets/scss/_racing-theme.scss), one source for every page.
+$color-practice: var(--racing-practice);
+$color-qualify: var(--racing-qualify);
+$color-race: var(--racing-race);
 
 // === MAIN CARD ===
 .activity-card {
@@ -344,18 +345,18 @@ $color-race: $racing-red;         // Red
   transition: height 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 
   &--practice {
-    background: linear-gradient(180deg, color.adjust($color-practice, $lightness: 8%) 0%, $color-practice 100%);
-    box-shadow: 0 2px 8px rgba($color-practice, 0.4);
+    background: linear-gradient(180deg, color-mix(in srgb, $color-practice 82%, white) 0%, $color-practice 100%);
+    box-shadow: 0 2px 8px color-mix(in srgb, $color-practice 40%, transparent);
   }
 
   &--qualify {
-    background: linear-gradient(180deg, color.adjust($color-qualify, $lightness: 8%) 0%, $color-qualify 100%);
-    box-shadow: 0 2px 8px rgba($color-qualify, 0.4);
+    background: linear-gradient(180deg, color-mix(in srgb, $color-qualify 82%, white) 0%, $color-qualify 100%);
+    box-shadow: 0 2px 8px color-mix(in srgb, $color-qualify 40%, transparent);
   }
 
   &--race {
-    background: linear-gradient(180deg, color.adjust($color-race, $lightness: 8%) 0%, $color-race 100%);
-    box-shadow: 0 2px 8px rgba($color-race, 0.4);
+    background: linear-gradient(180deg, color-mix(in srgb, $color-race 82%, white) 0%, $color-race 100%);
+    box-shadow: 0 2px 8px color-mix(in srgb, $color-race 40%, transparent);
   }
 }
 
@@ -414,15 +415,15 @@ $color-race: $racing-red;         // Red
 
   .legend-item--practice & { 
     background: $color-practice; 
-    box-shadow: 0 0 8px rgba($color-practice, 0.5);
+    box-shadow: 0 0 8px color-mix(in srgb, $color-practice 50%, transparent);
   }
   .legend-item--qualify & { 
     background: $color-qualify; 
-    box-shadow: 0 0 8px rgba($color-qualify, 0.5);
+    box-shadow: 0 0 8px color-mix(in srgb, $color-qualify 50%, transparent);
   }
   .legend-item--race & { 
     background: $color-race; 
-    box-shadow: 0 0 8px rgba($color-race, 0.5);
+    box-shadow: 0 0 8px color-mix(in srgb, $color-race 50%, transparent);
   }
 }
 

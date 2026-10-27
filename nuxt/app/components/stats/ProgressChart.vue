@@ -13,11 +13,11 @@ const comboKey = ref('')
 watch(combos, (list) => { if (!list.some(c => c.key === comboKey.value)) comboKey.value = list[0]?.key ?? '' }, { immediate: true })
 const combo = computed(() => combos.value.find(c => c.key === comboKey.value) ?? null)
 
-// Stessi nomi e colori del dettaglio pista: qualifica gialla, gara rossa, media gara azzurra.
+// Stessi nomi e colori del dettaglio pista: qualifica gialla, gara rossa, media gara azzurra (token unici, PIP-654).
 const METRICS: { id: ProgressMetric, label: string, color: string }[] = [
-  { id: 'qualy', label: 'Best qualifica', color: '#ffc400' },
-  { id: 'race', label: 'Best gara', color: '#ff0024' },
-  { id: 'avgRace', label: 'Best media gara', color: '#0076ff' },
+  { id: 'qualy', label: 'Best qualifica', color: 'var(--racing-qualify)' },
+  { id: 'race', label: 'Best gara', color: 'var(--racing-race)' },
+  { id: 'avgRace', label: 'Best media gara', color: 'var(--racing-practice)' },
 ]
 const metric = ref<ProgressMetric>('race')
 const available = computed(() => METRICS.filter(m => combo.value && progressSeries(props.sessions, combo.value.trackKey, combo.value.carKey, m.id).length))
@@ -27,7 +27,7 @@ watch(available, (list) => {
   const c = combo.value
   metric.value = [...list].sort((a, b) => progressSeries(props.sessions, c.trackKey, c.carKey, b.id).length - progressSeries(props.sessions, c.trackKey, c.carKey, a.id).length)[0]?.id ?? 'race'
 }, { immediate: true })
-const color = computed(() => METRICS.find(m => m.id === metric.value)?.color ?? '#0076ff')
+const color = computed(() => METRICS.find(m => m.id === metric.value)?.color ?? 'var(--racing-practice)')
 const points = computed(() => (combo.value ? progressSeries(props.sessions, combo.value.trackKey, combo.value.carKey, metric.value) : []))
 const delta = computed(() => progressDelta(points.value))
 
@@ -84,10 +84,10 @@ const metricLabel = computed(() => METRICS.find(m => m.id === metric.value)?.lab
     <svg v-if="chart" class="progress__chart" :viewBox="`0 0 ${W} ${H}`" role="img" :aria-label="`Tempi per sessione, dal migliore ${formatLapTime(chart.min)} al peggiore ${formatLapTime(chart.max)}`">
       <line :x1="PAD" :x2="W - PAD" :y1="chart.best.y" :y2="chart.best.y" class="progress__best" />
       <g v-for="q in chart.pts" :key="q.v.date">
-        <circle :cx="q.x" :cy="q.y" :r="q.outOfScale ? 3 : 4" :fill="color" :opacity="q.outOfScale ? 0.25 : 0.45"><title>{{ dateLabel(q.v.date) }} · {{ formatLapTime(q.v.ms) }}{{ q.outOfScale ? ' (fuori scala)' : '' }}</title></circle>
+        <circle :cx="q.x" :cy="q.y" :r="q.outOfScale ? 3 : 4" :style="{ fill: color }" :opacity="q.outOfScale ? 0.25 : 0.45"><title>{{ dateLabel(q.v.date) }} · {{ formatLapTime(q.v.ms) }}{{ q.outOfScale ? ' (fuori scala)' : '' }}</title></circle>
       </g>
-      <polyline :points="chart.recordLine" fill="none" :stroke="color" stroke-width="3" stroke-linejoin="round" class="progress__record" />
-      <circle :cx="chart.best.x" :cy="chart.best.y" r="6" fill="#fff" :stroke="color" stroke-width="3" />
+      <polyline :points="chart.recordLine" fill="none" :style="{ stroke: color }" stroke-width="3" stroke-linejoin="round" class="progress__record" />
+      <circle :cx="chart.best.x" :cy="chart.best.y" r="6" fill="#fff" :style="{ stroke: color }" stroke-width="3" />
       <text :x="Math.min(Math.max(chart.best.x, PAD + 30), W - PAD - 30)" :y="Math.max(14, chart.best.y - 12)" text-anchor="middle" class="progress__label">Record {{ formatLapTime(chart.min) }}</text>
       <text :x="PAD" :y="H - 4" class="progress__axis">{{ dateLabel(points[0]!.date) }}</text>
       <text :x="W - PAD" :y="H - 4" text-anchor="end" class="progress__axis">{{ dateLabel(points[points.length - 1]!.date) }}</text>

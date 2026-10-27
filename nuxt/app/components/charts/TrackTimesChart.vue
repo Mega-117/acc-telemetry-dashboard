@@ -6,6 +6,7 @@ import { Chart as ChartJS, LinearScale, PointElement, LineElement, Tooltip, Lege
 import type { TrackHistoricalPointProjection } from '~/types/trackProjections'
 import { buildTrackTimesChart, type TrackChartPeriod, type TrackChartScale, type TrackChartPoint } from '~/utils/trackTimesChart'
 import { formatLapTime } from '~/utils/telemetryFormat'
+import { sessionColor } from '~/utils/sessionPalette'
 
 ChartJS.register(LinearScale, PointElement, LineElement, Tooltip, Legend)
 const props = defineProps<{ history: TrackHistoricalPointProjection[]; loading?: boolean }>()
@@ -15,7 +16,8 @@ const model = computed(() => buildTrackTimesChart(props.history, period.value, s
 const seriesLabels = { bestQualy: 'Best qualifica', bestRace: 'Best gara' }
 const chartData = computed<ChartData<'line', TrackChartPoint[]>>(() => ({
   datasets: (['bestQualy', 'bestRace'] as const).flatMap(key => {
-    const color = key === 'bestQualy' ? '#ffc400' : '#ff0024'
+    // PIP-654: Chart.js needs a colour string: read it from the site tokens (one source).
+    const color = sessionColor(key === 'bestQualy' ? 'qualify' : 'race')
     const points = model.value.series[key]
     const radii = points.map((point, index) => {
       const isolated = (points[index - 1]?.y == null) && (points[index + 1]?.y == null)
@@ -140,7 +142,7 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
   &__legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 20px; margin: 12px 0; color: #b7b7c1; font-size: 12px; }
   &__legend span { display: flex; align-items: center; gap: 7px; }
   &__legend i { width: 18px; height: 2px; display: inline-block; }
-  &__qualy { background: #ffc400; } &__race { background: #ff0024; }
+  &__qualy { background: var(--racing-qualify); } &__race { background: var(--racing-race); }
   &__hint { color: #92929e; font-size: 11px; line-height: 1.6; margin: 12px 0 0; }
   &__empty { min-height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #b7b7c1; font-size: 13px; }
   @media (max-width: 480px) { &__card { padding: 10px; } &__canvas { height: 260px; } }

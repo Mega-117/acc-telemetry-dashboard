@@ -3265,9 +3265,9 @@ const gripZones = computed(() => {
 .laps-table tr.lap-row--link { cursor: pointer; &:hover td { background: #ffffff0a; } }
 .type-badge {
   display: inline-grid; place-items: center; height: 22px; padding: 0 10px; border-radius: 0; font-size: 10px; font-weight: 700; letter-spacing: .06em; line-height: 1;
-  &--practice { background: rgba($accent-info,0.15); border: 1px solid rgba($accent-info,0.4); color: $accent-info; }
-  &--qualify { background: rgba($accent-warning,0.15); border: 1px solid rgba($accent-warning,0.4); color: $accent-warning; }
-  &--race { background: rgba(255,100,100,0.15); border: 1px solid rgba(255,100,100,0.4); color: rgb(255,100,100); }
+  &--practice { background: color-mix(in srgb, var(--racing-practice) 15%, transparent); border: 1px solid color-mix(in srgb, var(--racing-practice) 40%, transparent); color: var(--racing-practice); }
+  &--qualify { background: color-mix(in srgb, var(--racing-qualify) 15%, transparent); border: 1px solid color-mix(in srgb, var(--racing-qualify) 40%, transparent); color: var(--racing-qualify); }
+  &--race { background: color-mix(in srgb, var(--racing-race) 15%, transparent); border: 1px solid color-mix(in srgb, var(--racing-race) 40%, transparent); color: var(--racing-race); }
 }
 .share-session-btn {
   margin-left: auto;
@@ -3661,9 +3661,10 @@ const gripZones = computed(() => {
   text-align: center;
 }
 .stint-type { padding: 3px 6px; border-radius: 3px; font-size: 9px; font-weight: 700; text-align: center;
-  &--q { background: rgba($accent-warning,0.15); color: $accent-warning; }
-  &--r { background: rgba(255,100,100,0.15); color: rgb(255,100,100); }
-  &--l { background: rgba($accent-info,0.15); color: $accent-info; }
+  // PIP-654: the site-wide session colours.
+  &--q { background: color-mix(in srgb, var(--racing-qualify) 15%, transparent); color: var(--racing-qualify); }
+  &--r { background: color-mix(in srgb, var(--racing-race) 15%, transparent); color: var(--racing-race); }
+  &--l { background: color-mix(in srgb, var(--racing-practice) 15%, transparent); color: var(--racing-practice); }
 }
 .stint-num { font-size: 11px; font-weight: 600; color: #fff; text-align: center; }
 .stint-delta { display: flex; align-items: center; gap: 6px; justify-self: end; padding: 4px 8px; border-radius: 4px; }
@@ -3687,14 +3688,6 @@ const gripZones = computed(() => {
 .detail-header {
   display: flex; align-items: center; gap: 12px;
   margin-bottom: 16px;
-}
-.stint-type-tag {
-  padding: 4px 10px;
-  border-radius: 4px;
-  font-size: 10px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.5px;
-  &--q { background: rgba($accent-warning, 0.15); color: $accent-warning; border: 1px solid rgba($accent-warning, 0.3); }
-  &--r { background: rgba(255, 100, 100, 0.15); color: rgb(255, 100, 100); border: 1px solid rgba(255, 100, 100, 0.3); }
 }
 .detail-title { font-size: 16px; font-weight: 600; color: #fff; margin: 0; }
 .best-tag {
@@ -4855,24 +4848,6 @@ const gripZones = computed(() => {
   display: flex;
   align-items: center;
   gap: 14px;
-}
-.ssc-badge {
-  padding: 5px 12px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1px;
-
-  &--race {
-    background: rgba(59, 130, 246, 0.2);
-    color: #60a5fa;
-    border: 1px solid rgba(59, 130, 246, 0.3);
-  }
-  &--quali {
-    background: rgba(234, 179, 8, 0.2);
-    color: #fbbf24;
-    border: 1px solid rgba(234, 179, 8, 0.3);
-  }
 }
 
 // Data table - Racing HUD
@@ -6260,19 +6235,9 @@ const gripZones = computed(() => {
   text-transform: uppercase;
   letter-spacing: 0.5px;
 
-  // Race = rosso
-  &--r {
-    background: rgba(239, 68, 68, 0.15);
-    color: #ef4444;
-    border: 1px solid rgba(239, 68, 68, 0.4);
-  }
-
-  // Quali = giallo
-  &--q {
-    background: rgba(234, 179, 8, 0.15);
-    color: #fbbf24;
-    border: 1px solid rgba(234, 179, 8, 0.4);
-  }
+  // PIP-654: race and qualifying in the site-wide session colours.
+  &--r { background: color-mix(in srgb, var(--racing-race) 15%, transparent); border: 1px solid color-mix(in srgb, var(--racing-race) 40%, transparent); color: var(--racing-race); }
+  &--q { background: color-mix(in srgb, var(--racing-qualify) 15%, transparent); border: 1px solid color-mix(in srgb, var(--racing-qualify) 40%, transparent); color: var(--racing-qualify); }
 }
 
 // Stint number - secondary
@@ -6827,8 +6792,8 @@ const gripZones = computed(() => {
   .stint-target > strong { font-size: 24px; color: #20d9a0; font-variant-numeric: tabular-nums; }
   .stint-target small { font-size: 12px; color: #a1a1aa; }
   .stint-item .stint-type { padding: 4px 6px; justify-self: start; border: 1px solid currentColor; line-height: 1.2; font-size: 12px; }
-  .stint-item .stint-type--r { background: #ff003c18; color: #ff4569; border-color: #ff003c55; }
-  .stint-item .stint-type--q { background: #ffd00014; color: #ffd000; border-color: #ffd00055; }
+  .stint-item .stint-type--r { background: color-mix(in srgb, var(--racing-race) 10%, transparent); color: var(--racing-race); border-color: color-mix(in srgb, var(--racing-race) 35%, transparent); }
+  .stint-item .stint-type--q { background: color-mix(in srgb, var(--racing-qualify) 8%, transparent); color: var(--racing-qualify); border-color: color-mix(in srgb, var(--racing-qualify) 35%, transparent); }
   .laps-table tr.lap-invalid { background: #ff304b12; }
   .lap-excluded:not(.lap-invalid):not(.lap-pit) { background: #ffffff03; }
   .lap-state--excluded { color: #a1a1aa; font-size: 10px; font-weight: 500; }

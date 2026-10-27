@@ -49,6 +49,8 @@ export default defineConfig({
         // PIP-591: esito del salvataggio attrezzatura.
         'app/utils/equipmentSaveOutcome.ts',
         'app/utils/sessionShareUrl.ts',
+        // PIP-654: colori di sessione unici per i grafici.
+        'app/utils/sessionPalette.ts',
         // PIP-633: presentazione delle Statistiche.
         'app/utils/statsPresentation.ts',
         'app/utils/statsJourney.ts',

@@ -298,12 +298,12 @@ watch(
 .row-left, .row-right { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .row-right { flex-shrink: 0; }
 .session-chip { padding: 3px 8px; border: 1px solid currentColor; font: 700 10px 'Inter', sans-serif; letter-spacing: .06em; text-transform: uppercase;
-  &--practice { color: #38bdf8; } &--qualify { color: #fbbf24; } &--race { color: #ff5a6e; } &--sessione { color: #aaa; } }
+  &--practice { color: var(--racing-practice); } &--qualify { color: var(--racing-qualify); } &--race { color: var(--racing-race); } &--sessione { color: #aaa; } }
 .session-date { color: #fff; font-size: 13px; font-weight: 600; white-space: nowrap; }
 .session-car { color: #aaa; font-size: 13px; overflow: hidden; white-space: nowrap; }
 .stat { color: #888; font-size: 12px; white-space: nowrap; }
 .time { min-width: 92px; font: italic 700 14px 'Racer Display', sans-serif; letter-spacing: .02em; text-align: right;
-  &--qualy { color: #fbbf24; } &--race { color: #ff5a6e; } &.is-empty { color: #555; } }
+  &--qualy { color: var(--racing-qualify); } &--race { color: var(--racing-race); } &.is-empty { color: #555; } }
 .spm-empty { margin: 8px 0; color: #888; font-size: 13px; }
 .spm-load-more { justify-self: center; margin-top: 6px; }
 @media (max-width: 640px) {
