@@ -13,6 +13,7 @@
 // ============================================
 
 import { computed, ref, watch } from 'vue'
+import { useI18n } from '~/i18n'
 import type { usePitwallRoom } from '~/composables/usePitwallRoom'
 import type { usePitwallLink } from '~/composables/usePitwallLink'
 import { describePitwallGrantScope } from '~/services/pitwall/pitwallLink'
@@ -493,14 +494,15 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
    * rotto un collegamento che funziona.
    */
   const blockedReason = computed<string | null>(() => {
-    if (!link.room.value) return 'Nessuna gara selezionata.'
-    if (link.roomClosed.value) return 'Questa gara e chiusa: non accetta piu strategie.'
-    if (!link.amMember.value) return 'Non sei ancora entrato in questa gara.'
+    const { t } = useI18n()
+    if (!link.room.value) return t('pitwall.blocked.noRace')
+    if (link.roomClosed.value) return t('pitwall.blocked.closed')
+    if (!link.amMember.value) return t('pitwall.blocked.notMember')
     if (link.executor.value.reason !== 'ready') return link.executorLabel.value
     if (!link.sendReadiness.value.ready) return link.sendReadiness.value.reason
-    if (!pitwallRepairsCompatible(repairs.value)) return 'Le sospensioni richiedono anche la riparazione della carrozzeria.'
+    if (!pitwallRepairsCompatible(repairs.value)) return t('pitwall.blocked.repairs')
     if (tyreSetBlocked.value) return tyreSetNotice.value
-    if (!hasChanges.value) return 'Nessuna modifica da inviare.'
+    if (!hasChanges.value) return t('pitwall.blocked.noChanges')
     return null
   })
 

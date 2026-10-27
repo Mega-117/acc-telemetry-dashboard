@@ -26,16 +26,29 @@ export function initialLocale(saved: string | null | undefined, systemLanguage: 
   return String(systemLanguage ?? 'it').toLowerCase().startsWith('it') ? 'it' : 'en'
 }
 
+// Keys the app wrote before languages existed (preferences, spotter, HUD, Pitwall, Ctrl+K state).
+const LEGACY_KEY = /^(rc:|acc[.:_-]|racer|pitwall|spotter|hud|overlay|training)/i
+
 function readStored(): { saved: string | null, usedBefore: boolean } {
   try {
     if (typeof localStorage === 'undefined') return { saved: null, usedBefore: false }
     let usedBefore = false
-    for (let i = 0; i < localStorage.length; i++) if (localStorage.key(i)?.startsWith('rc:')) { usedBefore = true; break }
+    for (let i = 0; i < localStorage.length; i++) if (LEGACY_KEY.test(localStorage.key(i) ?? '')) { usedBefore = true; break }
     return { saved: localStorage.getItem(LOCALE_STORAGE_KEY), usedBefore }
   } catch { return { saved: null, usedBefore: false } }
 }
 const stored = readStored()
 const locale = ref<Locale>(initialLocale(stored.saved, typeof navigator === 'undefined' ? 'it' : navigator.language, stored.usedBefore))
+// The decision is written at once: HUD windows opened later read it instead of guessing again.
+if (!isLocale(stored.saved)) { try { localStorage.setItem(LOCALE_STORAGE_KEY, locale.value) } catch { /* Storage can be disabled. */ } }
+// Another window of the program (main or HUD) changed the language: follow it without writing back.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', event => {
+    if (event.key !== LOCALE_STORAGE_KEY || !isLocale(event.newValue) || event.newValue === locale.value) return
+    locale.value = event.newValue
+    if (typeof document !== 'undefined') document.documentElement.lang = event.newValue
+  })
+}
 
 type LocaleBridge = { setUiLocale?: (locale: Locale) => void }
 /** The desktop program shows a few texts itself (Windows notifications): it follows the same choice. */

@@ -3,6 +3,9 @@ import type { PartialDictionary } from '../types'
 export default {
   common: {
     retry: 'Retry',
+    yes: 'Yes',
+    no: 'No',
+    startupFailed: 'The app could not start.',
     close: 'Close',
     cancel: 'Cancel',
     remove: 'Remove',

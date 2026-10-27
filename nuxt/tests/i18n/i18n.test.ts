@@ -11,6 +11,21 @@ import { stintTypeLabel } from '~/services/session-detail/sessionPresentation'
 import { lapStatus } from '~/services/session-detail/sessionDataPresentation'
 import { lapShareErrorMessage } from '~/services/telemetry/lapShareLink'
 
+describe('i18n across windows', () => {
+  it('writes the first decision at once and follows a change made in another window', () => {
+    // The module ran at import: the resolved language is already saved for the HUD windows.
+    expect(localStorage.getItem(LOCALE_STORAGE_KEY)).toMatch(/^(it|en)$/)
+    const { locale } = useI18n()
+    setLocale('it')
+    window.dispatchEvent(new StorageEvent('storage', { key: LOCALE_STORAGE_KEY, newValue: 'en' }))
+    expect(locale.value).toBe('en')
+    expect(document.documentElement.lang).toBe('en')
+    window.dispatchEvent(new StorageEvent('storage', { key: LOCALE_STORAGE_KEY, newValue: 'xx' }))
+    expect(locale.value).toBe('en')
+    setLocale('it')
+  })
+})
+
 describe('i18n', () => {
   it('keeps English complete: every Italian key has an English text', () => {
     expect(missingKeys('en')).toEqual([])

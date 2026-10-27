@@ -2,6 +2,13 @@
 // Status messages produced by the Pitwall services/store and the dev-only views stay Italian.
 export default {
   pitwall: {
+    blocked: {
+      noRace: 'Nessuna gara selezionata.',
+      closed: 'Questa gara e chiusa: non accetta piu strategie.',
+      notMember: 'Non sei ancora entrato in questa gara.',
+      repairs: 'Le sospensioni richiedono anche la riparazione della carrozzeria.',
+      noChanges: 'Nessuna modifica da inviare.',
+    },
     unavailable: {
       title: 'Attualmente non disponibile',
       body: 'Pitwall non è ancora disponibile per {game}.',

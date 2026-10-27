@@ -2,6 +2,13 @@ import type { PartialDictionary } from '../types'
 
 export default {
   pitwall: {
+    blocked: {
+      noRace: 'No race selected.',
+      closed: 'This race is closed: it no longer accepts strategies.',
+      notMember: 'You have not joined this race yet.',
+      repairs: 'Suspension repairs also need bodywork repairs.',
+      noChanges: 'No changes to send.',
+    },
     unavailable: {
       title: 'Currently unavailable',
       body: 'Pitwall is not available yet for {game}.',

@@ -2,6 +2,9 @@
 export default {
   common: {
     retry: 'Riprova',
+    yes: 'Sì',
+    no: 'No',
+    startupFailed: 'Il programma non è riuscito ad avviarsi.',
     close: 'Chiudi',
     cancel: 'Annulla',
     remove: 'Rimuovi',

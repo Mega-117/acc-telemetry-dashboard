@@ -7,6 +7,7 @@ const { consultedGame } = useGameContext()
 
 import { ref, shallowRef, computed, nextTick, onMounted, onBeforeMount, onBeforeUnmount, watch, provide } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { useI18n } from '~/i18n'
 import { usePitwallDriverPresence } from '~/composables/usePitwallDriverPresence'
 import { useConfirmedLogout } from '~/composables/useConfirmedLogout'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
@@ -23,7 +24,7 @@ import { useOwnerDataMaintenance } from '~/composables/useOwnerDataMaintenance'
 import { useOwnerCacheLifecycle } from '~/composables/useOwnerCacheLifecycle'
 import { AUTH_EMAIL_VERIFICATION_REQUIRED } from '~/config/authPolicy'
 import { canUseDevTools } from '~/utils/devToolsAccess'
-import { toAuthStartupOutcome, describeAuthRecovery, AUTH_RECOVERY_DEFAULT_MESSAGE, type AuthSessionStatus } from '~/services/auth/authSessionPolicy'
+import { toAuthStartupOutcome, describeAuthRecovery, AUTH_RECOVERY_DEFAULT_MESSAGE, AUTH_RECOVERY_EXHAUSTED_MESSAGE, type AuthSessionStatus } from '~/services/auth/authSessionPolicy'
 import { publishAuthStartupOutcome } from '~/services/auth/localIdentityBridge'
 import { useWheelInputBridge } from '~/composables/useWheelInputBridge'
 import { useWindowPresentationVisibility } from '~/composables/usePresentationVisibility'
@@ -269,7 +270,9 @@ const loadingMessage = computed(() => dashboardEntryState.value.status === 'fail
     : authRecovery.value.message)
 const canRetryLoading = computed(() => dashboardEntryState.value.status === 'failed' || authRecovery.value.canRetry)
 // PIP-640: the laser already says "loading"; words appear only when something is wrong or being retried.
-const loadingNote = computed(() => loadingMessage.value === AUTH_RECOVERY_DEFAULT_MESSAGE ? '' : loadingMessage.value)
+const { t } = useI18n()
+// PIP-665: the policy keeps its Italian constants (compared elsewhere); the screen shows them translated.
+const loadingNote = computed(() => loadingMessage.value === AUTH_RECOVERY_DEFAULT_MESSAGE ? '' : loadingMessage.value === AUTH_RECOVERY_EXHAUSTED_MESSAGE ? t('common.startupFailed') : loadingMessage.value)
 const retryLoading = () => dashboardEntryState.value.status === 'failed'
   ? enterDashboard() : retryRecoverableAuthSession()
 const overviewEntry = shallowRef<OverviewEntry | null>(null)
@@ -742,7 +745,7 @@ provide('goToSettings', handleGoToSettings)
             <div class="loading-below">
               <p v-if="loadingNote" class="loading-text" :class="{ 'is-problem': canRetryLoading }">{{ loadingNote }}</p>
               <button v-if="canRetryLoading" type="button" class="rc-btn rc-btn--primary loading-retry" @click="retryLoading()">
-                Riprova<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" />
+                {{ t('common.retry') }}<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" />
               </button>
             </div>
           </div>

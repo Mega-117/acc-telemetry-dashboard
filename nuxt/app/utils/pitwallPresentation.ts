@@ -3,6 +3,7 @@
 // Nessun I/O: la pagina raccoglie i valori, questo modulo li normalizza
 // e li trasforma nel riepilogo mostrato a schermo.
 // ============================================
+import { useI18n } from '~/i18n'
 
 export const PITWALL_WHEELS = ['FL', 'FR', 'RL', 'RR'] as const
 
@@ -254,7 +255,7 @@ export function formatRepairs(bodywork: boolean | null, suspension: boolean | nu
 /** Le tre risposte possibili di una casella del Pit MFD. */
 export function formatToggle(value: boolean | null): string {
   if (value == null) return '—'
-  return value ? 'Sì' : 'No'
+  return useI18n().t(value ? 'common.yes' : 'common.no')
 }
 
 export function resolveDriverName(driverId: string | null, drivers: PitwallDriver[]): string {
