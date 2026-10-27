@@ -221,6 +221,11 @@ function openSession(event: MouseEvent, id: string) {
 @media (min-width: 640px) and (max-width: 960px) {
   .session-row { grid-template-columns: 84px 56px minmax(0, 1fr) minmax(0, 1.3fr); grid-template-areas: 'type time track car' 'laps stints q g'; }
   .racing-session-list--track .session-row { grid-template-areas: 'type time car car' 'laps stints q g'; }
+  .racing-session-list--track .session-car { grid-area: car; }
+}
+// Very narrow phones: a lap time needs about 80 px, so Q and G get a row of their own.
+@media (max-width: 380px) {
+  .session-row { grid-template-areas: 'type time track track' 'car car car car' 'laps laps stints stints' 'q q g g'; }
 }
 
 </style>
