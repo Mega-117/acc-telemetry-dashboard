@@ -4,6 +4,9 @@ import { normalizeLapTrace, type LapTraceView } from '~/services/telemetry/lapTr
 import { channelAt, sectorBounds } from '~/services/telemetry/lapAnalysis'
 import { stitchIdealLap } from '~/services/telemetry/idealLap'
 import { formatLapTime } from '~/utils/telemetryFormat'
+import { fetchLibraryLap, listLibrary, type LapsArchiveDeps } from '~/services/telemetry/lapsArchiveClient'
+import { pickReferences, type ReferenceConditions } from '~/services/telemetry/referencePick'
+import { loadPublicNickname } from '~/repositories/publicProfileRepository'
 
 /** One lap of the Telemetria menus. Only "local"/"pilot" laps of the shown session can be "Tu". */
 export interface Entry { id: string, lapNumber: number, lapTimeMs: number, valid: boolean, complete: boolean, origin: LapOrigin, sessionToken: string, label?: string, note?: string }
@@ -99,5 +102,38 @@ export function useReferenceLibrary(o: {
       label: `Giro ideale · ${formatLapTime(ms)} · ${seconds(potentialS)} sul tuo migliore` } }])
   }
 
-  return { loadOwnLaps, loadBestLaps, refreshIdeal }
+  /**
+   * PIP-650: other drivers' laps here (same track and car), from the shared library: the suggested one,
+   * a step above your best in the closest conditions, and the fastest. Shown with the driver's nickname.
+   */
+  async function loadOtherDrivers(isCurrent: () => boolean, deps: LapsArchiveDeps & { loadNickname?: (uid: string) => Promise<string | null> },
+    where: { game: string, track: string, car: string, variant: string | null }, ctx: { myUid: string | null, myBestMs: number | null, mine: ReferenceConditions }): Promise<string | null> {
+    try {
+      const { suggested, fastest } = pickReferences(await listLibrary(where, deps), ctx)
+      const nickname = deps.loadNickname ?? loadPublicNickname
+      const picked = [[suggested, 'consigliato'], [fastest, 'il più veloce']] as const
+      const same = (a: string | null | undefined, b: string | null | undefined) => (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase()
+      const loaded = await Promise.all(picked.map(async ([e, tag]): Promise<Loaded | null> => {
+        if (!e) return null
+        try {
+          const [{ trace: raw }, nick] = await Promise.all([fetchLibraryLap(e.libId, deps), nickname(e.uid).catch(() => null)])
+          const trace = normalizeLapTrace(raw)
+          // Review: the library holds what uploaders declared; the lap itself must agree before it becomes a
+          // reference: same track, car and layout, complete and valid, the declared time, a believable speed.
+          const believable = !!trace && trace.complete && trace.valid === true && same(trace.track, where.track) && same(trace.car, where.car)
+            && same(trace.variant, where.variant) && Math.abs(trace.lapTimeS * 1000 - e.lapTimeMs) <= 100
+            && trace.lengthM / trace.lapTimeS * 3.6 <= 330
+          return believable ? { trace: trace!, entry: { id: `library:${e.libId}`, lapNumber: 0, lapTimeMs: e.lapTimeMs, valid: true, complete: true, origin: 'library', sessionToken: '',
+            label: `${nick || 'Pilota'} · ${formatLapTime(e.lapTimeMs)} · ${tag}` } } : null
+        } catch { return null }
+      }))
+      if (!isCurrent()) return null
+      const ok = loaded.filter((r): r is Loaded => r !== null)
+      add(ok)
+      // The suggested lap's id, so the page can propose it as the reference (user decision: automatic).
+      return suggested && ok.some(r => r.entry.id === `library:${suggested.libId}`) ? `library:${suggested.libId}` : null
+    } catch { return null /* other drivers' laps are an extra */ }
+  }
+
+  return { loadOwnLaps, loadBestLaps, refreshIdeal, loadOtherDrivers }
 }

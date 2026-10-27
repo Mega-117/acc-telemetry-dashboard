@@ -123,13 +123,45 @@ export async function readLapBody(response: Response): Promise<unknown> {
     if (error instanceof LapsArchiveError) throw error
     throw new LapsArchiveError('Giro non valido: contenuto illeggibile.')
   }
-  const channels = (parsed as { channels?: Record<string, unknown> } | null)?.channels
+  // PIP-648: encoded laps keep their channels under `channels_qd` (older readers refuse them cleanly).
+  const body = parsed as { encoding?: unknown, channels?: Record<string, unknown>, channels_qd?: Record<string, unknown> } | null
+  const channels = body?.encoding === undefined ? body?.channels : body?.channels_qd
   if (!channels || typeof channels !== 'object') throw new LapsArchiveError('Giro non valido: mancano i canali.')
   const entries = Object.values(channels)
   if (entries.length > LAP_DOWNLOAD_LIMITS.channels || entries.some(v => !Array.isArray(v) || v.length > LAP_DOWNLOAD_LIMITS.samples)) {
     throw new LapsArchiveError('Giro non valido: troppi canali o campioni.')
   }
-  return parsed
+  return decodeLapChannels(parsed as Record<string, unknown>)
+}
+
+/**
+ * PIP-648: laps uploaded as integer deltas (`encoding: 'qdelta1'`, lapUploadPayload.js) back to values:
+ * running sum / 10^decimals, rounded to those decimals. Laps without an encoding pass unchanged.
+ */
+const MAX_SCALED = 2 ** 40
+export function decodeLapChannels(payload: Record<string, unknown>): Record<string, unknown> {
+  if (payload.encoding === undefined) return payload
+  const decimals = payload.channel_decimals as Record<string, unknown> | undefined
+  if (payload.encoding !== 'qdelta1' || !decimals || typeof decimals !== 'object') throw new LapsArchiveError('Giro non valido: formato sconosciuto.')
+  const channels: Record<string, number[]> = {}
+  // Same bound as the writer (2^40): every delta and every running sum stays an exact integer.
+  const exact = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n) && Math.abs(n) <= MAX_SCALED
+  for (const [name, deltas] of Object.entries(payload.channels_qd as Record<string, unknown[]>)) {
+    const d = decimals[name]
+    if (typeof d !== 'number' || !Number.isInteger(d) || d < 0 || d > 6) throw new LapsArchiveError('Giro non valido: formato sconosciuto.')
+    const scale = 10 ** d
+    let sum = 0
+    channels[name] = deltas.map((delta) => {
+      if (!exact(delta) || !exact(sum + delta)) throw new LapsArchiveError('Giro non valido: contenuto illeggibile.')
+      sum += delta
+      return sum / scale
+    })
+  }
+  const rest = { ...payload }
+  delete rest.encoding
+  delete rest.channel_decimals
+  delete rest.channels_qd
+  return { ...rest, channels }
 }
 
 function metaFrom(response: Response): RemoteLapMeta {
@@ -160,6 +192,30 @@ export async function listPilotLaps(pilotUid: string, sessionToken: string, deps
 
 export async function fetchPilotLap(pilotUid: string, sessionToken: string, lapId: string, deps: LapsArchiveDeps): Promise<{ trace: unknown, meta: RemoteLapMeta }> {
   return request(`/v1/laps/of/${encodeURIComponent(pilotUid)}/${sessionToken}/${lapId}`, deps, async (response) => ({ trace: await readLapBody(response), meta: metaFrom(response) }))
+}
+
+/** PIP-650: one entry of the reference library (another driver's best lap here, with its conditions). */
+export interface LibraryEntry { libId: string, uid: string, lapTimeMs: number, recordedAt: string | null, grip: string | null, airC: number | null, roadC: number | null, fuelL: number | null }
+
+export async function listLibrary(where: { game: string, track: string, car: string, variant: string | null }, deps: LapsArchiveDeps): Promise<LibraryEntry[]> {
+  const q = new URLSearchParams({ game: where.game, track: where.track, car: where.car, variant: where.variant ?? '' })
+  const body = await request(`/v1/library?${q}`, deps, (response) => response.json() as Promise<{ entries?: LibraryEntry[] }>)
+  return (body.entries ?? []).filter(e => /^[a-f0-9]{24}$/.test(e?.libId ?? '') && typeof e.uid === 'string' && Number.isFinite(e.lapTimeMs))
+}
+
+export async function fetchLibraryLap(libId: string, deps: LapsArchiveDeps): Promise<{ trace: unknown, meta: RemoteLapMeta }> {
+  return request(`/v1/library/lap/${libId}`, deps, async (response) => ({ trace: await readLapBody(response), meta: metaFrom(response) }))
+}
+
+/** PIP-650: your consent to the reference library (on unless you switched it off in the Profile). */
+export async function getLibraryPreference(deps: LapsArchiveDeps): Promise<boolean> {
+  return (await request('/v1/library/preference', deps, (response) => response.json() as Promise<{ share?: boolean }>)).share !== false
+}
+
+export async function setLibraryPreference(share: boolean, deps: LapsArchiveDeps): Promise<boolean> {
+  const body = await request('/v1/library/preference', deps, (response) => response.json() as Promise<{ share?: boolean }>,
+    { method: 'PUT', body: JSON.stringify({ share }), headers: { 'Content-Type': 'application/json' } })
+  return body.share !== false
 }
 
 export async function loadLapsSummary(deps: LapsArchiveDeps): Promise<unknown> {

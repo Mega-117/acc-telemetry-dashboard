@@ -150,6 +150,14 @@ async function load() {
     const first = traces.value[usable[0]!.id]
     library.refreshIdeal()
     if (bridge && first) void (pilot ? library.loadOwnLaps(isCurrent, bridge, first.track, first.car) : library.loadBestLaps(isCurrent, bridge, first.track, first.car))
+    // PIP-650: other drivers' laps here, a step above this session's best in the closest conditions.
+    const bestTrace = traces.value[best.id]
+    // Proposed automatically as the reference, unless you picked another one meanwhile (fallback: your best).
+    const defaultRef = refId.value
+    if (first) void library.loadOtherDrivers(isCurrent, archiveDeps, { game: first.gameId, track: first.track, car: first.car, variant: first.variant },
+      { myUid: pilot ?? currentUser.value?.uid ?? null, myBestMs: best.valid ? best.lapTimeMs : null,
+        mine: { grip: bestTrace?.conditions?.grip ?? null, airC: bestTrace?.conditions?.airC ?? null, roadC: bestTrace?.conditions?.roadC ?? null, fuelL: bestTrace?.fuelL ?? null } })
+      .then(id => { if (id && isCurrent() && refId.value === defaultRef && !picked) refId.value = id })
   } catch (e) {
     if (isCurrent()) error.value = e instanceof LapsArchiveError ? e.message : 'Impossibile leggere i giri di questa sessione.'
   } finally {
@@ -382,6 +390,7 @@ const sessionEntries = computed(() => entries.value.filter(e => e.origin === 'lo
 const ownEntries = computed(() => entries.value.filter(e => e.origin === 'own'))
 const sharedEntries = computed(() => entries.value.filter(e => e.origin === 'shared'))
 const bestEntries = computed(() => entries.value.filter(e => e.origin === 'best')), idealEntries = computed(() => entries.value.filter(e => e.origin === 'ideal'))
+const libraryEntries = computed(() => entries.value.filter(e => e.origin === 'library'))
 const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Semplice on the whole session
 // PIP-635: il best (valido e completo) della sessione, segnato nei giri come nei tempi del gioco.
 const bestId = computed(() => sessionBest.value?.id ?? '')
@@ -391,7 +400,8 @@ const lapGroups = computed<LapGroup[]>(() => [{ label: '', options: sessionEntri
 const refGroups = computed<LapGroup[]>(() => [{ label: props.pilotUid ? 'Giri del pilota' : 'Questa sessione', options: sessionEntries.value.map(lapOption) },
   ...(ownEntries.value.length ? [{ label: 'I miei giri', options: ownEntries.value.map(lapOption) }] : []), ...(sharedEntries.value.length ? [{ label: 'Condiviso', options: sharedEntries.value.map(lapOption) }] : []),
   ...(idealEntries.value.length ? [{ label: 'Giro ideale (i tuoi settori migliori)', options: idealEntries.value.map(lapOption) }] : []),
-  ...(bestEntries.value.length ? [{ label: 'I tuoi migliori su questa pista', options: bestEntries.value.map(lapOption) }] : [])])
+  ...(bestEntries.value.length ? [{ label: 'I tuoi migliori su questa pista', options: bestEntries.value.map(lapOption) }] : []),
+  ...(libraryEntries.value.length ? [{ label: 'Altri piloti (stessa auto)', options: libraryEntries.value.map(lapOption) }] : [])])
 const short = (e: Entry | null) => e ? `Giro ${e.lapNumber} · ${formatLapTime(e.lapTimeMs)}` : '--'
 const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTime(s * 1000) : '--'
 </script>

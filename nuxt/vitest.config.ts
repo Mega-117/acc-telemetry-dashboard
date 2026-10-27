@@ -335,6 +335,7 @@ export default defineConfig({
         'app/services/telemetry/raceFuelClassification.ts',
         'app/services/telemetry/sessionZones.ts',
         'app/services/telemetry/idealLap.ts',
+        'app/services/telemetry/referencePick.ts',
         'app/services/telemetry/sessionMergeLogic.ts',
         'app/services/telemetry/theoreticalTimesCalculator.ts',
         'app/services/overlay/tyreSetupViewModel.ts',

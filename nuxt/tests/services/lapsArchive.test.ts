@@ -64,6 +64,27 @@ describe('archive client', () => {
     await expect(readLapBody(binary(gz(lap({ time_s: Array.from({ length: 20001 }, (_, i) => i) }))))).rejects.toThrow('troppi canali o campioni')
   })
 
+  it('PIP-648: decodes laps uploaded as integer deltas back to their values; unknown formats are refused', async () => {
+    // time_s 0, 1.5, 3.25 (3 decimals) and steer 0.1234, -0.05 (4 decimals), as lapUploadPayload.js writes them.
+    const { channels: _plain, ...base } = lap()
+    const encoded = { ...base, encoding: 'qdelta1', channel_decimals: { time_s: 3, steer_deg: 4 }, channels_qd: { time_s: [0, 1500, 1750], steer_deg: [1234, -1734, 500] } }
+    const out = await readLapBody(binary(gz(encoded))) as { channels: Record<string, number[]>, encoding?: string, channels_qd?: unknown }
+    expect(out.channels.time_s).toEqual([0, 1.5, 3.25])
+    expect(out.channels.steer_deg).toEqual([0.1234, -0.05, 0])
+    expect(out.encoding).toBeUndefined()
+    expect(out.channels_qd).toBeUndefined()
+    await expect(readLapBody(binary(gz({ ...encoded, encoding: 'zstd' })))).rejects.toThrow('formato sconosciuto')
+    await expect(readLapBody(binary(gz({ ...encoded, channel_decimals: { time_s: 3 } })))).rejects.toThrow('formato sconosciuto')
+    await expect(readLapBody(binary(gz({ ...encoded, channels_qd: { time_s: [0, 1.5] }, channel_decimals: { time_s: 3 } })))).rejects.toThrow('illeggibile')
+    // Review: integers beyond exact range, or running sums that leave it, are refused.
+    await expect(readLapBody(binary(gz({ ...encoded, channels_qd: { time_s: [2 ** 41] }, channel_decimals: { time_s: 3 } })))).rejects.toThrow('illeggibile')
+    await expect(readLapBody(binary(gz({ ...encoded, channels_qd: { time_s: [2 ** 40, 2 ** 40] }, channel_decimals: { time_s: 3 } })))).rejects.toThrow('illeggibile')
+    // An encoded lap without channels_qd (or an older reader looking at `channels`) never misreads deltas as values.
+    await expect(readLapBody(binary(gz({ ...base, encoding: 'qdelta1', channel_decimals: {}, channels: { time_s: [0, 1500] } })))).rejects.toThrow('mancano i canali')
+    // Older plain laps keep working.
+    expect(((await readLapBody(binary(gz(lap())))) as { channels: Record<string, number[]> }).channels.time_s).toEqual([0, 1, 2])
+  })
+
   it('stops reading a body that exceeds the compressed cap while it streams', async () => {
     let pulled = 0
     const stream = new ReadableStream<Uint8Array>({ pull(controller) { pulled += 1; controller.enqueue(new Uint8Array(64 * 1024)) } })
@@ -141,5 +162,12 @@ describe('admin archive model', () => {
     expect(lapsArchiveModel({ ...summary, days: {} }, NOW).forecast).toBeNull()
     expect(lapsArchiveModel({ ...summary, rejectionsTruncated: true }, NOW).rejectionsTruncated).toBe(true)
     expect(reasonLabel('something-new')).toBe('something-new')
+  })
+  it('PIP-648: warns from 45% of a cap (or when the Worker says so), before the laps stop at 60%', () => {
+    expect(lapsArchiveModel(summary, NOW).warning).toBe(false)
+    expect(lapsArchiveModel({ ...summary, state: { ...summary.state, storageBytes: 2.4 * 1024 ** 3 } }, NOW).warning).toBe(true)
+    expect(lapsArchiveModel({ ...summary, state: { ...summary.state, warning: true } }, NOW).warning).toBe(true)
+    expect(lapsArchiveModel({ ...summary, state: null }, NOW).warning).toBe(false)
+    expect(reasonLabel('hard-90')).toContain('90%')
   })
 })

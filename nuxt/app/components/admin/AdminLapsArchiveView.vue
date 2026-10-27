@@ -2,13 +2,14 @@
 // PIP-623: pannello "Archivio giri": soglie R2 (piano gratuito), interruttore, giri al giorno,
 // piloti, rifiuti e ultimo scarico locale. Solo presentazione: i dati arrivano dalla pagina.
 import { computed } from 'vue'
-import { LAPS_DISABLE_RATIO, reasonLabel, type LapsArchiveModel } from '~/repositories/lapsArchiveRepository'
+import { LAPS_DISABLE_RATIO, LAPS_HARD_RATIO, LAPS_WARN_RATIO, reasonLabel, type LapsArchiveModel } from '~/repositories/lapsArchiveRepository'
 
 const props = defineProps<{ model: LapsArchiveModel | null, names: Record<string, string>, loading: boolean, error: string, switching: boolean }>()
 const emit = defineEmits<{ refresh: [], switch: [mode: 'auto' | 'off'] }>()
 
 const maxDay = computed(() => Math.max(1, ...(props.model?.days ?? []).map(d => d.uploads)))
 const threshold = LAPS_DISABLE_RATIO * 50
+const warnAt = LAPS_WARN_RATIO * 50, hardAt = LAPS_HARD_RATIO * 50
 const when = (iso: string | null | undefined) => iso ? new Date(iso).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'
 const bytes = (value: number) => value >= 1024 ** 3 ? `${(value / 1024 ** 3).toFixed(2)} GB` : `${(value / 1024 ** 2).toFixed(1)} MB`
 const amount = (key: string, value: number) => key === 'storage' ? bytes(value) : value.toLocaleString('it-IT')
@@ -33,7 +34,9 @@ const syncAge = computed(() => {
           {{ model.reason === 'admin-off' ? 'Riaccendi (automatico)' : 'Spegni ora' }}
         </button>
       </div>
-      <p class="note">Percentuali sul piano gratuito R2 dell'intero account (giri + diagnostica). Oltre il {{ threshold }}% tutte le scritture si spengono da sole.</p>
+      <!-- PIP-648: the early warning, so raising the caps (a few cents a month) is decided before the laps stop. -->
+      <p v-if="model.warning" class="warning" role="status">Consumi oltre il {{ warnAt }}%: i caricamenti dei giri si fermano al {{ threshold }}%. Per tenerli accesi è il momento di decidere se alzare i tetti (pochi centesimi al mese).</p>
+      <p class="note">Percentuali sul piano gratuito R2 dell'intero account (giri + diagnostica). Oltre il {{ threshold }}% si fermano da soli i caricamenti dei giri; diagnostica e statistiche solo oltre il {{ hardAt }}%.</p>
       <div class="metrics">
         <article v-for="u in model.usage" :key="u.key" :class="{ warn: (u.percent ?? 0) >= threshold }">
           <span>{{ u.label }}</span>
@@ -82,6 +85,7 @@ const syncAge = computed(() => {
 h2 { margin: 6px 0 0; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; }
 .error { color: #ff5a6e; margin: 0; }
 .note { margin: 0; color: #8a8a90; font-size: 12px; }
+.warning { margin: 0; padding: 10px 12px; border: 1px solid #fbbf2466; background: #fbbf2414; color: #fbbf24; font-size: 13px; }
 .status { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px; border: 1px solid #3ddc5a66; background: #3ddc5a12;
   strong { color: #3ddc5a; } span { color: #b3b3b8; font-size: 13px; }
   button { margin-left: auto; height: 32px; padding: 0 12px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font: 700 12px 'Inter', sans-serif; cursor: pointer; }

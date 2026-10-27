@@ -6,13 +6,17 @@ import { loadLapsSummary, setLapsSwitch, type LapsArchiveDeps } from '~/services
 // Stessi tetti del Worker (workers/diagnostics-ingest/src/lapsQuota.mjs): meta' del piano gratuito R2.
 export const LAPS_CAPS = Object.freeze({ storageBytes: 5 * 1024 ** 3, classA: 500_000, classB: 5_000_000 })
 export const LAPS_DISABLE_RATIO = 0.6
-// Stime per la previsione: peso medio di un giro (misurato: 32–63 KB) e operazioni di classe A per invio.
-const AVG_LAP_BYTES = 64 * 1024
+// PIP-648: avviso dal 45%; diagnostica e statistiche si fermano solo al 90% (lapsQuota.mjs).
+export const LAPS_WARN_RATIO = 0.45
+export const LAPS_HARD_RATIO = 0.9
+// Stime per la previsione: peso medio di un giro (PIP-648, interi a differenze: circa 29 KB su 40 giri
+// veri, prima 55 KB) e operazioni di classe A per invio.
+const AVG_LAP_BYTES = 32 * 1024
 const CLASS_A_PER_UPLOAD = 3
 
 export interface LapsSummary {
   decision: { enabled: boolean, reason: string }
-  state: { checkedAt?: string, dataThrough?: string, storageBytes?: number, classAMonth?: number, classBMonth?: number, reason?: string, error?: string } | null
+  state: { checkedAt?: string, dataThrough?: string, storageBytes?: number, classAMonth?: number, classBMonth?: number, reason?: string, error?: string, warning?: boolean, hardStop?: boolean, usedShare?: number } | null
   override: { mode?: string, at?: string } | null
   lastSync: { at?: string, downloaded?: number, total?: number, complete?: boolean } | null
   days: Record<string, Record<string, { uploads: number, shares: number }>>
@@ -24,6 +28,8 @@ export interface LapsSummary {
 export interface LapsArchiveModel {
   enabled: boolean
   reason: string
+  /** PIP-648: oltre il 45% dei tetti: decidere per tempo se alzarli. */
+  warning: boolean
   usage: { key: 'storage' | 'classA' | 'classB', label: string, value: number, cap: number, percent: number | null }[]
   checkedAt: string | null
   lastSync: LapsSummary['lastSync']
@@ -38,6 +44,7 @@ export interface LapsArchiveModel {
 const REASONS: Record<string, string> = {
   ok: 'Attivo', 'usage-unknown': 'Consumi non leggibili', stale: 'Controllo dei consumi troppo vecchio', 'storage-60': 'Spazio oltre soglia',
   'class-a-60': 'Scritture oltre soglia', 'class-b-60': 'Letture oltre soglia', 'admin-off': 'Spento dall’admin', 'env-off': 'Spento dal Worker',
+  'hard-90': 'Oltre il 90%: ferme anche diagnostica e statistiche',
 }
 export function reasonLabel(reason: string): string { return REASONS[reason] ?? reason }
 
@@ -66,6 +73,8 @@ export function lapsArchiveModel(summary: LapsSummary, nowMs: number): LapsArchi
   return {
     enabled: summary.decision?.enabled === true,
     reason: summary.decision?.reason ?? 'usage-unknown',
+    warning: state?.warning === true || ([[state?.storageBytes, LAPS_CAPS.storageBytes], [state?.classAMonth, LAPS_CAPS.classA], [state?.classBMonth, LAPS_CAPS.classB]] as const)
+      .some(([value, cap]) => typeof value === 'number' && value > cap * LAPS_WARN_RATIO),
     // Percentuali sul piano GRATUITO (10 GB, 1M, 10M): il tetto dei giri e' la meta'.
     usage: [
       { key: 'storage', label: 'Spazio', value: state?.storageBytes ?? 0, cap: LAPS_CAPS.storageBytes, percent: percent(state?.storageBytes, LAPS_CAPS.storageBytes) },

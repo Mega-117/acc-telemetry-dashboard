@@ -5,7 +5,7 @@
 import { listPilotLaps, fetchPilotLap, type LapsArchiveDeps } from './lapsArchiveClient'
 
 /** PIP-646: 'best' = your fastest laps on the track from every session, 'ideal' = the stitched best sectors. */
-export type LapOrigin = 'local' | 'pilot' | 'own' | 'shared' | 'best' | 'ideal'
+export type LapOrigin = 'local' | 'pilot' | 'own' | 'shared' | 'best' | 'ideal' | 'library'
 
 export interface LapDescriptor {
   id: string
