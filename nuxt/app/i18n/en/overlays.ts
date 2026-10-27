@@ -35,13 +35,10 @@ export default {
     },
     sectors: {
       unavailable: 'Sectors not available',
-      inTarget: 'ON TARGET',
-      outTarget: 'OFF TARGET',
       title: 'SECTORS',
       titleLastLap: 'SECTORS · LAST LAP',
       previous: 'prev',
       best: 'best',
-      currentLap: 'CURRENT LAP',
       lastLap: 'LAST LAP',
     },
     trainingHud: {

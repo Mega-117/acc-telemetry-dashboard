@@ -160,6 +160,7 @@ const backgroundTransparency = reactive<Record<HudOverlayBackgroundId, number>>(
   info: 20,
   tyres: 20,
   standings: 50,
+  sectors: 0,
 })
 type InfoSettingKey = keyof typeof infoSettings
 const infoOptionDefinitions: Array<{ key: InfoSettingKey, labelKey: TranslationKey }> = [

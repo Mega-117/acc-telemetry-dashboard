@@ -35,13 +35,10 @@ export default {
     },
     sectors: {
       unavailable: 'Settori non disponibili',
-      inTarget: 'NEL TARGET',
-      outTarget: 'FUORI TARGET',
       title: 'SETTORI',
       titleLastLap: 'SETTORI · ULTIMO GIRO',
       previous: 'prec',
       best: 'best',
-      currentLap: 'GIRO IN CORSO',
       lastLap: 'ULTIMO GIRO',
     },
     trainingHud: {

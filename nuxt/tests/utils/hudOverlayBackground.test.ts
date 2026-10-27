@@ -13,7 +13,7 @@ describe('hudOverlayBackground', () => {
     expect(supportsHudOverlayBackground('info')).toBe(true)
     expect(supportsHudOverlayBackground('tyres')).toBe(true)
     expect(supportsHudOverlayBackground('standings')).toBe(true)
-    expect(supportsHudOverlayBackground('sectors')).toBe(false)
+    expect(supportsHudOverlayBackground('sectors')).toBe(true)
     expect(supportsHudOverlayBackground('dashboard')).toBe(false)
   })
 
@@ -22,6 +22,9 @@ describe('hudOverlayBackground', () => {
     expect(normalizeHudOverlayBackgroundOpacity(undefined)).toBe(0.8)
     expect(getHudOverlayBackgroundDefaultOpacity('standings')).toBe(0.5)
     expect(normalizeHudOverlayBackgroundOpacity(undefined, 'standings')).toBe(0.5)
+    // Sectors defaults to its opaque panel: 0% transparency in the settings slider.
+    expect(getHudOverlayBackgroundDefaultOpacity('sectors')).toBe(1)
+    expect(backgroundOpacityToTransparency(undefined, 'sectors')).toBe(0)
     expect(normalizeHudOverlayBackgroundOpacity(-1)).toBe(0)
     expect(normalizeHudOverlayBackgroundOpacity(2)).toBe(1)
     expect(normalizeHudOverlayBackgroundOpacity(0.347)).toBe(0.35)

@@ -403,6 +403,8 @@ export default defineConfig({
         'app/utils/compactSectorPresentation.ts',
         'app/utils/hudOverlayPresentationCapabilities.ts',
         'app/utils/hudOverlayBackground.ts',
+        'app/utils/fixedWidthGlyphs.ts',
+        'app/components/overlay/HudFixedDigits.vue',
         'app/utils/hudRoutePerformance.ts',
         'app/utils/brakeTemperaturePresentation.ts',
         'app/utils/brakeAxlePresentation.ts',

@@ -11,6 +11,7 @@ import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 // accesso alla stessa configurazione usata da Ctrl+K.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useHudOverlay } from '~/composables/useHudOverlay'
+import { useHudOverlayBackground } from '~/composables/useHudOverlayBackground'
 import { useOverlayTelemetrySource } from '~/composables/useOverlayTelemetrySource'
 import { useCompletedLapHold } from '~/composables/useCompletedLapHold'
 import SectorDeltaHud from '~/components/overlay/SectorDeltaHud.vue'
@@ -107,6 +108,8 @@ const currentLapTimeMs = computed(() => telemetry.source.value === 'focused'
   ? fastState.value.info?.currentLapTimeMs ?? null
   : fastState.value.sectorHud?.currentLapTimeMs ?? fastState.value.info?.currentLapTimeMs ?? null)
 const rootScale = computed(() => onTargetPage.value ? 1 : scale.value)
+const { backgroundOpacity } = useHudOverlayBackground(settings, 'sectors') // default 1 = opaque panel
+const panelBackgroundOpacity = computed(() => onTargetPage.value ? 1 : backgroundOpacity.value)
 // PIP-524: compact and classic read the same 20 Hz source.
 const liveSectorHud = computed(() => telemetry.source.value === 'focused'
   ? telemetry.sectorHud.value
@@ -268,6 +271,7 @@ onBeforeUnmount(() => {
         'hud-overlay__panel--compact': variant === 'compact',
         'hud-overlay__panel--target': onTargetPage,
       }"
+      :style="{ '--hud-sectors-bg-opacity': String(panelBackgroundOpacity) }"
     >
       <HudTimedPager
         v-if="variant === 'compact'"
@@ -361,8 +365,8 @@ onBeforeUnmount(() => {
   padding: calc(12px * var(--hud-scale));
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 12px;
-  // Sfondo OPACO e nessuna ombra (pannello stile v2).
-  background: #0d0e12;
+  // Pannello stile v2 senza ombra: solo lo sfondo segue l'opacita' scelta, testo pieno.
+  background: rgba(13, 14, 18, var(--hud-sectors-bg-opacity, 1));
 }
 
 // ── L'HUD riempie il pannello ────────────────────────────────────────────────
@@ -450,7 +454,6 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.045);
 }
 
-.hud-overlay .sector-delta-hud__lap-label,
 .hud-overlay .sector-delta__label {
   overflow: hidden;
   color: #a3a5ae;

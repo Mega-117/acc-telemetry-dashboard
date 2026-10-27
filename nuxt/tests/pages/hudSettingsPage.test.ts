@@ -65,6 +65,8 @@ describe('HUD settings page layout contract', () => {
     expect(source).toContain("v-else-if=\"selectedOverlayId === 'info'\"")
     expect(source).toContain("v-else-if=\"selectedOverlayId === 'trackmap' && support.mapOptions\"")
     expect(source).toContain('supportsHudOverlayBackground(selectedOverlayId)')
+    // Sectors shares the transparency slider; 0% keeps today's opaque panel.
+    expect(source).toMatch(/backgroundTransparency = reactive<[^>]*>>\(\{[^}]*sectors: 0,/)
     expect(source).toContain("v-if=\"sectorSupports('sectorCurrentLap')\"")
     expect(source).toContain(':disabled="selectedSettingsDisabled || !option.supported"')
     expect(source).toContain("key: 'showStintTimer', labelKey: 'hud.standings.stintTime', supported: true")

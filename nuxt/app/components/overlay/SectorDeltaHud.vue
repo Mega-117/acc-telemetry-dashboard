@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from '~/i18n'
 import { computed } from 'vue'
+import HudFixedDigits from '~/components/overlay/HudFixedDigits.vue'
 import type { CustomSectorTimes } from '~/utils/customSectorReferences'
 import type { SectorHudState, SectorHudEntry } from '~/composables/useLiveStatePoller'
 import type { InfoTargetOutcome } from '~/utils/infoPresentation'
@@ -84,18 +85,12 @@ const compactLapTime = computed(() => {
     ? '--:--.---'
     : formatLapTime(compactDisplayLapTimeMs.value)
 })
-// HUD style v2 (27/10): both layouts share the "SETTORI vs BEST" title bar.
-const titleText = computed(() => (
-  props.sectorHud?.mode === 'last_lap' && props.variant !== 'compact'
-    ? t('overlays.sectors.titleLastLap')
-    : t('overlays.sectors.title')
-))
-// The lap label names the lap shown; only Compact appends the frozen target outcome.
-const lapLabel = computed(() => {
-  const lap = props.sectorHud?.mode === 'last_lap' ? t('overlays.sectors.lastLap') : t('overlays.sectors.currentLap')
-  if (props.variant !== 'compact' || compactCurrentLapValid.value !== true || props.targetOutcome === 'neutral') return lap
-  const target = props.targetOutcome === 'inside' ? t('overlays.sectors.inTarget') : t('overlays.sectors.outTarget')
-  return props.sectorHud?.mode === 'last_lap' ? `${lap} · ${target}` : target
+// HUD style v2 (27/10): both layouts share the "SETTORI vs BEST" title bar. The lap
+// tile has no label any more, so the title alone says when the last lap is shown:
+// Classic "SETTORI · ULTIMO GIRO", Compact (narrower) "ULTIMO GIRO".
+const titleText = computed(() => {
+  if (props.sectorHud?.mode !== 'last_lap') return t('overlays.sectors.title')
+  return props.variant === 'compact' ? t('overlays.sectors.lastLap') : t('overlays.sectors.titleLastLap')
 })
 
 function formatTime(ms: number | null): string {
@@ -187,17 +182,13 @@ const { t } = useI18n()
             'sector-compact__lap--target-outside': targetOutcome === 'outside' && compactCurrentLapValid === true,
           }"
         >
-          <small
-            class="sector-compact__lap-label"
-            :class="{ 'sector-compact__lap-label--target': targetOutcome !== 'neutral' && compactCurrentLapValid === true }"
-          >{{ lapLabel }}</small>
           <strong
             class="sector-compact__lap"
             :class="{
               'sector-compact__lap--invalid': compactCurrentLapValid === false,
               'sector-compact__lap--unknown': compactCurrentLapValid === null,
             }"
-          >{{ compactLapTime }}</strong>
+          ><HudFixedDigits :value="compactLapTime" /></strong>
         </div>
       </div>
       <div class="sector-compact__rows">
@@ -215,12 +206,12 @@ const { t } = useI18n()
           <strong class="sector-compact__time">
             <span
               :class="{ 'sector-compact__time-value--long': valueText(sector).length > 6 }"
-            >{{ valueText(sector) }}</span>
+            ><HudFixedDigits :value="valueText(sector)" /></span>
           </strong>
           <small
             class="sector-compact__delta"
             :class="{ 'sector-delta__delta--placeholder': sector.state !== 'complete' || sector.deltaMs === null }"
-          >{{ deltaText(sector) }}</small>
+          ><HudFixedDigits :value="deltaText(sector)" /></small>
         </div>
       </div>
     </template>
@@ -234,14 +225,13 @@ const { t } = useI18n()
         :style="showCurrentLap !== false ? { gridTemplateColumns: `minmax(0, 1.35fr) minmax(0, ${visibleSectors.length}fr)` } : undefined"
       >
         <div v-if="showCurrentLap !== false" class="sector-delta-hud__lap">
-          <span class="sector-delta-hud__lap-label">{{ lapLabel }}</span>
           <strong
             class="sector-delta-hud__lap-time"
             :class="{
               'sector-compact__lap--invalid': compactCurrentLapValid === false,
               'sector-compact__lap--unknown': compactCurrentLapValid === null,
             }"
-          >{{ compactLapTime }}</strong>
+          ><HudFixedDigits :value="compactLapTime" /></strong>
         </div>
         <div class="sector-delta-hud__grid" :style="{ gridTemplateColumns: `repeat(${visibleSectors.length}, minmax(0, 1fr))` }">
           <div
@@ -258,11 +248,11 @@ const { t } = useI18n()
             <strong
               class="sector-delta__value"
               :class="{ 'sector-delta__value--placeholder': valueText(sector) === '--' }"
-            >{{ valueText(sector) }}</strong>
+            ><HudFixedDigits :value="valueText(sector)" /></strong>
             <small
               class="sector-delta__delta"
               :class="{ 'sector-delta__delta--placeholder': sector.state !== 'complete' || sector.deltaMs === null }"
-            >{{ deltaText(sector) }}</small>
+            ><HudFixedDigits :value="deltaText(sector)" /></small>
             <div v-if="showReference || showBest" class="sector-delta__minis">
               <span v-if="showReference" class="sector-delta__ref">
                 <b>{{ t('overlays.sectors.previous') }}</b><em>{{ sector.referenceMs !== null ? formatTime(sector.referenceMs) : '--' }}</em>
@@ -295,7 +285,8 @@ const { t } = useI18n()
 
 .sector-compact__header {
   display: grid;
-  gap: calc(6px * var(--hud-scale, 1));
+  /* Title bar -> lap block spacing (6px + 7px requested on 27/10), scales with the HUD. */
+  gap: calc(13px * var(--hud-scale, 1));
   flex: 0 0 auto;
   min-height: 0;
 }
@@ -346,16 +337,6 @@ const { t } = useI18n()
 
 .sector-compact__lap.sector-compact__lap--invalid { color: #dc1010; }
 .sector-compact__lap.sector-compact__lap--unknown { color: #6f7277; }
-
-.sector-compact__lap-label {
-  color: #a3a5ae;
-  font: 700 calc(12px * var(--hud-scale, 1))/1 var(--hud-font-label);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.sector-compact__lap-label--target { color: #cfe3ff; }
 
 .sector-compact__rows {
   display: grid;
