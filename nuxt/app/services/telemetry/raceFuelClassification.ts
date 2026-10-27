@@ -43,3 +43,23 @@ export function classifyHistoricalEligibility(
   if (effectiveStintType === 'Qualify') return 'qualy_historical'
   return isHistoricalRaceFuel(fuelStart) ? 'race_historical' : 'race_non_historical'
 }
+
+// PIP-649: a refuel in the pit box can land inside the stint's first lap (pit-exit latch missed, the
+// split came from the fuel jump), so the stint kept the low fuel read before the stop. Same rule as the
+// logger's stint_departure_fuel: the first lap ending 2 L above where it started means the car left
+// with that fuel. Without the correction a race stint on full tanks was filed as qualifying.
+export const REFUEL_JUMP_L = 2
+
+// A missing reading is unknown, never 0 (Number(null) is 0): only real numbers count as evidence.
+const reading = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : null
+
+export function stintDepartureFuel(stint: { fuel_start?: unknown, laps?: unknown } | null | undefined): number | null {
+  const start = reading(stint?.fuel_start)
+  const first = Array.isArray(stint?.laps) ? stint.laps[0] as { fuel_start?: unknown, fuel_remaining?: unknown } | undefined : undefined
+  const remaining = reading(first?.fuel_remaining)
+  const before = reading(first?.fuel_start) ?? start
+  if (remaining == null || before == null || remaining <= before + REFUEL_JUMP_L) return start
+  // The fuel after the refuel (never the previous stint's load), rounded as the logger saves it:
+  // recalculating a saved session gives the same class.
+  return Math.round(remaining * 10) / 10
+}

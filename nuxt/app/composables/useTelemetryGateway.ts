@@ -6,6 +6,7 @@ import { buildCommonOverviewProjection } from '~/services/projections/buildCommo
 import { buildCommonTrackOverview } from '~/services/projections/buildCommonTrackOverview'
 import { filterHistory, historyTrackId } from '~/services/projections/vehicleHistory'
 import { readFuelHistory } from '~/services/telemetry/fuelHistorySummary'
+import { classifyStintTypeFromFuel, stintDepartureFuel } from '~/services/telemetry/raceFuelClassification'
 import { mergePendingLocal } from '~/services/telemetry/telemetryMergeService'
 import { useTelemetryData } from './useTelemetryData'
 import {
@@ -671,7 +672,10 @@ export function useTelemetryGateway(explicitGameId?: string) {
         if (!fullSession || !bestTimeMs) return null
         const stints = fullSession?.stints || []
         for (const stint of stints) {
-            const stintIsQualy = stint.type === 'Qualify'
+            // PIP-649: the class from the departure fuel, as the summary: a raw file saved before the fix keeps 'Qualify'.
+            const stintType = stint.type === 'Qualify' || stint.type === 'Race'
+                ? classifyStintTypeFromFuel(stintDepartureFuel(stint), fullSession.session_info?.session_type) : stint.type
+            const stintIsQualy = stintType === 'Qualify'
             if (stintIsQualy !== isQualy) continue
             const laps = stint.laps || []
             for (const lap of laps) {

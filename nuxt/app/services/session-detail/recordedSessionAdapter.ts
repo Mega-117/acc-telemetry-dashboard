@@ -2,6 +2,7 @@ import type { FullSession, LapData } from '~/types/telemetry'
 import { canUseAccRules, recordingGame } from '~/services/telemetry/gameIdentity'
 import { historyTrackId } from '~/services/projections/vehicleHistory'
 import { averageLapMilliseconds } from '~/services/session-detail/sessionMath'
+import { classifyStintTypeFromFuel, stintDepartureFuel } from '~/services/telemetry/raceFuelClassification'
 
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 const text = (value: unknown, fallback = '') => typeof value === 'string' ? value : fallback
@@ -13,7 +14,7 @@ const positive = (value: unknown) => finite(value) > 0 ? value as number : 0
  * Original source enums, validity and raw document remain unchanged.
  */
 export function recordedSessionForDetail(raw: unknown): FullSession | null {
-  if (canUseAccRules(raw)) return raw as FullSession
+  if (canUseAccRules(raw)) return withDepartureFuel(raw as FullSession)
   if (recordingGame(raw) !== 'evo') return null
   const source = object(raw), info = object(source.session_info), capabilities = object(source.capabilities)
   const stints = (Array.isArray(source.stints) ? source.stints : []).map((value: unknown, index) => {
@@ -51,6 +52,20 @@ export function recordedSessionForDetail(raw: unknown): FullSession | null {
       session_best_lap: valid.length ? Math.min(...valid.map(lap => lap.lap_time_ms)) : 0, avg_clean_lap: 0,
       total_drive_time_ms: stints.reduce((sum, stint) => sum + stint.stint_drive_time_ms, 0),
       laps_total: laps.length, laps_valid: valid.length, laps_invalid: laps.length - valid.length } }
+}
+
+/** PIP-649: sessions saved before the logger fix keep the pre-refuel fuel on a stint whose pit stop
+ * landed inside its first lap. Show the departure fuel and its stint type; untouched sessions are
+ * returned as the same object, the raw document is never modified. */
+function withDepartureFuel(session: FullSession): FullSession {
+  let changed = false
+  const stints = (session.stints ?? []).map((stint) => {
+    const departure = stintDepartureFuel(stint)
+    if (departure == null || departure === stint.fuel_start) return stint
+    changed = true
+    return { ...stint, fuel_start: Math.round(departure * 10) / 10, type: classifyStintTypeFromFuel(departure, session.session_info?.session_type) }
+  })
+  return changed ? { ...session, stints } : session
 }
 
 export function sessionDetailTrackId(session: FullSession): string {

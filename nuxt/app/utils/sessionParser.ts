@@ -11,6 +11,7 @@ import {
   RACE_FUEL_BUCKETS,
   classifyHistoricalEligibility,
   classifyStintTypeFromFuel,
+  stintDepartureFuel,
   getRaceFuelBucket
 } from '~/services/telemetry/raceFuelClassification'
 
@@ -248,7 +249,7 @@ function buildLegacyCompatibilitySummary(rawObj: Record<string, unknown>, sessio
 
   stints.forEach((stint) => {
     const laps: Record<string, unknown>[] = Array.isArray(stint?.['laps']) ? (stint['laps'] as Record<string, unknown>[]) : []
-    const stintFuelStart = toPositiveNumber(stint?.['fuel_start'])
+    const stintFuelStart = toPositiveNumber(stintDepartureFuel(stint))
     const stintType = classifyStintTypeFromFuel(stintFuelStart, sessionType)
 
     laps.forEach((lap) => {
