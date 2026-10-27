@@ -51,7 +51,8 @@ function choose(action: 'edit' | 'delete') {
 // Frosted glass above the page (z-index over the overview, under the race modal's 1000).
 .race-options__menu {
   position: fixed; z-index: 900; width: 216px; box-sizing: border-box; display: grid; gap: 2px; padding: 6px;
-  border: 1px solid #ffffff38; background: #16161c8c; backdrop-filter: blur(22px) saturate(1.2); box-shadow: 0 16px 40px #000b;
+  // Lighter glass than the date picker: what is behind shows more (user, 27/10).
+  border: 1px solid #ffffff38; background: #16161c66; backdrop-filter: blur(10px) saturate(1.2); box-shadow: 0 16px 40px #000b;
   a, button {
     display: flex; align-items: center; gap: 12px; min-height: 44px; width: 100%; padding: 10px 12px; border: 0; border-radius: 0;
     color: #eee; background: transparent; text-align: left; text-decoration: none; font: 500 14px/1.3 'Inter', sans-serif; cursor: pointer;
