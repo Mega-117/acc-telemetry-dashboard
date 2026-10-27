@@ -3,7 +3,7 @@ import { vRcSwitch } from '~/directives/rcSwitch'
 import { Info } from '@lucide/vue'
 import { stintTypeLabel, gripAbbreviation, lapPointAppearance } from '~/services/session-detail/sessionPresentation'
 import { useHeaderBack } from '~/composables/useHeaderBack'
-import { initialDetailTab } from '~/utils/sessionDetailTab'
+import { initialDetailTab, lapTokenInArchive } from '~/utils/sessionDetailTab'
 import { noteFeatureUse } from '~/services/usage/featureUseNote'
 // ============================================
 // SessionDetailPage - Master / Detail Layout
@@ -263,6 +263,7 @@ watch(originalSession, (session) => {
   detailTab.value = initialDetailTab({
     evo: isEvoSession.value, foreign: !!props.externalUserId, hasLapToken: !!analysisToken.value, viewingPilot: !!targetUserId.value,
     desktop: typeof window !== 'undefined' && typeof (window as Window & { electronAPI?: { listLapTraces?: unknown } }).electronAPI?.listLapTraces === 'function',
+    inArchive: lapTokenInArchive(analysisToken.value),
   })
 }, { immediate: true })
 

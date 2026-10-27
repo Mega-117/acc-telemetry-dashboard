@@ -4,7 +4,8 @@
 // confondono con quelli della sessione mostrata.
 import { listPilotLaps, fetchPilotLap, type LapsArchiveDeps } from './lapsArchiveClient'
 
-export type LapOrigin = 'local' | 'pilot' | 'own' | 'shared'
+/** PIP-646: 'best' = your fastest laps on the track from every session, 'ideal' = the stitched best sectors. */
+export type LapOrigin = 'local' | 'pilot' | 'own' | 'shared' | 'best' | 'ideal'
 
 export interface LapDescriptor {
   id: string
@@ -23,7 +24,7 @@ export interface LapSource {
 }
 
 export interface LocalLapBridge {
-  listLapTraces?: (filter?: { sessionToken?: string, track?: string, car?: string }) => Promise<{ id: string }[] | null>
+  listLapTraces?: (filter?: { sessionToken?: string, track?: string, car?: string, fastest?: boolean, exceptSessionToken?: string, exceptCar?: string, limit?: number }) => Promise<{ id: string }[] | null>
   readLapTrace?: (id: string) => Promise<unknown>
 }
 
@@ -53,6 +54,17 @@ export function electronLapSource(bridge: LocalLapBridge): LapSource {
 export async function listOwnLaps(bridge: LocalLapBridge, track: string, car: string): Promise<LapDescriptor[]> {
   if (typeof bridge.listLapTraces !== 'function') return []
   return localDescriptors(await bridge.listLapTraces({ track, car }), 'own').map(d => ({ ...d, id: `own:${d.id}` }))
+}
+
+/**
+ * PIP-646: i miei giri più veloci (validi e completi) su questa pista, fuori dalla sessione mostrata: con questa
+ * auto, oppure (`otherCars`) con le altre auto. Le esclusioni valgono prima del limite, nel programma.
+ */
+export async function listFastestLaps(bridge: LocalLapBridge, o: { track: string, car: string, exceptSessionToken: string | null, otherCars?: boolean, limit: number }): Promise<LapDescriptor[]> {
+  if (typeof bridge.listLapTraces !== 'function') return []
+  const items = await bridge.listLapTraces({ track: o.track, fastest: true, limit: o.limit, ...(o.otherCars ? { exceptCar: o.car } : { car: o.car }),
+    ...(o.exceptSessionToken ? { exceptSessionToken: o.exceptSessionToken } : {}) })
+  return localDescriptors(items, 'best').map(d => ({ ...d, id: `best:${d.id}`, valid: true }))
 }
 
 /** Giri di una sessione del pilota collegato, dall'archivio online (vista coach). */
