@@ -13,29 +13,32 @@ import { RACING_BACKDROP_BACKGROUND, RACING_SPARK_FROM, RACING_SPARK_TO, RACING_
 // The logo-and-laser loader itself (BOOT_LOADER_CSS, bootLoaderHtml) is also the app's own loading screen, in
 // place of a spinner, so there is one loader everywhere.
 export const BOOT_SCREEN_ID = 'rc-boot'
-export const BOOT_LEAVE_MS = 450
+export const BOOT_LEAVE_MS = 800
 
 export const BOOT_LOADER_CSS = [
   `.rc-boot__inner{display:grid;justify-items:center;gap:30px;animation:rc-boot-in .55s cubic-bezier(.2,.7,.2,1) both;transition:opacity ${BOOT_LEAVE_MS}ms cubic-bezier(.4,0,.2,1),transform ${BOOT_LEAVE_MS}ms cubic-bezier(.4,0,.2,1)}`,
   '.rc-boot__inner img{width:min(410px,80vw);height:auto;filter:drop-shadow(0 0 12px #ff002438);animation:rc-boot-glow 2.4s ease-in-out infinite}',
-  // Laser: a thin dim track with a bright beam (white-hot head, red glow) sweeping across it.
-  '.rc-boot__laser{position:relative;width:min(260px,60vw);height:12px;overflow:hidden}',
-  ".rc-boot__laser::before{content:'';position:absolute;left:0;right:0;top:5px;height:2px;background:#ff002433}",
-  ".rc-boot__laser::after{content:'';position:absolute;left:0;top:5px;width:45%;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,#ff2d4b 40%,#ff8a9b 80%,#fff);box-shadow:0 0 6px 1px #ff2442,0 0 14px 3px #ff1f3dcc,0 0 28px 6px #ff002455;animation:rc-boot-laser 1.15s cubic-bezier(.45,0,.2,1) infinite}",
+  // Laser: a dim track and a beam of light running along it (white-hot core, red glow). The glow has room
+  // above and below (no clipping) and the ends fade out through a mask instead of being cut.
+  '.rc-boot__laser{position:relative;width:min(300px,64vw);height:60px;margin:-24px 0;-webkit-mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent)}',
+  ".rc-boot__laser::before{content:'';position:absolute;left:0;right:0;top:29px;height:2px;background:#ff1f3d40;box-shadow:0 0 6px #ff1f3d40}",
+  ".rc-boot__laser::after{content:'';position:absolute;left:0;top:29px;width:38%;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,#ff2d4b99 25%,#ff3a55 62%,#ffc2cb 88%,#fff 96%,transparent);box-shadow:0 0 3px 1px #ff5a70,0 0 10px 2px #ff1f3dcc,0 0 22px 5px #ff002466;animation:rc-boot-laser 1.7s cubic-bezier(.45,0,.25,1) infinite}",
   // Starts just above zero, not at zero: a frame at opacity 0 does not count as a first paint for PageSpeed.
   '@keyframes rc-boot-in{from{opacity:.01;transform:scale(.97)}}',
   '@keyframes rc-boot-glow{50%{filter:drop-shadow(0 0 28px #ff002480)}}',
-  '@keyframes rc-boot-laser{from{transform:translateX(-100%)}to{transform:translateX(225%)}}',
+  '@keyframes rc-boot-laser{from{transform:translateX(-100%)}to{transform:translateX(264%)}}',
   '@media (prefers-reduced-motion:reduce){.rc-boot__inner,.rc-boot__inner img,.rc-boot__laser::after{animation:none!important;transition:none!important}}',
 ].join('')
 
 const id = `#${BOOT_SCREEN_ID}`
 const BOOT_SCREEN_CSS = [
-  `${id}{position:fixed;left:0;top:0;z-index:2147483000;display:none;place-items:center;width:100vw;height:100vh;height:100dvh;pointer-events:none}`,
-  `${id} .rc-boot__bg{position:fixed;inset:0;z-index:-1;overflow:hidden;background:${RACING_BACKDROP_BACKGROUND}}`,
+  // Sized to the whole window by the start script (innerWidth): the space the page CSS later reserves for the
+  // scrollbar changes 100vw and the visible width, and the logo moved sideways with it.
+  `${id}{position:fixed;left:0;top:0;z-index:2147483000;display:none;place-items:center;width:var(--rc-boot-w,100vw);height:100vh;height:100dvh;pointer-events:none}`,
+  `${id} .rc-boot__bg{position:absolute;inset:0;z-index:-1;overflow:hidden;background:${RACING_BACKDROP_BACKGROUND}}`,
   `${id}.has-app .rc-boot__bg{display:none}`,
   `${id} .rc-boot__bg i{position:absolute;width:3px;height:3px;border-radius:50%;background:#ff7188;box-shadow:0 0 5px #f4002870;animation:rc-spark 18s linear infinite}`,
-  `${id}.is-leaving .rc-boot__inner{opacity:0;transform:scale(1.03)}`,
+  `${id}.is-leaving .rc-boot__inner{opacity:0;transform:scale(1.04)}`,
   `@keyframes rc-spark{0%{transform:${RACING_SPARK_FROM};opacity:0}20%,70%{opacity:.7}100%{transform:${RACING_SPARK_TO};opacity:0}}`,
   `@media (prefers-reduced-motion:reduce){${id} .rc-boot__bg i{animation:none;opacity:.5}}`,
 ].join('')
@@ -47,7 +50,7 @@ const sparksHtml = RACING_SPARKS
 // Browser only: show the screen, lift it and its style out of the loader, and put the sparks on the page clock.
 const bootScript = `(function(){var b=document.getElementById('${BOOT_SCREEN_ID}');if(/Electron/.test(navigator.userAgent)){b.remove();return}`
   + `var t=performance.now()/1000;b.querySelectorAll('i[data-d]').forEach(function(i){i.style.animationDelay=(i.getAttribute('data-d')-t)+'s'});`
-  + `b.style.display='grid';document.head.appendChild(document.getElementById('${BOOT_SCREEN_ID}-style'));document.body.appendChild(b)})()`
+  + `var w=function(){b.style.setProperty('--rc-boot-w',innerWidth+'px')};w();addEventListener('resize',w);b.style.display='grid';document.head.appendChild(document.getElementById('${BOOT_SCREEN_ID}-style'));document.body.appendChild(b)})()`
 
 const withSlash = (baseURL: string) => baseURL.endsWith('/') ? baseURL : `${baseURL}/`
 
