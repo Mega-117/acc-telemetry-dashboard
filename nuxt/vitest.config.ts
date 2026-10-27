@@ -108,6 +108,7 @@ export default defineConfig({
         'app/utils/temperatureColor.ts',
         'app/utils/boxEngineer.ts',
         'app/utils/datiWheels.ts',
+        'app/i18n/index.ts',
         'app/services/telemetry/lapAnalysis.ts',
         'app/components/overlay/ControlKNumberField.vue',
         'app/services/auth/dashboardEntryRecovery.ts',

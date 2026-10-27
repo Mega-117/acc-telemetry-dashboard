@@ -8,6 +8,7 @@ import { useFeatureAccess } from '~/composables/useFeatureAccess'
 import { usePitwallStore } from '~/composables/usePitwallStore'
 import { usePitwallConceptMode } from '~/composables/usePitwallConceptMode'
 import { markHudRoutePhase, startHudRouteTiming } from '~/utils/hudRoutePerformance'
+import { useI18n, type TranslationKey } from '~/i18n'
 
 defineProps<{
   backLabel?: string
@@ -17,6 +18,7 @@ defineProps<{
 const emit = defineEmits<{ back: [] }>()
 
 const route = useRoute()
+const { t } = useI18n()
 const { openHome: openPitwallHome } = usePitwallConceptMode()
 const { canAccess } = useFeatureAccess()
 const canAccessHud = canAccess('hud')
@@ -24,15 +26,15 @@ const canAccessHud = canAccess('hud')
 const { pendingNoticeCount: pitwallPending } = usePitwallStore()
 
 const baseTabs = [
-  { id: 'panoramica', label: 'PANORAMICA', to: '/panoramica' },
-  { id: 'sessioni', label: 'SESSIONI', to: '/sessioni' },
-  { id: 'piste', label: 'PISTE', to: '/piste' },
-  { id: 'pitwall', label: 'PITWALL', to: '/pitwall' },
-  { id: 'spotter', label: 'SPOTTER', to: '/spotter' }
+  { id: 'panoramica', label: 'nav.overview', to: '/panoramica' },
+  { id: 'sessioni', label: 'nav.sessions', to: '/sessioni' },
+  { id: 'piste', label: 'nav.tracks', to: '/piste' },
+  { id: 'pitwall', label: 'nav.pitwall', to: '/pitwall' },
+  { id: 'spotter', label: 'nav.spotter', to: '/spotter' }
 ]
 
 const tabs = computed(() => {
-  return [...baseTabs, ...(canAccessHud.value ? [{ id: 'hud', label: 'HUD', to: '/hud' }] : []), { id: 'dati', label: 'DATI', to: '/dati' }]
+  return [...baseTabs, ...(canAccessHud.value ? [{ id: 'hud', label: 'nav.hud', to: '/hud' }] : []), { id: 'dati', label: 'nav.data', to: '/dati' }]
 })
 
 // Check if tab is active based on current route
@@ -89,7 +91,7 @@ function onTabClick(tab: { id: string }) {
         :class="{ 'tab--active': isActive(tab.to), 'tab--section-start': tab.id === 'spotter' }"
         @click="onTabClick(tab)"
       >
-        {{ tab.label }}
+        {{ t(tab.label as TranslationKey) }}
         <span
           v-if="tab.id === 'pitwall' && pitwallPending"
           class="tab__badge"

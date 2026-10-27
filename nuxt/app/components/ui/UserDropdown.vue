@@ -4,6 +4,9 @@
 // ============================================
 
 import { onMounted, ref } from 'vue'
+import { useI18n } from '~/i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   userName: string
@@ -83,28 +86,28 @@ const handleLogout = () => {
             <circle cx="8" cy="5" r="3" stroke="currentColor" stroke-width="1.5"/>
             <path d="M2 14c0-3 2.5-5 6-5s6 2 6 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
-          Profilo
+          {{ t('userMenu.profile') }}
         </button>
         <button v-if="showSettings" class="dropdown-item" @click="handleSettings">
           <svg class="item-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
             <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
             <path d="M8 5v3l2 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
-          Impostazioni
+          {{ t('userMenu.settings') }}
         </button>
         <button class="dropdown-item" @click="openReport">
           <svg class="item-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M8 2l6.5 11.5h-13z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
             <path d="M8 6.5v3.2M8 11.6v.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
-          Segnala problema
+          {{ t('userMenu.report') }}
         </button>
         <div class="dropdown-divider"></div>
         <button class="dropdown-item dropdown-item--danger" @click="handleLogout">
           <svg class="item-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M6 2H4a2 2 0 00-2 2v8a2 2 0 002 2h2M11 11l3-3-3-3M14 8H6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          Logout
+          {{ t('userMenu.logout') }}
         </button>
       </div>
     </Transition>

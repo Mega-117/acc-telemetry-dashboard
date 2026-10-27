@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { Keyboard, Play, Power } from '@lucide/vue'
+import { Keyboard, Languages, Play, Power } from '@lucide/vue'
+import { useI18n } from '~/i18n'
 import { onMounted, ref } from 'vue'
 import { useWheelInputBridge } from '~/composables/useWheelInputBridge'
 definePageMeta({ layout: 'dashboard' })
 
 const router = useRouter()
 const ready = ref(false)
-const section = ref<'commands' | 'startup' | 'intro'>('commands')
+const section = ref<'commands' | 'startup' | 'intro' | 'language'>('commands')
+const { t } = useI18n()
 const bridge = useWheelInputBridge()
 
 onBeforeRouteLeave(async () => { await bridge.finishConfiguration() })
@@ -28,28 +30,33 @@ onMounted(async () => {
   <div class="settings-page">
     <div v-if="ready" class="settings-content">
       <header class="settings-page__title">
-        <h1>Impostazioni</h1>
-        <span>Personalizza il programma e i controlli della tua postazione.</span>
+        <h1>{{ t('settings.title') }}</h1>
+        <span>{{ t('settings.subtitle') }}</span>
       </header>
       <div class="settings-shell">
-        <aside aria-label="Sezioni impostazioni">
+        <aside :aria-label="t('settings.sections')">
           <button type="button" :class="{ 'is-active': section === 'commands' }" :aria-pressed="section === 'commands'" @click="section = 'commands'">
             <Keyboard :size="22" aria-hidden="true" />
-            Comandi
+            {{ t('settings.commands') }}
           </button>
           <button type="button" :class="{ 'is-active': section === 'startup' }" :aria-pressed="section === 'startup'" @click="section = 'startup'">
             <Power :size="22" aria-hidden="true" />
-            Avvio
+            {{ t('settings.startup') }}
           </button>
           <button type="button" :class="{ 'is-active': section === 'intro' }" :aria-pressed="section === 'intro'" @click="section = 'intro'">
             <Play :size="22" aria-hidden="true" />
-            Introduzione
+            {{ t('settings.intro') }}
+          </button>
+          <button type="button" :class="{ 'is-active': section === 'language' }" :aria-pressed="section === 'language'" @click="section = 'language'">
+            <Languages :size="22" aria-hidden="true" />
+            {{ t('settings.language') }}
           </button>
         </aside>
         <main>
           <SettingsCommandBindingsPanel v-show="section === 'commands'" />
           <SettingsStartupPanel v-if="section === 'startup'" />
           <SettingsIntroPanel v-if="section === 'intro'" />
+          <LanguagePicker v-if="section === 'language'" />
         </main>
       </div>
     </div>
