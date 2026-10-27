@@ -6,6 +6,7 @@
 import { computed, ref } from 'vue'
 import AuthField from './AuthField.vue'
 import { emailDomainHintMessage } from '~/utils/emailDomainHint'
+import { PRIVACY_VERSION, TERMS_VERSION, legalPageUrl, type RegisterConsent } from '~/utils/legalVersions'
 
 withDefaults(defineProps<{
   loading?: boolean
@@ -20,9 +21,15 @@ const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
 const error = ref('')
+// PIP-658: two separate, unticked boxes; both are needed to create the account.
+const acceptTerms = ref(false)
+const acceptPrivacy = ref(false)
+const baseURL = useRuntimeConfig().app.baseURL
+const termsUrl = legalPageUrl('termini', baseURL)
+const privacyUrl = legalPageUrl('privacy', baseURL)
 
 const emit = defineEmits<{
-  submit: [data: { firstName: string; lastName: string; nickname: string; email: string; password: string }]
+  submit: [data: { firstName: string; lastName: string; nickname: string; email: string; password: string; consent: RegisterConsent }]
 }>()
 
 const domainHint = computed(() => emailDomainHintMessage(email.value))
@@ -68,13 +75,18 @@ const handleSubmit = () => {
     error.value = 'Le password non coincidono.'
     return
   }
+  if (!acceptTerms.value || !acceptPrivacy.value) {
+    error.value = 'Per creare l\'account accetta i Termini della beta e conferma di aver letto l\'Informativa privacy.'
+    return
+  }
 
   emit('submit', {
     firstName: firstName.value.trim(),
     lastName: lastName.value.trim(),
     nickname: nickname.value.trim(),
     email: email.value.trim(),
-    password: password.value
+    password: password.value,
+    consent: { termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION, acceptedAt: new Date().toISOString() }
   })
 }
 
@@ -92,6 +104,8 @@ defineExpose({
     email.value = ''
     password.value = ''
     confirmPassword.value = ''
+    acceptTerms.value = false
+    acceptPrivacy.value = false
     error.value = ''
   }
 })
@@ -162,6 +176,17 @@ defineExpose({
       @input="clearError"
     />
 
+    <div class="consent">
+      <label class="consent__row">
+        <input v-model="acceptTerms" type="checkbox" required @change="clearError">
+        <span>Accetto i <a :href="termsUrl" target="_blank" rel="noopener">Termini della beta</a></span>
+      </label>
+      <label class="consent__row">
+        <input v-model="acceptPrivacy" type="checkbox" required @change="clearError">
+        <span>Ho letto l'<a :href="privacyUrl" target="_blank" rel="noopener">Informativa privacy</a></span>
+      </label>
+    </div>
+
     <UiFormError :message="error" :visible="!!error" />
 
     <UiBaseButton
@@ -173,3 +198,11 @@ defineExpose({
     </UiBaseButton>
   </form>
 </template>
+
+<style scoped>
+.consent { display: grid; gap: 8px; margin: 4px 0 2px; }
+.consent__row { display: flex; align-items: flex-start; gap: 10px; color: #c9c9d1; font-size: 13px; line-height: 1.4; cursor: pointer; }
+.consent__row input { flex: none; width: 16px; height: 16px; margin: 1px 0 0; accent-color: #ff0024; cursor: pointer; }
+.consent__row a { color: #fff; text-decoration: underline; text-underline-offset: 2px; }
+.consent__row a:hover { color: #ff9aaa; }
+</style>

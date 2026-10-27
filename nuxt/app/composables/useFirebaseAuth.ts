@@ -17,6 +17,7 @@ import { createAuthSessionRecoveryCoordinator } from '~/services/auth/authSessio
 import { createAuthRevisionLeaseCoordinator, type AuthRevisionLease } from '~/services/auth/authRevisionLease'
 import { createRetryableSingleFlightLoader } from '~/services/auth/retryableSingleFlightLoader'
 import { recordFirebaseCacheHit } from '~/services/monitoring/firebaseOpsJournal'
+import type { RegisterConsent } from '~/utils/legalVersions'
 import {
     clearLocalUserIdentity,
     isSecondaryLocalRuntimeRenderer,
@@ -452,7 +453,8 @@ export function useFirebaseAuth() {
         password: string,
         nickname: string,
         firstName: string = '',
-        lastName: string = ''
+        lastName: string = '',
+        consent?: RegisterConsent
     ) => authActions.run(async () => {
         await authSync.whenIdle()
         invalidatePendingAuthWork()
@@ -461,7 +463,7 @@ export function useFirebaseAuth() {
         try {
             const { registerWithEmail, translateAuthError } = await getAuthDependencies()
             translateError = translateAuthError
-            const { user } = await registerWithEmail({ email, password, nickname, firstName, lastName })
+            const { user } = await registerWithEmail({ email, password, nickname, firstName, lastName, consent })
             console.log('[AUTH] Registration accepted')
             return { success: true, user }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type

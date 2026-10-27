@@ -306,6 +306,24 @@ describe('fresh user provisioning contract', () => {
     await assertFails(getDoc(doc(bare, `users/${SECOND_PILOT_UID}/sessions/s1`)))
   })
 
+  it('PIP-658: consent is stored at registration and updated later; malformed consent is refused; the owner deletes their account', async () => {
+    const db = testEnv.authenticatedContext(FRESH_PILOT_UID, { email: FRESH_PILOT_EMAIL, email_verified: true }).firestore()
+    const userRef = doc(db, `users/${FRESH_PILOT_UID}`)
+    const consent = { termsVersion: '2026-10-27', privacyVersion: '2026-10-27', acceptedAt: '2026-10-27T10:00:00.000Z' }
+    await assertFails(setDoc(userRef, initialPilotUserPayload(FRESH_PILOT_UID, { consent: { ...consent, extra: 1 } })))
+    await assertSucceeds(setDoc(userRef, initialPilotUserPayload(FRESH_PILOT_UID, { consent })))
+    await assertSucceeds(updateDoc(userRef, { consent: { ...consent, choicesAt: '2026-10-27T10:01:00.000Z', usage: true, diagnostics: false, library: false } }))
+    await assertFails(updateDoc(userRef, { consent: { ...consent, library: 'yes' } }))
+    await assertSucceeds(setDoc(doc(db, `publicProfiles/${FRESH_PILOT_UID}`), publicProfilePayload(FRESH_PILOT_UID)))
+    // Account deletion: subcollections, public profile and the profile itself, only for the owner.
+    const other = testEnv.authenticatedContext(SECOND_PILOT_UID, { email_verified: true }).firestore()
+    await assertFails(deleteDoc(doc(other, `users/${FRESH_PILOT_UID}`)))
+    await assertSucceeds(deleteDoc(doc(db, `users/${FRESH_PILOT_UID}/runtimeInstallations/i1`)))
+    await assertSucceeds(getDocs(query(collection(db, `users/${FRESH_PILOT_UID}/diagnostics`), limit(300))))
+    await assertSucceeds(deleteDoc(doc(db, `publicProfiles/${FRESH_PILOT_UID}`)))
+    await assertSucceeds(deleteDoc(userRef))
+  })
+
   it('rifiuta tutta la batch se la directory non coincide con il ruolo autorevole', async () => {
     const db = testEnv.authenticatedContext(FRESH_PILOT_UID, {
       email: FRESH_PILOT_EMAIL,
@@ -395,7 +413,8 @@ describe('top-level profile authorization matrix', () => {
     await assertFails(updateDoc(userRef, { uid: SECOND_PILOT_UID }))
     await assertFails(updateDoc(userRef, { createdAt: 'spoofed' }))
     await assertFails(setDoc(userRef, { serverOwned: true }, { merge: true }))
-    await assertFails(deleteDoc(userRef))
+    // PIP-658: the owner may delete it (Cancella account); nobody else may.
+    await assertFails(deleteDoc(doc(testEnv.authenticatedContext('qa-intruder', { email_verified: true }).firestore(), userRef.path)))
   })
 
   it('vincola email ed emailVerified del profilo esistente ai claim Auth', async () => {
@@ -472,7 +491,8 @@ describe('top-level profile authorization matrix', () => {
     await assertFails(updateDoc(profileRef, { nickname: 42 }))
     await assertFails(updateDoc(profileRef, { uid: SECOND_PILOT_UID }))
     await assertFails(updateDoc(profileRef, { createdAt: 'spoofed' }))
-    await assertFails(deleteDoc(profileRef))
+    // PIP-658: the owner may delete it (Cancella account); nobody else may.
+    await assertFails(deleteDoc(doc(testEnv.authenticatedContext('qa-intruder', { email_verified: true }).firestore(), profileRef.path)))
   })
 
   it('applica la matrice admin/coach a publicProfiles', async () => {
@@ -529,7 +549,8 @@ describe('top-level profile authorization matrix', () => {
     await assertFails(updateDoc(directoryRef, { role: 'admin' }))
     await assertFails(updateDoc(directoryRef, { coachId: uid }))
     await assertFails(setDoc(directoryRef, { trustedExtra: true }, { merge: true }))
-    await assertFails(deleteDoc(directoryRef))
+    // PIP-658: the owner may delete it (Cancella account); nobody else may.
+    await assertFails(deleteDoc(doc(testEnv.authenticatedContext('qa-intruder', { email_verified: true }).firestore(), directoryRef.path)))
   })
 
   it('ripara una directory mancante e proietta solo coach autorevole', async () => {

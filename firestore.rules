@@ -588,6 +588,19 @@ service cloud.firestore {
       return value == null || value is string;
     }
 
+    // PIP-658: accepted Terms/Privacy versions and the first-run privacy choices. Small and closed.
+    function validConsent(consent) {
+      return consent is map
+             && consent.keys().hasOnly(['termsVersion', 'privacyVersion', 'acceptedAt', 'choicesAt', 'usage', 'diagnostics', 'library'])
+             && (!consent.keys().hasAny(['termsVersion']) || (consent.termsVersion is string && consent.termsVersion.size() <= 20))
+             && (!consent.keys().hasAny(['privacyVersion']) || (consent.privacyVersion is string && consent.privacyVersion.size() <= 20))
+             && (!consent.keys().hasAny(['acceptedAt']) || (consent.acceptedAt is string && consent.acceptedAt.size() <= 40))
+             && (!consent.keys().hasAny(['choicesAt']) || (consent.choicesAt is string && consent.choicesAt.size() <= 40))
+             && (!consent.keys().hasAny(['usage']) || consent.usage is bool)
+             && (!consent.keys().hasAny(['diagnostics']) || consent.diagnostics is bool)
+             && (!consent.keys().hasAny(['library']) || consent.library is bool);
+    }
+
     function validInitialPilotUser(userId) {
       return request.resource.data.keys().hasAll([
                'uid', 'email', 'nickname', 'role', 'coachId', 'createdAt',
@@ -596,8 +609,9 @@ service cloud.firestore {
              && request.resource.data.keys().hasOnly([
                'uid', 'email', 'firstName', 'lastName', 'nickname', 'role',
                'coachId', 'createdAt', 'emailVerified', 'directorySortName',
-               'searchPrefixes'
+               'searchPrefixes', 'consent'
              ])
+             && (!request.resource.data.keys().hasAny(['consent']) || validConsent(request.resource.data.consent))
              && request.resource.data.uid == userId
              && request.resource.data.uid == request.auth.uid
              && request.resource.data.email == request.auth.token.get('email', null)
@@ -621,8 +635,9 @@ service cloud.firestore {
                'uid', 'email', 'emailVerified', 'firstName', 'lastName',
                'nickname', 'directorySortName', 'searchPrefixes', 'equipment',
                'stats', 'sessionIndex', 'suiteVersion', 'suiteVersionDetail',
-               'suiteVersionUpdatedAt', 'clientRuntime', 'maintenance'
+               'suiteVersionUpdatedAt', 'clientRuntime', 'maintenance', 'consent'
              ])
+             && (!request.resource.data.keys().hasAny(['consent']) || validConsent(request.resource.data.consent))
              && request.resource.data.get('role', null) == resource.data.get('role', null)
              && request.resource.data.get('coachId', null) == resource.data.get('coachId', null)
              && request.resource.data.get('createdAt', null) == resource.data.get('createdAt', null)
@@ -855,6 +870,7 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if (isAccountOwner(userId) || isAdmin())
                     && validPublicProfileCreate(userId);
+      allow delete: if isAccountOwner(userId);
       allow update: if (isAccountOwner(userId) && validOwnerPublicProfileUpdate(userId))
                     || (isAdmin() && validAdminPublicProfileUpdate(userId));
       allow delete: if isAdmin();
@@ -870,6 +886,7 @@ service cloud.firestore {
                     && validPilotDirectoryCreate(userId);
       allow update: if (isAccountOwner(userId) || isAdmin())
                     && validPilotDirectoryUpdate(userId);
+      allow delete: if isAccountOwner(userId);
       allow delete: if isAdmin();
     }
 
@@ -880,6 +897,8 @@ service cloud.firestore {
       allow read: if isAccountOwner(userId);
       allow create: if isAccountOwner(userId) && validInitialPilotUser(userId);
       allow update: if isAccountOwner(userId) && validOwnerUserUpdate(userId);
+      // PIP-658: "Cancella account" removes the owner's own documents (subcollections first, this one last).
+      allow delete: if isAccountOwner(userId);
 
       // Coach can read assigned pilots only.
       allow read: if isCoachOfUser(userId);
@@ -895,7 +914,7 @@ service cloud.firestore {
                       && validRuntimeInstallation(installationId)
                       && request.resource.data.installationId == resource.data.installationId
                       && request.resource.data.startedAt == resource.data.startedAt;
-        allow delete: if isAdmin();
+        allow delete: if isOwner(userId) || isAdmin();
       }
 
       // === Sessions subcollection ===
@@ -994,7 +1013,9 @@ service cloud.firestore {
         allow list: if isAdmin()
                     && request.query.limit != null
                     && request.query.limit <= 1001;
-        allow delete: if isAdmin();
+        // PIP-658: account deletion pages through the owner's own reports and removes them.
+        allow list: if isOwner(userId) && request.query.limit != null && request.query.limit <= 500;
+        allow delete: if isOwner(userId) || isAdmin();
         allow update: if false;
       }
 
@@ -1033,6 +1054,7 @@ service cloud.firestore {
                       && resource.data.coachId == request.auth.uid
                       && request.resource.data.coachId == request.auth.uid
                       && request.resource.data.pilotId == userId;
+        allow delete: if isOwner(userId);
       }
     }
 

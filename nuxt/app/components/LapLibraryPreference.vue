@@ -1,6 +1,7 @@
 <script setup lang="ts">
-// PIP-650: consent to the reference library, on by default (user decision 27/10). Switching it off
-// takes your laps out of the library at once; the online archive of your own laps is not touched.
+// PIP-650: consent to the reference library. PIP-658: off for new accounts (chosen on the first-run privacy
+// screen, server default in library.mjs); the team kept it on. Switching it off takes your laps out of the
+// library at once; the online archive of your own laps is not touched.
 import { onMounted, ref } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { getLibraryPreference, setLibraryPreference } from '~/services/telemetry/lapsArchiveClient'

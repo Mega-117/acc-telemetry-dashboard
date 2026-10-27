@@ -30,6 +30,7 @@ describe('production runtime imports', () => {
     expect(appShell).toContain("const destination = pendingSpaRedirectPath.value || (isDashboardRoute(normalizedRoutePath.value) ? route.fullPath : '/panoramica')")
     expect(rootPage).toContain("if (typeof route.query['spa-redirect-path'] === 'string') return")
     expect(nuxtConfig).toContain("window.history.replaceState(null, '', appBase + redirectPath)")
-    expect(pagesWorkflow).toContain('run: cp docs/404.html 404.html')
+    // PIP-656: the SPA fallback is staged at the root of the published site only.
+    expect(pagesWorkflow).toContain('cp docs/404.html _site/404.html')
   })
 })

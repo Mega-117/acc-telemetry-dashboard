@@ -53,13 +53,19 @@ describe('Racer Core authentication presentation', () => {
   it('keeps registration matching-password validation and exact payload', async () => {
     const w = keep(mount(RegisterForm, { global }))
     const values = [' QA ', ' Pilot ', ' racer ', 'qa@example.invalid', 'secret', 'different']
-    for (const [i, input] of w.findAll('input').entries()) await input.setValue(values[i])
+    for (const [i, input] of w.findAll('input:not([type="checkbox"])').entries()) await input.setValue(values[i])
     await w.get('form').trigger('submit')
     expect(w.text()).toContain('Le password non coincidono.')
     expect(w.emitted('submit')).toBeUndefined()
     await w.findAll('input')[5]!.setValue('secret')
+    // PIP-658: both boxes are required; the payload carries the accepted versions.
     await w.get('form').trigger('submit')
-    expect(w.emitted('submit')).toEqual([[{ firstName: 'QA', lastName: 'Pilot', nickname: 'racer', email: 'qa@example.invalid', password: 'secret' }]])
+    expect(w.emitted('submit')).toBeUndefined()
+    expect(w.text()).toContain('accetta i Termini della beta')
+    for (const box of w.findAll('input[type="checkbox"]')) await box.setValue(true)
+    await w.get('form').trigger('submit')
+    expect(w.emitted('submit')).toEqual([[{ firstName: 'QA', lastName: 'Pilot', nickname: 'racer', email: 'qa@example.invalid', password: 'secret',
+      consent: { termsVersion: '2026-10-27', privacyVersion: '2026-10-27', acceptedAt: expect.any(String) } }]])
   })
   it('keeps conditional recovery success and exposed reset', async () => {
     const w = keep(mount(ResetPasswordForm, { global }))

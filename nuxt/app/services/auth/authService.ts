@@ -12,6 +12,7 @@ import { auth } from '~/config/firebaseAuth'
 import { refreshUserCredentials } from './authSessionPolicy'
 import { createInitialUserDocument } from './userProvisioningService'
 import { observeFirebaseAuthOperation } from '~/services/monitoring/firebaseOpsJournal'
+import type { RegisterConsent } from '~/utils/legalVersions'
 
 // Con la protezione anti-enumerazione attiva sul progetto - `accsuite117` la usa -
 // Firebase non distingue piu' "utente inesistente" da "password errata": nega
@@ -47,8 +48,9 @@ export async function registerWithEmail(params: {
     nickname: string
     firstName?: string
     lastName?: string
+    consent?: RegisterConsent
 }) {
-    const { email, password, nickname, firstName = '', lastName = '' } = params
+    const { email, password, nickname, firstName = '', lastName = '', consent } = params
     const userCredential = await observeFirebaseAuthOperation('register', () => createUserWithEmailAndPassword(auth, email, password))
     const user = userCredential.user
 
@@ -63,7 +65,7 @@ export async function registerWithEmail(params: {
     }
 
     try {
-        await createInitialUserDocument(user, { firstName, lastName, nickname })
+        await createInitialUserDocument(user, { firstName, lastName, nickname, consent })
     } catch (error) {
         profileReady = false
         console.warn('[AUTH] Registration Firestore provisioning deferred:', getAuthErrorCode(error))

@@ -75,6 +75,8 @@ const handleGoToSettings = () => {
     <ElectronLocalProfileStatus />
     <!-- PIP-571: introduzione al primo avvio, una volta per utente e installazione -->
     <OnboardingIntro />
+    <!-- PIP-658: privacy choices, once per account (above the introduction until answered) -->
+    <PrivacyChoicesDialog />
     <!-- Page Content with transitions -->
     <main class="dashboard-viewport">
       <slot></slot>

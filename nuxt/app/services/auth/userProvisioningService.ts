@@ -8,6 +8,7 @@ import { buildPilotDirectoryProjection } from '~/services/pilotDirectoryProjecti
 // primo lettore (login/avvio) e aggiorna la copia con cio' che scrive.
 import { loadOwnerDocument, rememberOwnerDocumentPatch } from '~/repositories/ownerDocumentRepository'
 import { hasProfileProjectionReceipt, rememberProfileProjectionReceipt } from './profileProjectionReceipt'
+import type { RegisterConsent } from '~/utils/legalVersions'
 
 const AUTH_PROVISION_CALLER = 'AuthProvisioning'
 
@@ -96,11 +97,13 @@ export async function createInitialUserDocument(
     {
         firstName = '',
         lastName = '',
-        nickname
+        nickname,
+        consent
     }: {
         firstName?: string
         lastName?: string
         nickname: string
+        consent?: RegisterConsent
     }
 ) {
     const userDocRef = doc(db, 'users', user.uid)
@@ -117,6 +120,8 @@ export async function createInitialUserDocument(
         coachId: null,
         createdAt: new Date().toISOString(),
         emailVerified: user.emailVerified,
+        // PIP-658: the Terms/Privacy versions accepted at registration (Firestore: validConsent).
+        ...(consent ? { consent: { termsVersion: consent.termsVersion, privacyVersion: consent.privacyVersion, acceptedAt: consent.acceptedAt } } : {}),
         ...buildPilotDirectoryFields({
             firstName,
             lastName,

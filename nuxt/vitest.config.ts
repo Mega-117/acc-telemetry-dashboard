@@ -51,6 +51,9 @@ export default defineConfig({
         'app/utils/sessionShareUrl.ts',
         // PIP-654: colori di sessione unici per i grafici.
         'app/utils/sessionPalette.ts',
+        // PIP-658: privacy, consenso e cancellazione account.
+        'app/utils/legalVersions.ts',
+        'app/services/auth/accountDeletion.ts',
         // PIP-633: presentazione delle Statistiche.
         'app/utils/statsPresentation.ts',
         'app/utils/statsJourney.ts',

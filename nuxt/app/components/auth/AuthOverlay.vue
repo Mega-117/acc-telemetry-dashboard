@@ -7,6 +7,7 @@ import { computed, ref } from 'vue'
 import AuthScene from './AuthScene.vue'
 import AuthIcon from './AuthIcon.vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import type { RegisterConsent } from '~/utils/legalVersions'
 
 type AuthView = 'login' | 'register' | 'reset'
 
@@ -66,12 +67,12 @@ const handleLogin = async (credentials: { email: string; password: string }) => 
   }
 }
 
-const handleRegister = async (data: { firstName: string; lastName: string; nickname: string; email: string; password: string }) => {
+const handleRegister = async (data: { firstName: string; lastName: string; nickname: string; email: string; password: string; consent: RegisterConsent }) => {
   if (isBusy.value) return
   isSubmitting.value = true
 
   try {
-    const result = await register(data.email, data.password, data.nickname, data.firstName, data.lastName)
+    const result = await register(data.email, data.password, data.nickname, data.firstName, data.lastName, data.consent)
     if (result.success) {
       emit('register-success', data.email)
     } else {
