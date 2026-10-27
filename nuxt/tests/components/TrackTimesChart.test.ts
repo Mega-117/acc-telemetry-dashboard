@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { setLocale } from '~/i18n'
 import { flushPromises, mount } from '@vue/test-utils'
 import { ref } from 'vue'
 import TrackTimesChart from '../../app/components/charts/TrackTimesChart.vue'
@@ -18,6 +19,9 @@ const history = Array.from({ length: 20 }, (_, i) => ({
 }))
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date(2026, 8, 24, 12)) })
 afterEach(() => vi.useRealTimers())
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('TrackTimesChart controls and consumer data', () => {
   it('paginates nonempty track sessions newest first, groups days and resets when category changes', async () => {

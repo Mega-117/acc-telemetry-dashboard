@@ -5,6 +5,8 @@ import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { usePilotContext } from '~/composables/usePilotContext'
 import { filterHistory, historyBest, historyTrackId } from '~/services/projections/vehicleHistory'
 import { formatLapTime } from '~/utils/telemetryFormat'
+import { useI18n } from '~/i18n'
+const { t } = useI18n()
 const props = defineProps<{ session: unknown; ownerId?: string }>()
 const model = computed(() => commonSessionPresentation(props.session))
 const pilot = usePilotContext()
@@ -29,40 +31,40 @@ watch(() => [props.session, props.ownerId, pilot.value], async () => {
   <section class="common-session racing-data">
     <slot name="actions" />
     <template v-if="model">
-      <p class="eyebrow">{{ model.game }} · SESSIONE</p>
+      <p class="eyebrow">{{ model.game }} · {{ t('sessions.type.unknown') }}</p>
       <h1>{{ model.track }}</h1>
       <p>{{ model.car }} · {{ model.date }}</p>
-      <p v-if="model.variant">Variante: {{ model.variant }}</p>
-      <section class="historical-references" aria-label="Riferimenti storici della vettura">
-        <h2>Storico vettura · {{ model.car }}</h2>
-        <p v-if="referenceError">Riferimenti storici non disponibili al momento.</p>
+      <p v-if="model.variant">{{ t('sessions.common.variant') }}: {{ model.variant }}</p>
+      <section class="historical-references" :aria-label="t('sessions.common.referencesAria')">
+        <h2>{{ t('overview.historyCar') }} · {{ model.car }}</h2>
+        <p v-if="referenceError">{{ t('sessions.common.referencesError') }}</p>
         <dl v-else class="common-analysis">
-          <dt>Qualifica</dt><dd>{{ formatLapTime(references.bestQualy) }}</dd>
-          <dt>Gara</dt><dd>{{ formatLapTime(references.bestRace) }}</dd>
-          <dt>Media gara</dt><dd>{{ formatLapTime(references.bestAvgRace) }}</dd>
+          <dt>{{ t('overview.columns.qualify') }}</dt><dd>{{ formatLapTime(references.bestQualy) }}</dd>
+          <dt>{{ t('overview.columns.race') }}</dt><dd>{{ formatLapTime(references.bestRace) }}</dd>
+          <dt>{{ t('overview.columns.avgRace') }}</dt><dd>{{ formatLapTime(references.bestAvgRace) }}</dd>
         </dl>
-        <p class="availability">Carburante: qualifica fino a 20 L, storico gara oltre 40 L. Media gara: almeno 5 giri puliti. I dati mancanti non generano record.</p>
+        <p class="availability">{{ t('sessions.common.fuelRule') }}</p>
       </section>
       <dl v-if="model.analysis" class="common-analysis">
-        <dt>Giri completi e validi</dt><dd>{{ model.analysis.eligibleLaps }}</dd>
-        <dt>Migliore</dt><dd>{{ model.analysis.best }}</dd>
-        <dt>Media</dt><dd>{{ model.analysis.average }}</dd>
-        <dt>Variabilità dei tempi</dt><dd>{{ model.analysis.consistency }}</dd>
-        <dt>Teorico dai settori</dt><dd>{{ model.analysis.theoretical }}</dd>
+        <dt>{{ t('sessions.common.eligibleLaps') }}</dt><dd>{{ model.analysis.eligibleLaps }}</dd>
+        <dt>{{ t('sessions.common.best') }}</dt><dd>{{ model.analysis.best }}</dd>
+        <dt>{{ t('sessions.common.average') }}</dt><dd>{{ model.analysis.average }}</dd>
+        <dt>{{ t('sessions.common.consistency') }}</dt><dd>{{ model.analysis.consistency }}</dd>
+        <dt>{{ t('sessions.common.theoretical') }}</dt><dd>{{ model.analysis.theoretical }}</dd>
       </dl>
       <div class="racing-table-scroll">
         <table class="racing-day-table">
-          <caption>Tempi registrati</caption>
-          <thead><tr><th>Giro</th><th>Tempo</th><th>Registrazione</th><th>Validità</th><th>Settori disponibili</th></tr></thead>
+          <caption>{{ t('sessions.common.recordedTimes') }}</caption>
+          <thead><tr><th>{{ t('sessions.common.lap') }}</th><th>{{ t('sessions.common.time') }}</th><th>{{ t('sessions.common.recording') }}</th><th>{{ t('sessions.common.validity') }}</th><th>{{ t('sessions.common.sectors') }}</th></tr></thead>
           <tbody><tr v-for="lap in model.laps" :key="lap.number">
             <td>{{ lap.number }}</td><td>{{ lap.time }}</td><td>{{ lap.completeness }}</td><td>{{ lap.validity }}</td>
-            <td><span v-for="(sector, index) in lap.sectors" :key="index" class="sector">S{{ index + 1 }} {{ sector }}</span><span v-if="!lap.sectors.length">Non disponibili</span></td>
+            <td><span v-for="(sector, index) in lap.sectors" :key="index" class="sector">S{{ index + 1 }} {{ sector }}</span><span v-if="!lap.sectors.length">{{ t('sessions.common.sectorsNone') }}</span></td>
           </tr></tbody>
         </table>
       </div>
-      <p class="availability">— indica un tempo non disponibile. La validità sconosciuta non è considerata valida nei best.</p>
+      <p class="availability">{{ t('sessions.common.legend') }}</p>
     </template>
-    <p v-else>Formato sessione non supportato.</p>
+    <p v-else>{{ t('sessions.common.unsupported') }}</p>
   </section>
 </template>
 

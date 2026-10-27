@@ -50,7 +50,7 @@ export default {
       help: 'Paste it on Discord in the #bug channel, with a couple of lines on what you were doing. We need it to find the data for your problem.',
       intro: 'Briefly tell us what happened. We privately send the technical data of the last half hour of the app (errors, state, versions), never your passwords.',
       question: 'What happened?',
-      placeholder: 'E.g. in the pits I pressed Fix pressures and nothing changed',
+      placeholder: 'E.g. in the pits I pressed Pressure correction and nothing changed',
       sending: 'Sending…',
       send: 'Send report',
       sendFailed: 'Could not send. Try again.',

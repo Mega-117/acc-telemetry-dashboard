@@ -4,8 +4,9 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useFloatingPanel } from '~/composables/useFloatingPanel'
 import {
   addDays, displayRaceDateTime, formatRaceDateTime, monthCells, monthLabel, parseRaceDateTime, parseTimePart,
-  RACE_WEEKDAYS, sameDay, type RaceDay,
+  raceWeekdays, sameDay, type RaceDay,
 } from '~/utils/raceDateTime'
+import { useI18n } from '~/i18n'
 
 // PIP-641: date and time of a race in the site's style, instead of the browser's own picker. Like a professional
 // picker the calendar floats above everything, attached to the field (it never stretches the modal): below it, or
@@ -15,6 +16,7 @@ const props = defineProps<{ modelValue: string, invalid?: boolean, describedby?:
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 // Most league races are in the evening; the time stays editable.
 const DEFAULT_HOUR = 21
+const { t, intlLocale } = useI18n()
 
 const value = computed(() => parseRaceDateTime(props.modelValue))
 const now = new Date()
@@ -28,7 +30,7 @@ const field = ref<HTMLButtonElement | null>(null)
 const grid = ref<HTMLElement | null>(null)
 const panel = ref<HTMLElement | null>(null)
 const cells = computed(() => monthCells(view.value.year, view.value.month))
-const dayLabel = (day: RaceDay) => new Intl.DateTimeFormat('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+const dayLabel = (day: RaceDay) => new Intl.DateTimeFormat(intlLocale.value, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   .format(new Date(day.year, day.month, day.day))
 const pad = (n: number) => String(n).padStart(2, '0')
 
@@ -91,22 +93,22 @@ function done() {
       :id="fieldId" ref="field" type="button" class="dt-picker__field" :class="{ 'is-invalid': invalid, 'is-open': open }"
       :aria-expanded="open" :aria-invalid="invalid || undefined" :aria-describedby="describedby" @click="toggle"
     >
-      <span :class="{ 'is-placeholder': !value }">{{ value ? displayRaceDateTime(value) : 'Scegli data e ora' }}</span>
+      <span :class="{ 'is-placeholder': !value }">{{ value ? displayRaceDateTime(value) : t('overview.picker.choose') }}</span>
       <CalendarDays :size="18" :stroke-width="1.6" aria-hidden="true" />
     </button>
     <Teleport to="body">
     <Transition name="dt-drawer">
       <div
         v-if="open" ref="panel" class="dt-picker__panel" :class="`is-${floating.place.value?.placement ?? 'below'}`"
-        :style="floating.style()" role="dialog" aria-label="Scegli data e ora"
+        :style="floating.style()" role="dialog" :aria-label="t('overview.picker.choose')"
       >
         <div class="dt-picker__head">
-          <button type="button" aria-label="Mese precedente" @click="shiftMonth(-1)"><ChevronLeft :size="18" aria-hidden="true" /></button>
+          <button type="button" :aria-label="t('overview.picker.prevMonth')" @click="shiftMonth(-1)"><ChevronLeft :size="18" aria-hidden="true" /></button>
           <strong aria-live="polite">{{ monthLabel(view.year, view.month) }}</strong>
-          <button type="button" aria-label="Mese successivo" @click="shiftMonth(1)"><ChevronRight :size="18" aria-hidden="true" /></button>
+          <button type="button" :aria-label="t('overview.picker.nextMonth')" @click="shiftMonth(1)"><ChevronRight :size="18" aria-hidden="true" /></button>
         </div>
         <div ref="grid" class="dt-picker__grid" @keydown="onGridKey">
-          <span v-for="(weekday, i) in RACE_WEEKDAYS" :key="`wd-${i}`" class="dt-picker__weekday" aria-hidden="true">{{ weekday }}</span>
+          <span v-for="(weekday, i) in raceWeekdays()" :key="`wd-${i}`" class="dt-picker__weekday" aria-hidden="true">{{ weekday }}</span>
           <button
             v-for="cell in cells" :key="`${cell.year}-${cell.month}-${cell.day}`" type="button" class="dt-picker__day"
             :class="{ 'is-out': !cell.inMonth, 'is-today': sameDay(cell, today), 'is-selected': sameDay(cell, value) }"
@@ -115,11 +117,11 @@ function done() {
           >{{ cell.day }}</button>
         </div>
         <div class="dt-picker__time">
-          <span>Ora</span>
-          <input v-model="hourText" inputmode="numeric" maxlength="2" aria-label="Ora" @change="commitTime">
+          <span>{{ t('overview.picker.time') }}</span>
+          <input v-model="hourText" inputmode="numeric" maxlength="2" :aria-label="t('overview.picker.hour')" @change="commitTime">
           <b aria-hidden="true">:</b>
-          <input v-model="minuteText" inputmode="numeric" maxlength="2" aria-label="Minuti" @change="commitTime">
-          <button type="button" class="rc-btn dt-picker__done" @click="done">Fatto</button>
+          <input v-model="minuteText" inputmode="numeric" maxlength="2" :aria-label="t('overview.picker.minutes')" @change="commitTime">
+          <button type="button" class="rc-btn dt-picker__done" @click="done">{{ t('overview.picker.done') }}</button>
         </div>
       </div>
     </Transition>

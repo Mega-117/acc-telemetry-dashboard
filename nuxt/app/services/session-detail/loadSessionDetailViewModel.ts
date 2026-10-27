@@ -1,5 +1,6 @@
 import type { FullSession } from '~/types/telemetry'
 import type { SessionDetailUserIdentity } from '~/types/sessionDetailViewModel'
+import { useI18n } from '~/i18n'
 
 function getErrorDetails(error: unknown): { code?: string; message?: string } {
   if (!error || typeof error !== 'object') return {}
@@ -12,9 +13,10 @@ function getErrorDetails(error: unknown): { code?: string; message?: string } {
 
 export function getSessionDetailLoadError(error: unknown): string {
   const details = getErrorDetails(error)
+  const { t } = useI18n()
   return details.code === 'permission-denied'
-    ? 'Sessione non condivisa o accesso negato'
-    : (details.message || 'Errore caricamento')
+    ? t('sessionDetail.errors.denied')
+    : (details.message || t('sessionDetail.errors.load'))
 }
 
 export async function loadSessionDetailViewModel(params: {
@@ -29,7 +31,7 @@ export async function loadSessionDetailViewModel(params: {
 }): Promise<{ fullSession: FullSession | null; currentUserNickname: string; loadError: string | null; userIdToLoad?: string }> {
   const { sessionId, externalUserId, targetUserId, currentUser, currentUserDisplayName, telemetryGateway } = params
 
-  const currentUserNickname = currentUserDisplayName || currentUser.value?.displayName || 'Tu'
+  const currentUserNickname = currentUserDisplayName || currentUser.value?.displayName || useI18n().t('sessionDetail.youName')
 
   const userIdToLoad = externalUserId || targetUserId || undefined
 
@@ -43,7 +45,7 @@ export async function loadSessionDetailViewModel(params: {
       return {
         fullSession: null,
         currentUserNickname,
-        loadError: 'Sessione non trovata',
+        loadError: useI18n().t('sessionDetail.errors.notFound'),
         userIdToLoad
       }
     }

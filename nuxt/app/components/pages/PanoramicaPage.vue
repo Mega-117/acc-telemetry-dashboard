@@ -18,11 +18,14 @@ import { getOverviewCarImage } from '~/utils/overviewCarImage'
 import { overviewEntryKey } from '~/services/auth/overviewEntryPreparation'
 import type { OverviewProjection } from '~/types/overviewProjections'
 import type { RaceCalendarEvent } from '~/repositories/raceCalendarRepository'
+import { useI18n, type TranslationKey } from '~/i18n'
+import { parseTelemetryDate } from '~/utils/telemetryFormat'
 
 // PIP-555: `pending` = prepared before the cloud with nothing to show; the page stays
 // "in caricamento" and loads at the cloud-ready event.
 const props = defineProps<{ prepared?: { uid: string; projection: OverviewProjection | null; events: RaceCalendarEvent[]; pending?: boolean } }>()
 
+const { t, locale, intlLocale } = useI18n()
 const pilotContext = usePilotContext()
 const targetUserId = useTargetUserId()
 const { consultedGame } = useGameContext()
@@ -99,11 +102,27 @@ const activityTotals = computed(() => overviewProjection.value?.activityTotals |
 
 const lastCarImage = computed(() => getOverviewCarImage(overviewProjection.value?.lastCar.rawName, consultedGame.value))
 
-const lastCarName = computed(() => overviewProjection.value?.lastCar.displayName || 'Nessuna auto')
-const lastCarDate = computed(() => overviewProjection.value?.lastCar.lastUsedDate || 'Nessuna sessione registrata')
+// PIP-665: the projection is cached with Italian placeholders and dates: Italian shows them as stored,
+// other languages rebuild them at display time from the raw values (the cache is never rewritten).
+const STORED_NO_CAR = ['Nessuna auto', 'NESSUNA AUTO']
+const lastCarName = computed(() => {
+  const stored = overviewProjection.value?.lastCar.displayName
+  if (!stored || (locale.value !== 'it' && STORED_NO_CAR.includes(stored))) return t('overview.noCar')
+  return stored
+})
+const lastCarDate = computed(() => {
+  const stored = overviewProjection.value?.lastCar.lastUsedDate
+  if (!stored || stored === 'Nessuna sessione registrata') return t('overview.noSession')
+  const raw = overviewProjection.value?.lastSession?.date
+  const date = locale.value === 'it' || !raw ? null : parseTelemetryDate(raw)
+  return date ? date.toLocaleDateString(intlLocale.value, { day: 'numeric', month: 'short', year: 'numeric' }) : stored
+})
 const lastTrack = computed(() => overviewProjection.value?.lastTrack || null)
-const lastTrackName = computed(() => lastTrack.value?.name || 'La tua prossima pista')
+const lastTrackName = computed(() => lastTrack.value?.name || t('overview.nextTrack'))
 const lastSession = computed(() => overviewProjection.value?.lastSession || null)
+// Column labels are stored in Italian in the cached projection: shown through their key.
+const COLUMN_KEYS: Record<string, TranslationKey> = { Qualifica: 'overview.columns.qualify', Gara: 'overview.columns.race', 'Media gara': 'overview.columns.avgRace' }
+const columnLabel = (label: string) => COLUMN_KEYS[label] ? t(COLUMN_KEYS[label]) : label
 const performanceColumns = computed(() => overviewProjection.value?.performanceColumns ?? [
   { label: 'Qualifica', best: lastTrack.value?.bestQualy, grip: lastTrack.value?.bestQualyGrip, session: lastSession.value?.bestQualy },
   { label: 'Gara', best: lastTrack.value?.bestRace, grip: lastTrack.value?.bestRaceGrip, session: lastSession.value?.bestRace },
@@ -136,10 +155,10 @@ function goToStats() {
   <LayoutPageContainer>
     <GameContextTransition :game-id="consultedGame" :busy="overviewStatus === 'pending' || calendarBusy">
     <p v-if="overviewStatus === 'error'" class="overview-error" role="status">
-      Dati non disponibili. <button type="button" @click="loadOverview">Riprova</button>
+      {{ t('overview.dataUnavailable') }} <button type="button" @click="loadOverview">{{ t('common.retry') }}</button>
     </p>
     <div class="racing-overview" :aria-busy="overviewStatus === 'pending'">
-      <section class="last-drive racing-panel" :class="{ 'overview-placeholder': isOverviewPlaceholder }" :inert="isOverviewPlaceholder" aria-label="Ultima sessione e migliori tempi">
+      <section class="last-drive racing-panel" :class="{ 'overview-placeholder': isOverviewPlaceholder }" :inert="isOverviewPlaceholder" :aria-label="t('overview.lastDriveAria')">
         <div class="last-drive__hero">
           <UiResponsiveImage :src="lastCarImage" :alt="lastCarName" :sizes="OVERVIEW_CAR_SIZES" loading="eager" fetchpriority="high" class="last-drive__image" />
           <div class="last-drive__game"><GameLogo :game-id="consultedGame" /></div>
@@ -150,37 +169,37 @@ function goToStats() {
           </div>
         </div>
         <div class="last-drive__results">
-          <table class="performance-table" aria-label="Best storici pista e best ultima sessione">
+          <table class="performance-table" :aria-label="t('overview.performanceAria')">
             <tbody>
               <tr>
                 <td v-for="column in performanceColumns" :key="column.label">
-                  <span class="time-label">{{ consultedGame === 'acc' ? `Storico ${getCarCategory(overviewProjection?.lastCar.rawName || '')}` : 'Storico vettura' }} · {{ column.label }}</span>
+                  <span class="time-label">{{ consultedGame === 'acc' ? t('overview.historyCategory', { category: getCarCategory(overviewProjection?.lastCar.rawName || '') }) : t('overview.historyCar') }} · {{ columnLabel(column.label) }}</span>
                   <strong>{{ column.best || '--:--.---' }}</strong>
                   <abbr v-if="column.grip" class="grip-badge" :title="column.grip">{{ column.grip.slice(0, 3).toUpperCase() }}</abbr>
                 </td>
               </tr>
               <tr>
                 <td v-for="column in performanceColumns" :key="column.label">
-                  <span class="time-label">Ultima · {{ column.label }}</span>
+                  <span class="time-label">{{ t('overview.latest') }} · {{ columnLabel(column.label) }}</span>
                   <strong>{{ column.session || '--:--.---' }}</strong>
                 </td>
               </tr>
             </tbody>
           </table>
           <div class="last-drive__actions">
-            <button class="rc-btn" :disabled="!lastTrack" @click="goToTrack">Dettaglio pista<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" /></button>
-            <button class="rc-btn rc-btn--primary" :disabled="!lastSession?.id" @click="goToSession">Ultima sessione<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" /></button>
+            <button class="rc-btn" :disabled="!lastTrack" @click="goToTrack">{{ t('overview.trackDetail') }}<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" /></button>
+            <button class="rc-btn rc-btn--primary" :disabled="!lastSession?.id" @click="goToSession">{{ t('overview.lastSession') }}<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" /></button>
           </div>
         </div>
-        <span v-if="isOverviewPlaceholder" class="overview-loading-label" role="status">Caricamento dati…</span>
+        <span v-if="isOverviewPlaceholder" class="overview-loading-label" role="status">{{ t('common.loadingData') }}</span>
       </section>
 
       <aside class="racing-overview__side">
         <OverviewUpcomingRacesCard :user-id="targetUserId" :game-id="consultedGame" @loading="calendarBusy = $event" :initial-events="prepared?.events" :initial-user-id="prepared?.uid" racing />
         <CardsActivityCard class="overview-activity" :data="activityData" :practice-total="activityTotals.practice" :qualify-total="activityTotals.qualify" :race-total="activityTotals.race" :other-total="overviewProjection?.otherActivity" racing :aria-busy="isOverviewPlaceholder" :stats-link="consultedGame === 'acc'" @open-stats="goToStats" />
         <section class="training-panel racing-panel">
-          <div><h2>Allenamenti</h2><p>Migliora il tuo tempo in pista</p></div>
-          <NuxtLink to="/preparazione?scenario=tracktitan_input" class="rc-btn rc-btn--primary">Esplora allenamenti<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" /></NuxtLink>
+          <div><h2>{{ t('overview.training') }}</h2><p>{{ t('overview.trainingText') }}</p></div>
+          <NuxtLink to="/preparazione?scenario=tracktitan_input" class="rc-btn rc-btn--primary">{{ t('overview.trainingCta') }}<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" /></NuxtLink>
         </section>
       </aside>
     </div>

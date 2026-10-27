@@ -8,15 +8,18 @@ import { fetchLibraryLap, listLibrary, type LapsArchiveDeps } from '~/services/t
 import { pickReferences, type ReferenceConditions } from '~/services/telemetry/referencePick'
 import { loadPublicNickname } from '~/repositories/publicProfileRepository'
 import { noteFeatureUse } from '~/services/usage/featureUseNote'
+import { useI18n } from '~/i18n'
 
 /** One lap of the Telemetria menus. Only "local"/"pilot" laps of the shown session can be "Tu". */
 export interface Entry { id: string, lapNumber: number, lapTimeMs: number, valid: boolean, complete: boolean, origin: LapOrigin, sessionToken: string, label?: string, note?: string }
 type Loaded = { trace: LapTraceView, entry: Entry }
 
-export const CAR_MISMATCH_NOTE = 'Auto diversa dalla tua: il confronto è indicativo.'
+/** Note on a reference driven with another car, in the interface language. */
+export const carMismatchNote = () => useI18n().t('telemetry.carMismatch')
+const lapWord = (lap: number) => useI18n().t('sessionDetail.chart.lap', { lap })
 const IDEAL_ID = 'ideal'
 const day = (token: string) => `${token.slice(6, 8)}/${token.slice(4, 6)}`
-const seconds = (s: number) => `${s <= 0 ? '−' : '+'}${Math.abs(s).toFixed(1).replace('.', ',')} s`
+const seconds = (s: number) => `${s <= 0 ? '−' : '+'}${Math.abs(s).toFixed(1).replace('.', useI18n().locale.value === 'it' ? ',' : '.')} s`
 
 /**
  * PIP-623/646: the references beyond the shown session. The coach's own laps (coach view); your
@@ -51,7 +54,7 @@ export function useReferenceLibrary(o: {
   async function loadOwnLaps(isCurrent: () => boolean, bridge: LocalLapBridge, track: string, car: string) {
     try {
       const own = await read(bridge, (await listOwnLaps(bridge, track, car)).slice(0, 10), (d, t) => ({ id: d.id, lapNumber: d.lapNumber, lapTimeMs: d.lapTimeMs,
-        valid: t.valid === true, complete: true, origin: 'own', sessionToken: d.sessionToken, label: `Mio · Giro ${d.lapNumber} · ${formatLapTime(d.lapTimeMs)}` }))
+        valid: t.valid === true, complete: true, origin: 'own', sessionToken: d.sessionToken, label: `${useI18n().t('telemetry.labels.mine')} · ${lapWord(d.lapNumber)} · ${formatLapTime(d.lapTimeMs)}` }))
       if (isCurrent()) add(own.sort((a, b) => a.entry.lapTimeMs - b.entry.lapTimeMs))
     } catch { /* the coach's own laps are an extra: the pilot's laps stay usable */ }
   }
@@ -67,9 +70,9 @@ export function useReferenceLibrary(o: {
       const [sameCar, anyCar] = await Promise.all([listFastestLaps(bridge, { track, car, exceptSessionToken, limit: 8 }),
         listFastestLaps(bridge, { track, car, exceptSessionToken, otherCars: true, limit: 1 })])
       const mine = await read(bridge, sameCar, (d) => ({ id: d.id, lapNumber: d.lapNumber, lapTimeMs: d.lapTimeMs, valid: true, complete: true,
-        origin: 'best', sessionToken: d.sessionToken, label: `Giro ${d.lapNumber} del ${day(d.sessionToken)} · ${formatLapTime(d.lapTimeMs)}` }))
+        origin: 'best', sessionToken: d.sessionToken, label: `${useI18n().t('telemetry.labels.lapOf', { lap: d.lapNumber, day: day(d.sessionToken) })} · ${formatLapTime(d.lapTimeMs)}` }))
       const otherCar = await read(bridge, anyCar, (d, t) => t.car === car ? null : ({ id: d.id, lapNumber: d.lapNumber, lapTimeMs: d.lapTimeMs,
-        valid: true, complete: true, origin: 'best', sessionToken: d.sessionToken, label: `${t.car} · ${day(d.sessionToken)} · ${formatLapTime(d.lapTimeMs)}`, note: CAR_MISMATCH_NOTE }))
+        valid: true, complete: true, origin: 'best', sessionToken: d.sessionToken, label: `${t.car} · ${day(d.sessionToken)} · ${formatLapTime(d.lapTimeMs)}`, note: carMismatchNote() }))
       if (!isCurrent()) return
       historyTraces = mine.map(r => r.trace)
       add([...mine.slice(0, 3), ...otherCar])
@@ -100,7 +103,7 @@ export function useReferenceLibrary(o: {
     }
     const ms = Math.round(fastestMs + potentialS * 1000)
     add([{ trace: { ...ideal.trace, lapTimeS: ms / 1000 }, entry: { id: IDEAL_ID, lapNumber: 0, lapTimeMs: ms, valid: true, complete: true, origin: 'ideal', sessionToken: '',
-      label: `Giro ideale · ${formatLapTime(ms)} · ${seconds(potentialS)} sul tuo migliore` } }])
+      label: useI18n().t('telemetry.labels.ideal', { time: formatLapTime(ms), gap: seconds(potentialS) }) } }])
   }
 
   /**
@@ -112,7 +115,7 @@ export function useReferenceLibrary(o: {
     try {
       const { suggested, fastest } = pickReferences(await listLibrary(where, deps), ctx)
       const nickname = deps.loadNickname ?? loadPublicNickname
-      const picked = [[suggested, 'consigliato'], [fastest, 'il più veloce']] as const
+      const picked = [[suggested, useI18n().t('telemetry.labels.suggested')], [fastest, useI18n().t('telemetry.labels.fastest')]] as const
       const same = (a: string | null | undefined, b: string | null | undefined) => (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase()
       const loaded = await Promise.all(picked.map(async ([e, tag]): Promise<Loaded | null> => {
         if (!e) return null
@@ -125,7 +128,7 @@ export function useReferenceLibrary(o: {
             && same(trace.variant, where.variant) && Math.abs(trace.lapTimeS * 1000 - e.lapTimeMs) <= 100
             && trace.lengthM / trace.lapTimeS * 3.6 <= 330
           return believable ? { trace: trace!, entry: { id: `library:${e.libId}`, lapNumber: 0, lapTimeMs: e.lapTimeMs, valid: true, complete: true, origin: 'library', sessionToken: '',
-            label: `${nick || 'Pilota'} · ${formatLapTime(e.lapTimeMs)} · ${tag}` } } : null
+            label: `${nick || useI18n().t('sessions.picker.driver')} · ${formatLapTime(e.lapTimeMs)} · ${tag}` } } : null
         } catch { return null }
       }))
       if (!isCurrent()) return null
@@ -155,7 +158,7 @@ export function useReferenceLibrary(o: {
           try {
             const trace = normalizeLapTrace(await source.read(d))
             return trace?.complete && (d.valid ?? trace.valid) === true ? { trace, entry: { id: `compare:${d.id}`, lapNumber: d.lapNumber, lapTimeMs: d.lapTimeMs, valid: true, complete: true,
-              origin: 'compare', sessionToken: d.sessionToken, label: `${target.label} · Giro ${d.lapNumber} · ${formatLapTime(d.lapTimeMs)}` } } : null
+              origin: 'compare', sessionToken: d.sessionToken, label: `${target.label} · ${lapWord(d.lapNumber)} · ${formatLapTime(d.lapTimeMs)}` } } : null
           } catch { if (!isCurrent()) return null }
         }
         return null

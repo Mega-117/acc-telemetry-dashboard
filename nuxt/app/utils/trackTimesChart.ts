@@ -1,5 +1,6 @@
 import type { TrackHistoricalPointProjection } from '~/types/trackProjections'
 import { parseTelemetryDate } from '~/utils/telemetryFormat'
+import { useI18n } from '~/i18n'
 
 export type TrackChartPeriod = '7' | '30' | '90' | 'all'
 export type TrackChartScale = 'focus' | 'complete'
@@ -69,12 +70,13 @@ export function buildTrackTimesChart(
     .filter(item => period === 'all' || (item.date && item.date >= start && item.date <= end))
     .sort((a, b) => (a.date?.getTime() ?? Infinity) - (b.date?.getTime() ?? Infinity))
   const series: Record<TrackChartSeries, TrackChartPoint[]> = { bestQualy: [], bestRace: [] }
+  const { t, locale, intlLocale } = useI18n()
   selected.forEach(({ point, date }, x) => {
     for (const key of ['bestQualy', 'bestRace'] as const) {
       const value = lapSeconds(point[key])
       if (value === null) continue
       series[key].push({ x, y: value, original: value, sessionId: point.sessionId, outside: false,
-        label: date ? date.toLocaleString('it-IT', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : `${point.date} · data completa non disponibile` })
+        label: date ? date.toLocaleString(intlLocale.value, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : `${point.date} · ${t('tracks.chart.noFullDate')}` })
     }
   })
   const values = Object.values(series).flatMap(points => points.map(point => point.original))
@@ -96,5 +98,6 @@ export function buildTrackTimesChart(
     }
   }
   return { series, outside, min, max, count: values.length, sessionCount: selected.length, unknownDates,
-    labels: selected.map(({ point }) => point.date) }
+    // The stored axis label is Italian ('20 set'): other languages rebuild it from the date when known.
+    labels: selected.map(({ point, date }) => locale.value !== 'it' && date ? date.toLocaleDateString(intlLocale.value, { day: 'numeric', month: 'short' }) : point.date) }
 }

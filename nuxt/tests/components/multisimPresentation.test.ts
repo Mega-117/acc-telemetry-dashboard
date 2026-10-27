@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { mount, flushPromises } from '@vue/test-utils'
+import { setLocale } from '~/i18n'
 import { ref } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 import CommonSessionDetail from '~/components/sessions/CommonSessionDetail.vue'
@@ -12,6 +13,9 @@ vi.mock('~/composables/useTelemetryGateway', () => ({ useTelemetryGateway: () =>
 vi.mock('~/composables/usePilotContext', () => ({ useTargetUserId: () => ref('qa'), usePilotContext: () => ref(null) }))
 vi.mock('~/composables/useDevToolsAccess', () => ({ useDevToolsAccess: () => ({ canAccessDevTools: fixture.admin }) }))
 vi.mock('~/composables/useFastStatePoller', () => ({ useFastStatePoller: () => ({ fastState: fixture.live, startFastStatePolling: vi.fn(), stopFastStatePolling: vi.fn() }) }))
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
+
 describe('common game surfaces', () => {
   it('selects the destination game before preparing its parent list', async () => {
     useGameContext().selectGame('evo')

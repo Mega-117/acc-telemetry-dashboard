@@ -6,6 +6,7 @@
  * slightly different length stay aligned on start and finish.
  */
 import type { LapTraceView } from './lapTraceChart'
+import { useI18n } from '~/i18n'
 
 /** Levels have no values in between: the logger stores them as steps (PIP-617). */
 const DISCRETE = new Set(['gear', 'engine_map', 'traction_control', 'traction_control_2', 'abs'])
@@ -192,23 +193,24 @@ export function compareCorners(lap: LapTraceView, reference: LapTraceView, corne
  * reference, then what to try. Only where time is actually lost.
  */
 export function cornerAdvice(c: CornerComparison): string {
-  if (c.timeLostS < 0.03) return c.timeLostS <= -0.03 ? 'Qui sei più veloce del riferimento' : 'Come il riferimento'
+  const { t } = useI18n()
+  if (c.timeLostS < 0.03) return c.timeLostS <= -0.03 ? t('telemetry.advice.faster') : t('telemetry.advice.same')
   const loss = c.phaseLossS
   const main = (['entry', 'mid', 'exit'] as const).reduce((best, phase) => loss[phase] > loss[best] + 0.005 ? phase : best, 'entry' as 'entry' | 'mid' | 'exit')
   // No part holds even 40% of the loss: the time goes everywhere, not in one place.
-  if (loss[main] < c.timeLostS * 0.4) return "Perdi un po' in tutta la curva: confronta le due traiettorie sulla mappa"
+  if (loss[main] < c.timeLostS * 0.4) return t('telemetry.advice.everywhere')
   const seconds = loss[main].toFixed(2)
   if (main === 'entry') {
-    if (c.brakeDeltaM !== null && c.brakeDeltaM <= -10) return `Freni ${Math.round(-c.brakeDeltaM)} m prima del riferimento: prova a frenare più tardi`
-    if (c.brakeDeltaM !== null && c.brakeDeltaM >= 10) return `Freni ${Math.round(c.brakeDeltaM)} m dopo il riferimento e arrivi lungo: frena un po' prima`
-    return `In frenata perdi ${seconds} s: confronta quanto forte freni e quanta velocità porti dentro`
+    if (c.brakeDeltaM !== null && c.brakeDeltaM <= -10) return t('telemetry.advice.brakeEarly', { m: Math.round(-c.brakeDeltaM) })
+    if (c.brakeDeltaM !== null && c.brakeDeltaM >= 10) return t('telemetry.advice.brakeLate', { m: Math.round(c.brakeDeltaM) })
+    return t('telemetry.advice.entry', { s: seconds })
   }
   if (main === 'mid') {
-    if (c.lapMinKmh !== null && c.refMinKmh !== null && c.refMinKmh - c.lapMinKmh >= 3) return `A centro curva vai ${Math.round(c.refMinKmh - c.lapMinKmh)} km/h più piano del riferimento: porta più velocità`
-    return `A centro curva perdi ${seconds} s: confronta le due traiettorie sulla mappa`
+    if (c.lapMinKmh !== null && c.refMinKmh !== null && c.refMinKmh - c.lapMinKmh >= 3) return t('telemetry.advice.midSlow', { kmh: Math.round(c.refMinKmh - c.lapMinKmh) })
+    return t('telemetry.advice.mid', { s: seconds })
   }
-  if (c.exitDeltaKmh !== null && c.exitDeltaKmh <= -3) return `In uscita vai ${Math.round(-c.exitDeltaKmh)} km/h più piano del riferimento: cerca un'uscita più veloce`
-  return `In uscita perdi ${seconds} s: confronta quando riapri il gas`
+  if (c.exitDeltaKmh !== null && c.exitDeltaKmh <= -3) return t('telemetry.advice.exitSlow', { kmh: Math.round(-c.exitDeltaKmh) })
+  return t('telemetry.advice.exit', { s: seconds })
 }
 
 export interface MapPoint { x: number, y: number }

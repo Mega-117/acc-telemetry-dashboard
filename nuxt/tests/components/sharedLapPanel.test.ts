@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // PIP-623: "Giro di un altro pilota" e "Condividi giro" nella Telemetria.
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { setLocale } from '~/i18n'
 import { flushPromises, mount } from '@vue/test-utils'
 import { gzipSync } from 'node:zlib'
 import { ref } from 'vue'
@@ -26,6 +27,9 @@ function rawLap({ track = 'Hungaroring', car = 'ferrari_296_gt3', lapTime = 104.
 const gzResponse = (value: unknown, headers: Record<string, string> = {}) => new Response(new Uint8Array(gzipSync(Buffer.from(JSON.stringify(value)))) as unknown as BodyInit, { status: 200, headers })
 
 afterEach(() => { delete (window as any).electronAPI; vi.unstubAllGlobals() })
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('SharedLapPanel', () => {
   const current = normalizeLapTrace(rawLap())!

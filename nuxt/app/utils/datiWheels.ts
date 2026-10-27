@@ -2,10 +2,13 @@
 // Pure builders shared by the recorded lap (Giri) and the live view (In diretta).
 import { brakeColor, pressureColor, tyreColor, type BrakePad } from '~/utils/temperatureColor'
 import type { LapTelemetry, WheelValues } from '~/types/telemetry'
+import { useI18n, type TranslationKey } from '~/i18n'
 
 export type WheelId = 'FL' | 'FR' | 'RL' | 'RR'
 export const WHEEL_IDS: readonly WheelId[] = ['FL', 'FR', 'RL', 'RR']
-export const WHEEL_NAMES: Record<WheelId, string> = { FL: 'Ant. sinistra', FR: 'Ant. destra', RL: 'Post. sinistra', RR: 'Post. destra' }
+const WHEEL_NAME_KEYS: Record<WheelId, TranslationKey> = { FL: 'data.wheel.fl', FR: 'data.wheel.fr', RL: 'data.wheel.rl', RR: 'data.wheel.rr' }
+/** Wheel name in the interface language. */
+export const wheelName = (id: WheelId) => useI18n().t(WHEEL_NAME_KEYS[id])
 
 export interface WheelMetric { label: string, value: string, color: string | null, detail?: string, hint?: string }
 export interface WheelCard { id: WheelId, name: string, metrics: WheelMetric[] }
@@ -23,21 +26,22 @@ const at = (values: WheelValues | undefined, i: number) => values?.[i] ?? null
 /** Four wheel cards for a recorded lap; with no per-lap summary every value is "--". */
 export function recordedWheels(tel?: LapTelemetry): WheelCard[] {
   const wet = !!tel?.tyre?.wet
+  const { t } = useI18n()
   return WHEEL_IDS.map((id, i) => {
     const axle = i < 2 ? 'front' : 'rear'
     const pad = padOf(axle === 'front' ? tel?.brakes?.front_pad : tel?.brakes?.rear_pad)
     const pressure = at(tel?.pressure?.avg, i), loss = at(tel?.pressure?.loss, i)
     const tyre = at(tel?.tyre_temp?.avg, i), brake = at(tel?.brake_temp?.avg, i)
-    return { id, name: WHEEL_NAMES[id], metrics: [
-      { label: 'Pressione', value: fixed(pressure, 1, ' psi'), color: pressureColor(pressure, wet),
-        detail: join(finite(at(tel?.pressure?.high, i)) && `max ${fixed(at(tel?.pressure?.high, i))}`, finite(loss) && loss > 0 && `calo ${fixed(loss, 2)}`),
-        hint: 'Pressione media a caldo nel giro: il colore la confronta con la finestra di Correggi pressioni' },
-      { label: 'Gomma', value: degrees(tyre), color: tyreColor(tyre, wet), detail: range(at(tel?.tyre_temp?.low, i), at(tel?.tyre_temp?.high, i)),
-        hint: 'Temperatura media della gomma nel giro, sotto la più bassa e la più alta' },
-      { label: 'Freno', value: degrees(brake), color: brakeColor(brake, axle, pad), detail: range(at(tel?.brake_temp?.low, i), at(tel?.brake_temp?.high, i)),
-        hint: 'Temperatura media del disco nel giro; le fasce dipendono dalle pastiglie montate' },
-      { label: 'Usura', value: fixed(at(tel?.brakes?.pad_life, i), 1, '%'), color: null, detail: finite(at(tel?.brakes?.disc_life, i)) ? `disco ${fixed(at(tel?.brakes?.disc_life, i), 1, '%')}` : undefined,
-        hint: 'Vita rimasta della pastiglia (e del disco)' },
+    return { id, name: wheelName(id), metrics: [
+      { label: t('data.metric.pressure'), value: fixed(pressure, 1, ' psi'), color: pressureColor(pressure, wet),
+        detail: join(finite(at(tel?.pressure?.high, i)) && `max ${fixed(at(tel?.pressure?.high, i))}`, finite(loss) && loss > 0 && `${t('data.metric.drop')} ${fixed(loss, 2)}`),
+        hint: t('data.metric.pressureHint') },
+      { label: t('data.metric.tyre'), value: degrees(tyre), color: tyreColor(tyre, wet), detail: range(at(tel?.tyre_temp?.low, i), at(tel?.tyre_temp?.high, i)),
+        hint: t('data.metric.tyreHint') },
+      { label: t('data.metric.brake'), value: degrees(brake), color: brakeColor(brake, axle, pad), detail: range(at(tel?.brake_temp?.low, i), at(tel?.brake_temp?.high, i)),
+        hint: t('data.metric.brakeHint') },
+      { label: t('data.metric.wear'), value: fixed(at(tel?.brakes?.pad_life, i), 1, '%'), color: null, detail: finite(at(tel?.brakes?.disc_life, i)) ? `${t('data.metric.disc')} ${fixed(at(tel?.brakes?.disc_life, i), 1, '%')}` : undefined,
+        hint: t('data.metric.wearHint') },
     ] }
   })
 }
@@ -50,16 +54,17 @@ export interface LiveWheel {
 
 /** Four wheel cards for the live car: same reading order as the recorded lap. */
 export function liveWheels(wheel: (id: WheelId) => LiveWheel | undefined, wet: boolean): WheelCard[] {
+  const { t } = useI18n()
   return WHEEL_IDS.map((id, i) => {
     const w = wheel(id)
     const loss = w?.pressureLossPsi
-    return { id, name: WHEEL_NAMES[id], metrics: [
-      { label: 'Pressione', value: fixed(w?.pressurePsi, 1, ' psi'), color: pressureColor(w?.pressurePsi, wet),
-        detail: finite(loss) && loss > 0 ? `calo ${fixed(loss, 2)}` : undefined, hint: 'Pressione adesso: il colore la confronta con la finestra di Correggi pressioni' },
-      { label: 'Correzione', value: w?.correction?.text ?? '--', color: w?.correction?.color ?? null, hint: 'Aria da aggiungere (+) o togliere (−) al prossimo pit stop' },
-      { label: 'Gomma', value: degrees(w?.coreTempC), color: tyreColor(w?.coreTempC, wet), hint: 'Temperatura della gomma adesso' },
-      { label: 'Freno', value: degrees(w?.brakeTempC), color: brakeColor(w?.brakeTempC, i < 2 ? 'front' : 'rear', w?.pad), hint: 'Temperatura del disco adesso' },
-      { label: 'Usura', value: fixed(w?.padLifePct, 0, '%'), color: null, detail: finite(w?.discLifePct) ? `disco ${fixed(w?.discLifePct, 1, '%')}` : undefined, hint: 'Vita rimasta della pastiglia (e del disco)' },
+    return { id, name: wheelName(id), metrics: [
+      { label: t('data.metric.pressure'), value: fixed(w?.pressurePsi, 1, ' psi'), color: pressureColor(w?.pressurePsi, wet),
+        detail: finite(loss) && loss > 0 ? `${t('data.metric.drop')} ${fixed(loss, 2)}` : undefined, hint: t('data.metric.pressureLiveHint') },
+      { label: t('data.metric.correction'), value: w?.correction?.text ?? '--', color: w?.correction?.color ?? null, hint: t('data.metric.correctionHint') },
+      { label: t('data.metric.tyre'), value: degrees(w?.coreTempC), color: tyreColor(w?.coreTempC, wet), hint: t('data.metric.tyreLiveHint') },
+      { label: t('data.metric.brake'), value: degrees(w?.brakeTempC), color: brakeColor(w?.brakeTempC, i < 2 ? 'front' : 'rear', w?.pad), hint: t('data.metric.brakeLiveHint') },
+      { label: t('data.metric.wear'), value: fixed(w?.padLifePct, 0, '%'), color: null, detail: finite(w?.discLifePct) ? `${t('data.metric.disc')} ${fixed(w?.discLifePct, 1, '%')}` : undefined, hint: t('data.metric.wearHint') },
     ] }
   })
 }

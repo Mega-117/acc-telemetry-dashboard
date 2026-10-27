@@ -7,6 +7,9 @@
 import { computed } from 'vue'
 import { bodySlipDeg, channelAt } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
+import { useI18n } from '~/i18n'
+// `tr`: the template already uses `t` for the tyres.
+const { t: tr } = useI18n()
 
 const props = defineProps<{
   lap: LapTraceView
@@ -51,8 +54,8 @@ const gDot = (v: { lat: number, long: number } | null) => v ? { x: 50 + (v.lat /
 <template>
   <div v-if="available" class="car">
     <div class="car-body">
-      <span class="car-title">Auto</span>
-      <svg viewBox="0 0 100 124" aria-label="Auto vista dall'alto">
+      <span class="car-title">{{ tr('telemetry.car.title') }}</span>
+      <svg viewBox="0 0 100 124" :aria-label="tr('telemetry.car.aria')">
         <line x1="50" y1="4" x2="50" y2="120" class="car-path" />
         <g :transform="`rotate(${(slip ?? 0).toFixed(1)} 50 62)`">
           <rect x="34" y="14" width="32" height="96" rx="12" class="car-shell" />
@@ -63,11 +66,11 @@ const gDot = (v: { lat: number, long: number } | null) => v ? { x: 50 + (v.lat /
           </template>
         </g>
       </svg>
-      <p class="car-fact" title="Quanto il muso punta fuori dalla traiettoria: positivo verso destra">Angolo auto <b>{{ slip === null ? '--' : `${slip.toFixed(1)}°` }}</b></p>
+      <p class="car-fact" :title="tr('telemetry.car.slipTitle')">{{ tr('telemetry.car.slip') }} <b>{{ slip === null ? '--' : `${slip.toFixed(1)}°` }}</b></p>
     </div>
     <div class="car-g">
       <span class="car-title">G</span>
-      <svg viewBox="0 0 100 100" aria-label="Indicatore delle G">
+      <svg viewBox="0 0 100 100" :aria-label="tr('telemetry.car.gAria')">
         <circle cx="50" cy="50" r="42" class="g-ring" />
         <circle cx="50" cy="50" r="28" class="g-ring" />
         <circle cx="50" cy="50" r="14" class="g-ring" />
@@ -77,7 +80,7 @@ const gDot = (v: { lat: number, long: number } | null) => v ? { x: 50 + (v.lat /
       </svg>
       <p class="car-fact">Lat <b>{{ lapG ? lapG.lat.toFixed(2) : '--' }}</b> · Long <b>{{ lapG ? lapG.long.toFixed(2) : '--' }}</b></p>
     </div>
-    <p class="car-legend"><i style="background:#4dabf7" />scorre <i style="background:#3ddc5a" />lavora <i style="background:#ffd43b" />al limite <i style="background:#ff5a6e" />scivola · barra = sospensione (carico)</p>
+    <p class="car-legend"><i style="background:#4dabf7" />{{ tr('telemetry.car.rolls') }} <i style="background:#3ddc5a" />{{ tr('telemetry.car.works') }} <i style="background:#ffd43b" />{{ tr('telemetry.car.limit') }} <i style="background:#ff5a6e" />{{ tr('telemetry.car.slides') }} · {{ tr('telemetry.car.bar') }}</p>
   </div>
 </template>
 

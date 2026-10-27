@@ -6,6 +6,8 @@ import { ref, watch } from 'vue'
 import type { LapsArchiveDeps } from '~/services/telemetry/lapsArchiveClient'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { loadSharedLapLink, type SharedLapLoaded } from '~/services/telemetry/sharedLapLoad'
+import { useI18n } from '~/i18n'
+const { t } = useI18n()
 
 export type { SharedLapLoaded }
 
@@ -34,13 +36,13 @@ async function load() {
 </script>
 
 <template>
-  <div class="shared-lap" role="dialog" aria-label="Giro di un altro pilota">
+  <div class="shared-lap" role="dialog" :aria-label="t('telemetry.sharedLap.aria')">
     <label class="shared-field">
-      <span>Link del giro</span>
+      <span>{{ t('telemetry.sharedLap.link') }}</span>
       <input v-model="text" type="text" placeholder="https://…/giro#…" autocomplete="off" spellcheck="false" @keydown.enter.prevent="load">
     </label>
-    <button type="button" class="shared-load" :disabled="busy || !text.trim()" @click="load">{{ busy ? 'Carico…' : 'Usa come riferimento' }}</button>
-    <button type="button" class="shared-close" aria-label="Chiudi" @click="emit('close')">✕</button>
+    <button type="button" class="shared-load" :disabled="busy || !text.trim()" @click="load">{{ busy ? t('sessions.picker.loadingLink') : t('telemetry.sharedLap.use') }}</button>
+    <button type="button" class="shared-close" :aria-label="t('common.close')" @click="emit('close')">✕</button>
     <p v-if="error" class="shared-error" role="alert">{{ error }}</p>
   </div>
 </template>

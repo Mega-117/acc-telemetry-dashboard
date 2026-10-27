@@ -6,6 +6,14 @@ import privacy from './it/privacy'
 import profile from './it/profile'
 import settingsPanels from './it/settingsPanels'
 import onboarding from './it/onboarding'
+import common from './it/common'
+import overview from './it/overview'
+import sessions from './it/sessions'
+import sessionDetail from './it/sessionDetail'
+import telemetry from './it/telemetry'
+import stats from './it/stats'
+import tracks from './it/tracks'
+import data from './it/data'
 
 export default {
   ...shell,
@@ -14,4 +22,12 @@ export default {
   ...profile,
   ...settingsPanels,
   ...onboarding,
+  ...common,
+  ...overview,
+  ...sessions,
+  ...sessionDetail,
+  ...telemetry,
+  ...stats,
+  ...tracks,
+  ...data,
 } as const

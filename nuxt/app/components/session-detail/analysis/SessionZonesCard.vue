@@ -3,26 +3,28 @@
 // A row selects its corner (map and charts follow); the colour matches the stretch on the map.
 import { computed } from 'vue'
 import { ZONE_COLORS, zoneSeconds, type SessionZones } from '~/services/telemetry/sessionZones'
+import { useI18n } from '~/i18n'
 
 const props = defineProps<{ insight: SessionZones, selected: number | null, totalLaps: number }>()
 const emit = defineEmits<{ select: [corner: number] }>()
+const { t } = useI18n()
 
 const rows = computed(() => {
   const { leastConsistent: c, mostPotential: p, mostMistakes: m } = props.insight
   return [
-    { key: 'consistency', title: 'Dove sei meno costante', color: ZONE_COLORS.consistency, corner: c?.corner.number ?? null,
-      text: c ? `Curva ${c.corner.number}: varii di ${zoneSeconds(c.spreadS)} s da un giro all’altro` : 'Sei costante in tutte le curve.' },
-    { key: 'potential', title: 'Dove hai più potenziale', color: ZONE_COLORS.potential, corner: p?.corner.number ?? null,
-      text: p ? `Curva ${p.corner.number}: il tuo giro tipico è ${zoneSeconds(p.potentialS)} s più lento del tuo migliore` : 'Il giro tipico è già vicino al tuo migliore ovunque.' },
-    { key: 'mistakes', title: 'Dove sbagli di più', color: ZONE_COLORS.mistakes, corner: m?.corner.number ?? null,
-      text: m ? `Curva ${m.corner.number}: ${m.mistakes} ${m.mistakes === 1 ? 'giro rovinato' : 'giri rovinati'} su ${props.totalLaps} (+${zoneSeconds(m.mistakeLossS)} s in tutto)` : 'Nessun giro rovinato: bene così.' },
+    { key: 'consistency', title: t('telemetry.zones.consistencyTitle'), color: ZONE_COLORS.consistency, corner: c?.corner.number ?? null,
+      text: c ? t('telemetry.zones.consistency', { n: c.corner.number, s: zoneSeconds(c.spreadS) }) : t('telemetry.zones.consistencyNone') },
+    { key: 'potential', title: t('telemetry.zones.potentialTitle'), color: ZONE_COLORS.potential, corner: p?.corner.number ?? null,
+      text: p ? t('telemetry.zones.potential', { n: p.corner.number, s: zoneSeconds(p.potentialS) }) : t('telemetry.zones.potentialNone') },
+    { key: 'mistakes', title: t('telemetry.zones.mistakesTitle'), color: ZONE_COLORS.mistakes, corner: m?.corner.number ?? null,
+      text: m ? t(m.mistakes === 1 ? 'telemetry.zones.mistakesOne' : 'telemetry.zones.mistakesMany', { n: m.corner.number, count: m.mistakes, total: props.totalLaps, s: zoneSeconds(m.mistakeLossS) }) : t('telemetry.zones.mistakesNone') },
   ]
 })
 </script>
 
 <template>
   <section class="side-box zones">
-    <h4>Dove lavorare <small>su {{ insight.laps }} giri validi</small></h4>
+    <h4>{{ t('telemetry.zones.title') }} <small>{{ t('telemetry.zones.laps', { laps: insight.laps }) }}</small></h4>
     <div class="zone-list">
       <button v-for="r in rows" :key="r.key" type="button" class="zone-row" :class="{ active: r.corner !== null && selected === r.corner }" :disabled="r.corner === null" @click="r.corner !== null && emit('select', r.corner)">
         <i class="zone-mark" :style="{ background: r.corner !== null ? r.color : '#ffffff1f' }" />

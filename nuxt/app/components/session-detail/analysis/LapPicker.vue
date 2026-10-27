@@ -3,6 +3,7 @@
 // il best in viola come nei tempi del gioco, i giri non validi in rosso, i parziali spenti e non sceglibili.
 import { computed, nextTick, ref, useId } from 'vue'
 import { vClickOutside } from '~/directives/clickOutside'
+import { useI18n } from '~/i18n'
 
 export interface LapOption { id: string, title: string, time: string, conditions: string, valid: boolean, complete: boolean, best: boolean }
 export interface LapGroup { label: string, options: LapOption[] }
@@ -12,6 +13,7 @@ export interface LapAction { id: string, label: string, disabled?: boolean, hint
 // `align: 'right'`: the menu grows to the left (the picker on the right of the bar), so it never leaves the window.
 const props = defineProps<{ modelValue: string, groups: LapGroup[], name: string, color: string, disabled?: boolean, hint?: string, actions?: LapAction[], align?: 'left' | 'right' }>()
 const emit = defineEmits<{ 'update:modelValue': [id: string], 'action': [id: string] }>()
+const { t } = useI18n()
 
 const open = ref(false)
 const active = ref('')
@@ -81,7 +83,7 @@ function onFocusOut(event: FocusEvent) {
   <div ref="root" v-click-outside="() => close()" class="lap-picker" :style="{ '--c': color }" :title="hint" @focusout="onFocusOut">
     <span class="lap-picker__name">{{ name }}</span>
     <button ref="button" type="button" class="lap-picker__button" :disabled="disabled || !all.length" aria-haspopup="listbox" :aria-expanded="open" :aria-controls="`${uid}-list`"
-      :aria-label="`${name}: ${current ? `${current.title} ${current.time}` : 'nessun giro'}`" @click="open ? close() : show()" @keydown="onButtonKey">
+      :aria-label="`${name}: ${current ? `${current.title} ${current.time}` : t('telemetry.picker.noLap')}`" @click="open ? close() : show()" @keydown="onButtonKey">
       <template v-if="current">
         <span class="lap-picker__title">{{ current.title }}</span>
         <span class="lap-picker__time" :class="{ 'is-invalid': !current.valid, 'is-best': current.best }">{{ current.time }}</span>
@@ -98,10 +100,10 @@ function onFocusOut(event: FocusEvent) {
           :class="{ 'is-active': active === o.id, 'is-selected': modelValue === o.id, 'is-partial': !o.complete }" :aria-selected="modelValue === o.id" :aria-disabled="!o.complete || undefined"
           @mouseenter="o.complete && (active = o.id)" @click="pick(o)">
           <span class="lap-row__title">{{ o.title }}</span>
-          <span class="lap-row__time" :class="{ 'is-invalid': !o.valid, 'is-best': o.best }" :title="o.best ? 'Il tuo giro migliore' : undefined">{{ o.time }}<span v-if="o.complete && !o.valid" class="sr-only"> (non valido)</span></span>
+          <span class="lap-row__time" :class="{ 'is-invalid': !o.valid, 'is-best': o.best }" :title="o.best ? t('telemetry.picker.best') : undefined">{{ o.time }}<span v-if="o.complete && !o.valid" class="sr-only"> ({{ t('telemetry.picker.invalid') }})</span></span>
           <span class="lap-row__tags">
             <!-- PIP-645: an invalid lap is told by its red time only; partial laps keep their tag (they cannot be picked). -->
-            <span v-if="!o.complete" class="lap-tag lap-tag--partial">Parziale</span>
+            <span v-if="!o.complete" class="lap-tag lap-tag--partial">{{ t('sessions.common.partial') }}</span>
           </span>
           <span class="lap-row__cond" :title="o.conditions">{{ o.conditions }}</span>
         </div>

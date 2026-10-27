@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // PIP-633: i tempi del grafico "Stai migliorando?" sono leggibili anche come testo (tastiera, lettore di schermo).
 import { describe, expect, it } from 'vitest'
+import { setLocale } from '~/i18n'
 import { mount } from '@vue/test-utils'
 import ProgressChart from '~/components/stats/ProgressChart.vue'
 import type { SessionDocument } from '~/types/telemetry'
@@ -10,6 +11,9 @@ const session = (day: number, race: number): SessionDocument => ({
   meta: { date_start: new Date(2026, 9, day, 20).toISOString(), track: 'monza', car: 'ferrari_296_gt3', session_type: 2, gameId: 'acc' },
   summary: { totalTime: 3_600_000, laps: 20, lapsValid: 18, bestLap: race, best_race_ms: race },
 } as unknown as SessionDocument)
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('ProgressChart', () => {
   it('lists every session time in a text list, in date order, marking the record', () => {

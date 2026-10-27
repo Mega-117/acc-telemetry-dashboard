@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { setLocale } from '~/i18n'
 import { flushPromises, mount } from '@vue/test-utils'
 
 const mocks = vi.hoisted(() => ({ page: vi.fn() }))
@@ -19,6 +20,9 @@ const mountPicker = () => mount(SessionPickerModal, {
 })
 
 beforeEach(() => vi.clearAllMocks())
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('session picker paging (PIP-591)', () => {
   it('opens with one page, the same unfiltered read as before', async () => {

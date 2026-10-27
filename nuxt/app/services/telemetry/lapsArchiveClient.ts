@@ -3,12 +3,16 @@
 // costruito apposta non puo' riempire la memoria della pagina.
 import { DIAGNOSTICS_INGEST_ORIGIN, resolveDiagnosticsOrigin } from '~/repositories/diagnosticBundlesRepository'
 import type { LapShareRef } from './lapShareLink'
+import { useI18n, type TranslationKey } from '~/i18n'
 
 export const LAP_DOWNLOAD_LIMITS = Object.freeze({ compressedBytes: 256 * 1024, jsonBytes: 4 * 1024 * 1024, channels: 40, samples: 20000 })
 
 export class LapsArchiveError extends Error {
   constructor(message: string, readonly status = 0) { super(message) }
 }
+/** A downloaded lap that cannot be used, said in the interface language. */
+type InvalidLapReason = 'unreadable' | 'size' | 'corrupt' | 'empty' | 'format' | 'channels' | 'tooMany' | 'tooBig'
+const invalidLap = (reason: InvalidLapReason) => new LapsArchiveError(useI18n().t(`telemetry.archive.invalid.${reason}`))
 
 export interface LapsArchiveDeps {
   getToken: () => Promise<string | null>
@@ -32,11 +36,11 @@ export function lapsOrigin(): string {
   try { return resolveDiagnosticsOrigin(useRuntimeConfig().public.diagnosticsIngestUrl) } catch { return DIAGNOSTICS_INGEST_ORIGIN }
 }
 
-const MESSAGES: Record<number, string> = {
-  401: 'Sessione scaduta: accedi di nuovo.',
-  403: 'Non puoi leggere questi giri.',
-  404: 'Giro non trovato: il link è sbagliato o il giro è scaduto.',
-  503: 'Archivio giri in pausa: riprova più tardi.',
+const MESSAGES: Record<number, TranslationKey> = {
+  401: 'telemetry.archive.expired',
+  403: 'telemetry.archive.forbidden',
+  404: 'telemetry.archive.notFound',
+  503: 'telemetry.archive.paused',
 }
 
 /**
@@ -45,14 +49,15 @@ const MESSAGES: Record<number, string> = {
  */
 async function request<T>(path: string, deps: LapsArchiveDeps, read: (response: Response) => Promise<T>, init: RequestInit = {}): Promise<T> {
   const token = await deps.getToken()
-  if (!token) throw new LapsArchiveError('Accedi per usare i giri condivisi.', 401)
+  const { t } = useI18n()
+  if (!token) throw new LapsArchiveError(t('telemetry.archive.signIn'), 401)
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), deps.timeoutMs ?? 15000)
   try {
     const response = await (deps.fetchImpl ?? fetch)(`${deps.origin ?? lapsOrigin()}${path}`, {
       ...init, redirect: 'error', headers: { Authorization: `Bearer ${token}`, ...(init.headers as Record<string, string> | undefined) }, signal: controller.signal,
     })
-    if (!response.ok) throw new LapsArchiveError(MESSAGES[response.status] ?? `Archivio giri non disponibile (${response.status}).`, response.status)
+    if (!response.ok) throw new LapsArchiveError(t(MESSAGES[response.status] ?? 'telemetry.archive.unavailable', { status: response.status }), response.status)
     // La lettura corre contro lo stesso tempo massimo: un corpo che non finisce viene interrotto.
     return await Promise.race([
       read(response),
@@ -60,7 +65,7 @@ async function request<T>(path: string, deps: LapsArchiveDeps, read: (response: 
     ])
   } catch (error) {
     if (error instanceof LapsArchiveError) throw error
-    throw new LapsArchiveError(controller.signal.aborted ? 'Archivio giri lento: tempo scaduto, riprova.' : 'Archivio giri non raggiungibile: controlla la connessione.', 0)
+    throw new LapsArchiveError(controller.signal.aborted ? t('telemetry.archive.slow') : t('telemetry.archive.unreachable'), 0)
   } finally {
     clearTimeout(timer)
   }
@@ -69,7 +74,7 @@ async function request<T>(path: string, deps: LapsArchiveDeps, read: (response: 
 /** Legge al massimo `maxBytes` dal corpo, interrompendo appena li supera. */
 async function readBytesBounded(response: Response, maxBytes: number): Promise<Uint8Array> {
   const declared = Number(response.headers.get('Content-Length'))
-  if (Number.isFinite(declared) && declared > maxBytes) throw new LapsArchiveError('Giro non valido: dimensione inattesa.')
+  if (Number.isFinite(declared) && declared > maxBytes) throw invalidLap('size')
   const reader = response.body?.getReader()
   if (!reader) return new Uint8Array(await response.arrayBuffer())
   const chunks: Uint8Array[] = []
@@ -78,7 +83,7 @@ async function readBytesBounded(response: Response, maxBytes: number): Promise<U
     const { value, done } = await reader.read()
     if (done) break
     total += value.byteLength
-    if (total > maxBytes) { await reader.cancel(); throw new LapsArchiveError('Giro non valido: dimensione inattesa.') }
+    if (total > maxBytes) { await reader.cancel(); throw invalidLap('size') }
     chunks.push(value)
   }
   const all = new Uint8Array(total)
@@ -89,9 +94,9 @@ async function readBytesBounded(response: Response, maxBytes: number): Promise<U
 
 /** Decomprime con un tetto ai byte prodotti (interrompe il flusso appena lo supera). */
 export async function gunzipBounded(bytes: Uint8Array, maxBytes = LAP_DOWNLOAD_LIMITS.jsonBytes): Promise<string> {
-  if (typeof DecompressionStream === 'undefined') throw new LapsArchiveError('Questo browser non sa aprire i giri condivisi.')
+  if (typeof DecompressionStream === 'undefined') throw new LapsArchiveError(useI18n().t('telemetry.archive.browser'))
   const body = new Response(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer).body
-  if (!body) throw new LapsArchiveError('Giro non valido: file vuoto.')
+  if (!body) throw invalidLap('empty')
   const stream = body.pipeThrough(new DecompressionStream('gzip'))
   const reader = stream.getReader()
   const chunks: Uint8Array[] = []
@@ -101,12 +106,12 @@ export async function gunzipBounded(bytes: Uint8Array, maxBytes = LAP_DOWNLOAD_L
       const { value, done } = await reader.read()
       if (done) break
       total += value.byteLength
-      if (total > maxBytes) { await reader.cancel(); throw new LapsArchiveError('Giro non valido: troppo grande.') }
+      if (total > maxBytes) { await reader.cancel(); throw invalidLap('tooBig') }
       chunks.push(value)
     }
   } catch (error) {
     if (error instanceof LapsArchiveError) throw error
-    throw new LapsArchiveError('Giro non valido: file danneggiato.')
+    throw invalidLap('corrupt')
   }
   const all = new Uint8Array(total)
   let offset = 0
@@ -117,19 +122,19 @@ export async function gunzipBounded(bytes: Uint8Array, maxBytes = LAP_DOWNLOAD_L
 /** Corpo gzip del giro → oggetto JSON, con i tetti su byte, canali e campioni. */
 export async function readLapBody(response: Response): Promise<unknown> {
   const buffer = await readBytesBounded(response, LAP_DOWNLOAD_LIMITS.compressedBytes)
-  if (buffer.byteLength === 0) throw new LapsArchiveError('Giro non valido: dimensione inattesa.')
+  if (buffer.byteLength === 0) throw invalidLap('size')
   let parsed: unknown
   try { parsed = JSON.parse(await gunzipBounded(buffer)) } catch (error) {
     if (error instanceof LapsArchiveError) throw error
-    throw new LapsArchiveError('Giro non valido: contenuto illeggibile.')
+    throw invalidLap('unreadable')
   }
   // PIP-648: encoded laps keep their channels under `channels_qd` (older readers refuse them cleanly).
   const body = parsed as { encoding?: unknown, channels?: Record<string, unknown>, channels_qd?: Record<string, unknown> } | null
   const channels = body?.encoding === undefined ? body?.channels : body?.channels_qd
-  if (!channels || typeof channels !== 'object') throw new LapsArchiveError('Giro non valido: mancano i canali.')
+  if (!channels || typeof channels !== 'object') throw invalidLap('channels')
   const entries = Object.values(channels)
   if (entries.length > LAP_DOWNLOAD_LIMITS.channels || entries.some(v => !Array.isArray(v) || v.length > LAP_DOWNLOAD_LIMITS.samples)) {
-    throw new LapsArchiveError('Giro non valido: troppi canali o campioni.')
+    throw invalidLap('tooMany')
   }
   return decodeLapChannels(parsed as Record<string, unknown>)
 }
@@ -142,17 +147,17 @@ const MAX_SCALED = 2 ** 40
 export function decodeLapChannels(payload: Record<string, unknown>): Record<string, unknown> {
   if (payload.encoding === undefined) return payload
   const decimals = payload.channel_decimals as Record<string, unknown> | undefined
-  if (payload.encoding !== 'qdelta1' || !decimals || typeof decimals !== 'object') throw new LapsArchiveError('Giro non valido: formato sconosciuto.')
+  if (payload.encoding !== 'qdelta1' || !decimals || typeof decimals !== 'object') throw invalidLap('format')
   const channels: Record<string, number[]> = {}
   // Same bound as the writer (2^40): every delta and every running sum stays an exact integer.
   const exact = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n) && Math.abs(n) <= MAX_SCALED
   for (const [name, deltas] of Object.entries(payload.channels_qd as Record<string, unknown[]>)) {
     const d = decimals[name]
-    if (typeof d !== 'number' || !Number.isInteger(d) || d < 0 || d > 6) throw new LapsArchiveError('Giro non valido: formato sconosciuto.')
+    if (typeof d !== 'number' || !Number.isInteger(d) || d < 0 || d > 6) throw invalidLap('format')
     const scale = 10 ** d
     let sum = 0
     channels[name] = deltas.map((delta) => {
-      if (!exact(delta) || !exact(sum + delta)) throw new LapsArchiveError('Giro non valido: contenuto illeggibile.')
+      if (!exact(delta) || !exact(sum + delta)) throw invalidLap('unreadable')
       sum += delta
       return sum / scale
     })

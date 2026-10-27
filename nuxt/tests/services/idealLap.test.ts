@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { computed, ref } from 'vue'
 import { measureSectorTimes, stitchIdealLap } from '~/services/telemetry/idealLap'
 import { useSectorCompare } from '~/composables/useSectorCompare'
-import { useReferenceLibrary, CAR_MISMATCH_NOTE, type Entry } from '~/composables/useReferenceLibrary'
+import { useReferenceLibrary, carMismatchNote, type Entry } from '~/composables/useReferenceLibrary'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
 // A lap is the seconds it spends in each third of the track (constant speed inside each third).
@@ -78,7 +78,7 @@ describe('useReferenceLibrary (PIP-646)', () => {
     await library.loadBestLaps(() => true, bridge, 'spa', 'bmw')
     const best = entries.value.filter(e => e.origin === 'best')
     expect(best.map(e => e.label)).toEqual(['Giro 4 del 01/10 · 1:15.000', 'ferrari · 02/10 · 1:14.000'])
-    expect(best[1]!.note).toBe(CAR_MISMATCH_NOTE)
+    expect(best[1]!.note).toBe(carMismatchNote())
     const ideal = entries.value.find(e => e.origin === 'ideal')!
     // 29.8 (other session) + 20.0 (lap b) + 25.0: the other car never feeds the ideal lap.
     expect(ideal.lapTimeMs).toBe(74800)

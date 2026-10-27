@@ -10,6 +10,7 @@ import GameContextTransition from '~/components/layout/GameContextTransition.vue
 import { sessionGame, sessionFilterType, sessionCarCategory } from '~/services/telemetry/gameIdentity'
 import RacingSessionList from '~/components/sessions/RacingSessionList.vue'
 import { vRcSwitch } from '~/directives/rcSwitch'
+import { useI18n } from '~/i18n'
 import { sessionTiming } from '~/services/telemetry/fuelHistorySummary'
 import { ref, computed, onBeforeUnmount, onMounted, watch, nextTick } from 'vue'
 import { 
@@ -27,6 +28,7 @@ import type { SessionPagerFilters } from '~/composables/useSessionPager'
 import { ACC_CAR_OPTIONS, ACC_TRACK_OPTIONS } from '~/constants/accCatalog'
 
 // Emit to parent for navigation
+const { t } = useI18n()
 const emit = defineEmits<{
   'go-to-session': [sessionId: string]
 }>()
@@ -255,8 +257,8 @@ const carOptions = computed(() => {
     .sort((a, b) => a.name.localeCompare(b.name))
 })
 const carAllLabel = computed(() => filterCarCategory.value === 'all'
-  ? 'Tutte le auto'
-  : `Tutte le auto ${filterCarCategory.value}`
+  ? t('sessions.filters.allCars')
+  : t('sessions.filters.allCarsOf', { category: filterCarCategory.value })
 )
 
 // Filtered sessions
@@ -345,8 +347,7 @@ async function onPageChange(page: number) {
 
 // Get session type label
 function getTypeLabel(type: SessionType): string {
-  const labels = { practice: 'PROVE LIBERE', qualify: 'QUALIFICA', race: 'GARA' }
-  return labels[type]
+  return t(`sessions.type.${type}`)
 }
 
 // Navigate to session detail via emit
@@ -359,25 +360,25 @@ function goToSession(id: string) {
   <LayoutPageContainer class="sessions-page racing-data">
     <GameContextTransition :game-id="consultedGame" :busy="isLoading">
     <h1 class="racing-sr-only">
-      Sessioni
+      {{ t('sessions.title') }}
     </h1>
     <p
       v-if="!isOnline"
       class="sessions-notice"
       role="status"
     >
-      Modalità offline: visualizzo dati locali. La sincronizzazione riprenderà quando torni online.
+      {{ t('sessions.offline') }}
     </p>
 
     <section
       class="session-filters"
-      aria-label="Filtri sessioni"
+      :aria-label="t('sessions.filters.aria')"
     >
       <div
         v-rc-switch
         class="racing-filter-tabs rc-switch"
         role="group"
-        aria-label="Tipo di sessione"
+        :aria-label="t('sessions.filters.type')"
       >
         <button
           v-for="type in (['all', 'practice', 'qualify', 'race'] as const)"
@@ -387,17 +388,17 @@ function goToSession(id: string) {
           :class="{ 'is-active': filterType === type }"
           @click="filterType = type"
         >
-          {{ type === 'all' ? 'Tutto' : getTypeLabel(type) }}
+          {{ type === 'all' ? t('sessions.filters.all') : getTypeLabel(type) }}
         </button>
       </div>
       <div class="racing-filter-selects">
         <select
           v-model="filterTrack"
           class="racing-select racing-select--compact"
-          aria-label="Filtra pista"
+          :aria-label="t('sessions.filters.track')"
         >
           <option value="all">
-            Tutte le piste
+            {{ t('sessions.filters.allTracks') }}
           </option>
           <option
             v-for="track in trackOptions"
@@ -411,10 +412,10 @@ function goToSession(id: string) {
           v-model="filterCarCategory"
           :disabled="filterGame !== 'acc'"
           class="racing-select racing-select--compact"
-          aria-label="Filtra categoria auto"
+          :aria-label="t('sessions.filters.category')"
         >
           <option value="all">
-            Tutte le categorie
+            {{ t('sessions.filters.allCategories') }}
           </option>
           <option
             v-for="category in CAR_CATEGORIES"
@@ -427,7 +428,7 @@ function goToSession(id: string) {
         <select
           v-model="filterCar"
           class="racing-select racing-select--compact racing-select--car"
-          aria-label="Filtra auto"
+          :aria-label="t('sessions.filters.car')"
         >
           <option value="all">
             {{ carAllLabel }}
@@ -443,19 +444,19 @@ function goToSession(id: string) {
         <select
           v-model="filterTimeRange"
           class="racing-select racing-select--compact"
-          aria-label="Filtra periodo"
+          :aria-label="t('sessions.filters.period')"
         >
           <option value="all">
-            Ogni periodo
+            {{ t('sessions.filters.anyTime') }}
           </option>
           <option value="today">
-            Oggi
+            {{ t('sessions.filters.today') }}
           </option>
           <option value="7d">
-            Ultimi 7 giorni
+            {{ t('sessions.filters.last7') }}
           </option>
           <option value="30d">
-            Ultimi 30 giorni
+            {{ t('sessions.filters.last30') }}
           </option>
         </select>
       </div>
@@ -463,21 +464,21 @@ function goToSession(id: string) {
 
     <UiScrollArea
       class="sessions-scroll"
-      label="Elenco sessioni"
+      :label="t('sessions.listAria')"
     >
       <p
         v-if="pagerError"
         class="sessions-notice sessions-notice--error"
         role="alert"
       >
-        Impossibile caricare le sessioni.
+        {{ t('sessions.loadError') }}
         <button
           type="button"
           class="racing-text-action"
           :disabled="isLoading"
           @click="reloadFirstPage(true)"
         >
-          Riprova
+          {{ t('common.retry') }}
         </button>
       </p>
       <p
@@ -485,14 +486,14 @@ function goToSession(id: string) {
         class="sessions-status"
         role="status"
       >
-        Caricamento sessioni…
+        {{ t('sessions.loading') }}
       </p>
       <p
         v-else-if="!pagerError && !paginatedSessionsByDay.length"
         class="sessions-status"
         role="status"
       >
-        Nessuna sessione trovata con i filtri selezionati.
+        {{ t('sessions.empty') }}
       </p>
 
       <div
@@ -511,7 +512,7 @@ function goToSession(id: string) {
       :total-pages="totalPages"
       :total-items="totalFilteredSessions"
       :scroll-target="sessionsRef"
-      item-label="sessioni"
+      :item-label="t('sessions.itemLabel')"
       @page-change="onPageChange"
     />
     </GameContextTransition>

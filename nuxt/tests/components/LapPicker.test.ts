@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // PIP-635: scelta del giro nello stile del sito: best in fucsia, giri non validi in rosso.
 import { describe, expect, it } from 'vitest'
+import { setLocale } from '~/i18n'
 import { flushPromises, mount } from '@vue/test-utils'
 import LapPicker, { type LapGroup } from '~/components/session-detail/analysis/LapPicker.vue'
 
@@ -10,6 +11,9 @@ const groups: LapGroup[] = [{ label: '', options: [
   { id: 'c', title: 'Giro 3', time: '1:44.100', conditions: '', valid: false, complete: true, best: false },
 ] }]
 const render = (modelValue = 'b') => mount(LapPicker, { props: { modelValue, groups, name: 'Tu', color: '#38bdf8' }, attachTo: document.body })
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('LapPicker', () => {
   it('shows the best lap in fuchsia without a tag, and marks invalid and partial laps in the list', async () => {

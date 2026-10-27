@@ -17,12 +17,14 @@ import {
 } from '~/utils/statsPresentation'
 import { periodTotals, previousPeriodSessions } from '~/utils/statsJourney'
 import type { SessionDocument } from '~/types/telemetry'
+import { useI18n } from '~/i18n'
 
 const emit = defineEmits<{ back: [] }>()
 const targetUserId = useTargetUserId()
 const pilotContext = usePilotContext()
 const gateway = useTelemetryGateway('acc')
-useHeaderBack(() => emit('back'), () => 'Torna alla Panoramica')
+const { t } = useI18n()
+useHeaderBack(() => emit('back'), () => t('stats.back'))
 
 const sessions = shallowRef<SessionDocument[]>([])
 const summary = shallowRef<StatsSummary | null>(null)
@@ -30,11 +32,11 @@ const status = ref<'loading' | 'ready' | 'error'>('loading')
 const computing = ref(false)
 const remaining = ref(0)
 
-const PERIODS = [
-  { days: 7, label: '7 giorni' }, { days: 30, label: '30 giorni' }, { days: 90, label: '3 mesi' },
-  { days: 365, label: '12 mesi' }, { days: 0, label: 'Tutto' },
-]
-const TYPES = [{ value: -1, label: 'Tutte' }, { value: 0, label: 'Prove libere' }, { value: 1, label: 'Qualifica' }, { value: 2, label: 'Gara' }]
+const PERIODS = computed(() => [
+  { days: 7, label: t('stats.periods.d7') }, { days: 30, label: t('stats.periods.d30') }, { days: 90, label: t('stats.periods.m3') },
+  { days: 365, label: t('stats.periods.m12') }, { days: 0, label: t('stats.periods.all') },
+])
+const TYPES = computed(() => [{ value: -1, label: t('stats.all') }, { value: 0, label: t('stats.types.practice') }, { value: 1, label: t('stats.types.qualify') }, { value: 2, label: t('stats.types.race') }])
 const periodDays = ref(90)
 const trackKey = ref('')
 const carKey = ref('')
@@ -64,7 +66,7 @@ const previous = computed(() => {
   const prev = previousPeriodSessions(sessions.value, filter.value, nowMs.value)
   return prev ? periodTotals(prev) : null
 })
-const periodLabel = computed(() => PERIODS.find(p => p.days === periodDays.value)?.label ?? '')
+const periodLabel = computed(() => PERIODS.value.find(p => p.days === periodDays.value)?.label ?? '')
 const carMax = computed(() => Math.max(1, ...cars.value.map(c => c.timeMs)))
 const weeks = computed(() => timeByWeek(filtered.value, Math.min(26, Math.max(4, Math.ceil((periodDays.value || 182) / 7))), nowMs.value))
 const weekMax = computed(() => Math.max(1, ...weeks.value.map(w => w.timeMs)))
@@ -150,17 +152,17 @@ watch(targetUserId, (uid, previous) => { if (uid && uid !== previous) void load(
   <LayoutPageContainer>
     <div class="stats">
       <header class="stats__head">
-        <h1>Statistiche</h1>
-        <div class="stats__filters" role="group" aria-label="Filtri">
-          <label>Periodo<select v-model.number="periodDays"><option v-for="p in PERIODS" :key="p.days" :value="p.days">{{ p.label }}</option></select></label>
-          <label>Pista<select v-model="trackKey"><option value="">Tutte</option><option v-for="t in trackOptions" :key="t.key" :value="t.key">{{ t.name }}</option></select></label>
-          <label>Auto<select v-model="carKey"><option value="">Tutte</option><option v-for="c in carOptions" :key="c.key" :value="c.key">{{ c.name }}</option></select></label>
-          <label>Tipo<select v-model.number="sessionType"><option v-for="t in TYPES" :key="t.value" :value="t.value">{{ t.label }}</option></select></label>
+        <h1>{{ t('overview.activity.stats') }}</h1>
+        <div class="stats__filters" role="group" :aria-label="t('stats.filters')">
+          <label>{{ t('stats.period') }}<select v-model.number="periodDays"><option v-for="p in PERIODS" :key="p.days" :value="p.days">{{ p.label }}</option></select></label>
+          <label>{{ t('sessions.list.track') }}<select v-model="trackKey"><option value="">{{ t('stats.all') }}</option><option v-for="tk in trackOptions" :key="tk.key" :value="tk.key">{{ tk.name }}</option></select></label>
+          <label>{{ t('sessions.list.car') }}<select v-model="carKey"><option value="">{{ t('stats.all') }}</option><option v-for="c in carOptions" :key="c.key" :value="c.key">{{ c.name }}</option></select></label>
+          <label>{{ t('sessions.list.type') }}<select v-model.number="sessionType"><option v-for="ty in TYPES" :key="ty.value" :value="ty.value">{{ ty.label }}</option></select></label>
         </div>
       </header>
 
-      <p v-if="status === 'loading'" class="stats__note" role="status">Caricamento…</p>
-      <p v-else-if="status === 'error'" class="stats__note" role="status">Dati non disponibili. <button type="button" @click="load">Riprova</button></p>
+      <p v-if="status === 'loading'" class="stats__note" role="status">{{ t('sessions.picker.loading') }}</p>
+      <p v-else-if="status === 'error'" class="stats__note" role="status">{{ t('overview.dataUnavailable') }} <button type="button" @click="load">{{ t('common.retry') }}</button></p>
 
       <template v-else>
       <!-- PIP-633: prima "come sto andando" (tendenze, calendario, record, progressi), poi i dettagli. -->
@@ -171,20 +173,20 @@ watch(targetUserId, (uid, previous) => { if (uid && uid !== previous) void load(
       <div class="stats__grid">
         <StatsProgressChart :sessions="sessions" :now-ms="nowMs" />
         <section class="stats-panel" aria-labelledby="stats-time">
-          <h2 id="stats-time">Tempo in pista per auto</h2>
+          <h2 id="stats-time">{{ t('stats.time.title') }}</h2>
           <p v-if="insights.cars" class="insight">{{ insights.cars }}</p>
           <ul class="car-bars">
             <li v-for="(c, i) in cars" :key="c.carKey">
               <div class="car-bars__label"><span>{{ formatCarName(c.car) }}</span><strong>{{ hours(c.timeMs) }}</strong></div>
               <div class="car-bars__track"><span :style="{ width: `${Math.max(2, (c.timeMs / carMax) * 100)}%`, '--bar': CAR_COLORS[i % CAR_COLORS.length] }" /></div>
-              <small>{{ c.sessions }} {{ c.sessions === 1 ? 'sessione' : 'sessioni' }} · {{ c.laps }} {{ c.laps === 1 ? 'giro' : 'giri' }} · {{ c.laps ? Math.round((c.lapsValid / c.laps) * 100) + '% validi' : 'nessun giro' }}</small>
+              <small>{{ c.sessions }} {{ c.sessions === 1 ? t('stats.session') : t('stats.sessions') }} · {{ c.laps }} {{ c.laps === 1 ? t('sessions.list.lap') : t('sessions.list.lapsUnit') }} · {{ c.laps ? t('stats.time.validPct', { pct: Math.round((c.lapsValid / c.laps) * 100) }) : t('stats.time.noLaps') }}</small>
             </li>
-            <li v-if="!cars.length" class="empty">Nessuna sessione nel periodo.</li>
+            <li v-if="!cars.length" class="empty">{{ t('stats.time.empty') }}</li>
           </ul>
-          <h3 class="stats__h3">Ore per settimana</h3>
+          <h3 class="stats__h3">{{ t('stats.time.weekly') }}</h3>
           <!-- Come il grafico Attivita' della Panoramica: valore sopra la colonna, settimane vuote come slot leggeri. -->
-          <div class="weeks" role="img" :aria-label="`Ore per settimana, massimo ${hours(weekMax)}`">
-            <div v-for="(w, i) in weeks" :key="w.weekStart" class="weeks__col" :class="{ 'weeks__col--empty': !w.timeMs }" :title="`Settimana dal ${weekLabel(w.weekStart)} · ${hours(w.timeMs)}`">
+          <div class="weeks" role="img" :aria-label="t('stats.time.weeklyAria', { max: hours(weekMax) })">
+            <div v-for="(w, i) in weeks" :key="w.weekStart" class="weeks__col" :class="{ 'weeks__col--empty': !w.timeMs }" :title="t('stats.time.weekTitle', { week: weekLabel(w.weekStart), time: hours(w.timeMs) })">
               <div class="weeks__slot">
                 <span v-if="w.timeMs" class="weeks__bar" :style="{ height: `${Math.max(8, (w.timeMs / weekMax) * 100)}%` }"><em>{{ compactHours(w.timeMs) }}</em></span>
               </div>
@@ -193,17 +195,17 @@ watch(targetUserId, (uid, previous) => { if (uid && uid !== previous) void load(
           </div>
         </section>
 
-        <h2 class="stats__section">Per approfondire</h2>
+        <h2 class="stats__section">{{ t('stats.deeper') }}</h2>
         <section class="stats-panel" aria-labelledby="stats-compare">
-          <h2 id="stats-compare">Confronto tra due auto</h2>
+          <h2 id="stats-compare">{{ t('stats.compare.title') }}</h2>
           <p v-if="cars.length > 1" class="insight">{{ insights.compare }}</p>
           <div class="stats__pair">
-            <select v-model="carA" aria-label="Prima auto"><option v-for="c in cars" :key="c.carKey" :value="c.carKey">{{ formatCarName(c.car) }}</option></select>
-            <span>contro</span>
-            <select v-model="carB" aria-label="Seconda auto"><option v-for="c in cars" :key="c.carKey" :value="c.carKey" :disabled="c.carKey === carA">{{ formatCarName(c.car) }}</option></select>
+            <select v-model="carA" :aria-label="t('stats.compare.first')"><option v-for="c in cars" :key="c.carKey" :value="c.carKey">{{ formatCarName(c.car) }}</option></select>
+            <span>{{ t('telemetry.versus') }}</span>
+            <select v-model="carB" :aria-label="t('stats.compare.second')"><option v-for="c in cars" :key="c.carKey" :value="c.carKey" :disabled="c.carKey === carA">{{ formatCarName(c.car) }}</option></select>
           </div>
           <table class="stats-table">
-            <thead><tr><th>Pista</th><th>Prima</th><th>Seconda</th><th title="Tempo della seconda meno quello della prima: verde se la seconda e' piu' veloce">Seconda vs prima</th><th>Ore</th></tr></thead>
+            <thead><tr><th>{{ t('sessions.list.track') }}</th><th>{{ t('stats.compare.firstShort') }}</th><th>{{ t('stats.compare.secondShort') }}</th><th :title="t('stats.compare.gapTitle')">{{ t('stats.compare.gap') }}</th><th>{{ t('stats.compare.hours') }}</th></tr></thead>
             <tbody>
               <tr v-for="r in comparison" :key="r.trackKey">
                 <td>{{ formatTrackName(r.track) }}</td><td>{{ formatLapTime(r.bestA) }}</td><td>{{ formatLapTime(r.bestB) }}</td>
@@ -212,42 +214,42 @@ watch(targetUserId, (uid, previous) => { if (uid && uid !== previous) void load(
                 </td>
                 <td>{{ hours(r.timeA) }} / {{ hours(r.timeB) }}</td>
               </tr>
-              <tr v-if="!comparison.length"><td colspan="5" class="empty">Servono due auto con sessioni nel periodo.</td></tr>
+              <tr v-if="!comparison.length"><td colspan="5" class="empty">{{ t('stats.compare.empty') }}</td></tr>
             </tbody>
           </table>
         </section>
 
         <section class="stats-panel" aria-labelledby="stats-sectors">
-          <h2 id="stats-sectors">Settori migliori e giro ideale</h2>
+          <h2 id="stats-sectors">{{ t('stats.ideal.title') }}</h2>
           <p v-if="insights.ideal" class="insight">{{ insights.ideal }}</p>
-          <p class="stats__sub">Il giro ideale mette insieme i tuoi tre settori migliori: il margine è quanto potresti guadagnare. In alto le piste con più margine. Su tutto lo storico: periodo e tipo di sessione qui non si applicano.</p>
+          <p class="stats__sub">{{ t('stats.ideal.sub') }}</p>
           <table class="stats-table">
-            <thead><tr><th>Pista · auto</th><th>S1</th><th>S2</th><th>S3</th><th>Ideale</th><th>Migliore</th><th title="Ideale meno migliore: quanto puoi guadagnare mettendo insieme i settori migliori">Margine</th></tr></thead>
+            <thead><tr><th>{{ t('stats.trackCar') }}</th><th>S1</th><th>S2</th><th>S3</th><th>{{ t('stats.ideal.ideal') }}</th><th>{{ t('sessions.common.best') }}</th><th :title="t('stats.ideal.marginTitle')">{{ t('sessionDetail.target.margin') }}</th></tr></thead>
             <tbody>
               <tr v-for="c in idealRows" :key="c.key">
                 <td>{{ label(c) }}</td><td v-for="(s, i) in c.bestSectorsMs" :key="i">{{ sector(s) }}</td>
                 <td>{{ formatLapTime(c.idealMs) }}</td><td>{{ formatLapTime(c.bestLapMs) }}</td>
                 <td><span v-if="c.marginMs !== null" class="margin" :class="`margin--${marginLevel(c.marginMs)}`">{{ gap(c.marginMs) }}</span><template v-else>–</template></td>
               </tr>
-              <tr v-if="!combos.length"><td colspan="7" class="empty">{{ summary ? 'Nessun dato per questi filtri.' : 'Questi dati arrivano dal programma Racer Core sul PC del pilota.' }}</td></tr>
+              <tr v-if="!combos.length"><td colspan="7" class="empty">{{ summary ? t('stats.noData') : t('stats.fromApp') }}</td></tr>
             </tbody>
           </table>
         </section>
 
         <section class="stats-panel stats-panel--wide" aria-labelledby="stats-conditions">
-          <h2 id="stats-conditions">Tempi per temperatura dell'aria e grip</h2>
+          <h2 id="stats-conditions">{{ t('stats.conditions.title') }}</h2>
           <p v-if="insights.air" class="insight">{{ insights.air }}</p>
-          <p class="stats__sub">Il tuo miglior giro valido in ogni condizione. Verde dove vai più forte, rosso dove perdi di più. Su tutto lo storico: periodo e tipo di sessione qui non si applicano.</p>
-          <p class="heat-legend" aria-hidden="true"><span class="heat--0">migliore</span><span class="heat--1">≤ 0,3 s</span><span class="heat--2">≤ 1 s</span><span class="heat--3">≤ 2 s</span><span class="heat--4">oltre</span></p>
+          <p class="stats__sub">{{ t('stats.conditions.sub') }}</p>
+          <p class="heat-legend" aria-hidden="true"><span class="heat--0">{{ t('stats.conditions.best') }}</span><span class="heat--1">{{ t('stats.conditions.le03') }}</span><span class="heat--2">≤ 1 s</span><span class="heat--3">≤ 2 s</span><span class="heat--4">{{ t('stats.conditions.beyond') }}</span></p>
           <table class="stats-table">
-            <thead><tr><th>Pista · auto</th><th v-for="b in AIR_BANDS" :key="b.id">{{ b.label }}</th></tr></thead>
+            <thead><tr><th>{{ t('stats.trackCar') }}</th><th v-for="b in AIR_BANDS" :key="b.id">{{ b.label }}</th></tr></thead>
             <tbody>
               <tr v-for="c in combos" :key="c.key"><td>{{ label(c) }}</td><td v-for="b in AIR_BANDS" :key="b.id" :class="heatClass(c.byAir[b.id], airBest(c))">{{ formatLapTime(c.byAir[b.id] ?? null) }}</td></tr>
-              <tr v-if="!combos.length"><td :colspan="AIR_BANDS.length + 1" class="empty">{{ summary ? 'Nessun dato per questi filtri.' : 'Questi dati arrivano dal programma Racer Core sul PC del pilota.' }}</td></tr>
+              <tr v-if="!combos.length"><td :colspan="AIR_BANDS.length + 1" class="empty">{{ summary ? t('stats.noData') : t('stats.fromApp') }}</td></tr>
             </tbody>
           </table>
           <table v-if="gripColumns.length" class="stats-table">
-            <thead><tr><th>Pista · auto</th><th v-for="g in gripColumns" :key="g">{{ g }}</th></tr></thead>
+            <thead><tr><th>{{ t('stats.trackCar') }}</th><th v-for="g in gripColumns" :key="g">{{ g }}</th></tr></thead>
             <tbody>
               <tr v-for="c in combos" :key="c.key"><td>{{ label(c) }}</td><td v-for="g in gripColumns" :key="g" :class="heatClass(c.byGrip[g], gripBest(c))">{{ formatLapTime(c.byGrip[g] ?? null) }}</td></tr>
             </tbody>
@@ -257,8 +259,8 @@ watch(targetUserId, (uid, previous) => { if (uid && uid !== previous) void load(
       </template>
 
       <p v-if="status === 'ready'" class="stats__note">
-        <template v-if="computing">Aggiornamento di settori, temperature e grip…</template>
-        <template v-else-if="summary">Settori, temperature e grip: {{ Object.keys(summary.counted).length }} sessioni analizzate su {{ accSessions.length }} sessioni ACC<template v-if="remaining">; altre {{ remaining }} si aggiungono domani</template><template v-else-if="Object.keys(summary.counted).length < accSessions.length"> (le altre non hanno giri validi)</template>.</template>
+        <template v-if="computing">{{ t('stats.footer.computing') }}</template>
+        <template v-else-if="summary">{{ t('stats.footer.counted', { count: Object.keys(summary.counted).length, total: accSessions.length }) }}<template v-if="remaining">; {{ t('stats.footer.remaining', { count: remaining }) }}</template><template v-else-if="Object.keys(summary.counted).length < accSessions.length"> ({{ t('stats.footer.noValid') }})</template>.</template>
       </p>
     </div>
   </LayoutPageContainer>

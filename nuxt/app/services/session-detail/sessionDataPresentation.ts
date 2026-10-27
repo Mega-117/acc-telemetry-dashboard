@@ -2,6 +2,7 @@ import type { FullSession, LapData, StintData } from '~/types/telemetry'
 import { buildBestSectorSummary, buildSessionDetailLaps } from './sessionComparisonTableService'
 import { isCleanSessionLap } from './sessionStintMetrics'
 import { formatLapTime } from '~/utils/telemetryFormat'
+import { useI18n } from '~/i18n'
 
 export function recordedNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
@@ -33,7 +34,8 @@ export function stintDataFacts(stint: StintData | undefined) {
 }
 
 export function lapStatus(lap: LapData): string {
-  if (lap.completeness === 'missing') return 'Dati persi'
-  if (lap.is_valid == null || lap.validity === 'unknown') return 'Validità non rilevata'
-  return [lap.is_valid ? 'Valido' : 'Invalido', lap.pit_out_lap ? 'Uscita box' : lap.has_pit_stop ? 'Box' : '', lap.completeness === 'partial' ? 'Parziale' : ''].filter(Boolean).join(' · ')
+  const { t } = useI18n()
+  if (lap.completeness === 'missing') return t('data.status.lost')
+  if (lap.is_valid == null || lap.validity === 'unknown') return t('data.status.unknown')
+  return [lap.is_valid ? t('data.status.valid') : t('data.status.invalid'), lap.pit_out_lap ? t('data.status.pitOut') : lap.has_pit_stop ? t('data.status.pit') : '', lap.completeness === 'partial' ? t('sessions.common.partial') : ''].filter(Boolean).join(' · ')
 }

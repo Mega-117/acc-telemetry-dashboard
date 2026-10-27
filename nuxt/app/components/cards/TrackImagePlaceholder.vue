@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { useId } from 'vue'
+import { useI18n } from '~/i18n'
 
 defineProps<{ name: string }>()
 const id = useId()
+const { t } = useI18n()
 </script>
 
 <template>
-  <svg viewBox="0 0 512 512" role="img" :aria-label="`${name} — immagine non ancora disponibile`">
+  <svg viewBox="0 0 512 512" role="img" :aria-label="`${name} — ${t('tracks.noImage')}`">
     <defs>
       <linearGradient :id="`${id}-background`" x2="1" y2="1">
         <stop stop-color="#11161c" />

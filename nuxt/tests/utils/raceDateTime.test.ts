@@ -1,11 +1,15 @@
 // @vitest-environment jsdom
 // PIP-641: the site's date and time picker for a planned race, and the checks of the race form.
 import { flushPromises, mount } from '@vue/test-utils'
+import { setLocale } from '~/i18n'
 import { describe, expect, it } from 'vitest'
 import RaceDateTimePicker from '~/components/overview/RaceDateTimePicker.vue'
 import { validateRaceForm } from '~/utils/raceCalendarForm'
 import { placeFloating } from '~/utils/floatingPlacement'
 import { addDays, displayRaceDateTime, formatRaceDateTime, monthCells, parseRaceDateTime, parseTimePart } from '~/utils/raceDateTime'
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('race date helpers', () => {
   it('reads and writes the calendar format, rejecting impossible dates', () => {

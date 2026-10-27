@@ -1,11 +1,13 @@
 <script setup lang="ts">
+import { useI18n } from '~/i18n'
 defineEmits<{ retry: [] }>()
+const { t } = useI18n()
 </script>
 <template>
   <LayoutPageContainer class="page-preparation-error">
     <div role="status">
-      <p>Non è stato possibile preparare la pagina.</p>
-      <button type="button" class="rc-btn" @click="$emit('retry')">Riprova</button>
+      <p>{{ t('common.pagePrepError') }}</p>
+      <button type="button" class="rc-btn" @click="$emit('retry')">{{ t('common.retry') }}</button>
     </div>
   </LayoutPageContainer>
 </template>

@@ -3,8 +3,10 @@
 import { calendarWeeks, drivingHabits, localDay } from '~/utils/statsJourney'
 import type { SessionDocument } from '~/types/telemetry'
 import { formatDriveTime } from '~/utils/telemetryFormat'
+import { useI18n } from '~/i18n'
 
 const props = defineProps<{ sessions: SessionDocument[], nowMs: number }>()
+const { t, intlLocale } = useI18n()
 const WEEKS = 52
 const weeks = computed(() => calendarWeeks(props.sessions, WEEKS, props.nowMs))
 // Riepilogo sullo stesso intervallo della griglia: "Ultimi 12 mesi" vale per tutto il riquadro.
@@ -13,33 +15,35 @@ const inRange = computed(() => props.sessions.filter(s => { const ms = Date.pars
 const habits = computed(() => drivingHabits(inRange.value, props.nowMs))
 // Alternativa testuale ai quadretti per tastiera e lettori di schermo.
 const drivenDays = computed(() => weeks.value.flat().filter(d => d.sessions).reverse())
-const MONTHS = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
+const MONTHS = computed(() => Array.from({ length: 12 }, (_, m) => intlLocale.value === 'it-IT'
+  ? ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'][m]!
+  : new Date(2024, m, 1).toLocaleDateString(intlLocale.value, { month: 'short' })))
 // Etichetta del mese sulla prima settimana che lo contiene.
 const monthLabels = computed(() => weeks.value.map((w, i) => {
   const m = Number(w[0]!.date.slice(5, 7)) - 1
   const prev = i ? Number(weeks.value[i - 1]![0]!.date.slice(5, 7)) - 1 : -1
-  return m !== prev ? MONTHS[m] : ''
+  return m !== prev ? MONTHS.value[m] : ''
 }))
 const dayTitle = (d: { date: string, timeMs: number, sessions: number }) =>
-  `${d.date.slice(8, 10)}/${d.date.slice(5, 7)}/${d.date.slice(0, 4)} · ${d.sessions ? `${formatDriveTime(d.timeMs)} in ${d.sessions} ${d.sessions === 1 ? 'sessione' : 'sessioni'}` : 'nessuna sessione'}`
-const days = (n: number) => `${n} ${n === 1 ? 'giorno' : 'giorni'}`
+  `${d.date.slice(8, 10)}/${d.date.slice(5, 7)}/${d.date.slice(0, 4)} · ${d.sessions ? t(d.sessions === 1 ? 'stats.calendar.dayOne' : 'stats.calendar.dayMany', { time: formatDriveTime(d.timeMs), count: d.sessions }) : t('stats.calendar.dayNone')}`
+const days = (n: number) => t(n === 1 ? 'stats.calendar.oneDay' : 'stats.calendar.days', { n })
 </script>
 
 <template>
   <section class="stats-panel calendar" aria-labelledby="stats-calendar">
     <div class="calendar__head">
-      <h2 id="stats-calendar">Calendario di guida</h2>
-      <span class="calendar__range">Ultimi 12 mesi</span>
+      <h2 id="stats-calendar">{{ t('stats.calendar.title') }}</h2>
+      <span class="calendar__range">{{ t('stats.calendar.range') }}</span>
     </div>
     <dl class="habits">
-      <div><dt>Giorni in pista</dt><dd>{{ habits.daysDriven }}</dd></div>
-      <div><dt>Serie più lunga</dt><dd>{{ days(habits.longestStreak) }}</dd></div>
-      <div><dt>Serie in corso</dt><dd>{{ habits.currentStreak ? days(habits.currentStreak) : '–' }}</dd></div>
-      <div><dt>Sessione più lunga</dt><dd>{{ habits.longestSessionMs ? formatDriveTime(habits.longestSessionMs) : '–' }}</dd></div>
+      <div><dt>{{ t('stats.calendar.daysDriven') }}</dt><dd>{{ habits.daysDriven }}</dd></div>
+      <div><dt>{{ t('stats.calendar.longestStreak') }}</dt><dd>{{ days(habits.longestStreak) }}</dd></div>
+      <div><dt>{{ t('stats.calendar.currentStreak') }}</dt><dd>{{ habits.currentStreak ? days(habits.currentStreak) : '–' }}</dd></div>
+      <div><dt>{{ t('stats.calendar.longestSession') }}</dt><dd>{{ habits.longestSessionMs ? formatDriveTime(habits.longestSessionMs) : '–' }}</dd></div>
     </dl>
     <div class="calendar__scroll">
-      <div class="calendar__grid" role="img" aria-label="Giorni di guida negli ultimi 12 mesi">
-        <div class="calendar__days" aria-hidden="true"><span>lun</span><span /><span>mer</span><span /><span>ven</span><span /><span>dom</span></div>
+      <div class="calendar__grid" role="img" :aria-label="t('stats.calendar.gridAria')">
+        <div class="calendar__days" aria-hidden="true"><span>{{ t('stats.calendar.mon') }}</span><span /><span>{{ t('stats.calendar.wed') }}</span><span /><span>{{ t('stats.calendar.fri') }}</span><span /><span>{{ t('stats.calendar.sun') }}</span></div>
         <div v-for="(w, i) in weeks" :key="w[0]!.date" class="calendar__week">
           <small class="calendar__month">{{ monthLabels[i] }}</small>
           <span v-for="d in w" :key="d.date" class="calendar__day" :class="[`lvl-${d.level}`, { 'is-future': d.future }]" :title="d.future ? '' : dayTitle(d)" />
@@ -47,10 +51,10 @@ const days = (n: number) => `${n} ${n === 1 ? 'giorno' : 'giorni'}`
       </div>
     </div>
     <details class="calendar__list">
-      <summary>Elenco dei giorni di guida ({{ drivenDays.length }})</summary>
+      <summary>{{ t('stats.calendar.list', { count: drivenDays.length }) }}</summary>
       <ul><li v-for="d in drivenDays" :key="d.date">{{ dayTitle(d) }}</li></ul>
     </details>
-    <p class="calendar__legend" aria-hidden="true">Meno <span class="calendar__day lvl-0" /><span class="calendar__day lvl-1" /><span class="calendar__day lvl-2" /><span class="calendar__day lvl-3" /><span class="calendar__day lvl-4" /> Di più</p>
+    <p class="calendar__legend" aria-hidden="true">{{ t('stats.calendar.less') }} <span class="calendar__day lvl-0" /><span class="calendar__day lvl-1" /><span class="calendar__day lvl-2" /><span class="calendar__day lvl-3" /><span class="calendar__day lvl-4" /> {{ t('stats.calendar.more') }}</p>
   </section>
 </template>
 

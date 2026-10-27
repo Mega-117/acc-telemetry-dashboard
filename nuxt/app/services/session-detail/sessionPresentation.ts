@@ -1,6 +1,9 @@
+import { useI18n } from '~/i18n'
+
 /** Display-only labels and markers. Never changes lap eligibility or timing. */
 export function stintTypeLabel(type?: string): string {
-  return type === 'R' ? 'Gara' : type === 'Q' ? 'Qualifica' : (type || '—')
+  const { t } = useI18n()
+  return type === 'R' ? t('overview.columns.race') : type === 'Q' ? t('overview.columns.qualify') : (type || '—')
 }
 
 export function gripAbbreviation(grip?: string): string {

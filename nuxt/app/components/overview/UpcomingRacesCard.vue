@@ -21,6 +21,7 @@ import { validateRaceForm, type RaceFormErrors, type RaceFormField } from '~/uti
 import RaceDateTimePicker from './RaceDateTimePicker.vue'
 import RaceFieldError from './RaceFieldError.vue'
 import RaceOptionsMenu from './RaceOptionsMenu.vue'
+import { useI18n } from '~/i18n'
 
 const props = defineProps<{
   userId: string | null | undefined
@@ -32,11 +33,12 @@ const props = defineProps<{
 
 const emit = defineEmits<{ loading: [value: boolean] }>()
 type ModalMode = 'create' | 'edit' | 'delete'
+const { t, intlLocale } = useI18n()
 
 const { currentUser, userRole, cloudSessionReady } = useFirebaseAuth()
 const runtimeWriteGate = useRuntimeCapabilityGate().gate('cloudWrite')
 const cloudWriteGate = computed(() => cloudSessionReady.value ? runtimeWriteGate.value
-  : { allowed: false, message: 'Ricollega il cloud per modificare il calendario.' })
+  : { allowed: false, message: t('overview.races.reconnect') })
 
 const events = ref<RaceCalendarEvent[]>(props.initialUserId === props.userId ? props.initialEvents || [] : [])
 const entry = inject(overviewEntryKey, null)
@@ -77,22 +79,22 @@ const featuredCountdown = computed(() => featuredEvent.value
 )
 const secondaryEvents = computed(() => upcomingEvents.value.slice(1))
 const modalTitle = computed(() => {
-  if (modalMode.value === 'delete') return 'Elimina gara'
-  if (modalMode.value === 'edit') return 'Modifica gara'
-  return 'Aggiungi gara'
+  if (modalMode.value === 'delete') return t('overview.races.delete')
+  if (modalMode.value === 'edit') return t('overview.races.edit')
+  return t('overview.races.add')
 })
 const modalSubmitLabel = computed(() => {
-  if (isSaving.value) return 'Salvataggio...'
-  if (modalMode.value === 'delete') return 'Conferma eliminazione'
-  if (modalMode.value === 'edit') return 'Conferma modifiche'
-  return 'Aggiungi gara'
+  if (isSaving.value) return t('overview.races.saving')
+  if (modalMode.value === 'delete') return t('overview.races.confirmDelete')
+  if (modalMode.value === 'edit') return t('overview.races.confirmEdit')
+  return t('overview.races.add')
 })
 
 function formatEventDate(value: string): string {
-  if (!value) return 'Data non impostata'
+  if (!value) return t('overview.races.noDate')
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('it-IT', {
+  return new Intl.DateTimeFormat(intlLocale.value, {
     weekday: 'short',
     day: '2-digit',
     month: 'short',
@@ -111,8 +113,8 @@ function formatShortDate(value: string): string {
 function countdownText(event: RaceCalendarEvent): string {
   const countdown = getRaceCalendarCountdown(event.startsAt, new Date(nowMs.value))
   if (!countdown) return ''
-  if (countdown.days === 0) return 'oggi'
-  return countdown.days === 1 ? 'domani' : `tra ${countdown.days} giorni`
+  if (countdown.days === 0) return t('overview.races.today')
+  return countdown.days === 1 ? t('overview.races.tomorrow') : t('overview.races.inDays', { days: countdown.days })
 }
 
 function resetForm() {
@@ -258,7 +260,7 @@ async function submitModal() {
     isModalOpen.value = false
     await refreshEvents()
   } catch (error: any) {
-    errorMessage.value = error?.message || 'Operazione non riuscita.'
+    errorMessage.value = error?.message || t('overview.races.failed')
   } finally {
     isSaving.value = false
   }
@@ -300,21 +302,21 @@ onBeforeUnmount(() => {
   <section class="upcoming-races-card coach-card" :class="{ 'upcoming-races-card--racing': racing }">
     <div class="coach-card__header race-header">
       <div>
-        <span v-if="!racing" class="eyebrow">Calendario pilota</span>
-        <h2 class="coach-title">{{ racing ? 'Prossima gara' : 'Prossime gare' }}</h2>
+        <span v-if="!racing" class="eyebrow">{{ t('overview.races.calendar') }}</span>
+        <h2 class="coach-title">{{ racing ? t('overview.races.nextRace') : t('overview.races.nextRaces') }}</h2>
       </div>
-      <button class="race-action" type="button" aria-label="Aggiungi gara" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Aggiungi gara' : cloudWriteGate.message" @click="openCreateModal"><CirclePlus v-if="racing" :size="32" :stroke-width="1.2" aria-hidden="true" /><span v-else>Aggiungi gara</span></button>
+      <button class="race-action" type="button" :aria-label="t('overview.races.add')" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? t('overview.races.add') : cloudWriteGate.message" @click="openCreateModal"><CirclePlus v-if="racing" :size="32" :stroke-width="1.2" aria-hidden="true" /><span v-else>{{ t('overview.races.add') }}</span></button>
     </div>
 
-    <div v-if="!cloudSessionReady" class="race-empty" role="status">Calendario non disponibile offline.</div>
-    <div v-else-if="isLoading" class="race-empty">Caricamento gare...</div>
+    <div v-if="!cloudSessionReady" class="race-empty" role="status">{{ t('overview.races.offline') }}</div>
+    <div v-else-if="isLoading" class="race-empty">{{ t('overview.races.loading') }}</div>
     <div v-else-if="calendarLoadError" class="race-empty" role="status">
-      <span>Calendario non disponibile.</span>
-      <button type="button" class="race-action" @click="refreshEvents">Riprova</button>
+      <span>{{ t('overview.races.unavailable') }}</span>
+      <button type="button" class="race-action" @click="refreshEvents">{{ t('common.retry') }}</button>
     </div>
     <div v-else-if="!featuredEvent" class="race-empty">
-      <strong>Nessuna gara pianificata</strong>
-      <span v-if="!racing">Aggiungi la prossima gara per averla sempre in vista.</span>
+      <strong>{{ t('overview.races.none') }}</strong>
+      <span v-if="!racing">{{ t('overview.races.noneHint') }}</span>
     </div>
     <div v-else class="race-content">
       <article
@@ -344,35 +346,35 @@ onBeforeUnmount(() => {
           <p>{{ featuredEvent.trackName }}<span v-if="featuredEvent.carName"> - {{ featuredEvent.carName }}</span></p>
         </div>
         <RaceOptionsMenu
-          v-if="racing" label="Opzioni prossima gara" :sim-grid-url="featuredEvent.simGridUrl" :race-url="featuredEvent.raceUrl"
+          v-if="racing" :label="t('overview.races.nextOptions')" :sim-grid-url="featuredEvent.simGridUrl" :race-url="featuredEvent.raceUrl"
           :disabled="!cloudWriteGate.allowed" @edit="openEditModal(featuredEvent)" @delete="openDeleteModal(featuredEvent)"
         />
         <div v-else class="race-row-actions">
           <a v-if="featuredEvent.simGridUrl" :href="featuredEvent.simGridUrl" target="_blank" rel="noopener">SimGrid</a>
-          <a v-if="featuredEvent.raceUrl" :href="featuredEvent.raceUrl" target="_blank" rel="noopener">Link gara</a>
-          <button type="button" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Modifica gara' : cloudWriteGate.message" @click="openEditModal(featuredEvent)">Modifica</button>
-          <button type="button" class="danger" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Elimina gara' : cloudWriteGate.message" @click="openDeleteModal(featuredEvent)">Elimina</button>
+          <a v-if="featuredEvent.raceUrl" :href="featuredEvent.raceUrl" target="_blank" rel="noopener">{{ t('overview.races.raceLink') }}</a>
+          <button type="button" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? t('overview.races.edit') : cloudWriteGate.message" @click="openEditModal(featuredEvent)">{{ t('overview.races.editShort') }}</button>
+          <button type="button" class="danger" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? t('overview.races.delete') : cloudWriteGate.message" @click="openDeleteModal(featuredEvent)">{{ t('overview.races.deleteShort') }}</button>
         </div>
       </article>
 
       <div v-if="secondaryEvents.length" class="race-list-block">
         <div v-if="!racing" class="race-list-header">
-          <span>{{ secondaryEvents.length === 1 ? 'Gara successiva' : 'Gare successive' }}</span>
+          <span>{{ secondaryEvents.length === 1 ? t('overview.races.followingOne') : t('overview.races.followingMany') }}</span>
           <strong>{{ secondaryEvents.length }}</strong>
         </div>
-        <div class="race-list" :class="{ 'race-list--multiple': secondaryEvents.length > 1 }" aria-label="Altre gare pianificate">
+        <div class="race-list" :class="{ 'race-list--multiple': secondaryEvents.length > 1 }" :aria-label="t('overview.races.otherAria')">
           <article v-for="event in secondaryEvents" :key="event.id" class="compact-race">
             <div>
               <strong>{{ event.title }}<em v-if="countdownText(event)" class="compact-race__in"> · {{ countdownText(event) }}</em></strong>
               <span>{{ formatShortDate(event.startsAt) }} · {{ event.trackName }}</span>
             </div>
             <RaceOptionsMenu
-              v-if="racing" compact :label="`Opzioni gara ${event.title}`" :disabled="!cloudWriteGate.allowed"
+              v-if="racing" compact :label="t('overview.races.options', { title: event.title })" :disabled="!cloudWriteGate.allowed"
               @edit="openEditModal(event)" @delete="openDeleteModal(event)"
             />
             <div v-else class="compact-actions">
-              <button type="button" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Modifica gara' : cloudWriteGate.message" @click="openEditModal(event)">Modifica</button>
-              <button type="button" class="danger" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Elimina gara' : cloudWriteGate.message" @click="openDeleteModal(event)">Elimina</button>
+              <button type="button" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? t('overview.races.edit') : cloudWriteGate.message" @click="openEditModal(event)">{{ t('overview.races.editShort') }}</button>
+              <button type="button" class="danger" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? t('overview.races.delete') : cloudWriteGate.message" @click="openDeleteModal(event)">{{ t('overview.races.deleteShort') }}</button>
             </div>
           </article>
         </div>
@@ -385,42 +387,42 @@ onBeforeUnmount(() => {
         <form class="race-modal" :class="{ 'race-modal--racing': racing }" novalidate role="dialog" aria-modal="true" :aria-label="modalTitle" @keydown.esc="closeModal" @submit.prevent="submitModal">
           <header>
             <div>
-              <span class="eyebrow">Calendario pilota<span v-if="gameId"> · {{ gameLabel(gameId) }}</span></span>
+              <span class="eyebrow">{{ t('overview.races.calendar') }}<span v-if="gameId"> · {{ gameLabel(gameId) }}</span></span>
               <h2>{{ modalTitle }}</h2>
             </div>
-            <button type="button" class="modal-close" aria-label="Chiudi" @click="closeModal"><X :size="20" aria-hidden="true" /></button>
+            <button type="button" class="modal-close" :aria-label="t('common.close')" @click="closeModal"><X :size="20" aria-hidden="true" /></button>
           </header>
 
           <div v-if="modalMode === 'delete'" class="delete-confirm">
             <strong>{{ selectedEvent?.title }}</strong>
             <span>{{ selectedEvent ? formatEventDate(selectedEvent.startsAt) : '' }}</span>
-            <p>Conferma l'eliminazione della gara dal calendario.</p>
+            <p>{{ t('overview.races.deleteText') }}</p>
           </div>
 
           <template v-else>
             <label>
-              <span>Titolo gara</span>
-              <input v-model="form.title" type="text" placeholder="Es. Endurance Sprint" v-bind="fieldProps('title')" />
+              <span>{{ t('overview.races.title') }}</span>
+              <input v-model="form.title" type="text" :placeholder="t('overview.races.titlePlaceholder')" v-bind="fieldProps('title')" />
               <RaceFieldError id="race-title-error" :message="fieldErrors.title" />
             </label>
             <div class="form-row">
               <div class="race-field">
-                <span id="race-startsAt-label">Data e ora</span>
+                <span id="race-startsAt-label">{{ t('overview.races.when') }}</span>
                 <RaceDateTimePicker v-model="form.startsAt" :invalid="!!fieldErrors.startsAt" describedby="race-startsAt-label race-startsAt-error" />
                 <RaceFieldError id="race-startsAt-error" :message="fieldErrors.startsAt" />
               </div>
               <label>
-                <span>Pista</span>
-                <input v-model="form.trackName" type="text" placeholder="Es. Spa-Francorchamps" v-bind="fieldProps('trackName')" />
+                <span>{{ t('overview.races.track') }}</span>
+                <input v-model="form.trackName" type="text" :placeholder="t('overview.races.trackPlaceholder')" v-bind="fieldProps('trackName')" />
                 <RaceFieldError id="race-trackName-error" :message="fieldErrors.trackName" />
               </label>
             </div>
             <label>
-              <span>Vettura <small class="field-optional">Facoltativa</small></span>
-              <input v-model="form.carName" type="text" placeholder="Es. Ferrari 296 GT3" />
+              <span>{{ t('overview.races.car') }} <small class="field-optional">{{ t('overview.races.optionalOne') }}</small></span>
+              <input v-model="form.carName" type="text" :placeholder="t('overview.races.carPlaceholder')" />
             </label>
             <fieldset class="race-links">
-              <legend>Link utili <small class="field-optional">Facoltativi</small></legend>
+              <legend>{{ t('overview.races.links') }} <small class="field-optional">{{ t('overview.races.optionalMany') }}</small></legend>
               <div class="form-row">
               <label>
                 <span>SimGrid</span>
@@ -428,8 +430,8 @@ onBeforeUnmount(() => {
                 <RaceFieldError id="race-simGridUrl-error" :message="fieldErrors.simGridUrl" />
               </label>
               <label>
-                <span>Link gara</span>
-                <input v-model="form.raceUrl" type="url" placeholder="Briefing, Discord, sito evento..." v-bind="fieldProps('raceUrl')" />
+                <span>{{ t('overview.races.raceLink') }}</span>
+                <input v-model="form.raceUrl" type="url" :placeholder="t('overview.races.linkPlaceholder')" v-bind="fieldProps('raceUrl')" />
                 <RaceFieldError id="race-raceUrl-error" :message="fieldErrors.raceUrl" />
               </label>
               </div>
@@ -439,7 +441,7 @@ onBeforeUnmount(() => {
           <footer>
             <!-- General errors (cloud, save failed) next to the buttons the user just pressed. -->
             <p class="footer-error" role="alert" aria-atomic="true"><Transition name="footer-error"><span v-if="errorMessage" class="form-error">{{ errorMessage }}</span></Transition></p>
-            <button type="button" :class="racing ? 'rc-btn' : 'secondary-action'" :disabled="isSaving" @click="closeModal">Annulla</button>
+            <button type="button" :class="racing ? 'rc-btn' : 'secondary-action'" :disabled="isSaving" @click="closeModal">{{ t('common.cancel') }}</button>
             <button :class="racing ? 'rc-btn rc-btn--primary' : ['primary-action', { danger: modalMode === 'delete' }]" type="submit" :disabled="isSaving || !cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? modalSubmitLabel : cloudWriteGate.message">
               {{ modalSubmitLabel }}
             </button>

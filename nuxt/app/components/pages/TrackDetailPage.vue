@@ -17,6 +17,7 @@ import { useHeaderBack } from '~/composables/useHeaderBack'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { RACE_FUEL_BUCKETS } from '~/services/telemetry/raceFuelClassification'
 import type { TrackDetailProjection, TrackFuelBucketReference } from '~/types/trackProjections'
+import { useI18n } from '~/i18n'
 
 
 const props = defineProps<{
@@ -30,13 +31,16 @@ const emit = defineEmits<{
 }>()
 
 const { consultedGame } = useGameContext()
-const headerBack = useHeaderBack(() => emit('back'), () => props.fromSession ? 'Torna alla sessione' : 'Torna alle piste')
+const { t, intlLocale } = useI18n()
+const headerBack = useHeaderBack(() => emit('back'), () => props.fromSession ? t('tracks.backSession') : t('tracks.back'))
 const targetUserId = usePilotContext()
 
 function formatShortDate(isoDate: string | null): string {
   if (!isoDate) return ''
   const dateStr = isoDate.split('T')[0] ?? isoDate
   const [year = '0', month = '0', day = '0'] = dateStr.split('-')
+  // Italian keeps its own short months; other languages use the browser's.
+  if (intlLocale.value !== 'it-IT') return new Date(Number(year), Number(month) - 1, Number(day)).toLocaleDateString(intlLocale.value, { day: 'numeric', month: 'short', year: 'numeric' })
   const months = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
   return `${parseInt(day, 10)} ${months[parseInt(month, 10) - 1] ?? ''} ${year}`
 }
@@ -238,7 +242,7 @@ function goToSession(id: string) {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M19 12H5M12 19l-7-7 7-7"/>
       </svg>
-      {{ props.fromSession ? 'Torna alla sessione' : 'Torna alle piste' }}
+      {{ props.fromSession ? t('tracks.backSession') : t('tracks.back') }}
     </button>
 
     <!-- Track Header -->
@@ -266,7 +270,7 @@ function goToSession(id: string) {
               <path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
               <path d="M9 12l2 2 4-4"/>
             </svg>
-            {{ track.turns }} curve
+            {{ t('tracks.turns', { n: track.turns }) }}
           </span>
 
         </div>
@@ -274,35 +278,35 @@ function goToSession(id: string) {
     </div>
     <div class="track-history-filters">
       <div v-if="consultedGame === 'acc'" class="track-filter track-filter--category">
-        <label for="track-category">Categoria</label>
+        <label for="track-category">{{ t('tracks.category') }}</label>
         <select id="track-category" v-model="selectedCategory">
-          <option value="">Tutte le categorie</option>
+          <option value="">{{ t('sessions.filters.allCategories') }}</option>
           <option v-for="cat in options.categories" :key="cat" :value="cat">{{ cat }}</option>
         </select>
       </div>
       <div class="track-filter track-filter--car">
-        <label for="track-car">Vettura</label>
+        <label for="track-car">{{ t('overview.races.car') }}</label>
         <select id="track-car" v-model="selectedCar">
-          <option value="">Tutte le vetture</option>
+          <option value="">{{ t('tracks.allCars') }}</option>
           <option v-for="car in cars" :key="car" :value="car">{{ formatCarName(car) }}</option>
         </select>
       </div>
     </div>
-    <div class="track-header-activity" aria-label="Attivita pista">
+    <div class="track-header-activity" :aria-label="t('tracks.activityAria')">
         <div class="activity-summary-item">
-          <span class="activity-summary-label">Sessioni</span>
+          <span class="activity-summary-label">{{ t('stats.trend.sessions') }}</span>
           <span class="activity-summary-value">{{ activityStats.sessionCount }}</span>
         </div>
         <div class="activity-summary-item">
-          <span class="activity-summary-label">Giri</span>
+          <span class="activity-summary-label">{{ t('stats.trend.laps') }}</span>
           <span class="activity-summary-value">{{ activityStats.totalLaps }}</span>
         </div>
         <div class="activity-summary-item">
-          <span class="activity-summary-label">Validi {{ activityStats.validPercent }}%</span>
+          <span class="activity-summary-label">{{ t('tracks.validPct', { pct: activityStats.validPercent }) }}</span>
           <span class="activity-summary-value">{{ activityStats.validLaps }}</span>
         </div>
         <div class="activity-summary-item">
-          <span class="activity-summary-label">Tempo in pista</span>
+          <span class="activity-summary-label">{{ t('stats.trend.time') }}</span>
           <span class="activity-summary-value">{{ activityStats.totalTimeFormatted }}</span>
         </div>
       </div>
@@ -320,18 +324,18 @@ function goToSession(id: string) {
         <div class="sidebar-section">
           <div class="section-header-row section-header-row--stacked">
             <div>
-              <h2 class="section-title">Migliori tempi</h2>
+              <h2 class="section-title">{{ t('tracks.bestTimes') }}</h2>
             </div>
           </div>
           <div class="track-filter track-filter--grip">
             <label for="track-grip">Grip</label>
             <select id="track-grip" v-model="selectedGrip">
-              <option v-for="grip in gripConditions" :key="grip" :value="grip">{{ grip === 'Unknown' ? 'Non disponibile' : grip }}</option>
+              <option v-for="grip in gripConditions" :key="grip" :value="grip">{{ grip === 'Unknown' ? t('common.notAvailable') : grip }}</option>
             </select>
           </div>
 
           <p v-if="consultedGame === 'evo' && selectedGrip === 'Unknown'" class="reference-empty-note">
-            Grip non disponibile nella registrazione.
+            {{ t('tracks.noGrip') }}
           </p>
 
           <div class="best-reference-stack">
@@ -339,10 +343,10 @@ function goToSession(id: string) {
               type="button"
               :class="['best-reference-card best-reference-card--qualy', { 'best-reference-card--clickable': track.bestQualySessionId }]"
               :disabled="!track.bestQualySessionId"
-              title="Vai alla sessione qualifica"
+              :title="t('tracks.goQualy')"
               @click="track.bestQualySessionId && goToSession(track.bestQualySessionId)"
             >
-              <span class="reference-card-title">Best qualifica</span>
+              <span class="reference-card-title">{{ t('stats.best.qualy') }}</span>
               <span class="reference-card-time">{{ track.bestQualy || '--:--.---' }}</span>
               <span class="reference-card-meta">
                 <template v-if="track.bestQualyDate">{{ formatShortDate(track.bestQualyDate) }}</template>
@@ -355,9 +359,9 @@ function goToSession(id: string) {
             <div :class="['race-reference-card', { 'race-reference-card--empty': !selectedRaceReference.hasData }]">
               <div class="race-reference-card__head">
                 <div>
-                  <span class="reference-card-kicker">Carburante iniziale</span>
+                  <span class="reference-card-kicker">{{ t('sessionDetail.conditions.startFuel') }}</span>
                 </div>
-                <select v-model="selectedRaceReferenceBucket" class="race-reference-card__select" aria-label="Scegli bucket fuel gara">
+                <select v-model="selectedRaceReferenceBucket" class="race-reference-card__select" :aria-label="t('tracks.fuelAria')">
                   <option v-for="bucket in raceFuelBuckets" :key="bucket.bucket" :value="bucket.bucket">
                     {{ bucket.bucket }}L
                   </option>
@@ -368,10 +372,10 @@ function goToSession(id: string) {
                   type="button"
                   :class="['race-reference-metric race-reference-metric--best', { 'race-reference-metric--clickable': selectedRaceReference.bestRaceSessionId }]"
                   :disabled="!selectedRaceReference.bestRaceSessionId"
-                  title="Vai alla sessione best gara"
+                  :title="t('tracks.goRace')"
                   @click="selectedRaceReference.bestRaceSessionId && goToSession(selectedRaceReference.bestRaceSessionId)"
                 >
-                  <span class="reference-card-title">Best gara</span>
+                  <span class="reference-card-title">{{ t('stats.best.race') }}</span>
                   <span class="reference-card-time">{{ selectedRaceReference.bestRace || '--:--.---' }}</span>
                   <span class="reference-card-meta">
                     <template v-if="selectedRaceReference.bestRaceDate">{{ formatShortDate(selectedRaceReference.bestRaceDate) }}</template>
@@ -384,10 +388,10 @@ function goToSession(id: string) {
                   type="button"
                   :class="['race-reference-metric race-reference-metric--avg', { 'race-reference-metric--clickable': selectedRaceReference.avgRaceSessionId }]"
                   :disabled="!selectedRaceReference.avgRaceSessionId"
-                  title="Vai alla sessione della best media gara"
+                  :title="t('tracks.goAvg')"
                   @click="selectedRaceReference.avgRaceSessionId && goToSession(selectedRaceReference.avgRaceSessionId)"
                 >
-                  <span class="reference-card-title">Best media gara</span>
+                  <span class="reference-card-title">{{ t('stats.best.avgRace') }}</span>
                   <span class="reference-card-time">{{ selectedRaceReference.avgRace || '--:--.---' }}</span>
                   <span class="reference-card-meta">
                     <template v-if="selectedRaceReference.avgRaceDate">{{ formatShortDate(selectedRaceReference.avgRaceDate) }}</template>
@@ -400,15 +404,15 @@ function goToSession(id: string) {
             </div>
           </div>
           <p v-if="!hasRaceFuelBucketData" class="no-data-hint no-data-hint--block">
-            Nessun riferimento gara per {{ selectedCar || selectedCategory || 'questa selezione' }} / {{ selectedGrip }}.
+            {{ t('tracks.noRaceRef', { what: selectedCar || selectedCategory || t('tracks.thisSelection'), grip: selectedGrip }) }}
           </p>
         </div>
 
       </aside>
-    <section ref="sessionsRef" class="track-sessions" aria-label="Sessioni recenti">
-      <h2 class="section-title">Sessioni recenti</h2>
-      <p v-if="isProjectionLoading" class="sessions-status" role="status">Caricamento sessioni…</p>
-      <p v-else-if="!recentSessions.length" class="sessions-status" role="status">Nessuna sessione disponibile per questa categoria.</p>
+    <section ref="sessionsRef" class="track-sessions" :aria-label="t('tracks.recent')">
+      <h2 class="section-title">{{ t('tracks.recent') }}</h2>
+      <p v-if="isProjectionLoading" class="sessions-status" role="status">{{ t('sessions.loading') }}</p>
+      <p v-else-if="!recentSessions.length" class="sessions-status" role="status">{{ t('tracks.noSessions') }}</p>
       <RacingSessionList v-else class="sessions-list" hide-track :groups="sessionGroups" :session-href="sessionRoute" @go-to-session="goToSession" />
       <PaginationControls
         v-model:current-page="currentPage"
@@ -416,7 +420,7 @@ function goToSession(id: string) {
         :disabled="isProjectionLoading"
         :total-pages="totalPages"
         :total-items="recentSessions.length"
-        item-label="sessioni"
+        :item-label="t('sessions.itemLabel')"
         @page-change="onPageChange"
       />
     </section>

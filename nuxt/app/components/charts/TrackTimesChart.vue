@@ -7,13 +7,15 @@ import type { TrackHistoricalPointProjection } from '~/types/trackProjections'
 import { buildTrackTimesChart, type TrackChartPeriod, type TrackChartScale, type TrackChartPoint } from '~/utils/trackTimesChart'
 import { formatLapTime } from '~/utils/telemetryFormat'
 import { sessionColor } from '~/utils/sessionPalette'
+import { useI18n } from '~/i18n'
 
 ChartJS.register(LinearScale, PointElement, LineElement, Tooltip, Legend)
 const props = defineProps<{ history: TrackHistoricalPointProjection[]; loading?: boolean }>()
 const period = ref<TrackChartPeriod>('30')
 const scale = ref<TrackChartScale>('focus')
 const model = computed(() => buildTrackTimesChart(props.history, period.value, scale.value, new Date()))
-const seriesLabels = { bestQualy: 'Best qualifica', bestRace: 'Best gara' }
+const { t } = useI18n()
+const seriesLabels = computed(() => ({ bestQualy: t('stats.best.qualy'), bestRace: t('stats.best.race') }))
 const chartData = computed<ChartData<'line', TrackChartPoint[]>>(() => ({
   datasets: (['bestQualy', 'bestRace'] as const).flatMap(key => {
     // PIP-654: Chart.js needs a colour string: read it from the site tokens (one source).
@@ -24,11 +26,11 @@ const chartData = computed<ChartData<'line', TrackChartPoint[]>>(() => ({
       return point.y !== null && (points.length <= 8 || isolated) ? 3 : 0
     })
     return [{
-      label: seriesLabels[key], data: points, borderColor: color, backgroundColor: color,
+      label: seriesLabels.value[key], data: points, borderColor: color, backgroundColor: color,
       borderWidth: 1.75, pointRadius: radii, pointHoverRadius: 5,
       pointHitRadius: 12, tension: 0, spanGaps: false, fill: false,
     }, {
-      label: `${seriesLabels[key]} · fuori scala`,
+      label: `${seriesLabels.value[key]} · ${t('stats.progress.outOfScale')}`,
       data: model.value.outside.filter(point => point.series === key),
       borderColor: color, backgroundColor: color, pointStyle: 'triangle' as const,
       pointRadius: 5, pointHoverRadius: 7, pointHitRadius: 12, showLine: false, clip: false,
@@ -63,7 +65,7 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
         }))
       },
       grid: { display: false },
-      title: { display: true, text: 'Sessioni in ordine cronologico', color: '#85858f' },
+      title: { display: true, text: t('tracks.chart.axis'), color: '#85858f' },
       ticks: { color: '#9898a3', maxTicksLimit: 6, precision: 0, maxRotation: 0,
         callback: value => Number.isInteger(Number(value)) ? model.value.labels[Number(value)] ?? '' : '' },
     },
@@ -77,44 +79,44 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
 </script>
 
 <template>
-  <section class="track-times" aria-label="Andamento tempi">
+  <section class="track-times" :aria-label="t('tracks.chart.title')">
     <header class="track-times__header">
-      <h2 title="Migliori tempi per sessione">Andamento tempi</h2>
+      <h2 :title="t('tracks.chart.titleHint')">{{ t('tracks.chart.title') }}</h2>
       <div class="track-times__controls">
-        <label>Periodo
-          <select v-model="period" aria-label="Periodo del grafico">
-            <option value="7">Ultimi 7 giorni</option>
-            <option value="30">Ultimi 30 giorni</option>
-            <option value="90">Ultimi 90 giorni</option>
-            <option value="all">Storico disponibile</option>
+        <label>{{ t('stats.period') }}
+          <select v-model="period" :aria-label="t('tracks.chart.periodAria')">
+            <option value="7">{{ t('sessions.filters.last7') }}</option>
+            <option value="30">{{ t('sessions.filters.last30') }}</option>
+            <option value="90">{{ t('tracks.chart.last90') }}</option>
+            <option value="all">{{ t('tracks.chart.allHistory') }}</option>
           </select>
         </label>
         <fieldset>
-          <legend>Scala</legend>
+          <legend>{{ t('tracks.chart.scale') }}</legend>
           <div v-rc-switch class="track-times__toggle rc-switch rc-switch--compact">
             <button type="button" :aria-pressed="scale === 'focus'" @click="scale = 'focus'">Focus</button>
-            <button type="button" :aria-pressed="scale === 'complete'" @click="scale = 'complete'">Completa</button>
+            <button type="button" :aria-pressed="scale === 'complete'" @click="scale = 'complete'">{{ t('tracks.chart.complete') }}</button>
           </div>
         </fieldset>
       </div>
     </header>
     <div class="track-times__card" :aria-busy="loading">
-      <p v-if="loading" class="track-times__empty" role="status">Caricamento tempi…</p>
+      <p v-if="loading" class="track-times__empty" role="status">{{ t('tracks.chart.loading') }}</p>
       <template v-else-if="model.count">
         <div class="track-times__canvas">
-          <Line :data="chartData" :options="chartOptions" role="img" :aria-label="`Andamento di ${model.count} ${model.count === 1 ? 'tempo' : 'tempi'}. Scala ${scale === 'focus' ? 'Focus' : 'Completa'}. ${model.outside.length} fuori scala.`" />
+          <Line :data="chartData" :options="chartOptions" role="img" :aria-label="t(model.count === 1 ? 'tracks.chart.ariaOne' : 'tracks.chart.ariaMany', { count: model.count, scale: scale === 'focus' ? 'Focus' : t('tracks.chart.complete'), outside: model.outside.length })" />
         </div>
-        <div class="track-times__legend" aria-label="Legenda">
-          <span><i class="track-times__qualy" />Best qualifica</span>
-          <span><i class="track-times__race" />Best gara</span>
+        <div class="track-times__legend" :aria-label="t('tracks.chart.legend')">
+          <span><i class="track-times__qualy" />{{ t('stats.best.qualy') }}</span>
+          <span><i class="track-times__race" />{{ t('stats.best.race') }}</span>
         </div>
       </template>
       <div v-else class="track-times__empty" role="status">
-        <p>Nessun tempo disponibile{{ period === 'all' ? '.' : ' nel periodo selezionato.' }}</p>
-        <button v-if="period !== 'all' && history.length" type="button" @click="period = 'all'">Mostra lo storico disponibile</button>
+        <p>{{ period === 'all' ? t('tracks.chart.noneAll') : t('tracks.chart.nonePeriod') }}</p>
+        <button v-if="period !== 'all' && history.length" type="button" @click="period = 'all'">{{ t('tracks.chart.showAll') }}</button>
       </div>
       <p v-if="!loading && model.unknownDates && period !== 'all'" class="track-times__hint">
-        {{ model.unknownDates }} {{ model.unknownDates === 1 ? 'sessione senza data completa: consultabile' : 'sessioni senza data completa: consultabili' }} nello storico disponibile.
+        {{ t(model.unknownDates === 1 ? 'tracks.chart.unknownOne' : 'tracks.chart.unknownMany', { count: model.unknownDates }) }}
       </p>
     </div>
   </section>

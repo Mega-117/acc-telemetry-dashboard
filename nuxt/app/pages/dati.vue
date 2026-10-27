@@ -10,8 +10,10 @@ import { sessionDataReferences, stintDataFacts, lapStatus } from '~/services/ses
 import { formatLapTime, formatTrackName, formatCarName, getSessionTypeLabel } from '~/utils/telemetryFormat'
 import { deltaSeconds, recordedWheels } from '~/utils/datiWheels'
 import type { FullSession, SectorTelemetry, SessionDocument } from '~/types/telemetry'
+import { useI18n } from '~/i18n'
 
 definePageMeta({ layout: 'dashboard' })
+const { t, intlLocale } = useI18n()
 const gateway = useTelemetryGateway('acc')
 const loader = useSessionLoader()
 const { profileUser, cloudSessionReady } = useFirebaseAuth()
@@ -60,29 +62,29 @@ const tel = computed(() => lap.value?.telemetry)
 const wheels = computed(() => recordedWheels(tel.value))
 // The lap and its sectors, each with its gap to the best of the session.
 const lapColumns = computed(() => [
-  { title: 'Giro', time: lap.value?.lap_time_ms ?? null, data: tel.value?.lap, lap: true, best: isBestLap(lap.value), stintBest: isStintBest(lap.value), unreliable: false,
+  { title: t('data.lap'), short: t('data.lap'), time: lap.value?.lap_time_ms ?? null, data: tel.value?.lap, lap: true, best: isBestLap(lap.value), stintBest: isStintBest(lap.value), unreliable: false,
     delta: isBestLap(lap.value) ? '' : deltaSeconds(lap.value?.lap_time_ms, bestLap.value) },
   // A sector counts as best only on a valid lap with reliable sectors (not the pit-out lap).
   ...sectors.value.map((time, i) => {
     const reliable = time !== null && sectorsReliable.value
     const best = reliable && !!lap.value?.is_valid && time === bestSectors.value[i]
-    return { title: `Settore ${i + 1}`, time, data: tel.value?.sectors?.[i], lap: false, best, stintBest: false, unreliable: time !== null && !sectorsReliable.value,
+    return { title: t('telemetry.sector', { n: i + 1 }), short: `S${i + 1}`, time, data: tel.value?.sectors?.[i], lap: false, best, stintBest: false, unreliable: time !== null && !sectorsReliable.value,
       delta: reliable && !best ? deltaSeconds(time, bestSectors.value[i]) : '' }
   }),
 ])
 const sectorsReliable = computed(() => lap.value?.sectors_reliable !== false)
-const lapRows: { label: string, hint: string, value: (data?: SectorTelemetry) => string }[] = [
-  { label: 'Vel. max', hint: 'Velocità più alta raggiunta, in km/h', value: d => kmh(d?.top_kmh) },
-  { label: 'Vel. media', hint: 'Velocità media, in km/h', value: d => kmh(d?.avg_kmh) },
-  { label: 'Interventi TC', hint: 'Quanto ha lavorato il traction control: decimi di secondo in cui era attivo', value: d => count(d?.tc) },
-  { label: 'Interventi ABS', hint: 'Quanto ha lavorato l’ABS: decimi di secondo in cui era attivo', value: d => count(d?.abs) },
-]
+const lapRows = computed<{ label: string, hint: string, value: (data?: SectorTelemetry) => string }[]>(() => [
+  { label: t('data.rows.top'), hint: t('data.rows.topHint'), value: d => kmh(d?.top_kmh) },
+  { label: t('data.rows.avg'), hint: t('data.rows.avgHint'), value: d => kmh(d?.avg_kmh) },
+  { label: t('data.rows.tc'), hint: t('data.rows.tcHint'), value: d => count(d?.tc) },
+  { label: t('data.rows.abs'), hint: t('data.rows.absHint'), value: d => count(d?.abs) },
+])
 const assists = computed(() => {
   const a = tel.value?.assists
   return a ? `TC ${count(a.tc)} · TC2 ${count(a.tc2)} · ABS ${count(a.abs)}` : '--'
 })
 // ACC's compound string is "dry_compound"/"wet_compound": the wet flag says the same, readably.
-const tyreType = computed(() => tel.value?.tyre ? (tel.value.tyre.wet ? 'Bagnato' : 'Asciutto') : '--')
+const tyreType = computed(() => tel.value?.tyre ? (tel.value.tyre.wet ? t('data.wet') : t('data.dry')) : '--')
 const brakeType = computed(() => {
   const b = tel.value?.brakes
   if (!b?.front_pad) return '--'
@@ -134,10 +136,10 @@ async function selectSession(id: string, restore = false) {
     const result = await gateway.getSessionDetail(id, uid, { warmupSessions: false })
     if (request !== revision || uid !== profileUser.value?.uid) return
     full.value = result
-    if (!result) error.value = 'Dettaglio non disponibile. Riprova quando la sessione è salvata su questo computer o il cloud è connesso.'
+    if (!result) error.value = t('data.errors.detail')
     reconcileSelection(restore ? remembered() : undefined); saveSelection()
-    updatedAt.value = new Date().toLocaleTimeString('it-IT')
-  } catch { if (request === revision) error.value = 'Impossibile caricare la sessione. Riprova.' }
+    updatedAt.value = new Date().toLocaleTimeString(intlLocale.value)
+  } catch { if (request === revision) error.value = t('data.errors.session') }
   finally { if (request === revision) busy.value = false }
 }
 function sorted(values: SessionDocument[]) {
@@ -158,7 +160,7 @@ async function load() {
     if (id) await selectSession(id, id === saved.sessionId)
     else busy.value = false
     if (gateway.error.value) error.value = gateway.error.value
-  } catch { if (request === revision) { error.value = 'Impossibile caricare le sessioni.'; busy.value = false } }
+  } catch { if (request === revision) { error.value = t('sessions.loadError'); busy.value = false } }
 }
 async function refreshLocal() {
   if (refreshing || busy.value || !profileUser.value) return
@@ -181,9 +183,9 @@ async function refreshLocal() {
       // Only if the pilot did not pick another lap while the file was loading.
       if (onLast && stintNumber.value === watched.stint && lapNumber.value === watched.lap) { stintNumber.value = stints.value.at(-1)?.stint_number ?? 0; lapNumber.value = stints.value.at(-1)?.laps.at(-1)?.lap_number ?? 0 }
       reconcileSelection(); saveSelection()
-      updatedAt.value = new Date().toLocaleTimeString('it-IT')
+      updatedAt.value = new Date().toLocaleTimeString(intlLocale.value)
     }
-  } catch { if (request === revision) error.value = 'Aggiornamento locale non riuscito. Premi Aggiorna per riprovare.' }
+  } catch { if (request === revision) error.value = t('data.errors.refresh') }
   finally { refreshing = false }
 }
 watch(stintNumber, () => { reconcileSelection(); saveSelection() })
@@ -195,7 +197,7 @@ onBeforeUnmount(() => { revision++; clearInterval(timer); window.removeEventList
 const time = (value: number | null | undefined) => value && value > 0 ? formatLapTime(value) : '--'
 const number = (value: number | null | undefined, digits = 1) => typeof value === 'number' && Number.isFinite(value) ? value.toFixed(digits) : '--'
 // Damage is the repair time in the pit (ms), as the ACC menu shows it.
-const repair = (value: number | null | undefined) => typeof value !== 'number' ? '--' : value > 0 ? formatLapTime(value) : 'Nessuno'
+const repair = (value: number | null | undefined) => typeof value !== 'number' ? '--' : value > 0 ? formatLapTime(value) : t('data.none')
 const repairTotal = computed(() => {
   const d = tel.value?.damage
   return typeof d?.body === 'number' && typeof d?.suspension === 'number' ? d.body + d.suspension : null
@@ -205,37 +207,37 @@ const repairTotal = computed(() => {
 
 <template>
   <LayoutPageContainer class="data-page">
-    <div v-rc-switch class="data-tabs rc-switch" role="tablist" aria-label="Vista dati">
-      <button type="button" role="tab" :aria-selected="tab === 'giro'" :class="{ active: tab === 'giro' }" title="Giro per giro, dalle sessioni registrate" @click="selectTab('giro')">Giri registrati</button>
-      <button type="button" role="tab" :aria-selected="tab === 'box'" :class="{ active: tab === 'box' }" title="L'auto adesso, mentre guidi" @click="selectTab('box')">In diretta</button>
+    <div v-rc-switch class="data-tabs rc-switch" role="tablist" :aria-label="t('data.viewAria')">
+      <button type="button" role="tab" :aria-selected="tab === 'giro'" :class="{ active: tab === 'giro' }" :title="t('data.tabLapsTitle')" @click="selectTab('giro')">{{ t('data.tabLaps') }}</button>
+      <button type="button" role="tab" :aria-selected="tab === 'box'" :class="{ active: tab === 'box' }" :title="t('data.tabLiveTitle')" @click="selectTab('box')">{{ t('data.tabLive') }}</button>
     </div>
     <DatiBoxPanel v-if="tab === 'box'" />
     <template v-else>
     <!-- One bar: session, latest, stint, refresh; the context line under it. -->
     <div class="data-bar">
-      <select class="data-session" :value="sessionId" :disabled="busy || !sessions.length" aria-label="Sessione" @change="selectSession(($event.target as HTMLSelectElement).value)">
-        <option v-if="!sessions.length" value="">Nessuna sessione</option>
-        <option v-for="s in sessions" :key="s.sessionId" :value="s.sessionId">{{ new Date(s.meta.date_start).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' }) }} · {{ formatTrackName(s.meta.track) }} · {{ formatCarName(s.meta.car) }} · {{ getSessionTypeLabel(s.meta.session_type) }}</option>
+      <select class="data-session" :value="sessionId" :disabled="busy || !sessions.length" :aria-label="t('data.session')" @change="selectSession(($event.target as HTMLSelectElement).value)">
+        <option v-if="!sessions.length" value="">{{ t('tracks.noSession') }}</option>
+        <option v-for="s in sessions" :key="s.sessionId" :value="s.sessionId">{{ new Date(s.meta.date_start).toLocaleString(intlLocale, { dateStyle: 'short', timeStyle: 'short' }) }} · {{ formatTrackName(s.meta.track) }} · {{ formatCarName(s.meta.car) }} · {{ getSessionTypeLabel(s.meta.session_type) }}</option>
       </select>
       <select v-model.number="stintNumber" class="data-stint" :disabled="busy || !stints.length" aria-label="Stint">
-        <option v-for="s in stints" :key="s.stint_number" :value="s.stint_number">Stint {{ s.stint_number }} · {{ s.laps.length }} giri</option>
+        <option v-for="s in stints" :key="s.stint_number" :value="s.stint_number">Stint {{ s.stint_number }} · {{ s.laps.length }} {{ t('sessions.list.lapsUnit') }}</option>
       </select>
-      <button type="button" class="rc-btn" :disabled="!latest || busy || isLatest" @click="latest && selectSession(latest.sessionId)">Ultima sessione</button>
-      <button type="button" class="data-refresh" :disabled="busy" aria-label="Aggiorna" title="Aggiorna" @click="load">↻</button>
+      <button type="button" class="rc-btn" :disabled="!latest || busy || isLatest" @click="latest && selectSession(latest.sessionId)">{{ t('overview.lastSession') }}</button>
+      <button type="button" class="data-refresh" :disabled="busy" :aria-label="t('data.refresh')" :title="t('data.refresh')" @click="load">↻</button>
     </div>
-    <p class="data-meta">{{ isLatest ? 'Ultima sessione registrata' : 'Sessione storica' }}<template v-if="updatedAt"> · aggiornato {{ updatedAt }}</template></p>
+    <p class="data-meta">{{ isLatest ? t('data.latest') : t('data.historic') }}<template v-if="updatedAt"> · {{ t('data.updated', { time: updatedAt }) }}</template></p>
     <p v-if="error" class="data-error" role="alert">{{ error }}</p>
-    <p v-if="busy && !full" role="status" class="data-empty">Caricamento dati…</p>
-    <p v-else-if="!sessions.length" class="data-empty">Nessuna sessione registrata. Completa un giro con Racer Core attivo, poi premi Aggiorna.</p>
+    <p v-if="busy && !full" role="status" class="data-empty">{{ t('common.loadingData') }}</p>
+    <p v-else-if="!sessions.length" class="data-empty">{{ t('data.empty') }}</p>
 
     <div v-else class="tele" :aria-busy="busy">
       <!-- Laps of the stint -->
       <aside class="tele-laps">
         <div class="tele-laps-head">
-          <h2>Giri</h2>
+          <h2>{{ t('stats.trend.laps') }}</h2>
           <span class="tele-steps">
-            <button type="button" aria-label="Giro precedente" title="Giro precedente (↑)" :disabled="!laps.length || lapNumber === laps[0]?.lap_number" @click="stepLap(-1)">↑</button>
-            <button type="button" aria-label="Giro successivo" title="Giro successivo (↓)" :disabled="!laps.length || lapNumber === laps.at(-1)?.lap_number" @click="stepLap(1)">↓</button>
+            <button type="button" :aria-label="t('data.prevLap')" :title="`${t('data.prevLap')} (↑)`" :disabled="!laps.length || lapNumber === laps[0]?.lap_number" @click="stepLap(-1)">↑</button>
+            <button type="button" :aria-label="t('data.nextLap')" :title="`${t('data.nextLap')} (↓)`" :disabled="!laps.length || lapNumber === laps.at(-1)?.lap_number" @click="stepLap(1)">↓</button>
           </span>
         </div>
         <div class="tele-lap-list">
@@ -245,33 +247,33 @@ const repairTotal = computed(() => {
             <span>{{ l.lap_number }}</span><strong>{{ time(l.lap_time_ms) }}</strong>
           </button>
         </div>
-        <p v-if="!laps.length" class="tele-note">Nessun giro in questo stint.</p>
+        <p v-if="!laps.length" class="tele-note">{{ t('data.noLaps') }}</p>
       </aside>
 
       <div class="tele-main">
         <!-- The lap and its sectors, each with the gap to the best of the session. -->
-        <section class="lap-head" aria-label="Giro e settori">
+        <section class="lap-head" :aria-label="t('data.lapAria')">
           <div v-for="col in lapColumns" :key="col.title" class="lap-split" :class="{ 'lap-split--lap': col.lap, best: col.best, 'stint-best': col.stintBest, invalid: col.lap && lap?.is_valid === false, unreliable: col.unreliable }"
-            :title="col.unreliable ? 'Settore non affidabile (giro di uscita dai box)' : col.lap && lap ? lapStatus(lap) : undefined">
-            <span class="lap-split-title">{{ col.lap ? `Giro ${lap?.lap_number ?? ''}` : col.title }}</span>
+            :title="col.unreliable ? t('data.unreliable') : col.lap && lap ? lapStatus(lap) : undefined">
+            <span class="lap-split-title">{{ col.lap ? t('sessionDetail.chart.lap', { lap: lap?.lap_number ?? '' }) : col.title }}</span>
             <strong>{{ time(col.time) }}<small v-if="col.unreliable"> *</small></strong>
-            <em v-if="col.best">migliore della sessione</em><em v-else-if="col.delta">{{ col.delta }}</em>
+            <em v-if="col.best">{{ t('data.sessionBest') }}</em><em v-else-if="col.delta">{{ col.delta }}</em>
           </div>
         </section>
 
         <div class="tele-body">
           <section class="tele-block">
-            <h2 class="tele-section">Ruote <small>media del giro, accanto il dettaglio</small></h2>
+            <h2 class="tele-section">{{ t('data.wheels') }} <small>{{ t('data.wheelsHint') }}</small></h2>
             <DatiWheelBoard :wheels="wheels" />
           </section>
           <div class="tele-side">
             <section class="tele-block">
-              <h2 class="tele-section">Velocità e aiuti <small>velocità in km/h, aiuti in decimi di secondo attivi</small></h2>
-              <div class="tele-table" role="table" aria-label="Velocità e aiuti per settore">
+              <h2 class="tele-section">{{ t('data.speedAids') }} <small>{{ t('data.speedAidsHint') }}</small></h2>
+              <div class="tele-table" role="table" :aria-label="t('data.speedAidsAria')">
                 <!-- Rows are display: contents (the grid keeps its columns); they give readers the table's rows. -->
                 <div class="tele-tr" role="row">
                   <span class="tele-th" role="columnheader" />
-                  <span v-for="col in lapColumns" :key="col.title" class="tele-th" role="columnheader">{{ col.lap ? 'Giro' : col.title.replace('Settore ', 'S') }}</span>
+                  <span v-for="col in lapColumns" :key="col.title" class="tele-th" role="columnheader">{{ col.short }}</span>
                 </div>
                 <div v-for="row in lapRows" :key="row.label" class="tele-tr" role="row">
                   <span class="tele-rh" role="rowheader" :title="row.hint">{{ row.label }}</span>
@@ -280,29 +282,29 @@ const repairTotal = computed(() => {
               </div>
             </section>
             <section class="tele-block">
-              <h2 class="tele-section">Assetto del giro</h2>
+              <h2 class="tele-section">{{ t('data.setup') }}</h2>
               <dl class="tele-facts">
-                <div><dt>Gomme</dt><dd>{{ tyreType }} · set {{ count(tel?.tyre?.set) }}</dd></div>
-                <div><dt>Pastiglie</dt><dd>{{ brakeType }}</dd></div>
-                <div title="Livelli impostati di traction control (TC, TC2) e ABS"><dt>Aiuti</dt><dd>{{ assists }}</dd></div>
-                <div title="Tempo di riparazione ai box a fine giro: carrozzeria + sospensioni"><dt>Danni</dt><dd>{{ repair(repairTotal) }}<small v-if="(tel?.damage?.body ?? 0) > 0 || (tel?.damage?.suspension ?? 0) > 0"> (carrozzeria {{ repair(tel?.damage?.body) }} · sospensioni {{ repair(tel?.damage?.suspension) }})</small></dd></div>
+                <div><dt>{{ t('data.tyres') }}</dt><dd>{{ tyreType }} · set {{ count(tel?.tyre?.set) }}</dd></div>
+                <div><dt>{{ t('data.pads') }}</dt><dd>{{ brakeType }}</dd></div>
+                <div :title="t('data.aidsHint')"><dt>{{ t('data.aids') }}</dt><dd>{{ assists }}</dd></div>
+                <div :title="t('data.damageHint')"><dt>{{ t('data.damage') }}</dt><dd>{{ repair(repairTotal) }}<small v-if="(tel?.damage?.body ?? 0) > 0 || (tel?.damage?.suspension ?? 0) > 0"> ({{ t('data.body') }} {{ repair(tel?.damage?.body) }} · {{ t('data.suspension') }} {{ repair(tel?.damage?.suspension) }})</small></dd></div>
               </dl>
             </section>
           </div>
         </div>
 
         <!-- Session, stint and conditions in one strip. -->
-        <section class="tele-strip" aria-label="Sessione e condizioni">
-          <div><span>Migliore</span><strong class="best-lap">{{ time(references.best) }}</strong></div>
-          <div title="Somma dei migliori settori della sessione"><span>Ottimale</span><strong>{{ time(references.optimal) }}</strong></div>
-          <div><span>Media</span><strong>{{ time(references.average) }}</strong></div>
-          <div title="Durata dello stint selezionato"><span>Stint</span><strong>{{ time(facts.duration) }}</strong></div>
-          <div title="Benzina usata nello stint e al giro"><span>Benzina</span><strong>{{ number(facts.consumed, 2) }} L <small>· {{ number(facts.perLap, 2) }} L/giro</small></strong></div>
-          <div title="Aria: all'avvio della sessione e quanto è cambiata a questo giro"><span>Aria</span><strong>{{ number(startAir, 1) }}° <small :class="{ warm: (delta(startAir, lap?.air_temp) ?? 0) > 0 }">{{ signed(delta(startAir, lap?.air_temp)) }}</small></strong></div>
-          <div title="Asfalto: all'avvio della sessione e quanto è cambiato a questo giro"><span>Asfalto</span><strong>{{ number(startTrack, 1) }}° <small :class="{ warm: (delta(startTrack, lap?.road_temp) ?? 0) > 0 }">{{ signed(delta(startTrack, lap?.road_temp)) }}</small></strong></div>
+        <section class="tele-strip" :aria-label="t('data.stripAria')">
+          <div><span>{{ t('sessions.common.best') }}</span><strong class="best-lap">{{ time(references.best) }}</strong></div>
+          <div :title="t('data.optimalHint')"><span>{{ t('data.optimal') }}</span><strong>{{ time(references.optimal) }}</strong></div>
+          <div><span>{{ t('sessions.common.average') }}</span><strong>{{ time(references.average) }}</strong></div>
+          <div :title="t('data.stintHint')"><span>Stint</span><strong>{{ time(facts.duration) }}</strong></div>
+          <div :title="t('data.fuelHint')"><span>{{ t('data.fuel') }}</span><strong>{{ number(facts.consumed, 2) }} L <small>· {{ number(facts.perLap, 2) }} {{ t('data.perLap') }}</small></strong></div>
+          <div :title="t('data.airHint')"><span>{{ t('sessionDetail.conditions.air') }}</span><strong>{{ number(startAir, 1) }}° <small :class="{ warm: (delta(startAir, lap?.air_temp) ?? 0) > 0 }">{{ signed(delta(startAir, lap?.air_temp)) }}</small></strong></div>
+          <div :title="t('data.trackHint')"><span>{{ t('sessionDetail.conditions.track') }}</span><strong>{{ number(startTrack, 1) }}° <small :class="{ warm: (delta(startTrack, lap?.road_temp) ?? 0) > 0 }">{{ signed(delta(startTrack, lap?.road_temp)) }}</small></strong></div>
         </section>
-        <p v-if="lapColumns.some(c => c.unreliable)" class="tele-note">* Settori non affidabili in questo giro (uscita dai box): non contano per i migliori.</p>
-        <p v-if="lap && !tel" class="tele-note">-- = giro registrato prima della versione che salva gomme, freni, velocità, TC/ABS e danni.</p>
+        <p v-if="lapColumns.some(c => c.unreliable)" class="tele-note">* {{ t('data.unreliableNote') }}</p>
+        <p v-if="lap && !tel" class="tele-note">-- = {{ t('data.oldLapNote') }}</p>
       </div>
     </div>
     </template>

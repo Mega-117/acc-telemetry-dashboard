@@ -16,6 +16,9 @@ import { sessionTiming } from '~/services/telemetry/fuelHistorySummary'
 import { X } from '@lucide/vue'
 import { parseLapShareLink } from '~/services/telemetry/lapShareLink'
 import { loadPublicNickname } from '~/repositories/publicProfileRepository'
+import { useI18n } from '~/i18n'
+
+const { t, intlLocale } = useI18n()
 
 const props = defineProps<{
   isOpen: boolean
@@ -75,7 +78,7 @@ async function loadSharedLink() {
 
   const parsed = parseSharedLink(sharedLink.value)
   if (!parsed) {
-    linkError.value = 'Link non riconosciuto: incolla il link di una sessione o di un giro.'
+    linkError.value = t('sessions.picker.linkUnknown')
     return
   }
   
@@ -88,7 +91,7 @@ async function loadSharedLink() {
     })
     
     if (!data) {
-      linkError.value = 'Sessione non trovata o non più condivisa'
+      linkError.value = t('sessions.picker.notFound')
       return
     }
     
@@ -97,13 +100,13 @@ async function loadSharedLink() {
     const currentTrackNorm = props.currentTrack.toLowerCase().replace(/[^a-z0-9]/g, '_')
     
     if (!sessionTrack.includes(currentTrackNorm) && !currentTrackNorm.includes(sessionTrack)) {
-      linkError.value = `Pista non corrispondente: ${data.session_info?.track || 'sconosciuta'} vs ${props.currentTrack}`
+      linkError.value = t('sessions.picker.trackMismatch', { track: data.session_info?.track || t('sessions.picker.unknown'), current: props.currentTrack })
       return
     }
     
     // 3. Fetch nickname
     // PIP-652: the public nickname (readable by everyone signed in): another driver's profile is private.
-    const nickname = (await loadPublicNickname(parsed.userId)) || 'Pilota'
+    const nickname = (await loadPublicNickname(parsed.userId)) || t('sessions.picker.driver')
     
     // 4. Emit with userId and nickname
     emit('select', parsed.sessionId, parsed.userId, nickname)
@@ -112,8 +115,8 @@ async function loadSharedLink() {
   } catch (e: any) {
     console.error('[SHARE] Error loading shared session:', e)
     linkError.value = e?.code === 'permission-denied' 
-      ? 'Sessione non più condivisa o accesso negato'
-      : 'Errore nel caricamento della sessione'
+      ? t('sessions.picker.denied')
+      : t('sessions.picker.loadError')
   } finally {
     isLoadingLink.value = false
   }
@@ -157,11 +160,13 @@ function formatDateShort(dateStr: string): string {
   const date = new Date(dateStr)
   const day = date.getDate()
   const months = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic']
-  return `${day} ${months[date.getMonth()]} ${date.getFullYear()}`
+  // Italian keeps its own short months; other languages use the browser's (same order: day month year).
+  if (intlLocale.value === 'it-IT' || Number.isNaN(date.getTime())) return `${day} ${months[date.getMonth()]} ${date.getFullYear()}`
+  return date.toLocaleDateString(intlLocale.value, { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 function getTypeLabel(type: string): string {
-  const labels: Record<string, string> = { practice: 'PRACTICE', qualify: 'QUALIFY', race: 'RACE' }
+  const labels: Record<string, string> = { practice: 'PRACTICE', qualify: 'QUALIFY', race: 'RACE', sessione: t('sessions.type.unknown') }
   return labels[type] || type.toUpperCase()
 }
 
@@ -212,32 +217,32 @@ watch(
     <!-- PIP-653: the same look as "Aggiungi gara" (Panoramica): the page dimmed and blurred behind, a see-through
          panel with the sections' light edge, square fields, one red action. -->
     <div v-if="isOpen" class="cmp-backdrop" @click.self="closeModal">
-      <div ref="modalEl" class="cmp-modal" role="dialog" aria-modal="true" aria-label="Confronta con…" tabindex="-1" @keydown="onModalKeydown">
+      <div ref="modalEl" class="cmp-modal" role="dialog" aria-modal="true" :aria-label="t('sessions.picker.title')" tabindex="-1" @keydown="onModalKeydown">
         <header>
           <div>
-            <span class="eyebrow">Confronto · {{ formatTrackName(currentTrack) }}</span>
-            <h2>Confronta con…</h2>
+            <span class="eyebrow">{{ t('sessions.picker.eyebrow') }} · {{ formatTrackName(currentTrack) }}</span>
+            <h2>{{ t('sessions.picker.title') }}</h2>
           </div>
-          <button type="button" class="modal-close" aria-label="Chiudi" @click="closeModal"><X :size="20" aria-hidden="true" /></button>
+          <button type="button" class="modal-close" :aria-label="t('common.close')" @click="closeModal"><X :size="20" aria-hidden="true" /></button>
         </header>
 
         <section class="cmp-link">
           <div class="cmp-field">
-            <label for="cmp-link-input">Link ricevuto <small>di una sessione o di un giro</small></label>
+            <label for="cmp-link-input">{{ t('sessions.picker.linkLabel') }} <small>{{ t('sessions.picker.linkHint') }}</small></label>
             <div class="cmp-link-row">
-              <input id="cmp-link-input" ref="linkInput" v-model="sharedLink" type="text" placeholder="https://…/sessioni/… oppure https://…/giro#…" spellcheck="false" autocomplete="off" @keyup.enter="loadSharedLink" />
+              <input id="cmp-link-input" ref="linkInput" v-model="sharedLink" type="text" :placeholder="t('sessions.picker.linkPlaceholder')" spellcheck="false" autocomplete="off" @keyup.enter="loadSharedLink" />
               <button type="button" class="rc-btn rc-btn--primary" :disabled="isLoadingLink || !sharedLink" @click="loadSharedLink">
-                <UiRacingIcon name="compare" :size="16" />{{ isLoadingLink ? 'Carico…' : 'Confronta' }}
+                <UiRacingIcon name="compare" :size="16" />{{ isLoadingLink ? t('sessions.picker.loadingLink') : t('sessions.picker.compare') }}
               </button>
             </div>
           </div>
           <p v-if="linkError" class="cmp-error" role="alert">{{ linkError }}</p>
           <!-- Only for a session link: open it instead of comparing (the desktop app has no address bar). -->
-          <button v-if="sessionLink" type="button" class="cmp-open" @click="openSharedSession">oppure apri la sessione</button>
+          <button v-if="sessionLink" type="button" class="cmp-open" @click="openSharedSession">{{ t('sessions.picker.openSession') }}</button>
         </section>
 
         <section class="cmp-sessions">
-          <h3>Le tue sessioni <small>{{ isLoadingSessions ? 'caricamento…' : `${filteredSessions.length} su questa pista` }}</small></h3>
+          <h3>{{ t('sessions.picker.yours') }} <small>{{ isLoadingSessions ? t('sessions.picker.loadingLower') : t('sessions.picker.onTrack', { count: filteredSessions.length }) }}</small></h3>
           <div class="cmp-list">
             <button v-for="session in filteredSessions" :key="session.id" type="button" class="session-row" @click="selectSession(session.id)">
               <span class="row-left">
@@ -246,17 +251,17 @@ watch(
                 <span class="session-car">{{ session.car }}</span>
               </span>
               <span class="row-right">
-                <span class="stat">{{ session.laps }} giri · {{ session.stints }} stint</span>
-                <span class="time time--qualy" :class="{ 'is-empty': !session.bestQualy }">Q {{ session.bestQualy || '—' }}</span>
-                <span class="time time--race" :class="{ 'is-empty': !session.bestRace }">G {{ session.bestRace || '—' }}</span>
+                <span class="stat">{{ t('sessions.picker.stat', { laps: session.laps, stints: session.stints }) }}</span>
+                <span class="time time--qualy" :class="{ 'is-empty': !session.bestQualy }">{{ t('sessions.list.qualifyAbbr') }} {{ session.bestQualy || '—' }}</span>
+                <span class="time time--race" :class="{ 'is-empty': !session.bestRace }">{{ t('sessions.list.raceAbbr') }} {{ session.bestRace || '—' }}</span>
               </span>
             </button>
             <p v-if="filteredSessions.length === 0 && !isLoadingSessions" class="spm-empty">
-              {{ hasMoreSessions ? 'Nessuna sessione di questa pista tra le più recenti.' : 'Nessuna altra sessione disponibile per questa pista.' }}
+              {{ hasMoreSessions ? t('sessions.picker.noneRecent') : t('sessions.picker.noneOther') }}
             </p>
-            <p v-if="sessionsLoadError" class="spm-empty">Caricamento non riuscito: riprova.</p>
+            <p v-if="sessionsLoadError" class="spm-empty">{{ t('sessions.picker.listError') }}</p>
             <button v-if="hasMoreSessions" type="button" class="rc-btn rc-btn--compact spm-load-more" :disabled="isLoadingSessions" @click="pages.loadMore">
-              {{ isLoadingSessions ? 'Caricamento…' : 'Carica altre sessioni' }}
+              {{ isLoadingSessions ? t('sessions.picker.loading') : t('sessions.picker.loadMore') }}
             </button>
           </div>
         </section>

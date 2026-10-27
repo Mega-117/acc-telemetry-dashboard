@@ -5,8 +5,10 @@ import { computed, ref, watch } from 'vue'
 import { personalRecords, progressDelta, progressSeries, shortDate, type ProgressMetric } from '~/utils/statsJourney'
 import type { SessionDocument } from '~/types/telemetry'
 import { formatCarName, formatLapTime, formatTrackName } from '~/utils/telemetryFormat'
+import { useI18n, type TranslationKey } from '~/i18n'
 
 const props = defineProps<{ sessions: SessionDocument[], nowMs: number }>()
+const { t, locale } = useI18n()
 // Le combinazioni con piu' sessioni prima: e' li' che si vede un andamento.
 const combos = computed(() => personalRecords(props.sessions, props.nowMs).slice().sort((a, b) => b.sessions - a.sessions))
 const comboKey = ref('')
@@ -14,10 +16,10 @@ watch(combos, (list) => { if (!list.some(c => c.key === comboKey.value)) comboKe
 const combo = computed(() => combos.value.find(c => c.key === comboKey.value) ?? null)
 
 // Stessi nomi e colori del dettaglio pista: qualifica gialla, gara rossa, media gara azzurra (token unici, PIP-654).
-const METRICS: { id: ProgressMetric, label: string, color: string }[] = [
-  { id: 'qualy', label: 'Best qualifica', color: 'var(--racing-qualify)' },
-  { id: 'race', label: 'Best gara', color: 'var(--racing-race)' },
-  { id: 'avgRace', label: 'Best media gara', color: 'var(--racing-practice)' },
+const METRICS: { id: ProgressMetric, label: TranslationKey, color: string }[] = [
+  { id: 'qualy', label: 'stats.best.qualy', color: 'var(--racing-qualify)' },
+  { id: 'race', label: 'stats.best.race', color: 'var(--racing-race)' },
+  { id: 'avgRace', label: 'stats.best.avgRace', color: 'var(--racing-practice)' },
 ]
 const metric = ref<ProgressMetric>('race')
 const available = computed(() => METRICS.filter(m => combo.value && progressSeries(props.sessions, combo.value.trackKey, combo.value.carKey, m.id).length))
@@ -56,49 +58,49 @@ const chart = computed(() => {
 const sentence = computed(() => {
   if (!combo.value) return null
   const n = points.value.length
-  if (n < 3) return `Servono almeno 3 sessioni con questo tempo per vedere un andamento (ora ${n}).`
+  if (n < 3) return t('stats.progress.needMore', { n })
   const d = delta.value!
   const since = shortDate(d.fromDate)
-  const s = (Math.abs(d.deltaMs) / 1000).toFixed(1).replace('.', ',')
-  if (Math.abs(d.deltaMs) < 50) return `Stabile rispetto ai tuoi inizi del ${since}: stessi tempi.`
-  return d.deltaMs < 0 ? `Stai migliorando: −${s} s rispetto ai tuoi inizi del ${since}.` : `Più lento di ${s} s rispetto ai tuoi inizi del ${since}: condizioni o setup diversi?`
+  const s = (Math.abs(d.deltaMs) / 1000).toFixed(1).replace('.', locale.value === 'it' ? ',' : '.')
+  if (Math.abs(d.deltaMs) < 50) return t('stats.progress.stable', { since })
+  return d.deltaMs < 0 ? t('stats.progress.better', { s, since }) : t('stats.progress.worse', { s, since })
 })
 const dateLabel = (iso: string) => shortDate(iso)
-const metricLabel = computed(() => METRICS.find(m => m.id === metric.value)?.label ?? '')
+const metricLabel = computed(() => { const m = METRICS.find(x => x.id === metric.value); return m ? t(m.label) : '' })
 </script>
 
 <template>
   <section class="progress" aria-labelledby="stats-progress">
     <div class="progress__head">
-      <h2 id="stats-progress">Stai migliorando?</h2>
-      <select v-model="comboKey" aria-label="Pista e auto">
+      <h2 id="stats-progress">{{ t('stats.progress.title') }}</h2>
+      <select v-model="comboKey" :aria-label="t('stats.progress.comboAria')">
         <option v-for="c in combos" :key="c.key" :value="c.key">{{ formatTrackName(c.track) }} · {{ formatCarName(c.car) }} ({{ c.sessions }})</option>
       </select>
     </div>
     <p v-if="sentence" class="progress__sentence" :class="{ 'is-good': delta && delta.deltaMs < -50 }">{{ sentence }}</p>
-    <div v-if="available.length > 1" class="progress__metrics" role="group" aria-label="Quale tempo">
-      <button v-for="m in available" :key="m.id" type="button" :class="{ active: m.id === metric }" :aria-pressed="m.id === metric" :style="{ '--m': m.color }" @click="metric = m.id">{{ m.label }}</button>
+    <div v-if="available.length > 1" class="progress__metrics" role="group" :aria-label="t('stats.progress.metricAria')">
+      <button v-for="m in available" :key="m.id" type="button" :class="{ active: m.id === metric }" :aria-pressed="m.id === metric" :style="{ '--m': m.color }" @click="metric = m.id">{{ t(m.label) }}</button>
     </div>
     <!-- Con un solo tempo disponibile non c'e' da scegliere, ma il nome resta visibile. -->
     <div v-else-if="available.length === 1" class="progress__metrics"><span class="active" :style="{ '--m': color }">{{ metricLabel }}</span></div>
-    <svg v-if="chart" class="progress__chart" :viewBox="`0 0 ${W} ${H}`" role="img" :aria-label="`Tempi per sessione, dal migliore ${formatLapTime(chart.min)} al peggiore ${formatLapTime(chart.max)}`">
+    <svg v-if="chart" class="progress__chart" :viewBox="`0 0 ${W} ${H}`" role="img" :aria-label="t('stats.progress.chartAria', { best: formatLapTime(chart.min), worst: formatLapTime(chart.max) })">
       <line :x1="PAD" :x2="W - PAD" :y1="chart.best.y" :y2="chart.best.y" class="progress__best" />
       <g v-for="q in chart.pts" :key="q.v.date">
-        <circle :cx="q.x" :cy="q.y" :r="q.outOfScale ? 3 : 4" :style="{ fill: color }" :opacity="q.outOfScale ? 0.25 : 0.45"><title>{{ dateLabel(q.v.date) }} · {{ formatLapTime(q.v.ms) }}{{ q.outOfScale ? ' (fuori scala)' : '' }}</title></circle>
+        <circle :cx="q.x" :cy="q.y" :r="q.outOfScale ? 3 : 4" :style="{ fill: color }" :opacity="q.outOfScale ? 0.25 : 0.45"><title>{{ dateLabel(q.v.date) }} · {{ formatLapTime(q.v.ms) }}{{ q.outOfScale ? ` (${t('stats.progress.outOfScale')})` : '' }}</title></circle>
       </g>
       <polyline :points="chart.recordLine" fill="none" :style="{ stroke: color }" stroke-width="3" stroke-linejoin="round" class="progress__record" />
       <circle :cx="chart.best.x" :cy="chart.best.y" r="6" fill="#fff" :style="{ stroke: color }" stroke-width="3" />
-      <text :x="Math.min(Math.max(chart.best.x, PAD + 30), W - PAD - 30)" :y="Math.max(14, chart.best.y - 12)" text-anchor="middle" class="progress__label">Record {{ formatLapTime(chart.min) }}</text>
+      <text :x="Math.min(Math.max(chart.best.x, PAD + 30), W - PAD - 30)" :y="Math.max(14, chart.best.y - 12)" text-anchor="middle" class="progress__label">{{ t('stats.progress.record') }} {{ formatLapTime(chart.min) }}</text>
       <text :x="PAD" :y="H - 4" class="progress__axis">{{ dateLabel(points[0]!.date) }}</text>
       <text :x="W - PAD" :y="H - 4" text-anchor="end" class="progress__axis">{{ dateLabel(points[points.length - 1]!.date) }}</text>
     </svg>
-    <p v-if="chart" class="progress__legend"><span class="progress__legend-line" :style="{ background: color }" />il tuo record nel tempo <span class="progress__legend-dot" :style="{ background: color }" />ogni sessione</p>
-    <p v-else class="progress__empty">Nessuna sessione con tempi per questa scelta.</p>
+    <p v-if="chart" class="progress__legend"><span class="progress__legend-line" :style="{ background: color }" />{{ t('stats.progress.legendRecord') }} <span class="progress__legend-dot" :style="{ background: color }" />{{ t('stats.progress.legendSession') }}</p>
+    <p v-else class="progress__empty">{{ t('stats.progress.empty') }}</p>
     <!-- Gli stessi dati del grafico in testo: i puntini non sono raggiungibili da tastiera o lettore di schermo. -->
     <details v-if="chart" class="progress__list">
-      <summary>Elenco delle sessioni ({{ points.length }})</summary>
+      <summary>{{ t('stats.progress.list', { count: points.length }) }}</summary>
       <ol>
-        <li v-for="(p, i) in points" :key="`${p.date}-${i}`">{{ shortDate(p.date, true) }} · {{ formatLapTime(p.ms) }}<template v-if="p.ms === chart.min"> · record</template></li>
+        <li v-for="(p, i) in points" :key="`${p.date}-${i}`">{{ shortDate(p.date, true) }} · {{ formatLapTime(p.ms) }}<template v-if="p.ms === chart.min"> · {{ t('stats.progress.recordLower') }}</template></li>
       </ol>
     </details>
   </section>

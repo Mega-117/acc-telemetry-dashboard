@@ -6,6 +6,8 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { deltaTrend, finishLine, glideFrame, fractions, lapDelta, mapPoints, worldToMap, type Corner, type MapPoint } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
+import { useI18n } from '~/i18n'
+const { t } = useI18n()
 
 const props = withDefaults(defineProps<{
   lap: LapTraceView
@@ -259,11 +261,11 @@ function onMove(event: PointerEvent) {
 <template>
   <div v-if="base" class="map-wrap">
   <div v-if="zoomControls" class="map-zoom">
-    <button type="button" aria-label="Avvicina la mappa" title="Avvicina (anche con la rotella)" :disabled="frameNow.span <= minSpan" @click="zoomStep(1 / 1.6)">+</button>
-    <button type="button" aria-label="Allontana la mappa" title="Allontana (anche con la rotella)" :disabled="frameNow.span >= maxSpan" @click="zoomStep(1.6)">−</button>
-    <button v-if="view" type="button" aria-label="Rimetti la mappa com'era" title="Inquadratura iniziale (anche doppio clic)" @click="view = null">⟲</button>
+    <button type="button" :aria-label="t('telemetry.map.zoomInAria')" :title="t('telemetry.map.zoomInTitle')" :disabled="frameNow.span <= minSpan" @click="zoomStep(1 / 1.6)">+</button>
+    <button type="button" :aria-label="t('telemetry.map.zoomOutAria')" :title="t('telemetry.map.zoomOutTitle')" :disabled="frameNow.span >= maxSpan" @click="zoomStep(1.6)">−</button>
+    <button v-if="view" type="button" :aria-label="t('telemetry.map.resetAria')" :title="t('telemetry.map.resetTitle')" @click="view = null">⟲</button>
   </div>
-  <svg class="map" :class="{ 'map--pan': zoomControls, 'map--dragging': dragging }" :viewBox="viewBox" :style="{ '--z': zoomScale }" role="img" aria-label="Mappa della pista" @pointermove="onMove" @pointerleave="onLeave" @pointerdown="onDown" @mousedown.prevent @dragstart.prevent @pointerup="onUp" @pointercancel="onUp" @wheel="onWheel" @dblclick="zoomControls && resetView()">
+  <svg class="map" :class="{ 'map--pan': zoomControls, 'map--dragging': dragging }" :viewBox="viewBox" :style="{ '--z': zoomScale }" role="img" :aria-label="t('telemetry.map.aria')" @pointermove="onMove" @pointerleave="onLeave" @pointerdown="onDown" @mousedown.prevent @dragstart.prevent @pointerup="onUp" @pointercancel="onUp" @wheel="onWheel" @dblclick="zoomControls && resetView()">
     <template v-if="edgePaths">
       <polygon :points="edgePaths.surface" class="map-surface" fill-rule="evenodd" />
       <polyline :points="edgePaths.left" class="map-edge" />
@@ -293,7 +295,7 @@ function onMove(event: PointerEvent) {
     <path v-if="lapArrow" :transform="`translate(${lapArrow.x} ${lapArrow.y}) rotate(${lapArrow.angle}) scale(${zoomScale})`" d="M8 0 L-6 -6 L-3 0 L-6 6 Z" class="map-arrow" />
   </svg>
   </div>
-  <p v-else class="map-none">Mappa non disponibile: questo giro non ha le coordinate.</p>
+  <p v-else class="map-none">{{ t('telemetry.map.none') }}</p>
 </template>
 
 <style>

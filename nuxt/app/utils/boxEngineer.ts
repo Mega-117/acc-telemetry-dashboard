@@ -1,6 +1,7 @@
 // PIP-616 Box: the few numbers the ACC Drive ENGINEER tab derives itself.
 // Fuel, references and the pressure plan come from the logger; this only combines them.
 import type { PressureRecommendationViewModel, TyreWheelId } from '~/services/overlay/tyreSetupViewModel'
+import { useI18n } from '~/i18n'
 
 /** Fuel per minute: consumption per lap over the reference lap. */
 export function fuelPerMinute(perLapL: number | null | undefined, referenceLapMs: number | null | undefined): number | null {
@@ -26,11 +27,12 @@ export function wheelCorrection(plan: PressureRecommendationViewModel | null | u
 
 /** What the correction cell says under the four values. */
 export function correctionNote(plan: PressureRecommendationViewModel | null | undefined): string {
-  if (!plan) return 'In attesa del primo giro completo'
+  const { t } = useI18n()
+  if (!plan) return t('data.box.waitFirst')
   const target = typeof plan.targetPsi === 'number' ? plan.targetPsi.toFixed(1) : '--'
-  if (plan.completedLaps < plan.requiredCompletedLaps) return `Disponibile dopo ${plan.requiredCompletedLaps} giri dello stint (${plan.completedLaps}/${plan.requiredCompletedLaps})`
-  if (plan.status === 'within_tolerance') return `Nella finestra: target ${target} psi`
-  if (plan.status === 'ready') return `Da correggere verso ${target} psi`
-  if (plan.status === 'click_limit_exceeded') return 'Correzione troppo grande: controlla il setup'
-  return 'In attesa di due giri stabili'
+  if (plan.completedLaps < plan.requiredCompletedLaps) return t('data.box.after', { required: plan.requiredCompletedLaps, done: plan.completedLaps })
+  if (plan.status === 'within_tolerance') return t('data.box.within', { target })
+  if (plan.status === 'ready') return t('data.box.correct', { target })
+  if (plan.status === 'click_limit_exceeded') return t('data.box.tooBig')
+  return t('data.box.waitStable')
 }

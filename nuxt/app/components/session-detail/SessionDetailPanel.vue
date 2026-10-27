@@ -1,12 +1,14 @@
 <script setup lang="ts">
+import { useI18n } from '~/i18n'
 defineProps<{ comparisonOpen: boolean; label: string }>()
+const { t } = useI18n()
 
 </script>
 
 <template>
   <div class="session-analysis">
     <header class="analysis-toolbar">
-      <h2>{{ comparisonOpen ? 'Confronto stint' : label }}</h2>
+      <h2>{{ comparisonOpen ? t('sessionDetail.compareStints') : label }}</h2>
     </header>
     <slot />
   </div>

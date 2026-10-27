@@ -84,6 +84,8 @@ import SessionDetailPanel from '~/components/session-detail/SessionDetailPanel.v
 import SessionAnalysisPanel from '~/components/session-detail/analysis/SessionAnalysisPanel.vue'
 import { analysisSessionToken } from '~/services/telemetry/lapAnalysis'
 import type { CompareTarget } from '~/composables/useCompareTargets'
+import { useI18n } from '~/i18n'
+import { parseTelemetryDate } from '~/utils/telemetryFormat'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler, zoomPlugin)
 
@@ -91,7 +93,8 @@ const currentUserNickname = ref<string>('')
 
 const props = defineProps<{ sessionId: string; externalUserId?: string }>()
 const emit = defineEmits<{ back: [], 'go-to-track': [trackId: string] }>()
-const headerBack = useHeaderBack(() => emit('back'), () => 'Torna alle sessioni')
+const { t, locale, intlLocale } = useI18n()
+const headerBack = useHeaderBack(() => emit('back'), () => t('sessionDetail.back'))
 
 // Is this a shared session from another user?
 const isSharedSession = computed(() => !!props.externalUserId)
@@ -106,7 +109,8 @@ const excludedLapsB = ref<Set<string>>(new Set()) // For Stint B in compare mode
 const excludedLapsCrossB = ref<Set<string>>(new Set()) // For Session B in cross-session mode
 const showLapManager = ref(false)
 type SessionChartRef = { chart?: ChartJS<'line'> }
-type SessionChartDataset = ChartDataset<'line', Array<number | null>> & { _points?: NormalizedLapPoint[] }
+// `_role` finds a series without reading its (translated) legend label.
+type SessionChartDataset = ChartDataset<'line', Array<number | null>> & { _points?: NormalizedLapPoint[]; _role?: 'a' | 'b' | 'theo' | 'target' | 'grip' }
 
 const chartRef = ref<SessionChartRef | null>(null)
 
@@ -240,10 +244,10 @@ async function shareSession() {
       generateShareLink: (id) => generateShareLink(id, { tab: detailTab.value === 'avanzata' ? 'telemetria' : 'sessione' })
     })
     // PIP-653: the outcome in the site's notification column, never beside the buttons.
-    pushNotice('Link copiato: chi lo apre vede la sessione e la sua Telemetria.', 'success')
+    pushNotice(t('sessionDetail.share.copied'), 'success')
     console.log('[SHARE] Link copied:', link)
   } catch (e) {
-    pushNotice('Condivisione non riuscita. Riprova dalla tua sessione sincronizzata.', 'error')
+    pushNotice(t('sessionDetail.share.failed'), 'error')
     console.error('[SHARE] Error sharing session:', e)
   } finally {
     isSharing.value = false
@@ -425,9 +429,9 @@ async function handleSessionBSelect(sessionId: string, userId?: string, nickname
     const mine = ownerId === comparisonCurrentUser.value?.uid
     const when = String(data.session_info?.date_start ?? '')
     compareTarget.value = token ? { ownerUid: ownerId, sessionToken: token, sharedSessionId: mine ? null : sessionId,
-      label: mine ? `Sessione del ${when.slice(8, 10)}/${when.slice(5, 7)}` : (nickname || 'Pilota') } : null
+      label: mine ? t('sessionDetail.compare.sessionOf', { date: `${when.slice(8, 10)}/${when.slice(5, 7)}` }) : (nickname || t('sessions.picker.driver')) } : null
   } catch {
-    if (version === comparisonLoadVersion) comparisonLoadError.value = 'Impossibile caricare la sessione da confrontare.'
+    if (version === comparisonLoadVersion) comparisonLoadError.value = t('sessionDetail.compare.loadError')
   }
 }
 
@@ -787,37 +791,37 @@ function canAddToBuilderB(stintNum: number): boolean {
 // Get tooltip for [+A] button
 function getAddToBuilderTooltipA(stintNum: number): string {
   // Check if in Strategy B first
-  if (selectedCrossStintB.value === stintNum && stintBSource.value === 'a') return 'Già in Strategia B'
-  if (strategyBSecond.value === stintNum && stintBSecondSource.value === 'a') return 'Già in Strategia B'
+  if (selectedCrossStintB.value === stintNum && stintBSource.value === 'a') return t('sessionDetail.builder.alreadyB')
+  if (strategyBSecond.value === stintNum && stintBSecondSource.value === 'a') return t('sessionDetail.builder.alreadyB')
 
-  if (!selectedCrossStintA.value) return 'Aggiungi a Strategia A'
-  if (selectedCrossStintA.value === stintNum) return 'Già in Strategia A'
-  if (strategyASecond.value === stintNum) return 'Già in Strategia A'
+  if (!selectedCrossStintA.value) return t('sessionDetail.builder.addA')
+  if (selectedCrossStintA.value === stintNum) return t('sessionDetail.builder.alreadyA')
+  if (strategyASecond.value === stintNum) return t('sessionDetail.builder.alreadyA')
   // If A has stint from different session, block
-  if (stintASource.value !== 'a') return 'Solo stint dalla stessa sessione'
+  if (stintASource.value !== 'a') return t('sessionDetail.builder.sameSession')
   if (!strategyASecond.value && stintNum === selectedCrossStintA.value + 1) {
-    return 'Aggiungi come secondo stint'
+    return t('sessionDetail.builder.addSecond')
   }
-  if (strategyASecond.value) return 'Massimo 2 stint per strategia'
-  return 'Solo stint consecutivo ammesso'
+  if (strategyASecond.value) return t('sessionDetail.builder.max2')
+  return t('sessionDetail.builder.consecutive')
 }
 
 // Get tooltip for [+B] button
 function getAddToBuilderTooltipB(stintNum: number): string {
   // Check if in Strategy A first
-  if (selectedCrossStintA.value === stintNum && stintASource.value === 'a') return 'Già in Strategia A'
-  if (strategyASecond.value === stintNum && stintASecondSource.value === 'a') return 'Già in Strategia A'
+  if (selectedCrossStintA.value === stintNum && stintASource.value === 'a') return t('sessionDetail.builder.alreadyA')
+  if (strategyASecond.value === stintNum && stintASecondSource.value === 'a') return t('sessionDetail.builder.alreadyA')
 
-  if (!selectedCrossStintB.value) return 'Aggiungi a Strategia B'
-  if (selectedCrossStintB.value === stintNum) return 'Già in Strategia B'
-  if (strategyBSecond.value === stintNum) return 'Già in Strategia B'
+  if (!selectedCrossStintB.value) return t('sessionDetail.builder.addB')
+  if (selectedCrossStintB.value === stintNum) return t('sessionDetail.builder.alreadyB')
+  if (strategyBSecond.value === stintNum) return t('sessionDetail.builder.alreadyB')
   // If B has stint from different session, block
-  if (stintBSource.value !== 'a') return 'Solo stint dalla stessa sessione'
+  if (stintBSource.value !== 'a') return t('sessionDetail.builder.sameSession')
   if (!strategyBSecond.value && stintNum === selectedCrossStintB.value + 1) {
-    return 'Aggiungi come secondo stint'
+    return t('sessionDetail.builder.addSecond')
   }
-  if (strategyBSecond.value) return 'Massimo 2 stint per strategia'
-  return 'Solo stint consecutivo ammesso'
+  if (strategyBSecond.value) return t('sessionDetail.builder.max2')
+  return t('sessionDetail.builder.consecutive')
 }
 
 // Add stint to Builder A (source = which session it comes from)
@@ -867,16 +871,16 @@ function canAddToBuilderACross(stintNum: number): boolean {
 
 // Cross-session specific: Tooltip for [+A] button on Source B stints
 function getAddToBuilderTooltipACross(stintNum: number): string {
-  if (!selectedCrossStintA.value) return 'Aggiungi a Strategia A (da S2)'
-  if (selectedCrossStintA.value === stintNum && stintASource.value === 'b') return 'Già in Strategia A'
-  if (strategyASecond.value === stintNum && stintASecondSource.value === 'b') return 'Già in Strategia A'
+  if (!selectedCrossStintA.value) return t('sessionDetail.builder.addAFromS2')
+  if (selectedCrossStintA.value === stintNum && stintASource.value === 'b') return t('sessionDetail.builder.alreadyA')
+  if (strategyASecond.value === stintNum && stintASecondSource.value === 'b') return t('sessionDetail.builder.alreadyA')
   // If A has stint from Session 1, block
-  if (stintASource.value !== 'b') return 'Solo stint dalla stessa sessione'
+  if (stintASource.value !== 'b') return t('sessionDetail.builder.sameSession')
   if (!strategyASecond.value && stintNum === selectedCrossStintA.value + 1) {
-    return 'Aggiungi come secondo stint'
+    return t('sessionDetail.builder.addSecond')
   }
-  if (strategyASecond.value) return 'Massimo 2 stint per strategia'
-  return 'Solo stint consecutivi dalla stessa sessione'
+  if (strategyASecond.value) return t('sessionDetail.builder.max2')
+  return t('sessionDetail.builder.consecutiveSame')
 }
 
 // Cross-session specific: Check if stint from Source B can be added to Strategy B
@@ -900,19 +904,19 @@ function canAddToBuilderBCross(stintNum: number): boolean {
 
 // Cross-session specific: Tooltip for [+B] button on Source B stints
 function getAddToBuilderTooltipBCross(stintNum: number): string {
-  if (selectedCrossStintA.value === stintNum && stintASource.value === 'b') return 'Già in Strategia A'
-  if (strategyASecond.value === stintNum && stintASecondSource.value === 'b') return 'Già in Strategia A'
+  if (selectedCrossStintA.value === stintNum && stintASource.value === 'b') return t('sessionDetail.builder.alreadyA')
+  if (strategyASecond.value === stintNum && stintASecondSource.value === 'b') return t('sessionDetail.builder.alreadyA')
 
-  if (!selectedCrossStintB.value) return 'Aggiungi a Strategia B'
-  if (selectedCrossStintB.value === stintNum) return 'Già in Strategia B'
-  if (strategyBSecond.value === stintNum) return 'Già in Strategia B'
+  if (!selectedCrossStintB.value) return t('sessionDetail.builder.addB')
+  if (selectedCrossStintB.value === stintNum) return t('sessionDetail.builder.alreadyB')
+  if (strategyBSecond.value === stintNum) return t('sessionDetail.builder.alreadyB')
   // If B has stint from Session 1, block
-  if (stintBSource.value !== 'b') return 'Solo stint dalla stessa sessione'
+  if (stintBSource.value !== 'b') return t('sessionDetail.builder.sameSession')
   if (!strategyBSecond.value && stintNum === selectedCrossStintB.value + 1) {
-    return 'Aggiungi come secondo stint'
+    return t('sessionDetail.builder.addSecond')
   }
-  if (strategyBSecond.value) return 'Massimo 2 stint per strategia'
-  return 'Solo stint consecutivo ammesso'
+  if (strategyBSecond.value) return t('sessionDetail.builder.max2')
+  return t('sessionDetail.builder.consecutive')
 }
 
 // Cross-session specific: Add stint from Source B to Strategy B
@@ -990,10 +994,15 @@ function selectStintForView(stintNum: number): void {
 // ========================================
 // TRANSFORMED SESSION DATA
 // ========================================
+// Italian keeps its own uppercase months; other languages use the browser's long date.
+function formatHeaderDate(date: string): string {
+  const parsed = locale.value === 'it' ? null : parseTelemetryDate(date)
+  return parsed ? parsed.toLocaleDateString(intlLocale.value, { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase() : formatDateFull(date)
+}
 function toDisplayModel(fullSession: FullSession | null, sessionId: string) {
   return buildSessionDisplayModel({
     sessionId, fullSession, maxReasonableLapMs: MAX_REASONABLE_LAP_MS,
-    formatLapTime, formatCarName, formatDateFull, formatTime, getSessionTypeLabel
+    formatLapTime, formatCarName, formatDateFull: formatHeaderDate, formatTime, getSessionTypeLabel
   })
 }
 const session = computed(() => toDisplayModel(fullSession.value, props.sessionId))
@@ -1075,7 +1084,7 @@ const selectedStint = computed(() => {
   if (!stint) return undefined
   const points = normalizeLapSeries({ laps: selectedStintLaps.value, source: effectiveStintSource.value, strategy: 'A', stintNumber: stint.number })
   const metrics = buildIncludedLapSummary(filterIncludedLapPoints(points, excludedLaps.value))
-  return { ...stint, bestMs: metrics.bestMs, avgMs: metrics.avgMs, best: formatLapTime(metrics.bestMs), avg: metrics.avgWarning ? 'min 5 giri' : formatLapTime(metrics.avgMs), avgWarning: metrics.avgWarning }
+  return { ...stint, bestMs: metrics.bestMs, avgMs: metrics.avgMs, best: formatLapTime(metrics.bestMs), avg: metrics.avgWarning ? t('sessionDetail.min5Laps') : formatLapTime(metrics.avgMs), avgWarning: metrics.avgWarning }
 })
 
 function formatFuelStart(fuel: number | null | undefined): string {
@@ -1097,11 +1106,11 @@ const stintReferenceLabel = computed(() => {
 })
 
 function formatReferenceTemp(temp: number | null): string {
-  return typeof temp === 'number' && Number.isFinite(temp) ? `${Math.round(temp)}°C` : 'n/d'
+  return typeof temp === 'number' && Number.isFinite(temp) ? `${Math.round(temp)}°C` : t('sessionDetail.na')
 }
 
 function formatReferenceCorrection(ms: number | null): string {
-  if (typeof ms !== 'number' || !Number.isFinite(ms)) return 'n/d'
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return t('sessionDetail.na')
   const seconds = ms / 1000
   if (seconds === 0) return '0.000s'
   return `${seconds > 0 ? '+' : ''}${seconds.toFixed(3)}s`
@@ -1348,17 +1357,17 @@ function getStintWarning(stint: { type: string; number: number }): { icon: strin
 
   // All laps invalid = disaster
   if (nonPitLaps.length > 0 && validLaps.length === 0) {
-    return { icon: '⚠️', message: 'Tutti i giri invalidi' }
+    return { icon: '⚠️', message: t('sessionDetail.warning.allInvalid') }
   }
 
   // Race stint with < 5 laps = unreliable
   if (stint.type === 'R' && nonPitLaps.length < 5) {
-    return { icon: '⚠️', message: `Stint gara troppo corto (${nonPitLaps.length} giri, min. 5)` }
+    return { icon: '⚠️', message: t('sessionDetail.warning.raceShort', { laps: nonPitLaps.length }) }
   }
 
   // Qualy stint with only 1 lap = unreliable
   if (stint.type === 'Q' && nonPitLaps.length <= 1) {
-    return { icon: '⚠️', message: 'Dati limitati (1 giro)' }
+    return { icon: '⚠️', message: t('sessionDetail.warning.limited') }
   }
 
   return null
@@ -1838,7 +1847,7 @@ function buildStrategySummaryRows(stints: SessionDetailStint[], points: Normaliz
       bestMs: summary.bestMs,
       best: formatSummaryTime(summary.bestMs),
       avgMs: summary.avgMs,
-      avg: summary.avgWarning ? 'min 5 giri' : formatSummaryTime(summary.avgMs),
+      avg: summary.avgWarning ? t('sessionDetail.min5Laps') : formatSummaryTime(summary.avgMs),
       avgWarning: summary.avgWarning,
       durationMs: stint.durationMs || Math.round(getLapsForSource(points.find(p => p.stintIndex === stintIndex)?.source ?? 'a', stint.number).reduce((sum, lap) => sum + timeToSeconds(lap.time) * 1000, 0)),
       paceDurationMs: summary.durationMs
@@ -1909,13 +1918,14 @@ const chartData = computed(() => {
 
   const datasets: SessionChartDataset[] = [
     {
+      _role: 'a',
       label: isBuilderSameSessionCompare.value
-        ? `Strategia A (${strategyAStints.value.map(s => `#${s.number}`).join('+')})`
+        ? t('sessionDetail.chart.strategyStints', { side: 'A', stints: strategyAStints.value.map(s => `#${s.number}`).join('+') })
         : isCompareMode.value
           ? `A: Stint #${stintA.value}`
           : isCrossSessionCompare.value
-            ? `Strategia A · Stint #${selectedCrossStintA.value}${strategyASecond.value ? '+#' + strategyASecond.value : ''}`
-          : 'Tempo',
+            ? `${t('sessionDetail.chart.strategy', { side: 'A' })} · Stint #${selectedCrossStintA.value}${strategyASecond.value ? '+#' + strategyASecond.value : ''}`
+          : t('sessionDetail.chart.time'),
       data: lapsA.map(l => l.timeSeconds),
       borderColor: '#3b82f6',
       backgroundColor: 'rgba(59,130,246,0.1)',
@@ -1937,7 +1947,8 @@ const chartData = computed(() => {
       } : undefined
     },
     {
-      label: `Teorico ${stintData?.type === 'Q' ? 'Q' : 'R'}`,
+      _role: 'theo',
+      label: t('sessionDetail.chart.theoretical', { type: stintData?.type === 'Q' ? 'Q' : 'R' }),
       data: lapsA.map(() => theoSecA),
       borderColor: '#f59e0b',
       borderDash: [5, 5],
@@ -1950,7 +1961,8 @@ const chartData = computed(() => {
   const isRace = !isQualy
   if (isRace && (showTargetZone.value && !isAnyComparison.value) && lapsA.length > 0) {
     datasets.push({
-      label: `Target (+${TARGET_THRESHOLD_S}s)`,
+      _role: 'target',
+      label: t('sessionDetail.chart.target', { seconds: TARGET_THRESHOLD_S }),
       data: lapsA.map(() => targetLine),
       borderColor: 'rgba(16, 185, 129, 0.6)',
       borderWidth: 2,
@@ -1979,6 +1991,7 @@ const chartData = computed(() => {
       })
 
       datasets.push({
+        _role: 'grip',
         label: `_grip_${zoneIdx}`, // Hidden label (starts with _)
         data: zoneData,
         borderColor: 'transparent',
@@ -2001,7 +2014,8 @@ const chartData = computed(() => {
     const appearanceB = lapsB.map(l => lapPointAppearance(l))
 
     datasets.splice(1, 0, {
-      label: isCompareMode.value ? `B: Stint ${stintLabels}` : `Strategia B (${stintLabels})`,
+      _role: 'b',
+      label: isCompareMode.value ? `B: Stint ${stintLabels}` : t('sessionDetail.chart.strategyStints', { side: 'B', stints: stintLabels }),
       data: lapsB.map(l => l.timeSeconds),
       borderColor: '#8b5cf6',
       backgroundColor: 'rgba(139,92,246,0.1)',
@@ -2030,17 +2044,17 @@ const chartData = computed(() => {
   if (isBuilderSameSessionCompare.value || isCrossSessionCompare.value || isCompareMode.value) {
     // Compare mode: use continuous numbering for alignment
     const maxLapCount = Math.max(lapsA.length, lapsB.length)
-    labels = Array.from({ length: maxLapCount }, (_, i) => `G${i + 1}`)
+    labels = Array.from({ length: maxLapCount }, (_, i) => `${t('sessionDetail.chart.lapAbbr')}${i + 1}`)
   } else {
     // Normal mode: labels from actual lap numbers, skipping excluded
-    labels = lapsA.map(l => `G${l.sessionLapNumber}`)
+    labels = lapsA.map(l => `${t('sessionDetail.chart.lapAbbr')}${l.sessionLapNumber}`)
   }
   const maxLapCount = labels.length
 
   // Extend Strategy A data with null values if shorter than max (so line stops where data ends)
   if ((isBuilderSameSessionCompare.value || isCrossSessionCompare.value || isCompareMode.value) && lapsA.length < maxLapCount) {
     // Find Strategy A dataset and extend with nulls
-    const strategyADataset = datasets.find(d => d.label?.startsWith('Strategia A') || d.label?.startsWith('A:'))
+    const strategyADataset = datasets.find(d => d._role === 'a')
     if (strategyADataset && Array.isArray(strategyADataset.data)) {
       const currentLength = strategyADataset.data.length
       for (let i = currentLength; i < maxLapCount; i++) {
@@ -2055,7 +2069,7 @@ const chartData = computed(() => {
     }
 
     // Extend theo and target lines to max length
-    const theoDataset = datasets.find(d => d.label?.startsWith('Teorico'))
+    const theoDataset = datasets.find(d => d._role === 'theo')
     if (theoDataset && Array.isArray(theoDataset.data) && theoDataset.data.length < maxLapCount) {
       const theoValue = theoDataset.data[0] ?? null
       for (let i = theoDataset.data.length; i < maxLapCount; i++) {
@@ -2063,7 +2077,7 @@ const chartData = computed(() => {
       }
     }
 
-    const targetDataset = datasets.find(d => d.label?.startsWith('Target'))
+    const targetDataset = datasets.find(d => d._role === 'target')
     if (targetDataset && Array.isArray(targetDataset.data) && targetDataset.data.length < maxLapCount) {
       const targetValue = targetDataset.data[0] ?? null
       for (let i = targetDataset.data.length; i < maxLapCount; i++) {
@@ -2072,7 +2086,7 @@ const chartData = computed(() => {
     }
   }
 
-  const visibleDatasets = datasets.filter(d => !d.label?.startsWith('Teorico') || (!isAnyComparison.value && theoSecA > 0))
+  const visibleDatasets = datasets.filter(d => d._role !== 'theo' || (!isAnyComparison.value && theoSecA > 0))
   return { labels, datasets: visibleDatasets }
 })
 
@@ -2100,7 +2114,7 @@ const chartOptions = {
             : undefined
           if (point) return buildLapTooltipTitle(point)
           // Show the lap label (e.g. "G5") from the X-axis labels
-          return `Giro ${items[0]?.label?.replace('G', '') || ''}`
+          return t('sessionDetail.chart.lap', { lap: items[0]?.label?.replace(/^\D+/, '') || '' })
         },
         label: (ctx: TooltipItem<'line'>) => {
           if (ctx.dataset.label?.startsWith('_')) return '' // Hide internal tooltip
@@ -2110,7 +2124,7 @@ const chartOptions = {
             const lines = [`${ctx.dataset.label}: ${secondsToTime(raw)}`, ...buildLapTooltipLines(point)]
             const target = timeToSeconds(consistencyStats.value.targetLine)
             if (!isAnyComparison.value && showTargetZone.value && displayedStint.value?.type === 'R' && !point.pit && target > 0) {
-              lines.push(raw <= target ? 'Nel target' : 'Fuori target')
+              lines.push(raw <= target ? t('sessionDetail.chart.inTarget') : t('sessionDetail.chart.outTarget'))
             }
             return lines
           }
@@ -2152,7 +2166,11 @@ const chartOptions = {
 // ========================================
 // HELPERS
 // ========================================
-function getTypeLabel(t: string) { return { practice: 'LIBERE', qualify: 'QUALIFICA', race: 'GARA', unknown: 'SESSIONE' }[t] || t.toUpperCase() }
+function getTypeLabel(type: string) {
+  const known = ['qualify', 'race', 'unknown'] as const
+  if (type === 'practice') return t('sessions.type.practiceShort')
+  return (known as readonly string[]).includes(type) ? t(`sessions.type.${type as typeof known[number]}`) : type.toUpperCase()
+}
 // Delta color scheme: green=on-target/faster, yellow=close, orange=margin, red=far
 function getDeltaClass(d: string | undefined) {
   if (!d || d === '-') return 'far'
@@ -2422,9 +2440,9 @@ const gripZones = computed(() => {
   <Teleport defer to="#app-toast-slot">
     <Transition name="autoselect-toast">
       <div v-if="showAutoSelectToast" class="autoselect-notification">
-        <span class="autoselect-notification-text">Confronto attivato con i migliori stint</span>
-        <button type="button" class="autoselect-notification-action" @click="showAutoSelectToast = false; resetBuilder()">Cambia</button>
-        <button type="button" class="autoselect-notification-close" aria-label="Chiudi" @click="showAutoSelectToast = false">✕</button>
+        <span class="autoselect-notification-text">{{ t('sessionDetail.autoSelect.text') }}</span>
+        <button type="button" class="autoselect-notification-action" @click="showAutoSelectToast = false; resetBuilder()">{{ t('sessionDetail.autoSelect.change') }}</button>
+        <button type="button" class="autoselect-notification-close" :aria-label="t('common.close')" @click="showAutoSelectToast = false">✕</button>
       </div>
     </Transition>
   </Teleport>
@@ -2433,7 +2451,7 @@ const gripZones = computed(() => {
     <div v-if="!headerBack" class="nav-bar">
       <button v-if="!headerBack" class="nav-btn" @click="emit('back')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
-        Torna alle sessioni
+        {{ t('sessionDetail.back') }}
       </button>
 
     </div>
@@ -2441,14 +2459,14 @@ const gripZones = computed(() => {
     <!-- LOADING STATE -->
     <div v-if="isLoading" class="loading-state">
       <div class="loading-spinner"></div>
-      <p>Caricamento sessione...</p>
+      <p>{{ t('sessionDetail.loading') }}</p>
     </div>
 
     <!-- ERROR STATE -->
     <div v-else-if="loadError" class="error-state">
       <p class="error-icon">⚠️</p>
       <p class="error-text">{{ loadError }}</p>
-      <button v-if="!headerBack" class="nav-btn" @click="emit('back')">Torna alle sessioni</button>
+      <button v-if="!headerBack" class="nav-btn" @click="emit('back')">{{ t('sessionDetail.back') }}</button>
     </div>
 
     <template v-else>
@@ -2460,7 +2478,7 @@ const gripZones = computed(() => {
       <div class="header-id">
         <div class="header-row">
           <!-- The track name opens the track page (the old "Apri pista" button). -->
-          <h1 class="track-name"><button type="button" class="track-link" title="Apri la pagina della pista" @click="emit('go-to-track', session.trackId)">{{ session.track.toUpperCase() }}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button></h1>
+          <h1 class="track-name"><button type="button" class="track-link" :title="t('sessionDetail.header.openTrack')" @click="emit('go-to-track', session.trackId)">{{ session.track.toUpperCase() }}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button></h1>
           <span :class="['type-badge', `type-badge--${session.type}`]">{{ getTypeLabel(session.type) }}</span>
         </div>
         <!-- When and with what, readable at a glance: date and time, then the car with its maker's badge. -->
@@ -2470,11 +2488,11 @@ const gripZones = computed(() => {
         </div>
       </div>
       <div class="header-actions">
-        <button v-if="!isEvoSession" type="button" class="rc-btn rc-btn--compact" title="Le tue sessioni, oppure il link di una sessione o di un giro ricevuto" @click="openSessionPicker"><UiRacingIcon name="compare" :size="16" />Confronta</button>
+        <button v-if="!isEvoSession" type="button" class="rc-btn rc-btn--compact" :title="t('sessionDetail.header.compareTitle')" @click="openSessionPicker"><UiRacingIcon name="compare" :size="16" />{{ t('sessions.picker.compare') }}</button>
         <SessionFileActions :can-share="canShare" :sharing="isSharing" @share="shareSession" />
-        <div v-if="!isEvoSession" v-rc-switch class="detail-tabs rc-switch" role="tablist" aria-label="Vista della sessione">
-          <button type="button" role="tab" :aria-selected="detailTab === 'sessione'" :class="{ active: detailTab === 'sessione' }" @click="chooseTab('sessione')">Sessione</button>
-          <button type="button" role="tab" :aria-selected="detailTab === 'avanzata'" :class="{ active: detailTab === 'avanzata' }" title="Il giro contro un riferimento: delta, curve, traiettorie e telemetria" @click="chooseTab('avanzata')">Telemetria</button>
+        <div v-if="!isEvoSession" v-rc-switch class="detail-tabs rc-switch" role="tablist" :aria-label="t('sessionDetail.header.viewAria')">
+          <button type="button" role="tab" :aria-selected="detailTab === 'sessione'" :class="{ active: detailTab === 'sessione' }" @click="chooseTab('sessione')">{{ t('sessionDetail.header.tabSession') }}</button>
+          <button type="button" role="tab" :aria-selected="detailTab === 'avanzata'" :class="{ active: detailTab === 'avanzata' }" :title="t('sessionDetail.header.tabTelemetryTitle')" @click="chooseTab('avanzata')">{{ t('sessionDetail.header.tabTelemetry') }}</button>
         </div>
       </div>
     </header>
@@ -2494,31 +2512,31 @@ const gripZones = computed(() => {
         class="master"
       >
         <h2 class="master-title">Stint</h2>
-        <div class="analysis-mode" role="group" aria-label="Modalità analisi">
-          <button type="button" :aria-pressed="!comparisonOpen" @click="comparisonOpen = false">Analisi</button>
-          <button type="button" :aria-pressed="comparisonOpen" :aria-controls="comparisonOpen ? 'session-comparison-builder' : undefined" @click="comparisonOpen = true">Confronto</button>
+        <div class="analysis-mode" role="group" :aria-label="t('sessionDetail.mode.aria')">
+          <button type="button" :aria-pressed="!comparisonOpen" @click="comparisonOpen = false">{{ t('sessionDetail.mode.analysis') }}</button>
+          <button type="button" :aria-pressed="comparisonOpen" :aria-controls="comparisonOpen ? 'session-comparison-builder' : undefined" @click="comparisonOpen = true">{{ t('sessionDetail.mode.compare') }}</button>
         </div>
         <div v-if="comparisonOpen" class="builder-panel" id="session-comparison-builder">
           <div class="builder-panel-header">
-            <span class="builder-panel-title">Composizione</span>
-            <button v-if="hasBuilderContent" class="builder-clear" @click="resetBuilder">Svuota selezione</button>
+            <span class="builder-panel-title">{{ t('sessionDetail.builder.title') }}</span>
+            <button v-if="hasBuilderContent" class="builder-clear" @click="resetBuilder">{{ t('sessionDetail.builder.clear') }}</button>
           </div>
 
           <!-- Slot A -->
           <div class="builder-slot builder-slot--a">
             <span class="builder-slot-label">A</span>
             <div class="builder-slot-content">
-              <span v-if="!selectedCrossStintA" class="builder-slot-empty">Seleziona +A nella lista</span>
+              <span v-if="!selectedCrossStintA" class="builder-slot-empty">{{ t('sessionDetail.builder.pickA') }}</span>
               <template v-else>
                 <span :class="['builder-chip', stintASource === 'a' ? 'builder-chip--s1' : 'builder-chip--s2']">
                   <span v-if="isCrossSessionMode" class="chip-session-tag">{{ stintASource === 'a' ? 'S1' : 'S2' }}</span>
                   #{{ selectedCrossStintA }}
-                  <button class="chip-remove" @click="removeBuilderStintA1" :title="strategyASecond ? 'Rimuovi (rimuoverà anche +' + strategyASecond + ')' : 'Rimuovi'">×</button>
+                  <button class="chip-remove" @click="removeBuilderStintA1" :title="strategyASecond ? t('sessionDetail.builder.removeAlso', { stint: strategyASecond }) : t('common.remove')">×</button>
                 </span>
                 <span v-if="strategyASecond" :class="['builder-chip', stintASecondSource === 'a' ? 'builder-chip--s1' : 'builder-chip--s2']">
                   <span v-if="isCrossSessionMode" class="chip-session-tag">{{ stintASecondSource === 'a' ? 'S1' : 'S2' }}</span>
                   + #{{ strategyASecond }}
-                  <button class="chip-remove" @click="removeSecondStintA" title="Rimuovi">×</button>
+                  <button class="chip-remove" @click="removeSecondStintA" :title="t('common.remove')">×</button>
                 </span>
               </template>
             </div>
@@ -2528,17 +2546,17 @@ const gripZones = computed(() => {
           <div class="builder-slot builder-slot--b">
             <span class="builder-slot-label">B</span>
             <div class="builder-slot-content">
-              <span v-if="!selectedCrossStintB" class="builder-slot-empty">Seleziona +B nella lista</span>
+              <span v-if="!selectedCrossStintB" class="builder-slot-empty">{{ t('sessionDetail.builder.pickB') }}</span>
               <template v-else>
                 <span :class="['builder-chip', stintBSource === 'a' ? 'builder-chip--s1' : 'builder-chip--s2']">
                   <span v-if="isCrossSessionMode" class="chip-session-tag">{{ stintBSource === 'a' ? 'S1' : 'S2' }}</span>
                   #{{ selectedCrossStintB }}
-                  <button class="chip-remove" @click="removeBuilderStintB1" :title="strategyBSecond ? 'Rimuovi (rimuoverà anche +' + strategyBSecond + ')' : 'Rimuovi'">×</button>
+                  <button class="chip-remove" @click="removeBuilderStintB1" :title="strategyBSecond ? t('sessionDetail.builder.removeAlso', { stint: strategyBSecond }) : t('common.remove')">×</button>
                 </span>
                 <span v-if="strategyBSecond" :class="['builder-chip', stintBSecondSource === 'a' ? 'builder-chip--s1' : 'builder-chip--s2']">
                   <span v-if="isCrossSessionMode" class="chip-session-tag">{{ stintBSecondSource === 'a' ? 'S1' : 'S2' }}</span>
                   + #{{ strategyBSecond }}
-                  <button class="chip-remove" @click="removeSecondStintB" title="Rimuovi">×</button>
+                  <button class="chip-remove" @click="removeSecondStintB" :title="t('common.remove')">×</button>
                 </span>
               </template>
             </div>
@@ -2558,7 +2576,7 @@ const gripZones = computed(() => {
           <!-- Session A Section -->
           <div class="cross-session-section">
             <div class="cross-session-header cross-session-header--a">
-              <span class="cross-session-label">S1 — {{ currentUserNickname || 'Te' }}</span>
+              <span class="cross-session-label">S1 — {{ currentUserNickname || t('sessionDetail.builder.you') }}</span>
               <span class="cross-session-date">{{ session.date }}</span>
             </div>
 
@@ -2609,13 +2627,13 @@ const gripZones = computed(() => {
             <div class="cross-session-header cross-session-header--b">
               <span class="cross-session-label">
                 <template v-if="isExternalSession">
-                  S2 — {{ crossSessionNickname || 'Utente Esterno' }}
+                  S2 — {{ crossSessionNickname || t('sessionDetail.builder.external') }}
                 </template>
                 <template v-else>
-                  S2 — {{ currentUserNickname || 'Te' }} (altra)
+                  S2 — {{ currentUserNickname || t('sessionDetail.builder.you') }} ({{ t('sessionDetail.builder.other') }})
                 </template>
               </span>
-              <button class="cross-session-close" @click="clearCrossSession" title="Rimuovi questa sorgente">✕</button>
+              <button class="cross-session-close" @click="clearCrossSession" :title="t('sessionDetail.builder.removeSource')">✕</button>
             </div>
 
             <div class="stint-list stint-list--builder">
@@ -2662,11 +2680,11 @@ const gripZones = computed(() => {
         <!-- NORMAL MODE: Single stint list with [+A] [+B] buttons -->
         <template v-else>
           <div v-if="!comparisonOpen" class="stint-reference" aria-live="polite">
-            <span>Riferimento · Stint {{ effectiveStintNumber }}</span>
-            <strong>{{ (selectedStint?.type === 'Q' ? theoreticalTimes.theoQualy : theoreticalTimes.theoRace) ? formatLapTime(selectedStint?.type === 'Q' ? theoreticalTimes.theoQualy : theoreticalTimes.theoRace) : 'Non disponibile' }}</strong>
-            <small>Ogni Δ usa il riferimento del proprio stint.</small>
+            <span>{{ t('sessionDetail.stint.reference') }} · Stint {{ effectiveStintNumber }}</span>
+            <strong>{{ (selectedStint?.type === 'Q' ? theoreticalTimes.theoQualy : theoreticalTimes.theoRace) ? formatLapTime(selectedStint?.type === 'Q' ? theoreticalTimes.theoQualy : theoreticalTimes.theoRace) : t('common.notAvailable') }}</strong>
+            <small>{{ t('sessionDetail.stint.referenceHint') }}</small>
           </div>
-          <div class="stint-columns" aria-hidden="true"><span>#</span><span>Tipo</span><span>Giri</span><span v-if="!comparisonOpen">Δ rif.</span><span v-else>A / B</span></div>
+          <div class="stint-columns" aria-hidden="true"><span>#</span><span>{{ t('sessions.list.type') }}</span><span>{{ t('sessions.list.laps') }}</span><span v-if="!comparisonOpen">{{ t('sessionDetail.stint.deltaRef') }}</span><span v-else>A / B</span></div>
           <div class="stint-list stint-list--builder">
             <div
             v-for="stint in session.stints"
@@ -2676,7 +2694,7 @@ const gripZones = computed(() => {
               'builder-selected': comparisonOpen && (isStintInBuilderA(stint.number) || isStintInBuilderB(stint.number)),
               'best-stint': false
             }]"
-            :role="comparisonOpen ? undefined : 'button'" :tabindex="comparisonOpen ? undefined : 0" :aria-label="`Visualizza stint ${stint.number}`" @keydown.enter="selectStintForView(stint.number)" @keydown.space.prevent="selectStintForView(stint.number)" @click="selectStintForView(stint.number)"
+            :role="comparisonOpen ? undefined : 'button'" :tabindex="comparisonOpen ? undefined : 0" :aria-label="t('sessionDetail.stint.viewAria', { stint: stint.number })" @keydown.enter="selectStintForView(stint.number)" @keydown.space.prevent="selectStintForView(stint.number)" @click="selectStintForView(stint.number)"
           >
             <!-- [+A] Button -->
             <button
@@ -2718,7 +2736,7 @@ const gripZones = computed(() => {
           v-if="comparisonOpen" class="rc-btn rc-btn--compact altra-sessione-btn"
           @click="openSessionPicker"
         >
-          Altra sessione o link
+          {{ t('sessionDetail.builder.otherSession') }}
         </button>
         </template>
       </aside>
@@ -2737,8 +2755,8 @@ const gripZones = computed(() => {
         <!-- EMPTY STATE: ONLY when session has no stints at all (rare edge case) -->
         <div v-if="!isCompareMode && !isBuilderSameSessionCompare && !isCrossSessionCompare && session.stints.length === 0" class="empty-state-panel">
           <div class="empty-state-content">
-            <h3 class="empty-state-title">Nessun stint disponibile</h3>
-            <p class="empty-state-text">Questa sessione non contiene dati di stint.</p>
+            <h3 class="empty-state-title">{{ t('sessionDetail.empty.title') }}</h3>
+            <p class="empty-state-text">{{ t('sessionDetail.empty.text') }}</p>
           </div>
         </div>
 
@@ -2751,15 +2769,15 @@ const gripZones = computed(() => {
         <!-- COMPARE MODE: Layout 1 - Headers + Table  -->
         <!-- ========================================== -->
         <div v-if="isCompareMode || isBuilderSameSessionCompare || isCrossSessionCompare" class="compare-layout stint-stats-card">
-          <aside class="stint-context compare-context" aria-label="Condizioni del confronto">
+          <aside class="stint-context compare-context" :aria-label="t('sessionDetail.conditions.compareAria')">
             <section v-for="side in ['A', 'B'] as const" :key="side" class="compare-context-side">
               <h3 :class="['compare-context-title', `compare-context-title--${side.toLowerCase()}`]">{{ side }} · {{ strategyCaption(side === 'A' ? chartLapPointsA : chartLapPointsB) }}</h3>
               <dl class="stint-context-data">
-                <div><dt>Aria</dt><dd>{{ getStintTempDisplay((side === 'A' ? chartLapPointsA : chartLapPointsB).map(p => p.raw)) }}</dd></div>
+                <div><dt>{{ t('sessionDetail.conditions.air') }}</dt><dd>{{ getStintTempDisplay((side === 'A' ? chartLapPointsA : chartLapPointsB).map(p => p.raw)) }}</dd></div>
                 <div><dt>Grip</dt><dd>{{ getStintGripDisplay((side === 'A' ? chartLapPointsA : chartLapPointsB).map(p => p.raw)) }}</dd></div>
               </dl>
               <div class="compare-fuel" :data-testid="`comparison-fuel-${side}`">
-                <h4>Carburante iniziale</h4>
+                <h4>{{ t('sessionDetail.conditions.startFuel') }}</h4>
                 <dl>
                   <div v-for="(stint, index) in (side === 'A' ? strategyAStints : strategyBStints)" :key="index">
                     <dt>Stint #{{ stint.number }}</dt>
@@ -2775,22 +2793,22 @@ const gripZones = computed(() => {
             <div class="ssc-table">
               <div class="ssc-table-header">
                 <div class="ssc-th ssc-th--label"></div>
-                <div class="ssc-th summary-side--a">STRATEGIA A</div>
-                <div class="ssc-th summary-side--b">STRATEGIA B</div>
+                <div class="ssc-th summary-side--a">{{ t('sessionDetail.table.strategyUpper', { side: 'A' }) }}</div>
+                <div class="ssc-th summary-side--b">{{ t('sessionDetail.table.strategyUpper', { side: 'B' }) }}</div>
                 <div class="ssc-th">DELTA</div>
               </div>
 
               <!-- Loop through each stint position -->
-              <section v-for="(_, stintIndex) in maxStrategyStints" :key="stintIndex" class="comparison-stint-block" :aria-label="`Confronto stint, posizione ${stintIndex + 1}`">
+              <section v-for="(_, stintIndex) in maxStrategyStints" :key="stintIndex" class="comparison-stint-block" :aria-label="t('sessionDetail.table.blockAria', { position: stintIndex + 1 })">
                 <div class="ssc-table-row comparison-stint-heading">
                   <div></div>
                   <div class="ssc-td summary-side--a">
                     <span v-if="strategyAStints[stintIndex]">Stint #{{ strategyAStints[stintIndex].number }}</span>
-                    <span v-else class="comparison-no-stint">Nessuno stint</span>
+                    <span v-else class="comparison-no-stint">{{ t('sessionDetail.table.noStint') }}</span>
                   </div>
                   <div class="ssc-td summary-side--b">
                     <span v-if="strategyBStints[stintIndex]">Stint #{{ strategyBStints[stintIndex].number }}</span>
-                    <span v-else class="comparison-no-stint">Nessuno stint</span>
+                    <span v-else class="comparison-no-stint">{{ t('sessionDetail.table.noStint') }}</span>
                   </div>
                   <div></div>
                 </div>
@@ -2811,7 +2829,7 @@ const gripZones = computed(() => {
 
                 <!-- AVG row -->
                 <div class="ssc-table-row">
-                  <div class="ssc-td ssc-td--label">MEDIA</div>
+                  <div class="ssc-td ssc-td--label">{{ t('sessionDetail.table.avg') }}</div>
                   <div :class="['ssc-td', 'ssc-td--value', { 'ssc-td--warning': strategyASummaryRows[stintIndex]?.avgWarning }]">
                     <template v-if="strategyASummaryRows[stintIndex]?.avgWarning">{{ strategyASummaryRows[stintIndex]?.avg }}</template>
                     <template v-else>{{ strategyASummaryRows[stintIndex]?.avg ?? '—' }}</template>
@@ -2831,23 +2849,23 @@ const gripZones = computed(() => {
 
                 <!-- Keep lap counts and duration on distinct, readable rows. -->
                 <div class="ssc-table-row ssc-table-row--compact">
-                  <div class="ssc-td ssc-td--label">VALIDI</div>
+                  <div class="ssc-td ssc-td--label">{{ t('sessionDetail.table.valid') }}</div>
                   <div class="ssc-td ssc-td--compact">
                     <template v-if="strategyASummaryRows[stintIndex]">
-                      {{ strategyASummaryRows[stintIndex].validLapsCount ?? 0 }} su {{ strategyASummaryRows[stintIndex].laps ?? 0 }}
+                      {{ t('sessionDetail.table.ofCount', { count: strategyASummaryRows[stintIndex].validLapsCount ?? 0, total: strategyASummaryRows[stintIndex].laps ?? 0 }) }}
                     </template>
                     <template v-else>—</template>
                   </div>
                   <div class="ssc-td ssc-td--compact">
                     <template v-if="strategyBSummaryRows[stintIndex]">
-                      {{ strategyBSummaryRows[stintIndex].validLapsCount ?? 0 }} su {{ strategyBSummaryRows[stintIndex].laps ?? 0 }}
+                      {{ t('sessionDetail.table.ofCount', { count: strategyBSummaryRows[stintIndex].validLapsCount ?? 0, total: strategyBSummaryRows[stintIndex].laps ?? 0 }) }}
                     </template>
                     <template v-else>—</template>
                   </div>
                   <div class="ssc-td"></div>
                 </div>
                 <div class="ssc-table-row ssc-table-row--duration">
-                  <div class="ssc-td ssc-td--label">DURATA</div>
+                  <div class="ssc-td ssc-td--label">{{ t('sessionDetail.table.duration') }}</div>
                   <div class="ssc-td ssc-td--value ssc-td--duration">{{ strategyASummaryRows[stintIndex] ? formatDuration(strategyASummaryRows[stintIndex]?.durationMs) : '—' }}</div>
                   <div class="ssc-td ssc-td--value ssc-td--duration">{{ strategyBSummaryRows[stintIndex] ? formatDuration(strategyBSummaryRows[stintIndex]?.durationMs) : '—' }}</div>
                   <div class="ssc-td"></div>
@@ -2857,10 +2875,10 @@ const gripZones = computed(() => {
               <!-- TOTALE row (only if more than 1 stint in either strategy) -->
               <template v-if="maxStrategyStints > 1">
                 <div class="ssc-stint-separator ssc-stint-separator--total">
-                  <span>TOTALE</span>
+                  <span>{{ t('sessionDetail.table.total') }}</span>
                 </div>
                 <div class="ssc-table-row ssc-table-row--total">
-                  <div class="ssc-td ssc-td--label">DURATA</div>
+                  <div class="ssc-td ssc-td--label">{{ t('sessionDetail.table.duration') }}</div>
                   <div class="ssc-td ssc-td--value ssc-td--duration">{{ formatDuration(strategyATotalDurationMs) }}</div>
                   <div class="ssc-td ssc-td--value ssc-td--duration">{{ formatDuration(strategyBTotalDurationMs) }}</div>
                   <div class="ssc-td"></div>
@@ -2876,32 +2894,32 @@ const gripZones = computed(() => {
         <div v-if="!isCompareMode && !isCrossSessionCompare && !isBuilderSameSessionCompare && displayedStint"
              :class="['stint-stats-card', `racing-theme--${racingStyle}`]">
 
-          <aside class="stint-context" aria-label="Condizioni dello stint">
+          <aside class="stint-context" :aria-label="t('sessionDetail.conditions.stintAria')">
             <dl class="stint-context-data">
-              <div class="stint-context-duration"><dt>Durata</dt><dd>{{ stintDuration.formatted }}</dd></div>
-              <div><dt>Aria</dt><dd>{{ isEvoSession ? formatRecordedNumber(selectedStintLaps.find(lap => Number.isFinite(lap.airTemp))?.airTemp, '°') : `${stintConditions.airTemp.avg || stintConditions.airTemp.start}°` }}</dd></div>
+              <div class="stint-context-duration"><dt>{{ t('sessionDetail.conditions.duration') }}</dt><dd>{{ stintDuration.formatted }}</dd></div>
+              <div><dt>{{ t('sessionDetail.conditions.air') }}</dt><dd>{{ isEvoSession ? formatRecordedNumber(selectedStintLaps.find(lap => Number.isFinite(lap.airTemp))?.airTemp, '°') : `${stintConditions.airTemp.avg || stintConditions.airTemp.start}°` }}</dd></div>
               <div><dt>Grip</dt><dd>{{ stintConditions.grip.dominant }}</dd></div>
-              <div><dt>Asfalto</dt><dd>{{ formatRecordedNumber(selectedStintLaps.find(lap => Number.isFinite(lap.roadTemp))?.roadTemp, '°') }}</dd></div>
-              <div class="stint-context-fuel" data-testid="stint-start-fuel"><dt>Carburante iniziale</dt><dd>{{ formatFuelStart(displayedStint?.fuelStart) }}</dd></div>
+              <div><dt>{{ t('sessionDetail.conditions.track') }}</dt><dd>{{ formatRecordedNumber(selectedStintLaps.find(lap => Number.isFinite(lap.roadTemp))?.roadTemp, '°') }}</dd></div>
+              <div class="stint-context-fuel" data-testid="stint-start-fuel"><dt>{{ t('sessionDetail.conditions.startFuel') }}</dt><dd>{{ formatFuelStart(displayedStint?.fuelStart) }}</dd></div>
             </dl>
             <div v-if="selectedStint?.type === 'R' && consistencyStats.total > 0" class="stint-target">
               <div class="stint-target-heading">
-                <span>Soglia target</span>
+                <span>{{ t('sessionDetail.target.threshold') }}</span>
                 <details class="ssc-theory-meta target-info" :key="`${effectiveStintSource}:${effectiveStintNumber}`">
-                  <summary aria-label="Come si calcola la soglia target" title="Come si calcola la soglia target"><Info :size="18" aria-hidden="true" /></summary>
+                  <summary :aria-label="t('sessionDetail.target.howAria')" :title="t('sessionDetail.target.howAria')"><Info :size="18" aria-hidden="true" /></summary>
                   <div class="reference-popover" role="note">
-                    <strong class="reference-title">Come si calcola il target</strong>
-                    <p>Al best di riferimento, già adattato alla temperatura dello stint, aggiungiamo sei decimi di secondo.</p>
+                    <strong class="reference-title">{{ t('sessionDetail.target.howTitle') }}</strong>
+                    <p>{{ t('sessionDetail.target.howText') }}</p>
                     <dl>
-                      <dt>Best di riferimento</dt><dd>{{ formatLapTime(theoreticalTimes.theoRace) }}</dd>
-                      <dt>Margine</dt><dd>+ {{ TARGET_THRESHOLD_S.toFixed(3).replace('.', ',') }} s</dd>
-                      <dt>Soglia target</dt><dd>{{ consistencyStats.targetLine }}</dd>
+                      <dt>{{ t('sessionDetail.target.referenceBest') }}</dt><dd>{{ formatLapTime(theoreticalTimes.theoRace) }}</dd>
+                      <dt>{{ t('sessionDetail.target.margin') }}</dt><dd>+ {{ TARGET_THRESHOLD_S.toFixed(3).replace('.', locale === 'it' ? ',' : '.') }} s</dd>
+                      <dt>{{ t('sessionDetail.target.threshold') }}</dt><dd>{{ consistencyStats.targetLine }}</dd>
                     </dl>
                   </div>
                 </details>
               </div>
               <strong>{{ consistencyStats.targetLine }}</strong>
-              <small>Oltre questo tempo: fuori target</small>
+              <small>{{ t('sessionDetail.target.beyond') }}</small>
             </div>
           </aside>
 
@@ -2910,26 +2928,26 @@ const gripZones = computed(() => {
                 <div class="ssc-th ssc-th--label"></div>
                 <div class="ssc-th">STINT</div>
                 <div class="ssc-th ssc-th--theo">
-                  RIFERIMENTO
+                  {{ t('sessionDetail.table.reference') }}
                               <details
               v-if="selectedBestTheoreticalReferenceLabel || selectedAvgTheoreticalReferenceLabel"
               class="ssc-theory-meta"
               data-testid="theoretical-reference-meta"
             >
-              <summary aria-label="Dettagli riferimento" title="Dettagli riferimento"><Info :size="18" aria-hidden="true" /></summary>
+              <summary :aria-label="t('sessionDetail.reference.detailsAria')" :title="t('sessionDetail.reference.detailsAria')"><Info :size="18" aria-hidden="true" /></summary>
               <div class="reference-popover" role="note">
-                <strong class="reference-title">Come nasce il riferimento</strong>
-                <p>Il tuo storico compatibile, adattato alla temperatura di questo stint.</p>
-                <section v-for="entry in [{ title: 'Miglior giro', ref: selectedBestTheoreticalReference }, { title: 'Media gara', ref: selectedAvgTheoreticalReference }]" :key="entry.title">
+                <strong class="reference-title">{{ t('sessionDetail.reference.title') }}</strong>
+                <p>{{ t('sessionDetail.reference.text') }}</p>
+                <section v-for="entry in [{ title: t('sessionDetail.reference.bestLap'), ref: selectedBestTheoreticalReference }, { title: t('overview.columns.avgRace'), ref: selectedAvgTheoreticalReference }]" :key="entry.title">
                   <template v-if="entry.ref">
                     <h5>{{ entry.title }}</h5>
-                    <p v-if="!entry.ref.historicMs">Nessuno storico compatibile disponibile.</p>
+                    <p v-if="!entry.ref.historicMs">{{ t('sessionDetail.reference.none') }}</p>
                     <dl v-else>
-                      <dt>Tempo storico</dt><dd>{{ formatLapTime(entry.ref.historicMs) }}</dd>
-                      <template v-if="entry.ref.fuelBucket"><dt>Carburante iniziale</dt><dd>{{ entry.ref.fuelBucket }} L</dd></template>
-                      <dt>Temperatura storico</dt><dd>{{ entry.ref.hasHistoricTemp ? formatReferenceTemp(entry.ref.historicTempRounded) : 'Non disponibile' }}</dd>
-                      <dt>Temperatura stint</dt><dd>{{ formatReferenceTemp(entry.ref.stintTemp) }}</dd>
-                      <dt>Correzione sul tempo</dt><dd>{{ formatReferenceCorrection(entry.ref.adjustmentMs) }}</dd>
+                      <dt>{{ t('sessionDetail.reference.historicTime') }}</dt><dd>{{ formatLapTime(entry.ref.historicMs) }}</dd>
+                      <template v-if="entry.ref.fuelBucket"><dt>{{ t('sessionDetail.conditions.startFuel') }}</dt><dd>{{ entry.ref.fuelBucket }} L</dd></template>
+                      <dt>{{ t('sessionDetail.reference.historicTemp') }}</dt><dd>{{ entry.ref.hasHistoricTemp ? formatReferenceTemp(entry.ref.historicTempRounded) : t('common.notAvailable') }}</dd>
+                      <dt>{{ t('sessionDetail.reference.stintTemp') }}</dt><dd>{{ formatReferenceTemp(entry.ref.stintTemp) }}</dd>
+                      <dt>{{ t('sessionDetail.reference.correction') }}</dt><dd>{{ formatReferenceCorrection(entry.ref.adjustmentMs) }}</dd>
                     </dl>
                   </template>
                 </section>
@@ -2952,8 +2970,8 @@ const gripZones = computed(() => {
                 </div>
               </div>
               <div class="ssc-table-row">
-                <div class="ssc-td ssc-td--label">MEDIA</div>
-                <div class="ssc-td ssc-td--value" :class="{ 'ssc-value--note': selectedStint?.avg?.includes('min') }">{{ selectedStint?.avg ?? '--' }}</div>
+                <div class="ssc-td ssc-td--label">{{ t('sessionDetail.table.avg') }}</div>
+                <div class="ssc-td ssc-td--value" :class="{ 'ssc-value--note': selectedStint?.avgWarning }">{{ selectedStint?.avg ?? '--' }}</div>
                 <div class="ssc-td ssc-td--value ssc-td--theo">
                   {{ selectedStint?.type === 'Q' ? '—' : (theoreticalTimes.theoAvgRace ? formatLapTime(theoreticalTimes.theoAvgRace) : '--') }}
                 </div>
@@ -2966,8 +2984,8 @@ const gripZones = computed(() => {
             <div class="ssc-progress-section">
               <div v-if="selectedStint?.type === 'R' && consistencyStats.total > 0" class="ssc-progress-row">
                 <div class="ssc-progress-label">
-                  <span class="ssc-progress-title">GIRI NEL TARGET</span>
-                  <span class="ssc-progress-count">{{ consistencyStats.onTarget }} su {{ consistencyStats.total }}</span>
+                  <span class="ssc-progress-title">{{ t('sessionDetail.progress.onTarget') }}</span>
+                  <span class="ssc-progress-count">{{ t('sessionDetail.table.ofCount', { count: consistencyStats.onTarget, total: consistencyStats.total }) }}</span>
                 </div>
                 <div class="ssc-progress-bar">
                   <div class="ssc-progress-fill" :style="{ width: consistencyStats.pct + '%', background: getGradientColor(consistencyStats.pct) }"></div>
@@ -2976,8 +2994,8 @@ const gripZones = computed(() => {
               </div>
               <div v-if="validityStats.total > 0" class="ssc-progress-row">
                 <div class="ssc-progress-label">
-                  <span class="ssc-progress-title">GIRI VALIDI</span>
-                  <span class="ssc-progress-count">{{ validityStats.valid }} su {{ validityStats.total }}</span>
+                  <span class="ssc-progress-title">{{ t('sessionDetail.progress.valid') }}</span>
+                  <span class="ssc-progress-count">{{ t('sessionDetail.table.ofCount', { count: validityStats.valid, total: validityStats.total }) }}</span>
                 </div>
                 <div class="ssc-progress-bar">
                   <div class="ssc-progress-fill" :style="{ width: validityStats.pct + '%', background: getGradientColor(validityStats.pct) }"></div>
@@ -2991,22 +3009,22 @@ const gripZones = computed(() => {
         <div class="chart-section">
           <div class="chart-header-row">
             <h3 class="chart-title">
-              <template v-if="isAnyComparison">Confronto tempi — {{ comparisonTitle }}</template>
-              <template v-else>Tempi Giro — Stint {{ displayedStintNumber }}</template>
+              <template v-if="isAnyComparison">{{ t('sessionDetail.chart.compareTitle') }} — {{ comparisonTitle }}</template>
+              <template v-else>{{ t('sessionDetail.chart.title') }} — Stint {{ displayedStintNumber }}</template>
             </h3>
             <!-- Chart Toolbar -->
             <div class="chart-toolbar">
-              <button class="toolbar-btn" @click="zoomIn" title="Zoom In">
+              <button class="toolbar-btn" @click="zoomIn" :title="t('sessionDetail.chart.zoomIn')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
               </button>
-              <button class="toolbar-btn" @click="zoomOut" title="Zoom Out">
+              <button class="toolbar-btn" @click="zoomOut" :title="t('sessionDetail.chart.zoomOut')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
               </button>
-              <button class="toolbar-btn" @click="resetZoom" title="Reset Zoom">
+              <button class="toolbar-btn" @click="resetZoom" :title="t('sessionDetail.chart.zoomReset')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
               </button>
               <div class="toolbar-divider"></div>
-              <button :class="['toolbar-btn', { 'toolbar-btn--active': showLapManager }]" @click="showLapManager = !showLapManager" title="Gestisci Giri">
+              <button :class="['toolbar-btn', { 'toolbar-btn--active': showLapManager }]" @click="showLapManager = !showLapManager" :title="t('sessionDetail.lapManager.title')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
               </button>
             </div>
@@ -3016,27 +3034,27 @@ const gripZones = computed(() => {
           <div v-if="showLapManager" class="lap-manager">
             <div v-for="side in (isAnyComparison ? ['A', 'B'] : ['A'])" :key="side" class="lap-manager-section">
               <div class="lap-manager-header">
-                <span class="lap-manager-title">{{ isAnyComparison ? `Strategia ${side}` : 'Giri analizzati' }}</span>
-                <button class="lap-manager-reset" @click="side === 'A' ? resetExcludedLaps() : isCrossSessionCompare ? resetExcludedLapsCrossB() : resetExcludedLapsB()">Includi tutti</button>
+                <span class="lap-manager-title">{{ isAnyComparison ? t('sessionDetail.chart.strategy', { side }) : t('sessionDetail.lapManager.analysed') }}</span>
+                <button class="lap-manager-reset" @click="side === 'A' ? resetExcludedLaps() : isCrossSessionCompare ? resetExcludedLapsCrossB() : resetExcludedLapsB()">{{ t('sessionDetail.lapManager.includeAll') }}</button>
               </div>
               <div class="lap-manager-grid">
                 <button v-for="point in (side === 'A' ? chartLapPointsA : chartLapPointsB)" :key="point.exclusionKey"
                   :class="['lap-toggle-btn', { 'lap-toggle-btn--b': side === 'B', 'lap-toggle-btn--excluded': (side === 'A' ? excludedLaps : isCrossSessionCompare ? excludedLapsCrossB : excludedLapsB).has(point.exclusionKey), 'lap-toggle-btn--invalid': !point.valid, 'lap-toggle-btn--pit': point.pit }]"
-                  :title="`Stint #${point.stintNumber} · Giro ${point.sessionLapNumber} · ${point.time}`"
+                  :title="`Stint #${point.stintNumber} · ${t('sessionDetail.chart.lap', { lap: point.sessionLapNumber })} · ${point.time}`"
                   @click="side === 'A' ? toggleLapExclusion(point.exclusionKey) : isCrossSessionCompare ? toggleLapExclusionCrossB(point.exclusionKey) : toggleLapExclusionB(point.exclusionKey)">
                   #{{ point.stintNumber }} · {{ point.sessionLapNumber }}
                 </button>
               </div>
             </div>
-            <p class="lap-manager-info">Primo e ultimo giro esclusi dal passo per ogni stint. Durata registrata invariata.</p>
+            <p class="lap-manager-info">{{ t('sessionDetail.lapManager.info') }}</p>
           </div>
 
           <div class="chart-wrap">
             <Line ref="chartRef" :data="chartData" :options="chartOptions" />
           </div>
-          <div class="point-legend" aria-label="Legenda giri">
-            <span class="key-valid">● Valido</span><span class="key-invalid">● Non valido</span>
-            <span class="chart-zoom-hint">Zoom: Ctrl + rotella</span>
+          <div class="point-legend" :aria-label="t('sessionDetail.chart.legendAria')">
+            <span class="key-valid">● {{ t('sessions.common.valid') }}</span><span class="key-invalid">● {{ t('sessions.common.invalid') }}</span>
+            <span class="chart-zoom-hint">{{ t('sessionDetail.chart.zoomHint') }}</span>
           </div>
           <!-- Grip Legend -->
           <div v-if="hasGripVariation && showGripZones" class="grip-legend">
@@ -3044,7 +3062,7 @@ const gripZones = computed(() => {
             <div v-for="zone in gripZones" :key="`${zone.gripLevel}-${zone.startLap}`" class="grip-legend-item">
               <span class="grip-legend-dot" :style="{ backgroundColor: gripColors[zone.gripLevel]?.border || '#fff' }"></span>
               <span class="grip-legend-label">{{ gripColors[zone.gripLevel]?.label || zone.gripLevel }}</span>
-              <span class="grip-legend-laps">(G{{ zone.startLap }}-G{{ zone.endLap }})</span>
+              <span class="grip-legend-laps">({{ t('sessionDetail.chart.lapAbbr') }}{{ zone.startLap }}-{{ t('sessionDetail.chart.lapAbbr') }}{{ zone.endLap }})</span>
             </div>
           </div>
         </div>
@@ -3056,7 +3074,7 @@ const gripZones = computed(() => {
             <!-- Tabs with COMPARE option in comparison modes -->
             <div v-if="isCompareMode || isCrossSessionCompare || isBuilderSameSessionCompare" class="laps-tabs">
               <button :class="['rc-btn rc-btn--compact rc-btn--toggle lap-tab lap-tab--compare', { 'is-active': activeTableTab === 'COMPARE' }]" :aria-pressed="activeTableTab === 'COMPARE'" @click="activeTableTab = 'COMPARE'">
-                Confronto
+                {{ t('sessionDetail.mode.compare') }}
               </button>
               <!-- All stints from Strategy A -->
               <button
@@ -3077,7 +3095,7 @@ const gripZones = computed(() => {
                 B: Stint #{{ stint.number }}
               </button>
             </div>
-            <h4 v-else class="laps-title">Tabella Giri — Stint {{ displayedStintNumber }}</h4>
+            <h4 v-else class="laps-title">{{ t('sessionDetail.laps.title') }} — Stint {{ displayedStintNumber }}</h4>
           </div>
 
           <!-- COMPARISON VIEW: Side-by-side A vs B -->
@@ -3086,18 +3104,18 @@ const gripZones = computed(() => {
               <thead>
                 <tr>
                   <th class="col-index">#</th>
-                  <th class="col-a" colspan="4">Strategia A</th>
+                  <th class="col-a" colspan="4">{{ t('sessionDetail.chart.strategy', { side: 'A' }) }}</th>
                   <th class="col-delta">Δ A-B</th>
-                  <th class="col-b" colspan="4">Strategia B</th>
+                  <th class="col-b" colspan="4">{{ t('sessionDetail.chart.strategy', { side: 'B' }) }}</th>
                 </tr>
                 <tr class="sub-header">
                   <th></th>
-                  <th class="col-a">Tempo</th>
+                  <th class="col-a">{{ t('sessions.common.time') }}</th>
                   <th class="col-a">S1</th>
                   <th class="col-a">S2</th>
                   <th class="col-a">S3</th>
                   <th></th>
-                  <th class="col-b">Tempo</th>
+                  <th class="col-b">{{ t('sessions.common.time') }}</th>
                   <th class="col-b">S1</th>
                   <th class="col-b">S2</th>
                   <th class="col-b">S3</th>
@@ -3141,14 +3159,14 @@ const gripZones = computed(() => {
             <table class="laps-table">
               <thead>
                 <tr>
-                  <th>Giro</th>
-                  <th>Tempo</th>
+                  <th>{{ t('sessions.common.lap') }}</th>
+                  <th>{{ t('sessions.common.time') }}</th>
                   <th>Δ best</th>
                   <th>S1</th>
                   <th>S2</th>
                   <th>S3</th>
-                  <th>Carb.</th>
-                  <th>Aria</th>
+                  <th>{{ t('sessionDetail.laps.fuel') }}</th>
+                  <th>{{ t('sessionDetail.conditions.air') }}</th>
                   <th>Grip</th>
 
                 </tr>
@@ -3164,10 +3182,10 @@ const gripZones = computed(() => {
                     'lap-best': isBestLap(lap),
                     'lap-row--link': !isEvoSession
                   }"
-                  :title="isEvoSession ? undefined : 'Apri questo giro in Telemetria'"
+                  :title="isEvoSession ? undefined : t('sessionDetail.laps.openLap')"
                   @click="openLapTelemetry(lap)"
                 >
-                  <td class="lap-number-cell">{{ lap.lap || lap.lapNumber }}<span v-if="isLapExcludedInCurrentTable(lap)" class="lap-state lap-state--excluded" title="Escluso dai calcoli del passo; il giro rimane nei dati" aria-label="Escluso dai calcoli del passo">Escluso</span><span v-if="lap.pit" class="lap-state lap-state--pit" title="Giro con passaggio ai box">PIT</span></td>
+                  <td class="lap-number-cell">{{ lap.lap || lap.lapNumber }}<span v-if="isLapExcludedInCurrentTable(lap)" class="lap-state lap-state--excluded" :title="t('sessionDetail.laps.excludedTitle')" :aria-label="t('sessionDetail.laps.excludedAria')">{{ t('sessionDetail.laps.excluded') }}</span><span v-if="lap.pit" class="lap-state lap-state--pit" :title="t('sessionDetail.laps.pitTitle')">PIT</span></td>
                   <td class="time">{{ lap.time || lap.lapTime }}</td>
                   <td :class="['delta', `delta--${getDeltaClass(lap.delta)}`]">{{ lap.delta || '—' }}</td>
                   <td :class="['sector', { 'sector--best': isBestSector(lap, 0) }]">{{ formatSectorTime(lap.sectors?.[0] || lap.s1) }}</td>

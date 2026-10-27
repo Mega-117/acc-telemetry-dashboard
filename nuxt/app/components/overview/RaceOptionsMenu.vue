@@ -2,12 +2,14 @@
 import { Ellipsis, ExternalLink, Pencil, Trash2 } from '@lucide/vue'
 import { ref } from 'vue'
 import { useFloatingPanel } from '~/composables/useFloatingPanel'
+import { useI18n } from '~/i18n'
 
 // PIP-641: the "…" menu of a planned race. It floats above the page (in <body>, attached to its button) so the
 // frosted glass really blurs what is behind it and the next rows or buttons never show through; it opens below or,
 // without room, above. Open and hover states are a white veil: red is kept for errors and the delete action.
 defineProps<{ label: string, simGridUrl?: string, raceUrl?: string, compact?: boolean, disabled?: boolean }>()
 const emit = defineEmits<{ edit: [], delete: [] }>()
+const { t } = useI18n()
 
 const open = ref(false)
 const toggle = ref<HTMLButtonElement | null>(null)
@@ -31,9 +33,9 @@ function choose(action: 'edit' | 'delete') {
       <Transition name="race-menu">
         <div v-if="open" ref="menu" class="race-options__menu" :class="`is-${floating.place.value?.placement ?? 'below'}`" :style="floating.style()" role="menu" :aria-label="label">
           <a v-if="simGridUrl" :href="simGridUrl" target="_blank" rel="noopener" role="menuitem" @click="open = false"><ExternalLink :size="17" aria-hidden="true" /><span>SimGrid</span></a>
-          <a v-if="raceUrl" :href="raceUrl" target="_blank" rel="noopener" role="menuitem" @click="open = false"><ExternalLink :size="17" aria-hidden="true" /><span>Link gara</span></a>
-          <button type="button" role="menuitem" class="race-options__edit" :disabled="disabled" @click="choose('edit')"><Pencil :size="17" aria-hidden="true" /><span>Modifica gara</span></button>
-          <button type="button" role="menuitem" class="race-options__delete" :disabled="disabled" @click="choose('delete')"><Trash2 :size="17" aria-hidden="true" /><span>Elimina gara</span></button>
+          <a v-if="raceUrl" :href="raceUrl" target="_blank" rel="noopener" role="menuitem" @click="open = false"><ExternalLink :size="17" aria-hidden="true" /><span>{{ t('overview.races.raceLink') }}</span></a>
+          <button type="button" role="menuitem" class="race-options__edit" :disabled="disabled" @click="choose('edit')"><Pencil :size="17" aria-hidden="true" /><span>{{ t('overview.races.edit') }}</span></button>
+          <button type="button" role="menuitem" class="race-options__delete" :disabled="disabled" @click="choose('delete')"><Trash2 :size="17" aria-hidden="true" /><span>{{ t('overview.races.delete') }}</span></button>
         </div>
       </Transition>
     </Teleport>

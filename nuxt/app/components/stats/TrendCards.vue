@@ -3,23 +3,25 @@
 import { ArrowDownRight, ArrowRight, ArrowUpRight } from '@lucide/vue'
 import { trend, type PeriodTotals } from '~/utils/statsJourney'
 import { formatDriveTime } from '~/utils/telemetryFormat'
+import { useI18n } from '~/i18n'
 
 const props = defineProps<{ current: PeriodTotals, previous: PeriodTotals | null, periodLabel: string }>()
 
+const { t } = useI18n()
 const hours = (ms: number) => (ms > 0 ? formatDriveTime(ms) : '0m')
 const cards = computed(() => {
   const p = props.previous
   return [
-    { id: 'time', label: 'Tempo in pista', value: hours(props.current.timeMs), t: trend(props.current.timeMs, p?.timeMs ?? null), fmt: (d: number) => hours(Math.abs(d)) },
-    { id: 'sessions', label: 'Sessioni', value: String(props.current.sessions), t: trend(props.current.sessions, p?.sessions ?? null), fmt: (d: number) => String(Math.abs(d)) },
-    { id: 'laps', label: 'Giri', value: String(props.current.laps), t: trend(props.current.laps, p?.laps ?? null), fmt: (d: number) => String(Math.abs(d)) },
-    { id: 'valid', label: 'Giri validi', value: props.current.validPct === null ? '–' : `${props.current.validPct}%`, t: trend(props.current.validPct, p?.validPct ?? null), fmt: (d: number) => `${Math.abs(d)} punti` },
+    { id: 'time', label: t('stats.trend.time'), value: hours(props.current.timeMs), t: trend(props.current.timeMs, p?.timeMs ?? null), fmt: (d: number) => hours(Math.abs(d)) },
+    { id: 'sessions', label: t('stats.trend.sessions'), value: String(props.current.sessions), t: trend(props.current.sessions, p?.sessions ?? null), fmt: (d: number) => String(Math.abs(d)) },
+    { id: 'laps', label: t('stats.trend.laps'), value: String(props.current.laps), t: trend(props.current.laps, p?.laps ?? null), fmt: (d: number) => String(Math.abs(d)) },
+    { id: 'valid', label: t('stats.trend.valid'), value: props.current.validPct === null ? '–' : `${props.current.validPct}%`, t: trend(props.current.validPct, p?.validPct ?? null), fmt: (d: number) => t('stats.trend.points', { n: Math.abs(d) }) },
   ]
 })
 </script>
 
 <template>
-  <dl class="trend-cards" :aria-label="`Riepilogo: ${periodLabel}`">
+  <dl class="trend-cards" :aria-label="t('stats.trend.aria', { period: periodLabel })">
     <div v-for="c in cards" :key="c.id" class="trend-card" :class="`trend-card--${c.id}`">
       <dt>{{ c.label }}</dt>
       <dd>
@@ -28,7 +30,7 @@ const cards = computed(() => {
           <ArrowUpRight v-if="c.t.direction === 'up'" :size="16" aria-hidden="true" />
           <ArrowDownRight v-else-if="c.t.direction === 'down'" :size="16" aria-hidden="true" />
           <ArrowRight v-else :size="16" aria-hidden="true" />
-          {{ c.t.direction === 'flat' ? 'come prima' : `${c.t.direction === 'up' ? '+' : '−'}${c.fmt(c.t.delta)} rispetto a prima` }}
+          {{ c.t.direction === 'flat' ? t('stats.trend.same') : t('stats.trend.change', { delta: `${c.t.direction === 'up' ? '+' : '−'}${c.fmt(c.t.delta)}` }) }}
         </span>
       </dd>
     </div>

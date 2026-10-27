@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { standingsManufacturerFromModel, standingsManufacturerLogo } from '~/services/overlay/standingsManufacturer'
 import { usePublicPath } from '~/composables/usePublicPath'
+import { useI18n } from '~/i18n'
 
 export interface RacingSessionRow {
   id: string
@@ -21,6 +22,7 @@ defineProps<{
   sessionHref?: (id: string) => string
 }>()
 const emit = defineEmits<{ 'go-to-session': [id: string] }>()
+const { t, intlLocale } = useI18n()
 // Logo del costruttore accanto all'auto (lo stesso set della classifica HUD), solo se il marchio e' noto.
 const { getPublicPath } = usePublicPath()
 function carLogo(car: string) {
@@ -33,10 +35,10 @@ function carLogo(car: string) {
 function formatDateHeader(dateStr: string) {
   const [year, month, day] = dateStr.split('-').map(Number)
   const date = new Date(year!, month! - 1, day!)
-  return Number.isNaN(date.getTime()) ? 'DATA NON DISPONIBILE' : date.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase()
+  return Number.isNaN(date.getTime()) ? t('sessions.list.noDate') : date.toLocaleDateString(intlLocale.value, { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase()
 }
 function getTypeLabel(type: RacingSessionRow['type']) {
-  return { practice: 'PROVE LIBERE', qualify: 'QUALIFICA', race: 'GARA', unknown: 'SESSIONE' }[type]
+  return t(`sessions.type.${type}`)
 }
 function openSession(event: MouseEvent, id: string) {
   event.stopPropagation()
@@ -57,7 +59,7 @@ function openSession(event: MouseEvent, id: string) {
           <div
             class="racing-table-scroll"
             role="region"
-            :aria-label="`Sessioni del ${formatDateHeader(group.date)}`"
+            :aria-label="t('sessions.list.dayAria', { date: formatDateHeader(group.date) })"
             tabindex="0"
           >
             <table class="racing-day-table">
@@ -69,22 +71,22 @@ function openSession(event: MouseEvent, id: string) {
               <thead class="racing-sr-only">
                 <tr>
                   <th scope="col">
-                    Tipo
+                    {{ t('sessions.list.type') }}
                   </th><th scope="col">
-                    Ora
+                    {{ t('sessions.list.time') }}
                   </th><th v-if="!hideTrack" scope="col">
-                    Pista
+                    {{ t('sessions.list.track') }}
                   </th><th scope="col">
-                    Auto
+                    {{ t('sessions.list.car') }}
                   </th>
                   <th scope="col">
-                    Giri
+                    {{ t('sessions.list.laps') }}
                   </th><th scope="col">
-                    Stint
+                    {{ t('sessions.list.stints') }}
                   </th><th scope="col">
-                    Tempo qualifica
+                    {{ t('sessions.list.qualifyTime') }}
                   </th><th scope="col">
-                    Tempo gara
+                    {{ t('sessions.list.raceTime') }}
                   </th>
                 </tr>
               </thead>
@@ -96,7 +98,7 @@ function openSession(event: MouseEvent, id: string) {
                   @click="emit('go-to-session', session.id)"
                 >
                   <td class="session-type">
-                    <span :class="['session-kind', `session-kind--${session.type}`]">{{ session.type === 'practice' ? 'LIBERE' : getTypeLabel(session.type) }}</span>
+                    <span :class="['session-kind', `session-kind--${session.type}`]">{{ session.type === 'practice' ? t('sessions.type.practiceShort') : getTypeLabel(session.type) }}</span>
                   </td>
                   <td class="session-time">
                     {{ session.time }}
@@ -107,7 +109,7 @@ function openSession(event: MouseEvent, id: string) {
                       :type="sessionHref ? undefined : 'button'"
                       :href="sessionHref?.(session.id)"
                       class="session-open"
-                      :aria-label="`Apri sessione ${getTypeLabel(session.type)}, ${session.track}, ${formatDateHeader(group.date)}, ${session.time}`"
+                      :aria-label="t('sessions.list.openAria', { type: getTypeLabel(session.type), track: session.track, date: formatDateHeader(group.date), time: session.time })"
                       @click="openSession($event, session.id)"
                     >
                       {{ session.track }}
@@ -125,23 +127,23 @@ function openSession(event: MouseEvent, id: string) {
                         :type="sessionHref ? undefined : 'button'"
                         :href="sessionHref?.(session.id)"
                         class="session-open"
-                        :aria-label="`Apri sessione ${getTypeLabel(session.type)}, ${session.track}, ${formatDateHeader(group.date)}, ${session.time}`"
+                        :aria-label="t('sessions.list.openAria', { type: getTypeLabel(session.type), track: session.track, date: formatDateHeader(group.date), time: session.time })"
                         @click="openSession($event, session.id)"
                       >{{ session.car }}</component>
                       <span v-else>{{ session.car }}</span>
                     </span>
                   </td>
                   <td class="session-stat">
-                    {{ session.laps }} <span>{{ session.laps === 1 ? 'giro' : 'giri' }}</span>
+                    {{ session.laps }} <span>{{ session.laps === 1 ? t('sessions.list.lap') : t('sessions.list.lapsUnit') }}</span>
                   </td>
                   <td class="session-stat session-stat--stints">
-                    {{ session.stints }} <span>stint</span>
+                    {{ session.stints }} <span>{{ t('sessions.list.stintUnit') }}</span>
                   </td>
                   <td class="session-best session-best--qualify">
-                    <abbr class="best-label" title="Tempo di qualifica">Q</abbr><span :class="{ 'is-empty': !session.bestQualy }">{{ session.bestQualy || '–' }}</span>
+                    <abbr class="best-label" :title="t('sessions.list.qualifyTitle')">{{ t('sessions.list.qualifyAbbr') }}</abbr><span :class="{ 'is-empty': !session.bestQualy }">{{ session.bestQualy || '–' }}</span>
                   </td>
                   <td class="session-best session-best--race">
-                    <abbr class="best-label" title="Tempo di gara">G</abbr><span :class="{ 'is-empty': !session.bestRace }">{{ session.bestRace || '–' }}</span>
+                    <abbr class="best-label" :title="t('sessions.list.raceTitle')">{{ t('sessions.list.raceAbbr') }}</abbr><span :class="{ 'is-empty': !session.bestRace }">{{ session.bestRace || '–' }}</span>
                   </td>
                 </tr>
               </tbody>

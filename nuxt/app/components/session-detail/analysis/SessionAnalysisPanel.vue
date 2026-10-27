@@ -24,6 +24,7 @@ import { useCornerStepper } from '~/composables/useCornerStepper'
 import { formatLapConditions, mergeLapConditions, normalizeLapTrace, type LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { formatLapTime } from '~/utils/telemetryFormat'
 import { useTrackEdges } from '~/composables/useTrackEdges'
+import { useI18n, type TranslationKey } from '~/i18n'
 
 const props = defineProps<{
   sessionToken: string | null
@@ -42,9 +43,9 @@ const props = defineProps<{
 }>()
 
 type Layout = 'pilota' | 'tracce'
-const LAYOUTS: { id: Layout, label: string, hint: string }[] = [
-  { id: 'tracce', label: 'Avanzata', hint: 'Tutti i canali sul giro, settori e curve: per capire perché' },
-  { id: 'pilota', label: 'Semplice', hint: 'La mappa colorata e le tre curve dove migliorare, in parole semplici' },
+const LAYOUTS: { id: Layout, label: TranslationKey, hint: TranslationKey }[] = [
+  { id: 'tracce', label: 'telemetry.layout.advanced', hint: 'telemetry.layout.advancedHint' },
+  { id: 'pilota', label: 'telemetry.layout.simple', hint: 'telemetry.layout.simpleHint' },
 ]
 // Per-viewer preferences: remembered, never required.
 function remembered<T extends string>(key: string, values: readonly T[], fallback: T) {
@@ -67,6 +68,7 @@ const library = useReferenceLibrary({ entries, traces, refId, sessionToken: () =
 const loading = ref(false), error = ref(''), fromArchive = ref(false)
 // PIP-635: nessun giro da analizzare: la pagina torna su Sessione se l'aveva aperta da sola.
 const emit = defineEmits<{ unavailable: [], compare: [], lapLinkHandled: [] }>(); watch(error, message => { if (message) emit('unavailable') })
+const { t } = useI18n()
 const cursor = ref<number | null>(null)
 const selectedCorner = ref<number | null>(null)
 const skipped = ref(0)
@@ -92,8 +94,8 @@ async function load() {
   entries.value = []
   traces.value = {}
   skipped.value = 0
-  if (!token) { error.value = 'Questa sessione non ha giri registrati sul computer.'; return }
-  if (props.foreign && !pilot) { error.value = 'I giri di questa sessione restano sul PC di chi ha guidato: per confrontarti chiedi un link con "Condividi giro".'; return }
+  if (!token) { error.value = t('telemetry.errors.noToken'); return }
+  if (props.foreign && !pilot) { error.value = t('telemetry.errors.foreign'); return }
   const bridge = api()
   const desktop = typeof bridge?.listLapTraces === 'function' && typeof bridge.readLapTrace === 'function'
   // PIP-647: in the browser your own laps come from the online archive, as a coach reads a pilot's
@@ -103,7 +105,7 @@ async function load() {
   let source: LapSource
   if (archiveUid) source = pilotLapSource(archiveUid, archiveDeps, props.sharedSessionId ?? null)
   else if (desktop) source = electronLapSource(bridge!)
-  else { error.value = 'L’analisi dei giri è disponibile nel programma Racer Core.'; return }
+  else { error.value = t('telemetry.errors.desktopOnly'); return }
   loading.value = true
   try {
     const list = await source.list(token)
@@ -134,10 +136,10 @@ async function load() {
     // stretched on the whole lap it would compare different places. Listed, not usable.
     const usable = entries.value.filter(e => e.complete)
     if (!usable.length) {
-      error.value = fromArchive.value ? 'Nel browser ci sono solo i giri validi e completi degli ultimi 30 giorni, e questa sessione non ne ha: tutti i giri sono nel programma Racer Core.'
-        : props.sharedSessionId ? 'Nessun giro di questa sessione nell’archivio online: ci sono solo i giri validi e completi degli ultimi 30 giorni.'
-        : pilot ? 'Nessun giro di questa sessione nell’archivio online: arrivano quando il pilota guida con Racer Core aggiornato.'
-        : entries.value.length ? 'Ci sono solo giri parziali in questa sessione: servono giri completi, partiti dal traguardo.' : 'Nessun giro registrato per questa sessione: le analisi arrivano dai giri guidati con Racer Core attivo.'
+      error.value = fromArchive.value ? t('telemetry.errors.archiveBrowser')
+        : props.sharedSessionId ? t('telemetry.errors.archiveShared')
+        : pilot ? t('telemetry.errors.archivePilot')
+        : entries.value.length ? t('telemetry.errors.partialOnly') : t('telemetry.errors.noLaps')
       return
     }
     // Default as Track Titan: your best valid lap is the reference, the last lap the one to study.
@@ -165,7 +167,7 @@ async function load() {
         mine: { grip: bestTrace?.conditions?.grip ?? null, airC: bestTrace?.conditions?.airC ?? null, roadC: bestTrace?.conditions?.roadC ?? null, fuelL: bestTrace?.fuelL ?? null } })
       .then(id => { if (id && isCurrent() && refId.value === defaultRef && !picked) refId.value = id })
   } catch (e) {
-    if (isCurrent()) error.value = e instanceof LapsArchiveError ? e.message : 'Impossibile leggere i giri di questa sessione.'
+    if (isCurrent()) error.value = e instanceof LapsArchiveError ? e.message : t('telemetry.errors.read')
   } finally {
     if (isCurrent()) loading.value = false
   }
@@ -182,11 +184,11 @@ const shareMessage = ref('')
 let shareTimer: ReturnType<typeof setTimeout> | null = null
 const canShare = computed(() => !props.pilotUid && typeof api()?.shareLapTrace === 'function'
   && lapEntry.value?.origin === 'local' && lapEntry.value.complete && lapEntry.value.valid)
-const shareHint = computed(() => props.pilotUid ? '' : lapEntry.value && !lapEntry.value.valid ? 'Si condividono solo giri validi' : 'Copia il link di questo giro: chi lo riceve lo usa come riferimento')
+const shareHint = computed(() => props.pilotUid ? '' : lapEntry.value && !lapEntry.value.valid ? t('telemetry.share.validOnly') : t('telemetry.share.hint'))
 // PIP-635: the two lap actions sit at the bottom of their menu (your lap: share it; reference: a lap by link).
 const lapActions = computed<LapAction[]>(() => !props.pilotUid && typeof api()?.shareLapTrace === 'function'
-  ? [{ id: 'share', label: shareState.value === 'busy' ? 'Condivido…' : 'Copia il link di questo giro (per usarlo come riferimento)', disabled: !canShare.value || shareState.value === 'busy', hint: shareHint.value }] : [])
-const refActions = computed<LapAction[]>(() => entries.value.length ? [{ id: 'compare', label: '+ Confronta con un’altra sessione o un link', hint: 'Le tue sessioni, oppure il link di una sessione o di un giro ricevuto' }] : [])
+  ? [{ id: 'share', label: shareState.value === 'busy' ? t('telemetry.share.busy') : t('telemetry.share.action'), disabled: !canShare.value || shareState.value === 'busy', hint: shareHint.value }] : [])
+const refActions = computed<LapAction[]>(() => entries.value.length ? [{ id: 'compare', label: t('telemetry.compareAction'), hint: t('sessionDetail.header.compareTitle') }] : [])
 function onLapAction(id: string) { if (id === 'share') void shareLap(); else if (id === 'compare') emit('compare') }
 async function shareLap() {
   const id = lapId.value
@@ -197,7 +199,7 @@ async function shareLap() {
     const result = await api()!.shareLapTrace!(id)
     await navigator.clipboard.writeText(result.link)
     shareState.value = 'copied'
-    shareMessage.value = 'Link copiato: mandalo a chi vuoi.'
+    shareMessage.value = t('telemetry.share.copied')
   } catch (error) {
     shareState.value = 'error'
     shareMessage.value = lapShareErrorMessage(error)
@@ -289,9 +291,10 @@ const traceRowHeight = computed(() => Math.max(80, Math.floor((viewportHeight.va
 // Garage 61 keeps the lap bar on the left, always open: sectors and corners say where to look.
 watch([traceRoot, layout, reference], () => nextTick(measureTrace))
 // What the charts show now, and the way back to the whole lap (Garage 61 reset, Esc, double click).
-const viewLabel = computed(() => zoomRange.value ? "Zoom" : selectedSector.value !== null ? `Settore ${selectedSector.value + 1}` : selectedCorner.value !== null ? `Curva ${selectedCorner.value}` : "Giro intero")
+const viewLabel = computed(() => zoomRange.value ? "Zoom" : selectedSector.value !== null ? t('telemetry.sector', { n: selectedSector.value + 1 }) : selectedCorner.value !== null ? t('telemetry.corner', { n: selectedCorner.value }) : t('telemetry.wholeLap'))
+const wholeView = computed(() => !zoomRange.value && selectedSector.value === null && selectedCorner.value === null)
 // PIP-635: quanto perdi nel tratto che guardi (curva, settore o zoom), fisso: senza cercarlo in fondo al delta.
-const stretchLoss = computed(() => viewLabel.value === 'Giro intero' || !lap.value || !reference.value ? null
+const stretchLoss = computed(() => wholeView.value || !lap.value || !reference.value ? null
   : zoomRange.value ? stretchDelta(lap.value, reference.value, range.value)
     // Same numbers as the lists on the left: the corner table and the official sector times.
     : selectedSector.value !== null ? (sectorGaps.value[selectedSector.value] ? sectorGaps.value[selectedSector.value]!.gap / 1000 : stretchDelta(lap.value, reference.value, range.value))
@@ -360,24 +363,24 @@ watch(layout, value => { selectedSector.value = null; zoomRange.value = null; if
 function emptyTrace(): LapTraceView { return { gameId: 'acc', variant: null, sessionId: null, track: '', car: '', lapTimeS: 0, source: '', complete: false, valid: null, fuelL: null, conditions: null, gridStepM: 2, lengthM: 0, channels: {} } }
 const has = (name: string) => !!lap.value?.channels[name]
 // PIP-635: the time in the stretch you look at sits in the Delta header (Garage 61, Delta), fixed.
-const deltaRow = computed<ChartRow[]>(() => reference.value ? [{ key: 'delta', title: 'Delta', unit: 's', channels: [], delta: true, height: 70,
+const deltaRow = computed<ChartRow[]>(() => reference.value ? [{ key: 'delta', title: t('telemetry.rows.delta'), unit: 's', channels: [], delta: true, height: 70,
   ...(stretchLoss.value !== null ? { note: `${viewLabel.value} · ${formatDelta(stretchLoss.value)}`, noteTone: stretchLoss.value >= 0.01 ? 'loss' as const : stretchLoss.value <= -0.01 ? 'gain' as const : null } : {}) }] : [])
-const speedRow: ChartRow = { key: 'speed', title: 'Velocità', unit: 'km/h', channels: [{ name: 'speed_kmh' }], height: 100 }
+const speedRow: ChartRow = { key: 'speed', title: t('telemetry.rows.speed'), unit: 'km/h', channels: [{ name: 'speed_kmh' }], height: 100 }
 // One channel per chart: every chart shows only your line and the reference's.
 const pedalRows: ChartRow[] = [
-  { key: 'gas', title: 'Gas', unit: '%', channels: [{ name: 'throttle_pct' }], height: 60, min: 0, max: 100 },
-  { key: 'brake', title: 'Freno', unit: '%', channels: [{ name: 'brake_pct' }], height: 60, min: 0, max: 100 },
+  { key: 'gas', title: t('telemetry.rows.throttle'), unit: '%', channels: [{ name: 'throttle_pct' }], height: 60, min: 0, max: 100 },
+  { key: 'brake', title: t('telemetry.rows.brake'), unit: '%', channels: [{ name: 'brake_pct' }], height: 60, min: 0, max: 100 },
 ]
-const steerRow: ChartRow = { key: 'steer', title: 'Sterzo', channels: [{ name: 'steer_deg' }], height: 60, digits: 2 }
-const gearRow: ChartRow = { key: 'gear', title: 'Marcia', channels: [{ name: 'gear' }], height: 46 }
+const steerRow: ChartRow = { key: 'steer', title: t('telemetry.rows.steer'), channels: [{ name: 'steer_deg' }], height: 60, digits: 2 }
+const gearRow: ChartRow = { key: 'gear', title: t('telemetry.rows.gear'), channels: [{ name: 'gear' }], height: 46 }
 const DEG = 57.2958
 const extraRows = computed<ChartRow[]>(() => [
-  ...(has('acc_lat_g') ? [{ key: 'latg', title: 'G laterale', unit: 'G', channels: [{ name: 'acc_lat_g' }], digits: 2 }, { key: 'longg', title: 'G longitudinale', unit: 'G', channels: [{ name: 'acc_long_g' }], digits: 2 }] : []),
-  ...(has('slip_angle_fl') ? (['fl', 'fr', 'rl', 'rr'] as const).map(w => ({ key: `slip-${w}`, title: `Deriva gomma ${WHEEL_NAME[w]}`, unit: '°', channels: [{ name: `slip_angle_${w}`, scale: DEG }], digits: 1 })) : []),
-  ...(has('susp_travel_mm_fl') ? (['fl', 'fr', 'rl', 'rr'] as const).map(w => ({ key: `susp-${w}`, title: `Sospensione ${WHEEL_NAME[w]}`, unit: 'mm', channels: [{ name: `susp_travel_mm_${w}` }] })) : []),
-  ...(has('rpm') ? [{ key: 'rpm', title: 'Giri motore', channels: [{ name: 'rpm' }] }] : []),
+  ...(has('acc_lat_g') ? [{ key: 'latg', title: t('telemetry.rows.latG'), unit: 'G', channels: [{ name: 'acc_lat_g' }], digits: 2 }, { key: 'longg', title: t('telemetry.rows.longG'), unit: 'G', channels: [{ name: 'acc_long_g' }], digits: 2 }] : []),
+  ...(has('slip_angle_fl') ? (['fl', 'fr', 'rl', 'rr'] as const).map(w => ({ key: `slip-${w}`, title: t('telemetry.rows.slip', { wheel: t(WHEEL_NAME[w]) }), unit: '°', channels: [{ name: `slip_angle_${w}`, scale: DEG }], digits: 1 })) : []),
+  ...(has('susp_travel_mm_fl') ? (['fl', 'fr', 'rl', 'rr'] as const).map(w => ({ key: `susp-${w}`, title: t('telemetry.rows.susp', { wheel: t(WHEEL_NAME[w]) }), unit: 'mm', channels: [{ name: `susp_travel_mm_${w}` }] })) : []),
+  ...(has('rpm') ? [{ key: 'rpm', title: t('telemetry.rows.rpm'), channels: [{ name: 'rpm' }] }] : []),
 ] as ChartRow[])
-const WHEEL_NAME = { fl: 'ant. sx', fr: 'ant. dx', rl: 'post. sx', rr: 'post. dx' } as const
+const WHEEL_NAME = { fl: 'telemetry.wheels.fl', fr: 'telemetry.wheels.fr', rl: 'telemetry.wheels.rl', rr: 'telemetry.wheels.rr' } as const
 const pilotRows = computed(() => [...deltaRow.value, speedRow, ...pedalRows])
 // Semplice: the four corner charts share the window under the three tips, never below 80 px.
 const pilotRowHeight = computed(() => Math.max(80, Math.floor((traceHeight.value - 230) / 4) - 40))
@@ -393,16 +396,16 @@ const libraryEntries = computed(() => entries.value.filter(e => e.origin === 'li
 const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Semplice on the whole session
 // PIP-635: il best (valido e completo) della sessione, segnato nei giri come nei tempi del gioco.
 const bestId = computed(() => sessionBest.value?.id ?? '')
-const lapOption = (e: Entry): LapOption => ({ id: e.id, title: e.label ?? `Giro ${e.lapNumber}`, time: e.label ? '' : formatLapTime(e.lapTimeMs), valid: e.valid, complete: e.complete, best: e.id === bestId.value,
+const lapOption = (e: Entry): LapOption => ({ id: e.id, title: e.label ?? t('sessionDetail.chart.lap', { lap: e.lapNumber }), time: e.label ? '' : formatLapTime(e.lapTimeMs), valid: e.valid, complete: e.complete, best: e.id === bestId.value,
   conditions: formatLapConditions(mergeLapConditions(traces.value[e.id]?.conditions ?? null, sessionRow(e))) })
 const lapGroups = computed<LapGroup[]>(() => [{ label: '', options: sessionEntries.value.map(lapOption) }])
-const refGroups = computed<LapGroup[]>(() => [{ label: props.pilotUid ? 'Giri del pilota' : 'Questa sessione', options: sessionEntries.value.map(lapOption) },
-  ...(ownEntries.value.length ? [{ label: 'I miei giri', options: ownEntries.value.map(lapOption) }] : []), ...(sharedEntries.value.length ? [{ label: 'Condiviso', options: sharedEntries.value.map(lapOption) }] : []),
-  ...(idealEntries.value.length ? [{ label: 'Giro ideale (i tuoi settori migliori)', options: idealEntries.value.map(lapOption) }] : []),
-  ...(bestEntries.value.length ? [{ label: 'I tuoi migliori su questa pista', options: bestEntries.value.map(lapOption) }] : []),
-  ...(libraryEntries.value.length ? [{ label: 'Altri piloti (stessa auto)', options: libraryEntries.value.map(lapOption) }] : []),
-  ...(compareEntries.value.length ? [{ label: 'Sessione a confronto', options: compareEntries.value.map(lapOption) }] : [])])
-const short = (e: Entry | null) => e ? `Giro ${e.lapNumber} · ${formatLapTime(e.lapTimeMs)}` : '--'
+const refGroups = computed<LapGroup[]>(() => [{ label: props.pilotUid ? t('telemetry.groups.pilot') : t('telemetry.groups.session'), options: sessionEntries.value.map(lapOption) },
+  ...(ownEntries.value.length ? [{ label: t('telemetry.groups.mine'), options: ownEntries.value.map(lapOption) }] : []), ...(sharedEntries.value.length ? [{ label: t('telemetry.groups.shared'), options: sharedEntries.value.map(lapOption) }] : []),
+  ...(idealEntries.value.length ? [{ label: t('telemetry.groups.ideal'), options: idealEntries.value.map(lapOption) }] : []),
+  ...(bestEntries.value.length ? [{ label: t('telemetry.groups.best'), options: bestEntries.value.map(lapOption) }] : []),
+  ...(libraryEntries.value.length ? [{ label: t('telemetry.groups.library'), options: libraryEntries.value.map(lapOption) }] : []),
+  ...(compareEntries.value.length ? [{ label: t('telemetry.groups.compare'), options: compareEntries.value.map(lapOption) }] : [])])
+const short = (e: Entry | null) => e ? `${t('sessionDetail.chart.lap', { lap: e.lapNumber })} · ${formatLapTime(e.lapTimeMs)}` : '--'
 const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTime(s * 1000) : '--'
 </script>
 
@@ -411,34 +414,34 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
     <div class="analysis-bar">
       <!-- PIP-635: one comparison block, "Tu  +1.733 s  Riferimento": each lap in its colour (Track Titan), the gap
            between them; sharing your lap and a lap by link live in the two menus. The view sits apart, on the right. -->
-      <div class="compare" role="group" aria-label="Confronto dei giri">
-        <LapPicker v-model="lapId" name="Tu" color="#38bdf8" :groups="lapGroups" :actions="lapActions" :disabled="!sessionEntries.length" hint="Il tuo giro: azzurro in grafici e mappa" @action="onLapAction" />
-        <p class="compare-gap" :class="{ gain: (totalDelta ?? 0) < 0, loss: (totalDelta ?? 0) > 0 }" title="Il tuo giro contro il riferimento">
-          <template v-if="totalDelta !== null"><strong>{{ formatDelta(totalDelta) }} s</strong><em>{{ totalDelta < 0 ? "più veloce" : totalDelta > 0 ? "più lento" : "pari" }}</em></template><em v-else>contro</em>
+      <div class="compare" role="group" :aria-label="t('telemetry.compareAria')">
+        <LapPicker v-model="lapId" :name="t('telemetry.you')" color="#38bdf8" :groups="lapGroups" :actions="lapActions" :disabled="!sessionEntries.length" :hint="t('telemetry.youHint')" @action="onLapAction" />
+        <p class="compare-gap" :class="{ gain: (totalDelta ?? 0) < 0, loss: (totalDelta ?? 0) > 0 }" :title="t('telemetry.gapTitle')">
+          <template v-if="totalDelta !== null"><strong>{{ formatDelta(totalDelta) }} s</strong><em>{{ totalDelta < 0 ? t('telemetry.faster') : totalDelta > 0 ? t('telemetry.slower') : t('telemetry.even') }}</em></template><em v-else>{{ t('telemetry.versus') }}</em>
         </p>
-        <LapPicker v-model="refId" name="Riferimento" align="right" color="#fbbf24" :groups="refGroups" :actions="refActions" :disabled="!entries.length" hint="Il giro di riferimento: ambra in grafici e mappa" @action="onLapAction" />
+        <LapPicker v-model="refId" :name="t('telemetry.reference')" align="right" color="#fbbf24" :groups="refGroups" :actions="refActions" :disabled="!entries.length" :hint="t('telemetry.referenceHint')" @action="onLapAction" />
       </div>
       <span v-if="shareMessage" class="bar-note" :class="{ failed: shareState === 'error' }" role="status">{{ shareMessage }}</span>
-      <div v-rc-switch class="rc-switch views-switch" role="tablist" aria-label="Vista dell’analisi">
-        <button v-for="l in LAYOUTS" :key="l.id" type="button" role="tab" :aria-selected="layout === l.id" :class="{ active: layout === l.id }" :title="l.hint" @click="layout = l.id">{{ l.label }}</button>
+      <div v-rc-switch class="rc-switch views-switch" role="tablist" :aria-label="t('telemetry.viewAria')">
+        <button v-for="l in LAYOUTS" :key="l.id" type="button" role="tab" :aria-selected="layout === l.id" :class="{ active: layout === l.id }" :title="t(l.hint)" @click="layout = l.id">{{ t(l.label) }}</button>
       </div>
     </div>
     <p v-if="linkError" class="analysis-note analysis-note--warn" role="alert">{{ linkError }}</p>
     <p v-if="refEntry?.note" class="analysis-note analysis-note--warn">{{ refEntry.note }}</p>
 
-    <p v-if="skipped" class="analysis-note">{{ skipped }} giri non leggibili esclusi.</p>
-    <p v-if="fromArchive && entries.length" class="analysis-note">Nel browser: i tuoi giri validi e completi degli ultimi 30 giorni. Tutti gli altri sono nel programma.</p>
-    <p v-if="loading" class="analysis-empty" role="status">Caricamento dei giri…</p>
+    <p v-if="skipped" class="analysis-note">{{ t('telemetry.skipped', { count: skipped }) }}</p>
+    <p v-if="fromArchive && entries.length" class="analysis-note">{{ t('telemetry.browserNote') }}</p>
+    <p v-if="loading" class="analysis-empty" role="status">{{ t('telemetry.loading') }}</p>
     <p v-else-if="error" class="analysis-empty">{{ error }}</p>
-    <p v-else-if="lapId === refId && entries.length > 1" class="analysis-empty">Scegli un riferimento diverso dal tuo giro per vedere il confronto.</p>
+    <p v-else-if="lapId === refId && entries.length > 1" class="analysis-empty">{{ t('telemetry.sameLap') }}</p>
 
     <!-- SEMPLICE (VRS): the coloured map and the three corners to work on, in plain words,
          with the same frame as Avanzata: it fills the window and each column scrolls on its own. -->
     <div v-if="lap && layout === 'pilota'" ref="traceRoot" class="layout-pilota" :style="{ height: `${traceHeight}px` }">
       <div class="pilota-left">
         <div class="panel">
-          <span v-if="zones.active.value" class="map-legend"><i :style="{ background: ZONE_COLORS.consistency }" />costanza <i :style="{ background: ZONE_COLORS.potential }" />potenziale <i :style="{ background: ZONE_COLORS.mistakes }" />errori</span>
-          <span v-else-if="reference" class="map-legend"><i class="g" />guadagni <i class="r" />perdi <i class="n" />uguale</span>
+          <span v-if="zones.active.value" class="map-legend"><i :style="{ background: ZONE_COLORS.consistency }" />{{ t('telemetry.legend.consistency') }} <i :style="{ background: ZONE_COLORS.potential }" />{{ t('telemetry.legend.potential') }} <i :style="{ background: ZONE_COLORS.mistakes }" />{{ t('telemetry.legend.mistakes') }}</span>
+          <span v-else-if="reference" class="map-legend"><i class="g" />{{ t('telemetry.legend.gain') }} <i class="r" />{{ t('telemetry.legend.loss') }} <i class="n" />{{ t('telemetry.legend.equal') }}</span>
           <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zone-colors="zones.colors.value" zoom-controls :size="440" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>
         <AnalysisCar :lap="lap" :reference="reference" :cursor="cursor" :ref-cursor="refCursor" />
@@ -446,13 +449,13 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
       <div class="pilota-right">
         <SessionZonesCard v-if="zones.active.value" :insight="zones.insight.value" :selected="selectedCorner" :total-laps="zones.totalLaps.value" @select="selectCorner($event)" />
         <section v-else class="side-box">
-          <h4>Dove migliorare</h4>
-          <p v-if="!reference" class="analysis-note">Scegli un riferimento per vedere dove migliorare.</p>
-          <p v-else-if="!worst.length" class="analysis-note">Nessuna curva sotto il riferimento di oltre 3 centesimi.</p>
+          <h4>{{ t('telemetry.improve.title') }}</h4>
+          <p v-if="!reference" class="analysis-note">{{ t('telemetry.improve.pickRef') }}</p>
+          <p v-else-if="!worst.length" class="analysis-note">{{ t('telemetry.improve.none') }}</p>
           <div v-else class="tip-list">
             <button v-for="(c, i) in worst" :key="c.corner.number" type="button" class="tip-row" :class="{ active: selectedCorner === c.corner.number }" @click="selectCorner(c.corner.number)">
               <span class="tip-rank">{{ i + 1 }}</span>
-              <span class="tip-corner">Curva {{ c.corner.number }}</span>
+              <span class="tip-corner">{{ t('telemetry.corner', { n: c.corner.number }) }}</span>
               <span class="tip-gap" :style="{ background: heat(c.timeLostS) }">{{ formatDelta(c.timeLostS) }}</span>
               <span class="tip-text">{{ cornerAdvice(c) }}</span>
             </button>
@@ -468,26 +471,26 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
       <aside class="tracce-left">
         <!-- Who is faster is already in the coloured pickers above: here only where. -->
         <section class="side-box">
-          <h4>Settori</h4>
+          <h4>{{ t('telemetry.sectors') }}</h4>
           <div v-if="sectorGaps.length" class="sector-rows" :class="{ 'has-active': selectedSector !== null && !zoomRange }">
-            <button v-for="(g, i) in sectorGaps" :key="i" type="button" class="sector-row" :class="{ active: selectedSector === i }" :title="`Riferimento ${(g.ref / 1000).toFixed(3)} s · clic per ingrandire`" @click="selectSector(i)">
+            <button v-for="(g, i) in sectorGaps" :key="i" type="button" class="sector-row" :class="{ active: selectedSector === i }" :title="t('telemetry.sectorTitle', { time: (g.ref / 1000).toFixed(3) })" @click="selectSector(i)">
               <span class="sector-name">S{{ i + 1 }}</span>
               <span class="sector-time">{{ (g.ref / 1000).toFixed(3) }}</span>
               <span class="sector-gap" :style="{ background: heat(g.gap / 1000) }">{{ formatDelta(g.gap / 1000) }}</span>
             </button>
           </div>
-          <p v-else class="analysis-note">Tempi dei settori non disponibili per questi giri.</p>
+          <p v-else class="analysis-note">{{ t('telemetry.noSectors') }}</p>
         </section>
         <!-- VRS: corners from the costliest; the first three carry their rank. -->
         <!-- PIP-635: only the list here (Delta, Garage 61): a row selects and zooms; the way back is in the charts' bar. -->
         <section v-if="comparison.length" ref="cornersBox" class="side-box side-box--corners">
           <div class="side-head">
-            <h4>Dove perdi di più</h4>
+            <h4>{{ t('telemetry.lossTitle') }}</h4>
           </div>
           <!-- Column heads as in the Curve table: the rows are corners, the cell the time lost there. -->
-          <div class="corner-row corner-row--head" aria-hidden="true"><span>Curva</span><span>Tempo perso</span></div>
+          <div class="corner-row corner-row--head" aria-hidden="true"><span>{{ t('telemetry.cornerHead') }}</span><span>{{ t('telemetry.timeLost') }}</span></div>
           <div class="corner-list" :class="{ 'has-active': selectedCorner !== null && selectedSector === null && !zoomRange }">
-            <button v-for="c in cornersByLoss" :key="c.corner.number" type="button" class="corner-row" :class="{ active: selectedCorner === c.corner.number }" :title="`Curva ${c.corner.number} · velocità minima ${c.lapMinKmh?.toFixed(0) ?? '--'} / ${c.refMinKmh?.toFixed(0) ?? '--'} km/h (tu / rif.) · ${cornerAdvice(c)}`" @click="selectCorner(c.corner.number)">
+            <button v-for="c in cornersByLoss" :key="c.corner.number" type="button" class="corner-row" :class="{ active: selectedCorner === c.corner.number }" :title="t('telemetry.cornerTitle', { n: c.corner.number, lap: c.lapMinKmh?.toFixed(0) ?? '--', ref: c.refMinKmh?.toFixed(0) ?? '--', advice: cornerAdvice(c) })" @click="selectCorner(c.corner.number)">
               <span class="corner-num">{{ c.corner.number }}</span><span class="corner-cell" :style="{ background: heat(c.timeLostS) }">{{ formatDelta(c.timeLostS) }}</span>
             </button>
           </div>
@@ -508,19 +511,19 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
           <!-- PIP-635 (Garage 61, Delta, MoTeC): one context control on the left (what you are looking at, ‹ › for
                corners, ✕ back to the whole lap, also Esc / double click), the channels on the right. -->
           <div class="strip-head">
-            <span class="strip-context" :class="{ 'is-zoomed': viewLabel !== 'Giro intero' }">
-              <button v-if="selectedCorner !== null && !zoomRange" type="button" class="strip-context__step" aria-label="Curva precedente" title="Curva precedente (←)" @click="goCorner(-1)">‹</button>
+            <span class="strip-context" :class="{ 'is-zoomed': !wholeView }">
+              <button v-if="selectedCorner !== null && !zoomRange" type="button" class="strip-context__step" :aria-label="t('telemetry.prevCorner')" :title="`${t('telemetry.prevCorner')} (←)`" @click="goCorner(-1)">‹</button>
               <strong aria-live="polite">{{ viewLabel }}</strong>
-              <button v-if="selectedCorner !== null && !zoomRange" type="button" class="strip-context__step" aria-label="Curva successiva" title="Curva successiva (→)" @click="goCorner(1)">›</button>
-              <button v-if="viewLabel !== 'Giro intero'" type="button" class="strip-context__close" aria-label="Torna al giro intero" title="Torna al giro intero (anche Esc o doppio clic sul grafico)" @click="wholeLap">✕</button>
+              <button v-if="selectedCorner !== null && !zoomRange" type="button" class="strip-context__step" :aria-label="t('telemetry.nextCorner')" :title="`${t('telemetry.nextCorner')} (→)`" @click="goCorner(1)">›</button>
+              <button v-if="!wholeView" type="button" class="strip-context__close" :aria-label="t('telemetry.backWhole')" :title="t('telemetry.backWholeTitle')" @click="wholeLap">✕</button>
             </span>
-            <button type="button" class="strip-channels" :class="{ active: allChannels }" @click="allChannels = !allChannels">{{ allChannels ? 'Solo l’essenziale' : '+ Altri canali' }}</button>
+            <button type="button" class="strip-channels" :class="{ active: allChannels }" @click="allChannels = !allChannels">{{ allChannels ? t('telemetry.essential') : t('telemetry.moreChannels') }}</button>
           </div>
           <div v-if="sectorList.length" class="strip-row">
-            <button v-for="s in visibleSectors" :key="s.index" type="button" :class="{ active: selectedSector === s.index }" :style="{ left: `${s.left}%`, width: `${s.width}%` }" :title="`Settore ${s.index + 1}: clic per ingrandire, di nuovo per il giro intero`" @click="selectSector(s.index)">S{{ s.index + 1 }}</button>
+            <button v-for="s in visibleSectors" :key="s.index" type="button" :class="{ active: selectedSector === s.index }" :style="{ left: `${s.left}%`, width: `${s.width}%` }" :title="t('telemetry.sectorStripTitle', { n: s.index + 1 })" @click="selectSector(s.index)">S{{ s.index + 1 }}</button>
           </div>
           <div class="strip-row strip-row--corners">
-            <button v-for="c in visibleCorners" :key="c.number" type="button" :class="{ active: selectedCorner === c.number, gain: c.lost <= -0.01, loss: c.lost >= 0.01 }" :style="{ left: `${c.left}%`, width: `${c.width}%` }" :title="`Curva ${c.number}: ${formatDelta(c.lost)} s`" @click="selectCorner(c.number)">{{ c.number }}</button>
+            <button v-for="c in visibleCorners" :key="c.number" type="button" :class="{ active: selectedCorner === c.number, gain: c.lost <= -0.01, loss: c.lost >= 0.01 }" :style="{ left: `${c.left}%`, width: `${c.width}%` }" :title="`${t('telemetry.corner', { n: c.number })}: ${formatDelta(c.lost)} s`" @click="selectCorner(c.number)">{{ c.number }}</button>
           </div>
         </div>
         <AnalysisCharts :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="traceRowHeight" :cursor-tag="cursorCorner" zoomable @hover="cursor = $event" @zoom="onZoom" />

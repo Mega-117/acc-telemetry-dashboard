@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 import { mount } from '@vue/test-utils'
+import { setLocale } from '~/i18n'
 import { describe, expect, it } from 'vitest'
 import SessionDetailPanel from '~/components/session-detail/SessionDetailPanel.vue'
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('Session detail analysis panel', () => {
   it('shows analysis directly without preview modes', () => {

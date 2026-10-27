@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { flushPromises, mount } from '@vue/test-utils'
+import { setLocale } from '~/i18n'
 import { ref } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import PistePage from '~/components/pages/PistePage.vue'
@@ -13,6 +14,9 @@ vi.stubGlobal('useState', (_key: string, init: () => unknown) => ref(init()))
 const row = (id: string, game: string, track: string) => ({ sessionId: id, meta: { gameId: game, track, car: 'Ferrari', date_start: '2026-09-25', session_type: 0 }, summary: { laps: 1 } })
 let wrapper: ReturnType<typeof mount> | undefined
 afterEach(() => { wrapper?.unmount(); vi.clearAllMocks() })
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('Piste racing grid', () => {
   it('discards old-game responses after switching while a load is pending', async () => {

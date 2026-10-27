@@ -5,6 +5,9 @@
 import { computed, ref, useId } from 'vue'
 import { channelAt, formatDelta, type Corner } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
+import { useI18n } from '~/i18n'
+// `tr`: the template already uses `t` for the axis ticks.
+const { t: tr } = useI18n()
 
 export interface ChartChannel { name: string, color?: string, label?: string, scale?: number }
 export interface ChartRow {
@@ -231,8 +234,8 @@ function onDouble() {
       <div class="chart-head">
         <span class="chart-title">{{ chart.row.title }}<em v-if="chart.row.note" class="chart-note" :class="chart.row.noteTone ? `chart-note--${chart.row.noteTone}` : null">{{ chart.row.note }}</em></span>
         <span v-if="headerValues[index]" class="chart-values">
-          <span class="v" :class="'tone' in headerValues[index]! && headerValues[index]!.tone ? `v--${headerValues[index]!.tone}` : 'v--lap'">Tu <b>{{ headerValues[index]!.lap }}</b></span>
-          <span v-if="headerValues[index]!.ref" class="v v--ref">Rif. <b>{{ headerValues[index]!.ref }}</b></span>
+          <span class="v" :class="'tone' in headerValues[index]! && headerValues[index]!.tone ? `v--${headerValues[index]!.tone}` : 'v--lap'">{{ tr('telemetry.you') }} <b>{{ headerValues[index]!.lap }}</b></span>
+          <span v-if="headerValues[index]!.ref" class="v v--ref">{{ tr('telemetry.refShort') }} <b>{{ headerValues[index]!.ref }}</b></span>
           <span v-if="headerValues[index]!.diff" class="v v--diff">Δ <b>{{ headerValues[index]!.diff }}</b></span>
         </span>
       </div>

@@ -9,6 +9,9 @@ import type { BrakePad } from '~/utils/temperatureColor'
 import { liveWheels } from '~/utils/datiWheels'
 import { correctionNote, fuelPerMinute, lapsLeft, wheelCorrection, type CorrectionTone } from '~/utils/boxEngineer'
 import type { FastStateTyre } from '~/types/liveTelemetry'
+import { useI18n, type TranslationKey } from '~/i18n'
+
+const { t } = useI18n()
 
 const live = useFastStatePoller(() => typeof window === 'undefined' ? null : (window as Window & { electronAPI?: unknown }).electronAPI)
 onMounted(() => { void live.startFastStatePolling() })
@@ -21,8 +24,9 @@ const carActive = computed(() => active.value && fs.value.tyres.some(t => typeof
 const wet = computed(() => fs.value.tyreCompound === 'WET')
 const tyre = (id: FastStateTyre['id']) => carActive.value ? fs.value.tyres.find(t => t.id === id) : undefined
 const PADS: BrakePad[] = ['standard', 'endurance', 'wet', 'qualy']
-const PAD_NAMES = ['Standard', 'Endurance', 'Bagnato', 'Qualifica']
-const GRIP: Record<string, string> = { GREEN: 'Verde', FAST: 'Veloce', OPTIMUM: 'Ottimale', GREASY: 'Unta', DAMP: 'Umida', WET: 'Bagnata', FLOODED: 'Allagata' }
+const PAD_NAMES: TranslationKey[] = ['data.pad.standard', 'data.pad.endurance', 'data.pad.wet', 'data.pad.qualy']
+const GRIP: Record<string, TranslationKey> = { GREEN: 'data.grip.green', FAST: 'data.grip.fast', OPTIMUM: 'data.grip.optimum', GREASY: 'data.grip.greasy', DAMP: 'data.grip.damp', WET: 'data.grip.wet', FLOODED: 'data.grip.flooded' }
+const gripName = (grip: string) => { const key = GRIP[grip.toUpperCase()]; return key ? t(key) : grip }
 
 const n = (v: number | null | undefined, digits = 1) => typeof v === 'number' && Number.isFinite(v) ? v.toFixed(digits) : '--'
 const lapTime = (v: number | null | undefined) => typeof v === 'number' && v > 0 ? formatLapTime(v) : '--'
@@ -52,13 +56,13 @@ function pad(id: FastStateTyre['id']) {
 }
 const padNames = computed(() => {
   const front = tyre('FL')?.brakeCompound, rear = tyre('RL')?.brakeCompound
-  const name = (i?: number | null) => typeof i === 'number' ? PAD_NAMES[i] ?? '--' : '--'
+  const name = (i?: number | null) => typeof i === 'number' && PAD_NAMES[i] ? t(PAD_NAMES[i]) : '--'
   return front === rear ? name(front) : `${name(front)} / ${name(rear)}`
 })
 // The correction is the retained plan: it stays visible in the garage, when the live readings are "--".
 const wheels = computed(() => liveWheels(id => ({ ...tyre(id), pad: pad(id), correction: correction(id) }), wet.value))
 const damage = computed(() => fs.value.damage)
-const repair = (ms: number | null | undefined) => typeof ms !== 'number' ? '--' : ms > 0 ? formatLapTime(ms) : 'Nessuno'
+const repair = (ms: number | null | undefined) => typeof ms !== 'number' ? '--' : ms > 0 ? formatLapTime(ms) : t('data.none')
 const pit = computed(() => fs.value.pitPrediction)
 </script>
 
@@ -66,48 +70,48 @@ const pit = computed(() => fs.value.pitPrediction)
   <div class="box">
     <!-- Session strip: where, how long, what the track gives. -->
     <div class="box-strip">
-      <div><span>Pista</span><strong>{{ fs.context?.track ? formatTrackName(fs.context.track) : '--' }}</strong></div>
-      <div><span>Grip</span><strong>{{ info?.grip ? (GRIP[info.grip.toUpperCase()] ?? info.grip) : '--' }}</strong></div>
-      <div title="Tempo che manca alla fine della sessione"><span>Tempo rimasto</span><strong>{{ clock(fs.sessionTimeLeftMs) }}</strong></div>
-      <div title="Giri interi che puoi ancora iniziare, al passo del giro di riferimento"><span>Giri rimasti</span><strong>{{ lapsLeftValue ?? '--' }}</strong></div>
-      <div><span>Giri stint</span><strong>{{ stintLaps ?? '--' }}</strong></div>
+      <div><span>{{ t('sessions.list.track') }}</span><strong>{{ fs.context?.track ? formatTrackName(fs.context.track) : '--' }}</strong></div>
+      <div><span>Grip</span><strong>{{ info?.grip ? gripName(info.grip) : '--' }}</strong></div>
+      <div :title="t('data.box.timeLeftHint')"><span>{{ t('data.box.timeLeft') }}</span><strong>{{ clock(fs.sessionTimeLeftMs) }}</strong></div>
+      <div :title="t('data.box.lapsLeftHint')"><span>{{ t('data.box.lapsLeft') }}</span><strong>{{ lapsLeftValue ?? '--' }}</strong></div>
+      <div><span>{{ t('data.box.stintLaps') }}</span><strong>{{ stintLaps ?? '--' }}</strong></div>
     </div>
-    <p v-if="!active" class="box-wait" role="status">In attesa del simulatore: i dati arrivano quando sei in pista.</p>
-    <p v-else-if="!carActive" class="box-wait" role="status">Auto ai box: i dati dell'auto tornano quando sei in macchina.</p>
+    <p v-if="!active" class="box-wait" role="status">{{ t('data.box.waitSim') }}</p>
+    <p v-else-if="!carActive" class="box-wait" role="status">{{ t('data.box.inPits') }}</p>
 
-    <p class="box-section">Benzina</p>
+    <p class="box-section">{{ t('data.fuel') }}</p>
     <div class="box-grid">
-      <div class="box-cell"><span class="box-label">Serbatoio</span><strong class="box-value">{{ carActive ? `${n(fs.fuelL)} L` : '--' }}</strong></div>
-      <div class="box-cell" title="Consumo al giro stimato da ACC"><span class="box-label">Al giro</span><strong class="box-value">{{ n(fs.fuelPerLapL, 2) }} L</strong></div>
-      <div class="box-cell" title="Consumo al giro diviso il giro di riferimento"><span class="box-label">Al minuto</span><strong class="box-value">{{ n(fuelPerMin, 2) }} L</strong></div>
-      <div class="box-cell" title="Per quanto basta la benzina che hai"><span class="box-label">Autonomia</span><strong class="box-value">{{ clock(info?.fuelLeftTimeMs ?? fs.fuelLeftTimeMs) }} · {{ n(fs.fuelLapsRemaining) }} giri</strong></div>
-      <div class="box-cell" title="Benzina per lo stint o da aggiungere ai box, come l'Info HUD"><span class="box-label">{{ info?.fuelLabel || 'Benzina stint' }}</span><strong class="box-value">{{ n(info?.fuelNeededL) }} L</strong></div>
+      <div class="box-cell"><span class="box-label">{{ t('data.box.tank') }}</span><strong class="box-value">{{ carActive ? `${n(fs.fuelL)} L` : '--' }}</strong></div>
+      <div class="box-cell" :title="t('data.box.perLapHint')"><span class="box-label">{{ t('data.box.perLap') }}</span><strong class="box-value">{{ n(fs.fuelPerLapL, 2) }} L</strong></div>
+      <div class="box-cell" :title="t('data.box.perMinHint')"><span class="box-label">{{ t('data.box.perMin') }}</span><strong class="box-value">{{ n(fuelPerMin, 2) }} L</strong></div>
+      <div class="box-cell" :title="t('data.box.rangeHint')"><span class="box-label">{{ t('data.box.range') }}</span><strong class="box-value">{{ clock(info?.fuelLeftTimeMs ?? fs.fuelLeftTimeMs) }} · {{ n(fs.fuelLapsRemaining) }} {{ t('sessions.list.lapsUnit') }}</strong></div>
+      <div class="box-cell" :title="t('data.box.stintFuelHint')"><span class="box-label">{{ info?.fuelLabel || t('data.box.stintFuel') }}</span><strong class="box-value">{{ n(info?.fuelNeededL) }} L</strong></div>
     </div>
 
-    <p class="box-section">Ruote <small v-if="note">· {{ note }}</small></p>
+    <p class="box-section">{{ t('data.wheels') }} <small v-if="note">· {{ note }}</small></p>
     <DatiWheelBoard :wheels="wheels" />
 
-    <p class="box-section">Auto</p>
+    <p class="box-section">{{ t('telemetry.car.title') }}</p>
     <div class="box-grid box-grid--auto">
-      <div class="box-cell"><span class="box-label">Gomme</span><strong class="box-value">{{ fs.tyreCompound === 'WET' ? 'Bagnato' : fs.tyreCompound === 'DRY' ? 'Asciutto' : '--' }} · set {{ fs.currentTyreSet ?? '--' }}</strong></div>
-      <div class="box-cell"><span class="box-label">Pastiglie</span><strong class="box-value">{{ padNames }}</strong></div>
-      <div class="box-cell" title="Tempo di riparazione ai box">
-        <span class="box-label">Danni</span>
+      <div class="box-cell"><span class="box-label">{{ t('data.tyres') }}</span><strong class="box-value">{{ fs.tyreCompound === 'WET' ? t('data.wet') : fs.tyreCompound === 'DRY' ? t('data.dry') : '--' }} · set {{ fs.currentTyreSet ?? '--' }}</strong></div>
+      <div class="box-cell"><span class="box-label">{{ t('data.pads') }}</span><strong class="box-value">{{ padNames }}</strong></div>
+      <div class="box-cell" :title="t('data.box.repairHint')">
+        <span class="box-label">{{ t('data.damage') }}</span>
         <dl class="box-list">
-          <div><dt>Carrozzeria</dt><dd>{{ repair(damage?.body.repairTimeMs) }}</dd></div>
-          <div><dt>Sospensioni</dt><dd>{{ repair(damage?.suspension.repairTimeMs) }}</dd></div>
-          <div><dt>Totale</dt><dd>{{ repair(damage?.totalRepairTimeMs) }}</dd></div>
+          <div><dt>{{ t('data.bodyCap') }}</dt><dd>{{ repair(damage?.body.repairTimeMs) }}</dd></div>
+          <div><dt>{{ t('data.suspensionCap') }}</dt><dd>{{ repair(damage?.suspension.repairTimeMs) }}</dd></div>
+          <div><dt>{{ t('data.box.total') }}</dt><dd>{{ repair(damage?.totalRepairTimeMs) }}</dd></div>
         </dl>
       </div>
     </div>
 
-    <p class="box-section">Tempi</p>
+    <p class="box-section">{{ t('data.box.times') }}</p>
     <div class="box-grid">
-      <div class="box-cell"><span class="box-label">Ultimo</span><strong class="box-value" :class="{ invalid: info?.lastLapValid === false }">{{ lapTime(info?.lastLapTimeMs ?? fs.lastLapTimeMs) }}</strong></div>
-      <div class="box-cell" title="Il tuo migliore della sessione"><span class="box-label">Migliore</span><strong class="box-value best">{{ lapTime(info?.bestLapTimeMs ?? fs.bestLapTimeMs) }}</strong></div>
-      <div class="box-cell" title="Somma dei tuoi migliori settori"><span class="box-label">Ottimale</span><strong class="box-value">{{ lapTime(info?.optimalLapTimeMs) }}</strong></div>
-      <div class="box-cell" title="Il giro usato per i calcoli della benzina"><span class="box-label">Riferimento</span><strong class="box-value">{{ lapTime(reference) }}</strong></div>
-      <div class="box-cell" title="Tempo perso per una sosta ai box (corsia + fermata)"><span class="box-label">Sosta ai box</span><strong class="box-value">{{ pit?.available && typeof pit.pitTimeS === 'number' ? `${pit.pitTimeS.toFixed(1)} s` : '--' }}</strong></div>
+      <div class="box-cell"><span class="box-label">{{ t('data.box.last') }}</span><strong class="box-value" :class="{ invalid: info?.lastLapValid === false }">{{ lapTime(info?.lastLapTimeMs ?? fs.lastLapTimeMs) }}</strong></div>
+      <div class="box-cell" :title="t('data.box.bestHint')"><span class="box-label">{{ t('sessions.common.best') }}</span><strong class="box-value best">{{ lapTime(info?.bestLapTimeMs ?? fs.bestLapTimeMs) }}</strong></div>
+      <div class="box-cell" :title="t('data.box.optimalHint')"><span class="box-label">{{ t('data.optimal') }}</span><strong class="box-value">{{ lapTime(info?.optimalLapTimeMs) }}</strong></div>
+      <div class="box-cell" :title="t('data.box.referenceHint')"><span class="box-label">{{ t('telemetry.reference') }}</span><strong class="box-value">{{ lapTime(reference) }}</strong></div>
+      <div class="box-cell" :title="t('data.box.pitHint')"><span class="box-label">{{ t('data.box.pit') }}</span><strong class="box-value">{{ pit?.available && typeof pit.pitTimeS === 'number' ? `${pit.pitTimeS.toFixed(1)} s` : '--' }}</strong></div>
     </div>
   </div>
 </template>

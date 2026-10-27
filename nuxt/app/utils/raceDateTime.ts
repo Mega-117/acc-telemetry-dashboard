@@ -5,6 +5,8 @@ export interface RaceDay { year: number, month: number, day: number }
 export interface RaceDateTime extends RaceDay { hour: number, minute: number }
 export interface RaceDayCell extends RaceDay { inMonth: boolean }
 
+import { useI18n } from '~/i18n'
+
 const pad = (value: number) => String(value).padStart(2, '0')
 
 export function parseRaceDateTime(value: string | null | undefined): RaceDateTime | null {
@@ -40,15 +42,20 @@ export function monthCells(year: number, month: number): RaceDayCell[] {
 }
 
 export const RACE_WEEKDAYS = ['L', 'M', 'M', 'G', 'V', 'S', 'D'] as const
+/** Monday-first initials in the interface language (Italian keeps RACE_WEEKDAYS). */
+export function raceWeekdays(): readonly string[] {
+  const { locale, t } = useI18n()
+  return locale.value === 'it' ? RACE_WEEKDAYS : t('overview.picker.weekdays').split(',')
+}
 
 export function monthLabel(year: number, month: number): string {
-  const label = new Intl.DateTimeFormat('it-IT', { month: 'long', year: 'numeric' }).format(new Date(year, month, 1))
+  const label = new Intl.DateTimeFormat(useI18n().intlLocale.value, { month: 'long', year: 'numeric' }).format(new Date(year, month, 1))
   return label.charAt(0).toUpperCase() + label.slice(1)
 }
 
 // "Mer 28 ott 2026 · 20:50"
 export function displayRaceDateTime(value: RaceDateTime): string {
-  const day = new Intl.DateTimeFormat('it-IT', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
+  const day = new Intl.DateTimeFormat(useI18n().intlLocale.value, { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
     .format(new Date(value.year, value.month, value.day))
   return `${day.charAt(0).toUpperCase()}${day.slice(1)} · ${pad(value.hour)}:${pad(value.minute)}`
 }

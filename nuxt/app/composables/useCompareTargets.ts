@@ -3,7 +3,7 @@ import { electronLapSource, pilotLapSource, type LocalLapBridge } from '~/servic
 import type { LapsArchiveDeps } from '~/services/telemetry/lapsArchiveClient'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { loadSharedLapLink, type SharedLapLoaded } from '~/services/telemetry/sharedLapLoad'
-import { CAR_MISMATCH_NOTE, type Entry, type useReferenceLibrary } from './useReferenceLibrary'
+import { carMismatchNote, type Entry, type useReferenceLibrary } from './useReferenceLibrary'
 
 export interface CompareTarget { ownerUid: string, sessionToken: string, sharedSessionId: string | null, label: string }
 
@@ -34,7 +34,7 @@ export function useCompareTargets(o: {
     o.traces.value = { ...o.traces.value, [shared.id]: shared.trace }
     o.entries.value = [...o.entries.value.filter(e => e.origin !== 'shared'), {
       id: shared.id, lapNumber: shared.lapNumber, lapTimeMs: shared.lapTimeMs, valid: true, complete: shared.trace.complete,
-      origin: 'shared', sessionToken: '', label: shared.label, note: shared.carMismatch ? CAR_MISMATCH_NOTE : undefined,
+      origin: 'shared', sessionToken: '', label: shared.label, note: shared.carMismatch ? carMismatchNote() : undefined,
     }]
     o.refId.value = shared.id
   }

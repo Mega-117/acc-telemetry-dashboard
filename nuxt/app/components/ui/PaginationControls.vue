@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from '~/i18n'
 // ============================================
 // PaginationControls - Reusable pagination component
 // ============================================
 
+const { t } = useI18n()
 const props = defineProps<{
   currentPage: number
   totalPages: number
@@ -70,12 +72,12 @@ async function nextPage() {
     :class="{ 'pagination--racing': variant === 'racing' }"
   >
     <span class="pagination-info">
-      {{ totalItems }} {{ itemLabel || 'elementi' }} · Pagina {{ currentPage }} di {{ totalPages }}
+      {{ totalItems }} {{ itemLabel || t('common.pager.items') }} · {{ t('common.pager.pageOf', { page: currentPage, total: totalPages }) }}
     </span>
     <div class="pagination-controls">
       <button 
         class="pagination-btn"
-        aria-label="Pagina precedente"
+        :aria-label="t('common.pager.prev')"
         :disabled="disabled || currentPage === 1"
         @click="prevPage"
       >
@@ -93,7 +95,7 @@ async function nextPage() {
           v-for="page in visiblePages"
           :key="page"
           :class="['page-btn', { 'page-btn--active': page === currentPage, 'pagination-gap': typeof page === 'string' }]"
-          :aria-label="typeof page === 'number' ? `Pagina ${page}` : 'Pagine intermedie'"
+          :aria-label="typeof page === 'number' ? t('common.pager.page', { page }) : t('common.pager.gap')"
           :aria-current="page === currentPage ? 'page' : undefined"
           :disabled="disabled || typeof page === 'string'"
           @click="typeof page === 'number' && goToPage(page)"
@@ -103,7 +105,7 @@ async function nextPage() {
       </div>
       <button 
         class="pagination-btn"
-        aria-label="Pagina successiva"
+        :aria-label="t('common.pager.next')"
         :disabled="disabled || currentPage === totalPages"
         @click="nextPage"
       >

@@ -6,6 +6,8 @@
 
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { ChartColumnIncreasing } from '@lucide/vue'
+import { useI18n } from '~/i18n'
+import { parseTelemetryDate } from '~/utils/telemetryFormat'
 
 // Types
 type DayData = {
@@ -29,6 +31,12 @@ const props = defineProps<{
   statsLink?: boolean
 }>()
 const emit = defineEmits<{ 'open-stats': [] }>()
+const { t, locale, intlLocale } = useI18n()
+// PIP-665: day names come stored in Italian with the projection; other languages rebuild them from the date.
+const dayName = (day: DayData) => {
+  const date = locale.value === 'it' || !day.date ? null : parseTelemetryDate(`${day.date}T12:00`)
+  return date ? date.toLocaleDateString(intlLocale.value, { weekday: 'short' }) : day.day
+}
 
 // Animation state
 const isAnimated = ref(false)
@@ -72,7 +80,7 @@ const practiceSummary = computed(() => props.practiceTotal || { minutes: 137, se
 const qualifySummary = computed(() => props.qualifyTotal || { minutes: 23, sessions: 3 })
 const raceSummary = computed(() => props.raceTotal || { minutes: 133, sessions: 2 })
 
-const formatSession = (count: number) => count === 1 ? 'sess.' : 'sess.'
+const formatSession = (_count: number) => t('overview.activity.sessionsShort')
 
 // Format duration: if >= 60min, show as "Xh" or "XhYY", else show as minutes
 const formatDuration = (minutes: number): { value: string; unit: string } => {
@@ -104,9 +112,9 @@ const formatYLabel = (minutes: number): string => {
   <div class="activity-card" :class="{ 'activity-card--racing': racing }">
     <!-- Title -->
     <div class="card-head">
-      <h2 class="card-title">{{ racing ? 'Attività · ultimi 7 giorni' : 'Attività (ultimi 7 giorni)' }}</h2>
-      <button v-if="statsLink" type="button" class="rc-btn rc-btn--compact stats-link" title="Apri le statistiche complete" @click="emit('open-stats')">
-        <ChartColumnIncreasing :size="18" :stroke-width="1.8" aria-hidden="true" /><span>Statistiche</span><UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" />
+      <h2 class="card-title">{{ racing ? t('overview.activity.titleRacing') : t('overview.activity.title') }}</h2>
+      <button v-if="statsLink" type="button" class="rc-btn rc-btn--compact stats-link" :title="t('overview.activity.openStats')" @click="emit('open-stats')">
+        <ChartColumnIncreasing :size="18" :stroke-width="1.8" aria-hidden="true" /><span>{{ t('overview.activity.stats') }}</span><UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" />
       </button>
     </div>
 
@@ -166,7 +174,7 @@ const formatYLabel = (minutes: number): string => {
             </div>
             <!-- Day label -->
             <span class="day-label">
-              <span>{{ day.day }}</span>
+              <span>{{ dayName(day) }}</span>
               <small v-if="day.dateLabel">{{ day.dateLabel }}</small>
             </span>
           </div>
@@ -178,7 +186,7 @@ const formatYLabel = (minutes: number): string => {
         <div class="legend-item legend-item--practice">
           <span class="legend-dot"></span>
           <div class="legend-text">
-            <span class="legend-label">PROVE LIBERE</span>
+            <span class="legend-label">{{ t('overview.activity.practice') }}</span>
             <span class="legend-value">{{ formatDuration(practiceSummary.minutes).value }}<small>{{ formatDuration(practiceSummary.minutes).unit }}</small></span>
             <span class="legend-sessions">{{ practiceSummary.sessions }} {{ formatSession(practiceSummary.sessions) }}</span>
           </div>
@@ -187,7 +195,7 @@ const formatYLabel = (minutes: number): string => {
         <div class="legend-item legend-item--qualify">
           <span class="legend-dot"></span>
           <div class="legend-text">
-            <span class="legend-label">QUALIFICA</span>
+            <span class="legend-label">{{ t('overview.activity.qualify') }}</span>
             <span class="legend-value">{{ formatDuration(qualifySummary.minutes).value }}<small>{{ formatDuration(qualifySummary.minutes).unit }}</small></span>
             <span class="legend-sessions">{{ qualifySummary.sessions }} {{ formatSession(qualifySummary.sessions) }}</span>
           </div>
@@ -196,7 +204,7 @@ const formatYLabel = (minutes: number): string => {
         <div class="legend-item legend-item--race">
           <span class="legend-dot"></span>
           <div class="legend-text">
-            <span class="legend-label">GARA</span>
+            <span class="legend-label">{{ t('overview.activity.race') }}</span>
             <span class="legend-value">{{ formatDuration(raceSummary.minutes).value }}<small>{{ formatDuration(raceSummary.minutes).unit }}</small></span>
             <span class="legend-sessions">{{ raceSummary.sessions }} {{ formatSession(raceSummary.sessions) }}</span>
           </div>
@@ -204,7 +212,7 @@ const formatYLabel = (minutes: number): string => {
       </div>
     </div>
 
-    <p v-if="otherTotal?.sessions" class="other-activity"><span></span>Altre sessioni · {{ formatYLabel(otherTotal.minutes) }} · {{ otherTotal.sessions }} sess.</p>
+    <p v-if="otherTotal?.sessions" class="other-activity"><span></span>{{ t('overview.activity.other') }} · {{ formatYLabel(otherTotal.minutes) }} · {{ otherTotal.sessions }} {{ t('overview.activity.sessionsShort') }}</p>
 
     <!-- Accent glow -->
     <div class="accent-glow"></div>

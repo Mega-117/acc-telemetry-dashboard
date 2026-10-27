@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { mount, flushPromises } from '@vue/test-utils'
+import { setLocale } from '~/i18n'
 import { ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Calendar from '~/components/overview/UpcomingRacesCard.vue'
@@ -13,6 +14,9 @@ vi.mock('~/composables/useRuntimeCapabilityGate', () => ({ useRuntimeCapabilityG
 vi.mock('~/repositories/raceCalendarRepository', () => ({ loadRaceCalendarEvents: mocks.load, loadUpcomingRaceCalendarEvents: mocks.load, createRaceCalendarEvent: mocks.create, updateRaceCalendarEvent: mocks.update, deleteRaceCalendarEvent: mocks.remove }))
 const event = { id: 'event', title: 'Gara QA', startsAt: '2099-10-01T19:00', trackName: 'Monza', carName: 'Ferrari' }
 beforeEach(() => { vi.clearAllMocks(); mocks.load.mockResolvedValue([event]) })
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('racing overview components', () => {
   it('shows a prepared calendar immediately and reloads on owner change', async () => {

@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
+import { setLocale } from '~/i18n'
 import { mount } from '@vue/test-utils'
 import { canShareOwnedSession } from '~/services/session-detail/sessionFileService'
 import SessionFileActions from '~/components/session-detail/SessionFileActions.vue'
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('session file actions', () => {
   it('allows sharing only the signed-in owner, including an explicit self link', () => {

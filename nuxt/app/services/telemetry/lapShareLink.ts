@@ -2,6 +2,8 @@
 // browser non manda mai a nessun server: chi riceve incolla il link nella Telemetria di una sua
 // sessione. Stessa base del sito pubblico usata dal programma (desktop-app/runtime/lapShare.js).
 
+import { useI18n } from '~/i18n'
+
 export const LAP_SHARE_LINK_BASE = 'https://mega-117.github.io/acc-telemetry-dashboard/docs/giro'
 
 export interface LapShareRef { shareId: string, key: string }
@@ -25,9 +27,10 @@ export function parseLapShareLink(text: unknown): LapShareRef | null {
 /** Messaggio per l'interfaccia da un errore della condivisione (Electron lo avvolge: si cerca il codice). */
 export function lapShareErrorMessage(error: unknown): string {
   const text = String((error as Error)?.message || error)
-  if (text.includes('archive-paused')) return 'Archivio giri in pausa: riprova più tardi.'
-  if (text.includes('share-daily-cap')) return 'Hai raggiunto le condivisioni di oggi.'
-  if (text.includes('auth-required') || text.includes('owner-changed') || text.includes('token-unavailable')) return 'Accedi di nuovo per condividere.'
-  if (text.includes('archive-disabled')) return 'Condivisione non disponibile in questa versione.'
-  return 'Condivisione non riuscita: riprova.'
+  const { t } = useI18n()
+  if (text.includes('archive-paused')) return t('telemetry.archive.paused')
+  if (text.includes('share-daily-cap')) return t('telemetry.share.dailyCap')
+  if (text.includes('auth-required') || text.includes('owner-changed') || text.includes('token-unavailable')) return t('telemetry.share.signInAgain')
+  if (text.includes('archive-disabled')) return t('telemetry.share.disabled')
+  return t('telemetry.share.failed')
 }

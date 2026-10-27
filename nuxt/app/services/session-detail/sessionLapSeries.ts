@@ -5,6 +5,7 @@ import type {
   NormalizedLapPoint,
   SessionDetailLap
 } from '~/types/sessionDetailViewModel'
+import { useI18n } from '~/i18n'
 
 export type { LapSeriesSource, LapSeriesSummary, NormalizedLapPoint } from '~/types/sessionDetailViewModel'
 
@@ -150,16 +151,18 @@ export function buildIncludedLapSummary(
 
 export function buildLapTooltipTitle(point: NormalizedLapPoint | null | undefined): string {
   if (!point) return ''
-  return `Strategia ${point.strategy} · Stint #${point.stintNumber} · Giro ${point.sessionLapNumber}`
+  const { t } = useI18n()
+  return `${t('sessionDetail.chart.strategy', { side: point.strategy })} · Stint #${point.stintNumber} · ${t('sessionDetail.chart.lap', { lap: point.sessionLapNumber })}`
 }
 
 export function buildLapTooltipLines(point: NormalizedLapPoint | null | undefined): string[] {
   if (!point) return []
   const state = point.pit ? 'PIT' : point.valid ? 'OK' : 'INV'
+  const { t } = useI18n()
   return [
-    `Giro stint: ${point.stintLapNumber}`,
-    `Tempo: ${point.time || '—'}`,
-    `Stato: ${state}`,
+    `${t('sessionDetail.tooltip.stintLap')}: ${point.stintLapNumber}`,
+    `${t('sessionDetail.tooltip.time')}: ${point.time || '—'}`,
+    `${t('sessionDetail.tooltip.state')}: ${state}`,
     `Fuel: ${point.fuel == null ? '—' : `${point.fuel}L`}`,
     `Air: ${point.air == null ? '—' : `${Math.round(point.air)}°C`}`,
     `Grip: ${point.grip}`

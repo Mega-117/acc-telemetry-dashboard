@@ -17,9 +17,11 @@ import { historyOptions, type HistoryFilter } from '~/services/projections/vehic
 import type { SessionDocument } from '~/types/telemetry'
 import GameContextTransition from '~/components/layout/GameContextTransition.vue'
 import TrackImagePlaceholder from '~/components/cards/TrackImagePlaceholder.vue'
+import { useI18n } from '~/i18n'
 const { consultedGame } = useGameContext()
 
 const { getPublicPath } = usePublicPath()
+const { t, intlLocale } = useI18n()
 
 type TrackDisplay = TrackOverviewProjectionItem
 
@@ -79,8 +81,10 @@ onBeforeUnmount(() => {
 })
 
 function formatDateDisplay(dateStr?: string): string {
-  if (!dateStr) return 'Nessuna sessione'
+  if (!dateStr) return t('tracks.noSession')
   const date = new Date(dateStr)
+  // Italian keeps its own short months; other languages use the browser's.
+  if (intlLocale.value !== 'it-IT' && !Number.isNaN(date.getTime())) return date.toLocaleDateString(intlLocale.value, { day: 'numeric', month: 'short', year: 'numeric' })
   const day = date.getDate()
   const months = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic']
   const month = months[date.getMonth()]
@@ -95,18 +99,18 @@ function goToTrack(id: string) {
 <template>
   <LayoutPageContainer>
     <GameContextTransition :game-id="consultedGame" :busy="loading">
-    <p v-if="failed" role="alert">Impossibile caricare le piste. <button @click="loadTracks">Riprova</button></p>
-    <p v-else-if="!loading && !sortedTracks.length">Nessuna pista registrata per questo gioco.</p>
+    <p v-if="failed" role="alert">{{ t('tracks.loadError') }} <button @click="loadTracks">{{ t('common.retry') }}</button></p>
+    <p v-else-if="!loading && !sortedTracks.length">{{ t('tracks.empty') }}</p>
     <div class="history-filters">
-      <label v-if="consultedGame === 'acc'">Categoria
-        <select :value="filter.category || ''" @change="changeFilter('category', $event)"><option value="">Tutte le categorie</option><option v-for="category in options.categories" :key="category" :value="category">{{ category }}</option></select>
+      <label v-if="consultedGame === 'acc'">{{ t('tracks.category') }}
+        <select :value="filter.category || ''" @change="changeFilter('category', $event)"><option value="">{{ t('sessions.filters.allCategories') }}</option><option v-for="category in options.categories" :key="category" :value="category">{{ category }}</option></select>
       </label>
-      <label>Vettura
-        <select :value="filter.car || ''" @change="changeFilter('car', $event)"><option value="">Tutte le vetture</option><option v-for="car in cars" :key="car" :value="car">{{ formatCarName(car) }}</option></select>
+      <label>{{ t('overview.races.car') }}
+        <select :value="filter.car || ''" @change="changeFilter('car', $event)"><option value="">{{ t('tracks.allCars') }}</option><option v-for="car in cars" :key="car" :value="car">{{ formatCarName(car) }}</option></select>
       </label>
     </div>
     <p class="page-subtitle">
-      {{ sortedTracks.filter(t => t.sessions > 0).length }} piste visitate su {{ sortedTracks.length }} totali
+      {{ t('tracks.visited', { count: sortedTracks.filter(track => track.sessions > 0).length, total: sortedTracks.length }) }}
     </p>
     <div class="tracks-grid">
       <a
@@ -115,7 +119,7 @@ function goToTrack(id: string) {
         :href="getPublicPath(`/piste/${encodeURIComponent(track.id)}`)"
         class="track-card"
         :class="{ 'track-card--unplayed': track.sessions === 0 }"
-        :aria-label="`Dettaglio pista ${track.name}`"
+        :aria-label="t('tracks.cardAria', { track: track.name })"
         @click.prevent="goToTrack(track.id)"
       >
         <div class="track-card__surface">
@@ -133,23 +137,23 @@ function goToTrack(id: string) {
           <div class="card-content">
             <h2 class="track-name">{{ track.name }}</h2>
             <div class="track-stats">
-              <span>{{ track.sessions }} {{ track.sessions === 1 ? 'sessione' : 'sessioni' }}</span>
-              <template v-if="track.lastSession"><span aria-hidden="true">·</span><span :title="`Ultima sessione: ${formatDateDisplay(track.lastSession)}`">{{ formatDateDisplay(track.lastSession) }}</span></template>
+              <span>{{ track.sessions }} {{ track.sessions === 1 ? t('stats.session') : t('stats.sessions') }}</span>
+              <template v-if="track.lastSession"><span aria-hidden="true">·</span><span :title="`${t('overview.lastSession')}: ${formatDateDisplay(track.lastSession)}`">{{ formatDateDisplay(track.lastSession) }}</span></template>
             </div>
             <div class="track-times">
               <span
                 class="time-badge time-badge--qualy"
                 :class="{ 'time-badge--empty': !track.bestQualy }"
-                :aria-label="`Qualifica ${track.bestQualy || 'non disponibile'}`"
+                :aria-label="`${t('overview.columns.qualify')} ${track.bestQualy || t('tracks.na')}`"
               >{{ track.bestQualy || '—:—.---' }}</span>
               <span
                 class="time-badge time-badge--race"
                 :class="{ 'time-badge--empty': !track.bestRace }"
-                :aria-label="`Gara ${track.bestRace || 'non disponibile'}`"
+                :aria-label="`${t('overview.columns.race')} ${track.bestRace || t('tracks.na')}`"
               >{{ track.bestRace || '—:—.---' }}</span>
             </div>
-            <p v-if="track.bestQualyCar" class="track-reference">Q · {{ formatCarName(track.bestQualyCar) }}</p>
-            <p v-if="track.bestRaceCar" class="track-reference">G · {{ formatCarName(track.bestRaceCar) }}</p>
+            <p v-if="track.bestQualyCar" class="track-reference">{{ t('sessions.list.qualifyAbbr') }} · {{ formatCarName(track.bestQualyCar) }}</p>
+            <p v-if="track.bestRaceCar" class="track-reference">{{ t('sessions.list.raceAbbr') }} · {{ formatCarName(track.bestRaceCar) }}</p>
           </div>
         </div>
       </a>

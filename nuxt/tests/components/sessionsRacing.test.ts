@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { mount, flushPromises } from '@vue/test-utils'
+import { setLocale } from '~/i18n'
 import { ref, nextTick } from 'vue'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import SessioniPage from '~/components/pages/SessioniPage.vue'
@@ -39,6 +40,9 @@ beforeEach(() => {
   HTMLElement.prototype.scrollTo = vi.fn()
 })
 afterEach(() => { disposeScrollbars(); wrappers.splice(0).forEach(w => w.unmount()); vi.useRealTimers(); vi.unstubAllGlobals() })
+
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
 
 describe('Sessioni racing single table', () => {
   it('keeps named common qualifications visible and unknown kinds out of the filter', async () => {

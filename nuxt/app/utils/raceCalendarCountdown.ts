@@ -1,3 +1,5 @@
+import { useI18n } from '~/i18n'
+
 const DAY_MS = 86_400_000
 
 export interface RaceCalendarCountdown {
@@ -25,15 +27,16 @@ export function getRaceCalendarCountdown(
     0,
     Math.round((localDateSerial(eventDate) - localDateSerial(now)) / DAY_MS),
   )
+  const { t } = useI18n()
 
   if (days === 0) {
     return {
       days,
-      value: 'Oggi',
+      value: t('overview.countdown.today'),
       unit: '',
-      leadingLabel: 'La gara è',
+      leadingLabel: t('overview.countdown.todayLead'),
       trailingLabel: '',
-      ariaLabel: 'La prossima gara è oggi',
+      ariaLabel: t('overview.countdown.todayAria'),
     }
   }
 
@@ -41,19 +44,19 @@ export function getRaceCalendarCountdown(
     return {
       days,
       value: '1',
-      unit: 'giorno',
-      leadingLabel: 'Manca',
-      trailingLabel: 'alla gara',
-      ariaLabel: 'Manca 1 giorno alla prossima gara',
+      unit: t('overview.countdown.day'),
+      leadingLabel: t('overview.countdown.oneLead'),
+      trailingLabel: t('overview.countdown.trailing'),
+      ariaLabel: t('overview.countdown.oneAria'),
     }
   }
 
   return {
     days,
     value: String(days),
-    unit: 'giorni',
-    leadingLabel: 'Mancano',
-    trailingLabel: 'alla gara',
-    ariaLabel: `Mancano ${days} giorni alla prossima gara`,
+    unit: t('overview.countdown.days'),
+    leadingLabel: t('overview.countdown.manyLead'),
+    trailingLabel: t('overview.countdown.trailing'),
+    ariaLabel: t('overview.countdown.manyAria', { days }),
   }
 }

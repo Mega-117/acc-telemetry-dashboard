@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { nextTick, ref } from 'vue'
 import { useCompareTargets, type CompareTarget } from '~/composables/useCompareTargets'
-import { useReferenceLibrary, CAR_MISMATCH_NOTE, type Entry } from '~/composables/useReferenceLibrary'
+import { useReferenceLibrary, carMismatchNote, type Entry } from '~/composables/useReferenceLibrary'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
 vi.mock('~/services/telemetry/sharedLapLoad', () => ({
@@ -32,7 +32,7 @@ describe('useCompareTargets (PIP-652)', () => {
     await flush()
     expect(s.handled).toHaveBeenCalled()
     expect(s.refId.value).toBe('shared:x')
-    expect(s.entries.value.find(e => e.id === 'shared:x')?.note).toBe(CAR_MISMATCH_NOTE)
+    expect(s.entries.value.find(e => e.id === 'shared:x')?.note).toBe(carMismatchNote())
     s.link.value = 'https://x/giro#bad'
     await flush()
     expect(s.linkError.value).toContain('Monza')

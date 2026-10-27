@@ -5,8 +5,10 @@ import { Trophy } from '@lucide/vue'
 import { personalRecords, shortDate, type RecordTime } from '~/utils/statsJourney'
 import type { SessionDocument } from '~/types/telemetry'
 import { formatCarName, formatLapTime, formatTrackName } from '~/utils/telemetryFormat'
+import { useI18n } from '~/i18n'
 
 const props = defineProps<{ sessions: SessionDocument[], nowMs: number }>()
+const { t } = useI18n()
 const records = computed(() => personalRecords(props.sessions, props.nowMs))
 const showAll = ref(false)
 const VISIBLE = 6
@@ -14,28 +16,28 @@ const visible = computed(() => (showAll.value ? records.value : records.value.sl
 const when = (t: RecordTime | null) => (t ? shortDate(t.date, true) : '')
 // Stessi nomi e colori del dettaglio pista: qualifica gialla, gara rossa, media gara azzurra.
 const kinds = [
-  { id: 'qualy', label: 'Best qualifica', cls: 'k-qualy' },
-  { id: 'race', label: 'Best gara', cls: 'k-race' },
-  { id: 'avgRace', label: 'Best media gara', cls: 'k-avg' },
+  { id: 'qualy', label: 'stats.best.qualy', cls: 'k-qualy' },
+  { id: 'race', label: 'stats.best.race', cls: 'k-race' },
+  { id: 'avgRace', label: 'stats.best.avgRace', cls: 'k-avg' },
 ] as const
 </script>
 
 <template>
   <section class="records" aria-labelledby="stats-records">
     <div class="records__head">
-      <h2 id="stats-records">Record personali</h2>
-      <span class="records__note">Di sempre, per pista e auto</span>
+      <h2 id="stats-records">{{ t('stats.records.title') }}</h2>
+      <span class="records__note">{{ t('stats.records.note') }}</span>
     </div>
-    <p v-if="!records.length" class="records__empty">I record compaiono dopo le prime sessioni con giri validi.</p>
+    <p v-if="!records.length" class="records__empty">{{ t('stats.records.empty') }}</p>
     <ul class="records__grid">
       <li v-for="r in visible" :key="r.key" class="record">
         <div class="record__title">
-          <div><strong>{{ formatTrackName(r.track) }}</strong><small>{{ formatCarName(r.car) }} · {{ r.sessions }} {{ r.sessions === 1 ? 'sessione' : 'sessioni' }}</small></div>
-          <span v-if="r.isNew" class="record__new"><Trophy :size="14" aria-hidden="true" />Nuovo!</span>
+          <div><strong>{{ formatTrackName(r.track) }}</strong><small>{{ formatCarName(r.car) }} · {{ r.sessions }} {{ r.sessions === 1 ? t('stats.session') : t('stats.sessions') }}</small></div>
+          <span v-if="r.isNew" class="record__new"><Trophy :size="14" aria-hidden="true" />{{ t('stats.records.new') }}</span>
         </div>
         <dl class="record__times">
           <div v-for="k in kinds" :key="k.id" :class="k.cls">
-            <dt>{{ k.label }}</dt>
+            <dt>{{ t(k.label) }}</dt>
             <dd>{{ formatLapTime(r[k.id]?.ms ?? null) }}</dd>
             <dd class="record__when">{{ when(r[k.id]) }}</dd>
           </div>
@@ -43,7 +45,7 @@ const kinds = [
       </li>
     </ul>
     <button v-if="records.length > VISIBLE" type="button" class="records__more" @click="showAll = !showAll">
-      {{ showAll ? 'Mostra meno' : `Mostra tutte (${records.length})` }}
+      {{ showAll ? t('stats.records.less') : t('stats.records.all', { count: records.length }) }}
     </button>
   </section>
 </template>

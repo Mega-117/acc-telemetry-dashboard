@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { mount, flushPromises } from '@vue/test-utils'
+import { setLocale } from '~/i18n'
 import { ref, inject, shallowRef, watch, defineComponent, h, Suspense } from 'vue'
 import { beforeEach, expect, it, vi } from 'vitest'
 import Page from '~/components/pages/PanoramicaPage.vue'
@@ -19,6 +20,9 @@ const projection = (name: string) => ({ ...buildCommonOverviewProjection([], 'ev
 beforeEach(() => { game.value = 'acc'; owner.value = 'qa'; cloudReady.value = true; vi.clearAllMocks() })
 const stubs = { LayoutPageContainer: { template: '<main><slot /></main>' }, UiResponsiveImage: true, OverviewUpcomingRacesCard: true, CardsActivityCard: true, NuxtLink: true }
 const cloudReadyEvent = () => window.dispatchEvent(new CustomEvent('acc:telemetry-cache-invalidated', { detail: { uid: 'qa', scope: 'cloud-ready' } }))
+// PIP-665: these checks read the Italian texts; the default would follow the system language.
+setLocale('it')
+
 it('PIP-555: preparata prima del cloud senza dati resta in caricamento, poi carica al cloud-ready', async () => {
   cloudReady.value = false
   mocks.acc.mockResolvedValue(projection('Dal cloud'))

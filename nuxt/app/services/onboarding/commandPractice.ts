@@ -2,6 +2,7 @@
 // every press moves a pretend panel exactly like the real one would (open/close, next, previous,
 // confirm, back) and the current exercise ticks off when the pilot does what it asks.
 import type { WheelControlAction } from '~/services/controls/wheelBindingModel'
+import { useI18n } from '~/i18n'
 
 export const PRACTICE_TILES = [
   'Stima pressioni', 'Correggi pressioni', 'A minuti', 'Sessione', 'Pitwall',
@@ -112,7 +113,8 @@ export function keyboardPracticeDone(state: KeyboardPracticeState): boolean {
 export function practiceHint(state: PracticeState, tasks: readonly PracticeTask[] = PRACTICE_TASKS): string {
   const task = tasks[state.task]
   if (!task) return ''
-  if (!state.open && task.id !== 'open' && task.id !== 'close') return 'Il menu è chiuso. Riaprilo.'
-  if (task.id === 'back' && state.confirmed === null) return 'Prima conferma una voce, poi premi Indietro.'
+  const { t } = useI18n()
+  if (!state.open && task.id !== 'open' && task.id !== 'close') return t('onboarding.commands.hintClosed')
+  if (task.id === 'back' && state.confirmed === null) return t('onboarding.commands.hintBack')
   return ''
 }

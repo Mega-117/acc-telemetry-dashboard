@@ -5,6 +5,11 @@ import { translateAuthError } from '~/services/auth/authService'
 import { commandErrorText } from '~/services/controls/commandCapture'
 import { formatWheelBinding } from '~/services/controls/wheelBindingModel'
 import { emailDomainHintMessage } from '~/utils/emailDomainHint'
+import { getRaceCalendarCountdown } from '~/utils/raceCalendarCountdown'
+import { validateRaceForm } from '~/utils/raceCalendarForm'
+import { stintTypeLabel } from '~/services/session-detail/sessionPresentation'
+import { lapStatus } from '~/services/session-detail/sessionDataPresentation'
+import { lapShareErrorMessage } from '~/services/telemetry/lapShareLink'
 
 describe('i18n', () => {
   it('keeps English complete: every Italian key has an English text', () => {
@@ -52,5 +57,22 @@ describe('i18n', () => {
     setLocale('it')
     expect(translateAuthError('auth/too-many-requests')).toBe('Troppi tentativi, riprova piu tardi')
     expect(commandErrorText('mystery')).toBe('Comando non salvato. Riprova.')
+  })
+
+  it('gives the main pages texts from utils and services in the interface language (wave 2)', () => {
+    const now = new Date(2026, 6, 13, 9)
+    const tomorrow = new Date(2026, 6, 14, 20).toISOString()
+    const empty = { title: '', startsAt: '', trackName: '', carName: '', simGridUrl: '', raceUrl: '' }
+    const lap = (fields: Record<string, unknown>) => ({ lap_number: 1, lap_time_ms: 90000, is_valid: true, ...fields }) as unknown as Parameters<typeof lapStatus>[0]
+    setLocale('en')
+    expect(getRaceCalendarCountdown(tomorrow, now)?.ariaLabel).toBe('1 day to the next race')
+    expect(validateRaceForm(empty, now.getTime()).title).toBe('Enter the race title.')
+    expect(stintTypeLabel('R')).toBe('Race')
+    expect(lapStatus(lap({ is_valid: false, pit_out_lap: true }))).toBe('Invalid · Pit out')
+    expect(lapShareErrorMessage(new Error('share-daily-cap'))).toBe('You have reached today’s shares.')
+    setLocale('it')
+    expect(getRaceCalendarCountdown(tomorrow, now)?.ariaLabel).toBe('Manca 1 giorno alla prossima gara')
+    expect(stintTypeLabel('Q')).toBe('Qualifica')
+    expect(lapStatus(lap({ is_valid: false, pit_out_lap: true }))).toBe('Invalido · Uscita box')
   })
 })
