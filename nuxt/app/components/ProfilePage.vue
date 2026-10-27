@@ -556,7 +556,7 @@ watch(
             </button>
           </div>
 
-          <div class="profile-card profile-card--secondary"><LanguagePicker /><UsagePreference /><DiagnosticsPreference /><LapLibraryPreference /><AccountDeletion /></div>
+          <div class="profile-card profile-card--secondary"><LanguagePicker /><UsagePreference /><LapLibraryPreference /><AccountDeletion /></div>
           <div class="profile-card profile-card--secondary maintenance-card">
             <span class="section-kicker">{{ t('profile.maintenance.kicker') }}</span>
             <h3 class="card-title">{{ t('profile.maintenance.title') }}</h3>

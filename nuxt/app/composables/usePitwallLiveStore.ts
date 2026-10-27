@@ -28,6 +28,8 @@ import {
 } from '~/services/pitwall/pitwallRoomContract'
 import { derivePitwallFriends, sortPitwallFriends } from '~/services/pitwall/pitwallFriends'
 import { createPitwallFriendActions } from '~/composables/usePitwallFriendActions'
+import { createPitwallBellNotices, NOTICE_PREFIX } from '~/composables/usePitwallBellNotices'
+import { createPitwallRequestPointers } from '~/services/pitwall/pitwallNotificationInbox'
 import { requestPitwallClose, requestPitwallOpen, usePitwallIntent, type PitwallIntentStatus } from '~/composables/usePitwallIntent'
 import { searchPitwallConceptDirectory } from '~/utils/pitwallConcept'
 import { formatTrackName } from '~/utils/telemetryFormat'
@@ -35,40 +37,19 @@ import type {
   PitwallConceptFriend,
   PitwallConceptMember,
   PitwallConceptMyRoom,
-  PitwallConceptNotice,
   PitwallConceptPerson,
   PitwallConceptRace,
 } from '~/utils/pitwallConcept'
 
 const SEARCH_DEBOUNCE_MS = 300
-const DISMISSED_INVITES_KEY = 'pitwall-dismissed-invites'
 
-/** Un insieme di id ricordato dal browser: sopravvive al ricaricamento, non ad altri. */
-function loadSet(key: string): Set<string> {
-  try {
-    const raw = typeof localStorage === 'undefined' ? null : localStorage.getItem(key)
-    return new Set(raw ? (JSON.parse(raw) as string[]) : [])
-  } catch {
-    return new Set()
-  }
-}
-
-function saveSet(key: string, value: Set<string>): void {
-  try {
-    if (typeof localStorage !== 'undefined') localStorage.setItem(key, JSON.stringify([...value]))
-  } catch {
-    // Senza memoria locale l'avviso ricompare al prossimo avvio: fastidioso, non falso.
-  }
-}
-
-export const NOTICE_PREFIX = { request: 'req:', invite: 'inv:', granted: 'grant:' } as const
 
 function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, halt: () => void, standardController: ReturnType<typeof usePitwallController>, inboxAccount: Ref<string | null>, respondFriendRequest: (personId: string, accept: boolean) => Promise<boolean> } {
-  const { currentUser } = useFirebaseAuth()
+  const { currentUser, userDisplayName } = useFirebaseAuth()
   const { consultedGame } = useGameContext()
   const allowed = computed(() => gameUiSupport(consultedGame.value).pitwall)
   const uid = () => allowed.value ? currentUser.value?.uid ?? null : null
-  const link = usePitwallRoom({ uid })
+  const link = usePitwallRoom({ uid, senderNickname: () => userDisplayName.value })
   const trust = usePitwallLink({ engineerUid: uid, inlineSearchFeedback: true })
   const controller = usePitwallController(link, trust)
 
@@ -93,6 +74,7 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
     for (const request of trust.incoming.value) known.set(request.engineerUid, request.nickname || request.engineerUid)
     for (const outgoing of trust.outgoing.value) known.set(outgoing.driverUid, outgoing.nickname || outgoing.driverUid)
     for (const found of trust.searchResults.value) known.set(found.uid, found.nickname)
+    for (const sender of bell.inbox.items.value) if (!known.has(sender.fromUid)) known.set(sender.fromUid, sender.fromNickname)
     for (const room of link.rooms.value) {
       for (const member of [...room.memberUids, ...room.allowedUids]) if (!known.has(member)) known.set(member, member)
       // The lobby has no selected crew yet. Reuse names from room occupancy,
@@ -200,9 +182,6 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
     void link.selectRoom(null)
   })
 
-  const dismissedInvites = ref(loadSet(`${DISMISSED_INVITES_KEY}:${uid()}`))
-  watch(uid, () => { dismissedInvites.value = loadSet(`${DISMISSED_INVITES_KEY}:${uid()}`) })
-
   // One card per room; discovery already verified a present friend or membership.
   const races = computed<PitwallConceptRace[]>(() => [...new Map(link.rooms.value.map(room => [room.roomId, room])).values()]
     .filter(room => !room.closedAt && !room.memberUids.includes(uid() ?? ''))
@@ -250,30 +229,12 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
     }
   })
 
-  // ---- Avvisi ---------------------------------------------------------------
-  /**
-   * Un invito e' un avviso solo se porta da qualche parte: il Pitwall aperto
-   * di un amico, oppure la gara di chi non e' mio amico e mi ha invitato a
-   * mano (+ Ospite). Gli inviti di un amico alle sue gare di ieri - le stanze
-   * non si chiudono da sole, e il suo PC mi semina in ognuna - non sono una
-   * notizia: visto dal vivo, sei campanelle "Gara non piu' disponibile".
-   */
-  const openRaceIds = computed(() => new Set(races.value.map(race => race.id)))
-  const friendIds = computed(() => new Set(friendViews.value.filter(view => view.state === 'friends').map(view => view.personId)))
-  const notices = computed<PitwallConceptNotice[]>(() => [
-    // PIP-561: only a live request on my node notifies. Its own one-way grant is
-    // the sender's to toggle freely; it stays in the list but never rings the bell.
-    ...friendViews.value.filter(view => view.state === 'received' && view.mineStatus === 'pending').map(view => ({
-      id: `${NOTICE_PREFIX.request}${view.personId}`, kind: 'request' as const, personId: view.personId,
-    })),
-    ...link.rooms.value
-      .filter(room => room.membershipModel !== 'social' && room.hostUid !== uid() && isPitwallRoomInvited(room, uid()) && !room.closedAt && !dismissedInvites.value.has(room.roomId))
-      .filter(room => openRaceIds.value.has(room.roomId) || !friendIds.value.has(room.hostUid))
-      .map(room => ({
-        id: `${NOTICE_PREFIX.invite}${room.roomId}`, kind: 'invite' as const, personId: room.hostUid, raceId: room.roomId,
-      })),
-  ])
-  const pendingNoticeCount = computed(() => notices.value.length)
+  // ---- Avvisi (usePitwallBellNotices; decision 27/10: instant through the Firestore inbox) ---------------
+  const bell = createPitwallBellNotices({
+    uid, rooms: () => link.rooms.value, openRaceIds: () => new Set(races.value.map(race => race.id)),
+    friendViews: () => friendViews.value, incoming: () => trust.incoming.value, refreshRequests: () => trust.refreshInbox(),
+  })
+  const notices = bell.notices
 
   // ---- Ricerca --------------------------------------------------------------
   const searchQuery = ref('')
@@ -298,7 +259,7 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
   const { befriend, unfriend } = createPitwallFriendActions({ uid, friendViews, link, trust: {
     preAuthorise: trust.preAuthoriseOutcome, requestLink: trust.requestLinkOutcome,
     decide: trust.decideOutcome, withdrawRequest: trust.withdrawRequestOutcome,
-  } })
+  }, pointers: createPitwallRequestPointers(db, uid, () => userDisplayName.value) })
 
   // ---- Il mio Pitwall -------------------------------------------------------
   const { pitwallIntent } = usePitwallIntent()
@@ -328,8 +289,7 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
   function enterRace(raceId: string): void {
     if (!allowed.value) return
     link.clearFeedback()
-    dismissedInvites.value.delete(raceId)
-    saveSet(`${DISMISSED_INVITES_KEY}:${uid()}`, dismissedInvites.value)
+    bell.enteredRace(raceId)
     // Con una sola gara accessibile il collegamento l'ha gia' scelta da solo:
     // riselezionarla la azzera per un istante, e la vista che la guardava
     // tornava alla home credendola sparita (visto il 2026-09-05, appena le
@@ -345,12 +305,8 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
 
   // ---- Avvisi: decidere -----------------------------------------------------
   function dismissNotice(id: string): void {
-    if (id.startsWith(NOTICE_PREFIX.invite)) {
-      // Le regole non permettono a un invitato di togliersi dagli invitati:
-      // rifiutare e' una memoria di questo browser, e la gara resta aperta.
-      dismissedInvites.value.add(id.slice(NOTICE_PREFIX.invite.length))
-      saveSet(`${DISMISSED_INVITES_KEY}:${uid()}`, dismissedInvites.value)
-    }
+    // Le regole non permettono a un invitato di togliersi dagli invitati: la gara resta aperta.
+    if (id.startsWith(NOTICE_PREFIX.invite)) bell.dismissInvite(id.slice(NOTICE_PREFIX.invite.length))
   }
   function acceptNotice(id: string): void {
     if (id.startsWith(NOTICE_PREFIX.request)) void befriend(id.slice(NOTICE_PREFIX.request.length))
@@ -427,10 +383,13 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
       link.start()
       trust.watchLive()
     } else trust.watchInbox()
+    // Decision 27/10: the Firestore inbox listens while signed in, in and out of the Pitwall.
+    if (accountUid) bell.inbox.start(accountUid)
     inboxAccount.value = accountUid
   }
   function halt(): void {
     if (!started) return
+    bell.inbox.stop()
     inboxAccount.value = null
     started = false
     if (fullStarted) link.stop()
@@ -468,7 +427,7 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
     myRoom,
     notices,
     selectedRace,
-    pendingNoticeCount,
+    pendingNoticeCount: bell.pendingNoticeCount,
     notice: computed(() => link.notice.value ?? trust.notice.value ?? null),
     error: computed(() => link.lastError.value ?? trust.lastError.value ?? null),
     // Non si mescola con `error`: un orologio sbagliato non passa da solo, e va

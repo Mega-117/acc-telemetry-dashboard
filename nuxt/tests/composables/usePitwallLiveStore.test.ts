@@ -23,7 +23,8 @@ vi.mock('~/composables/useFirebaseAuth', async () => {
 vi.mock('~/composables/usePitwallRoom', () => ({ usePitwallRoom: () => fakes.link }))
 vi.mock('~/composables/usePitwallLink', () => ({ usePitwallLink: () => fakes.trust }))
 
-import { NOTICE_PREFIX, usePitwallLiveStore } from '~/composables/usePitwallLiveStore'
+import { usePitwallLiveStore } from '~/composables/usePitwallLiveStore'
+import { NOTICE_PREFIX } from '~/composables/usePitwallBellNotices'
 import { registerPitwallIntentControls, resetPitwallIntentForTests, setPitwallIntentStatus } from '~/composables/usePitwallIntent'
 import type { PitwallRoom } from '~/services/pitwall/pitwallRoomContract'
 

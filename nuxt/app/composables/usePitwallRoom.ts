@@ -40,6 +40,7 @@ import {
   type PitwallDisplayOrderStatus,
 } from '~/services/pitwall/pitwallLink'
 import { describePitwallClockSkew } from '~/services/pitwall/pitwallServerClock'
+import { pitwallInvitePointers } from '~/services/pitwall/pitwallNotificationInbox'
 
 // Le forme di vista (esito per campo, riga dell'equipaggio) vivono nel contratto.
 export type { PitwallCrewRow, PitwallFieldOutcome } from '~/services/pitwall/pitwallRoomContract'
@@ -47,9 +48,12 @@ export type { PitwallCrewRow, PitwallFieldOutcome } from '~/services/pitwall/pit
 export interface PitwallRoomOptions {
   /** Uid dell'utente collegato. Null finche' non e' autenticato. */
   uid: () => string | null
+  /** Decision 27/10: the name shown on the invite in the guest's bell (Firestore inbox pointer). */
+  senderNickname?: () => string
 }
 
 export function usePitwallRoom(options: PitwallRoomOptions) {
+  const invitePointers = pitwallInvitePointers(db, options.uid, () => options.senderNickname?.() ?? '')
   const rooms = ref<PitwallRoom[]>([])
   const selectedRoomId = ref<string | null>(null)
   const room = ref<PitwallRoom | null>(null)
@@ -620,9 +624,12 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     const service_ = service()
     const roomId = selectedRoomId.value
     if (!service_ || !roomId) return
+    const social = room.value?.membershipModel === 'social'
     const result = await service_.invite(roomId, uid)
     if (!result.ok) rawError.value = result.reason
     else notice.value = 'Invitato: comparira nella gara appena apre la pagina.'
+    // Decision 27/10: the guest's bell rings at once (a Firestore pointer; the invite itself is in RTDB).
+    if (result.ok && !social) void invitePointers.invited(uid, roomId)
   }
 
   async function revoke(uid: string): Promise<void> {
@@ -632,6 +639,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     const result = await service_.revoke(roomId, uid)
     if (!result.ok) rawError.value = result.reason
     else notice.value = 'Accesso tolto.'
+    if (result.ok) void invitePointers.revoked(uid, roomId)
   }
 
   async function promote(uid: string): Promise<void> {
@@ -684,11 +692,14 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     if (!service_ || !roomId) return
     const current = currentAccount(service_)
     const social = room.value?.membershipModel === 'social'
+    const guests = social ? [] : (room.value?.allowedUids ?? []).filter(guest => !room.value?.memberUids.includes(guest)).slice(0, 20)
     detach()
     try {
       const result = await service_.closeRoom(roomId)
       if (!current() || (selectedRoomId.value && selectedRoomId.value !== roomId)) return
       if (!result.ok) throw new Error(result.reason)
+      // Decision 27/10: the invites I sent leave the guests' bells (theirs expire anyway after 12 hours).
+      for (const guest of guests) void invitePointers.revoked(guest, roomId)
       selectedRoomId.value = null
       room.value = null
       notice.value = social ? 'Sei uscito dalla gara.' : 'Gara chiusa.'

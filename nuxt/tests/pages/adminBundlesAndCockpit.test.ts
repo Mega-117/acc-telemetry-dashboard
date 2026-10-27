@@ -104,6 +104,28 @@ describe('admin diagnostic bundles page', () => {
     expect(view.findAll('tbody tr')).toHaveLength(1)
     expect(view.text()).not.toContain('Carica altri')
   })
+
+  it('decision 27/10: reports of the last 7 days, filtered by pilot; the internal code search still works', async () => {
+    mocks.list.mockResolvedValue({ items: [item(), item({ key: 'r1', kind: 'report', bundleId: 'report-20261015T100000-0000abcd', uploaderUid: 'pilot-aaaa1111' })], cursor: null })
+    const view = mount(BundlesPage, { global: { stubs: { NuxtLink: true } } })
+    await flushPromises()
+    await view.get('input[type="checkbox"]').setValue(true)
+    expect(view.findAll('tbody tr')).toHaveLength(1)
+    mocks.recent.mockResolvedValueOnce({ items: [
+      item({ key: 'r2', kind: 'report', uploaderUid: 'pilot-aaaa1111' }), item({ key: 'r3', kind: 'report', uploaderUid: 'pilot-bbbb2222' }),
+      item({ key: 'd1', kind: 'daily', uploaderUid: 'pilot-aaaa1111' })], complete: true })
+    await view.findAll('button').find((b) => b.text().includes('Segnalazioni'))!.trigger('click')
+    await flushPromises()
+    expect(mocks.recent).toHaveBeenLastCalledWith(expect.anything(), { days: 7 })
+    expect(view.findAll('tbody tr')).toHaveLength(2)
+    await view.get('button.pilot-button').trigger('click')
+    expect(view.findAll('tbody tr')).toHaveLength(1)
+    expect(view.text()).toContain('Pilota pilot-aa')
+    await view.get('input[placeholder="report-…"]').setValue('report-20261015T100000-0000abcd')
+    await view.findAll('button').find((b) => b.text() === 'Trova')!.trigger('click')
+    await flushPromises()
+    expect(view.findAll('tbody tr')).toHaveLength(1)
+  })
 })
 
 describe('admin cockpit scope', () => {

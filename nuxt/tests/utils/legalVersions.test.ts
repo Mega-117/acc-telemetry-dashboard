@@ -19,4 +19,11 @@ describe('legal versions (PIP-658)', () => {
     expect(page('privacy')).toContain(`versione ${PRIVACY_VERSION}`)
     expect(page('termini')).toContain(`versione ${TERMS_VERSION}`)
   })
+  it('decision 27/10: diagnostics are necessary (legitimate interest, 30 days); usage statistics stay optional', () => {
+    const privacy = readFileSync(resolve(__dirname, '../../public/legal/privacy.html'), 'utf8')
+    expect(privacy).toMatch(/Diagnostica tecnica[^<]*<\/td><td>Necessaria al funzionamento[^<]*<\/td><td>Al massimo 30 giorni/)
+    expect(privacy).toContain('legittimo interesse')
+    expect(privacy).toContain('Le puoi spegnere')
+    expect(privacy).not.toMatch(/scegli se attivare[^.]*diagnostica/)
+  })
 })

@@ -42,6 +42,7 @@ describe('account deletion (PIP-658)', () => {
     expect(calls).toContain('del:users/u1/raceCalendar/e1')
     expect(steps).toEqual(['verify', 'archive', 'documents', 'profile', 'account', 'done'])
     expect(USER_SUBCOLLECTIONS).toContain('runtimeInstallations')
+    expect(USER_SUBCOLLECTIONS).toContain('notifications')
   })
 
   it('a wrong password or a failing archive stops before anything in Firestore or Auth is deleted', async () => {

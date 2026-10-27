@@ -421,30 +421,37 @@ export function usePitwallLink(options: PitwallLinkOptions) {
 
   /**
    * Campanella fuori dal Pitwall: solo richieste in arrivo, senza profili.
-   * PIP-660: una lettura ogni ~3 minuti (e quando la finestra torna in primo piano) invece di un ascolto
-   * continuo, poi la connessione si chiude se nient'altro la usa: il piano gratuito ne ammette 100 insieme.
+   * PIP-660: una lettura (mai un ascolto continuo), poi la connessione si chiude se nient'altro la usa: il
+   * piano gratuito ne ammette 100 insieme. Decision 27/10: the bell is instant through the Firestore inbox
+   * (usePitwallBellNotices), which calls `refreshInbox`; this reading stays as a slow fallback (every ~10
+   * minutes and on focus, at most once a minute) for pointers that never arrived (old clients, a sender
+   * that went offline between the two writes).
    */
   let pollInbox: (() => Promise<void>) | null = null
   function watchInbox(): void {
     const engineer = service()
     if (!engineer || stopIncomingWatch) return
-    let cancelled = false, timer: ReturnType<typeof setTimeout> | null = null
+    let cancelled = false, timer: ReturnType<typeof setTimeout> | null = null, lastPollAt = 0
     const poll = async () => {
       if (timer) { clearTimeout(timer); timer = null }
+      lastPollAt = Date.now()
       try {
         const requests = await engineer.listPendingRequests()
         if (!cancelled && serviceRef.value === engineer && options.engineerUid()) incoming.value = requests
       } catch (error) { if (!cancelled) rawError.value = (error as Error)?.message || 'Richieste non disponibili.' }
       // A little jitter so many clients do not reconnect in the same second.
-      if (!cancelled) { closePitwallRealtimeWhenIdle(); timer = setTimeout(() => { void poll() }, 180_000 + Math.floor(Math.random() * 30_000)) }
+      if (!cancelled) { closePitwallRealtimeWhenIdle(); timer = setTimeout(() => { void poll() }, 600_000 + Math.floor(Math.random() * 60_000)) }
     }
-    const onFocus = () => { void poll() }
+    const onFocus = () => { if (Date.now() - lastPollAt > 60_000) void poll() }
     if (typeof window !== 'undefined') window.addEventListener('focus', onFocus)
     void poll()
     // Codex: a decision taken from the bell rereads at once (there is no listener to update it).
     pollInbox = poll
     stopIncomingWatch = () => { cancelled = true; pollInbox = null; if (timer) clearTimeout(timer); if (typeof window !== 'undefined') window.removeEventListener('focus', onFocus) }
   }
+
+  /** A bell pointer arrived: reread now (in the Pitwall the live listener already has it). */
+  const refreshInbox = async (): Promise<void> => { if (pollInbox) await pollInbox() }
 
   function stop(): void {
     stopOrderWatch?.()
@@ -502,6 +509,7 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     refreshIncoming,
     watchLive,
     watchInbox,
+    refreshInbox,
     decide,
     preAuthorise,
     setExpiry,

@@ -54,6 +54,10 @@ export default defineConfig({
         // PIP-658: privacy, consenso e cancellazione account.
         'app/utils/legalVersions.ts',
         'app/services/auth/accountDeletion.ts',
+        // Decision 27/10: instant bell through the Firestore inbox.
+        'app/services/pitwall/pitwallNotificationInbox.ts',
+        'app/composables/usePitwallNotificationInbox.ts',
+        'app/composables/usePitwallBellNotices.ts',
         // PIP-659: identità del profilo.
         'app/services/auth/profileIdentityService.ts',
         // PIP-633: presentazione delle Statistiche.

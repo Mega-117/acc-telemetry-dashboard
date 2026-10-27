@@ -589,6 +589,8 @@ service cloud.firestore {
     }
 
     // PIP-658: accepted Terms/Privacy versions and the first-run privacy choices. Small and closed.
+    // Decision 27/10: technical diagnostics are always on and the app no longer writes `diagnostics`; it stays
+    // accepted (bool) only because existing documents carry it and every owner update re-validates the map.
     function validConsent(consent) {
       return consent is map
              && consent.keys().hasOnly(['termsVersion', 'privacyVersion', 'acceptedAt', 'choicesAt', 'usage', 'diagnostics', 'library'])
@@ -599,6 +601,29 @@ service cloud.firestore {
              && (!consent.keys().hasAny(['usage']) || consent.usage is bool)
              && (!consent.keys().hasAny(['diagnostics']) || consent.diagnostics is bool)
              && (!consent.keys().hasAny(['library']) || consent.library is bool);
+    }
+
+    // Decision 27/10: instant notification bell. A small pointer written by the sender into the recipient's
+    // inbox; the request or invite itself stays in the Realtime Database. The id is fixed by the content (one
+    // per sender for a friend request, one per room for an invite), so an inbox cannot be flooded with ids.
+    function validPitwallNotification(userId, notificationId) {
+      let data = request.resource.data;
+      return isSignedIn()
+             && request.auth.uid != userId
+             && data.keys().hasOnly(['type', 'fromUid', 'fromNickname', 'roomId', 'createdAt'])
+             && data.keys().hasAll(['type', 'fromUid', 'fromNickname', 'createdAt'])
+             && data.fromUid == request.auth.uid
+             && data.fromNickname is string
+             && data.fromNickname.size() > 0
+             && data.fromNickname.size() <= 60
+             && data.createdAt == request.time
+             && ((data.type == 'friend-request'
+                  && !data.keys().hasAny(['roomId'])
+                  && notificationId == 'friend-request-' + request.auth.uid)
+                 || (data.type == 'room-invite'
+                  && data.roomId is string
+                  && data.roomId.matches('^[A-Za-z0-9_-]{1,64}$')
+                  && notificationId == 'room-invite-' + data.roomId));
     }
 
     function validInitialPilotUser(userId) {
@@ -905,6 +930,16 @@ service cloud.firestore {
 
       // Admin can read/write everything in users.
       allow read, write: if isAdmin();
+
+      // Decision 27/10: the notification inbox behind the bell (validPitwallNotification). The owner reads,
+      // lists and deletes; another verified user creates only a pointer signed with their own uid and may
+      // delete only what they wrote (a cancelled request, a revoked invite). Nothing is ever updated.
+      match /notifications/{notificationId} {
+        allow get, list: if isOwner(userId);
+        allow create: if validPitwallNotification(userId, notificationId);
+        allow delete: if isOwner(userId)
+                      || (isSignedIn() && resource.data.fromUid == request.auth.uid);
+      }
 
       match /runtimeInstallations/{installationId} {
         allow get, list: if isOwner(userId) || isAdmin();

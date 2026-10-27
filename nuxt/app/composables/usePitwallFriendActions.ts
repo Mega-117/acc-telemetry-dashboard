@@ -11,6 +11,7 @@ import type { Ref } from 'vue'
 import { emitPitwallDiagnostic } from '~/services/pitwall/pitwallDiagnostics'
 import { pitwallFriendActions, type PitwallFriendView } from '~/services/pitwall/pitwallFriends'
 import type { PitwallRoom } from '~/services/pitwall/pitwallRoomContract'
+import type { PitwallRequestPointers } from '~/services/pitwall/pitwallNotificationInbox'
 
 /** PIP-561: an action answers yes/no or, better, its own outcome with a reason code. */
 type ActionResult = boolean | { ok: boolean, code: string | null, afterCooldown?: boolean }
@@ -30,9 +31,11 @@ export interface PitwallFriendActionDeps {
     notice: Ref<string | null>
     service: () => { revoke: (roomId: string, uid: string) => Promise<unknown>, leaveRoom: (roomId: string) => Promise<unknown> } | null
   }
+  /** Decision 27/10: the bell's Firestore pointers, written after the Realtime Database (best effort). */
+  pointers?: PitwallRequestPointers
 }
 
-export function createPitwallFriendActions({ uid, friendViews, trust, link }: PitwallFriendActionDeps) {
+export function createPitwallFriendActions({ uid, friendViews, trust, link, pointers }: PitwallFriendActionDeps) {
   /**
    * Chiedere e accettare sono la stessa scrittura: autorizzo io (`me__X`) e
    * chiedo a lui (`X__me`). Se lui aveva gia' autorizzato me, siamo amici
@@ -49,6 +52,9 @@ export function createPitwallFriendActions({ uid, friendViews, trust, link }: Pi
     const requested = before?.theyAllow ? null : outcome(await trust.requestLink(personId, 'always'))
     if (requested && !requested.ok) { failed(requested.code); return false }
     if (uid() !== account) return false
+    // Their request is answered (my pointer from them goes); a new request of mine rings their bell.
+    if (before?.theyAllow) void pointers?.answered(personId)
+    if (requested) void pointers?.sent(personId)
     emitPitwallDiagnostic(before?.theyAllow ? 'friend_accepted' : 'friend_requested',
       { ...context, afterCooldown: requested?.afterCooldown === true })
     link.notice.value = before?.theyAllow
@@ -76,6 +82,9 @@ export function createPitwallFriendActions({ uid, friendViews, trust, link }: Pi
       if (!withdrawn.ok) { failed(withdrawn.code); return false }
     }
     if (uid() !== account) return false
+    // Declining their request removes its pointer from my inbox; cancelling mine removes it from theirs.
+    if (actions.revokeMine && before?.state === 'received') void pointers?.answered(personId)
+    if (actions.withdrawTheirs && before?.state === 'sent') void pointers?.withdrawn(personId)
     // I servizi parlano di permessi; l'utente ha tolto un amico o una richiesta.
     link.notice.value = before?.state === 'friends' ? 'Non siete più amici.' : 'Richiesta annullata.'
     // Only a close that actually wrote something counts as accepted by the Rules.

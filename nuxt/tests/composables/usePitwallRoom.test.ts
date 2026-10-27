@@ -16,6 +16,14 @@ import { effectScope } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('~/config/firebase', () => ({ db: {} }))
+// Decision 27/10: the invite pointers of the bell (the service itself is tested on its own).
+const pointerCalls = vi.hoisted(() => [] as string[])
+vi.mock('~/services/pitwall/pitwallNotificationInbox', () => ({
+  pitwallInvitePointers: (_db: unknown, _me: () => string | null, nickname: () => string) => ({
+    invited: async (to: string, roomId: string) => { pointerCalls.push(`invited:${to}:${roomId}:${nickname()}`); return true },
+    revoked: async (to: string, roomId: string) => { pointerCalls.push(`revoked:${to}:${roomId}`); return true },
+  }),
+}))
 vi.mock('~/services/pitwall/pitwallRealtimeEngineerService', () => ({
   createPitwallRealtimeEngineerService: () => ({ nicknameOf: async (uid: string) => {
     if (uid === 'rotto') throw new Error('profilo non leggibile')
@@ -431,6 +439,16 @@ describe('le azioni da manager, uscire e chiudere', () => {
     expect(fakes.calls.filter(call => call.startsWith('invite:'))).toHaveLength(2)
     expect(fakes.calls).toContain('revoke:popo')
     expect(fakes.calls).toContain('promote:popo')
+  })
+
+  it('decision 27/10: an invite rings the guest bell; revoke and close take the pointer away', async () => {
+    pointerCalls.length = 0
+    const link = await open([member()])
+    await link.invite('popo')
+    await link.invite('nessuno') // refused by the service: no pointer
+    await link.revoke('popo')
+    await link.closeRoom()
+    expect(pointerCalls).toEqual(['invited:popo:r1:', 'revoked:popo:r1', 'revoked:popo:r1'])
   })
 
   it('uscire lascia la gara e torna all elenco', async () => {

@@ -5,6 +5,7 @@ import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import {
   formatBundleSize,
   listDiagnosticBundles,
+  listRecentDiagnosticBundles,
   resolveDiagnosticsOrigin,
   saveDiagnosticBundle,
   type DiagnosticBundleItem
@@ -30,7 +31,12 @@ const getToken = async () => (await currentUser.value?.getIdToken()) ?? null
 // PIP-567: durante i collaudi il pannello puo' puntare a un Worker locale (NUXT_PUBLIC_DIAGNOSTICS_INGEST_URL).
 const origin = resolveDiagnosticsOrigin(useRuntimeConfig().public.diagnosticsIngestUrl)
 const deps = { getToken, origin }
-const totalBytes = computed(() => items.value.reduce((sum, item) => sum + item.size, 0))
+// Decision 27/10: the pilot no longer sees a code; reports are found by pilot (uid) and time.
+const reportsOnly = ref(false)
+const pilotFilter = ref('')
+const shown = computed(() => items.value.filter(item =>
+  (!reportsOnly.value || item.kind === 'report') && (!pilotFilter.value || item.uploaderUid === pilotFilter.value)))
+const totalBytes = computed(() => shown.value.reduce((sum, item) => sum + item.size, 0))
 
 // PIP-591 (X-A05-39): conta solo la risposta dell'ultima richiesta; una piu' lenta, partita con
 // filtri vecchi, non sovrascrive elenco e cursore.
@@ -70,7 +76,8 @@ async function download(item: DiagnosticBundleItem) {
   }
 }
 
-// PIP-661: the code a user pastes from "Segnala problema" is the package id. Reports are recent: the newest
+// PIP-661: the "Segnala problema" code is the package id (internal since 27/10: the pilot no longer sees it,
+// it is still in the program's diary). Reports are recent: the newest
 // pages are searched (up to 10) and only that package is shown.
 const codeFilter = ref('')
 async function findByCode() {
@@ -96,6 +103,28 @@ async function findByCode() {
   } finally {
     if (revision === loadRevision) loading.value = false
   }
+}
+
+/** All "Segnala problema" packages of the last 7 days, newest first (day index of the Worker). */
+async function loadReports() {
+  const revision = ++loadRevision
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    const result = await listRecentDiagnosticBundles(deps, { days: 7 })
+    if (revision !== loadRevision) return
+    items.value = result.items.filter(item => item.kind === 'report')
+    cursor.value = null
+    reportsOnly.value = true
+  } catch (error) {
+    if (revision === loadRevision) errorMessage.value = (error as Error)?.message || 'Impossibile leggere le segnalazioni.'
+  } finally {
+    if (revision === loadRevision) loading.value = false
+  }
+}
+
+function pickPilot(item: DiagnosticBundleItem) {
+  pilotFilter.value = pilotFilter.value === item.uploaderUid ? '' : (item.uploaderUid ?? '')
 }
 
 function pickInstallation(item: DiagnosticBundleItem) {
@@ -149,19 +178,23 @@ onMounted(() => load())
         <input v-model="codeFilter" type="search" placeholder="report-…" @keyup.enter="findByCode()" />
       </label>
       <button type="button" class="action-button" :disabled="loading || !codeFilter.trim()" @click="findByCode()">Trova</button>
-      <span class="result-count">{{ items.length }} pacchetti · {{ formatBundleSize(totalBytes) }}</span>
+      <button type="button" class="action-button" :disabled="loading" @click="loadReports()">Segnalazioni (7 giorni)</button>
+      <label class="check-field"><input v-model="reportsOnly" type="checkbox"> Solo segnalazioni</label>
+      <button v-if="pilotFilter" type="button" class="action-button" @click="pilotFilter = ''">Pilota {{ pilotFilter.slice(0, 8) }}… ✕</button>
+      <span class="result-count">{{ shown.length }} pacchetti · {{ formatBundleSize(totalBytes) }}</span>
     </section>
 
     <p v-if="errorMessage" class="notice notice--error" role="alert">{{ errorMessage }}</p>
-    <p v-else-if="!loading && items.length === 0" class="notice" role="status">Nessun pacchetto per questi filtri.</p>
+    <p v-else-if="!loading && shown.length === 0" class="notice" role="status">Nessun pacchetto per questi filtri.</p>
 
-    <div v-if="items.length" class="table-wrap">
+    <div v-if="shown.length" class="table-wrap">
       <table>
         <thead>
           <tr>
             <th>Ricevuto</th>
             <th>Tipo</th>
             <th>Installazione</th>
+            <th>Pilota</th>
             <th>Giorno</th>
             <th>Versione</th>
             <th>Motivo</th>
@@ -170,13 +203,19 @@ onMounted(() => load())
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in items" :key="item.key">
+          <tr v-for="item in shown" :key="item.key">
             <td>{{ formatTime(item.uploadedAt) }}</td>
             <td><span class="kind" :class="`kind--${item.kind}`">{{ KIND_LABELS[item.kind] || item.kind }}</span></td>
             <td>
               <button type="button" class="link-button mono" :title="item.installationId" @click="pickInstallation(item)">
                 {{ item.installationId.slice(0, 8) }}…
               </button>
+            </td>
+            <td>
+              <button v-if="item.uploaderUid" type="button" class="link-button mono pilot-button" :title="item.uploaderUid" @click="pickPilot(item)">
+                {{ item.uploaderUid.slice(0, 8) }}…
+              </button>
+              <span v-else class="muted">—</span>
             </td>
             <td class="mono">{{ item.date }}</td>
             <td class="mono" :title="item.channel || ''">{{ item.version || '—' }}<span v-if="item.channel" class="channel"> · {{ item.channel }}</span></td>
@@ -269,6 +308,7 @@ h1 {
 }
 
 .search-field { flex: 1; min-width: 260px; }
+.check-field { display: flex; align-items: center; gap: 6px; }
 
 .filter-bar input {
   min-height: 40px;

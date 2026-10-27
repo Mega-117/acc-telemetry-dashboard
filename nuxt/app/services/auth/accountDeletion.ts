@@ -8,7 +8,7 @@ import { collection, deleteDoc, doc, getDocs, limit, query, writeBatch, type Fir
 /** Every subcollection under users/{uid} (firestore.rules); sessions also hold rawChunks. */
 export const USER_SUBCOLLECTIONS = ['sessions', 'uploads', 'trackBests', 'trackBestsIndex', 'trackDetailProjections',
   'trackProjections', 'sessionListMeta', 'sessionListPages', 'activities', 'diagnostics', 'raceCalendar',
-  'raceCalendarIndex', 'coachLessons', 'runtimeInstallations'] as const
+  'raceCalendarIndex', 'coachLessons', 'runtimeInstallations', 'notifications'] as const
 
 export type DeletionStep = 'verify' | 'archive' | 'documents' | 'profile' | 'account' | 'done'
 

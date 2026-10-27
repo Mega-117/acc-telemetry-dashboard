@@ -1278,3 +1278,63 @@ it('PIP-591 the owner can repair an old public profile that has no createdAt', a
   await testEnv.withSecurityRulesDisabled(async (context) => { await deleteDoc(doc(context.firestore(), `publicProfiles/${PILOT_UID}`)) })
   await assertSucceeds(setDoc(profileRef, buildPublicProfileRepair(user, 'Nuovo', false, null)!))
 })
+
+describe('decision 27/10: notification inbox behind the bell', () => {
+  const THIRD_UID = 'qa-third'
+  const inboxDoc = (db: ReturnType<ReturnType<RulesTestEnvironment['authenticatedContext']>['firestore']>, owner: string, id: string) =>
+    doc(db, `users/${owner}/notifications/${id}`)
+  const request = (fromUid: string, extra: Record<string, unknown> = {}) =>
+    ({ type: 'friend-request', fromUid, fromNickname: 'Popo', createdAt: serverTimestamp(), ...extra })
+
+  it('a verified sender creates only its own small pointer, with the id fixed by the content; no updates', async () => {
+    const sender = testEnv.authenticatedContext(SECOND_PILOT_UID, { email_verified: true }).firestore()
+    const unverified = testEnv.authenticatedContext(THIRD_UID, { email_verified: false }).firestore()
+    const id = `friend-request-${SECOND_PILOT_UID}`
+    await assertFails(setDoc(inboxDoc(unverified, PILOT_UID, `friend-request-${THIRD_UID}`), request(THIRD_UID)))
+    await assertFails(setDoc(inboxDoc(sender, PILOT_UID, id), request(THIRD_UID)))
+    await assertFails(setDoc(inboxDoc(sender, PILOT_UID, `friend-request-${THIRD_UID}`), request(SECOND_PILOT_UID)))
+    await assertFails(setDoc(inboxDoc(sender, PILOT_UID, id), request(SECOND_PILOT_UID, { text: 'ciao' })))
+    await assertFails(setDoc(inboxDoc(sender, PILOT_UID, id), request(SECOND_PILOT_UID, { roomId: 'r1' })))
+    await assertFails(setDoc(inboxDoc(sender, PILOT_UID, id), request(SECOND_PILOT_UID, { createdAt: Timestamp.fromMillis(0) })))
+    await assertFails(setDoc(inboxDoc(sender, PILOT_UID, id), request(SECOND_PILOT_UID, { fromNickname: 'x'.repeat(61) })))
+    await assertFails(setDoc(inboxDoc(sender, PILOT_UID, id), request(SECOND_PILOT_UID, { type: 'message' })))
+    await assertFails(setDoc(inboxDoc(sender, SECOND_PILOT_UID, id), request(SECOND_PILOT_UID)))
+    await assertSucceeds(setDoc(inboxDoc(sender, PILOT_UID, id), request(SECOND_PILOT_UID)))
+    // Nothing is ever updated: a new request replaces the pointer with delete + create.
+    await assertFails(setDoc(inboxDoc(sender, PILOT_UID, id), request(SECOND_PILOT_UID)))
+    await assertFails(updateDoc(inboxDoc(sender, PILOT_UID, id), { fromNickname: 'Altro' }))
+    // Room invite: the id is the room.
+    const invite = { type: 'room-invite', fromUid: SECOND_PILOT_UID, fromNickname: 'Popo', roomId: 'a1b2c3', createdAt: serverTimestamp() }
+    await assertFails(setDoc(inboxDoc(sender, PILOT_UID, 'room-invite-other'), invite))
+    await assertFails(setDoc(inboxDoc(sender, PILOT_UID, 'room-invite-a.b'), { ...invite, roomId: 'a.b' }))
+    await assertFails(setDoc(inboxDoc(sender, PILOT_UID, 'room-invite-'), { ...invite, roomId: '' }))
+    await assertSucceeds(setDoc(inboxDoc(sender, PILOT_UID, 'room-invite-a1b2c3'), invite))
+  })
+
+  it('the owner reads, lists (newest first, capped) and deletes; the sender deletes only its own; others nothing', async () => {
+    const owner = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
+    const sender = testEnv.authenticatedContext(SECOND_PILOT_UID, { email_verified: true }).firestore()
+    const third = testEnv.authenticatedContext(THIRD_UID, { email_verified: true }).firestore()
+    await assertSucceeds(setDoc(inboxDoc(sender, PILOT_UID, `friend-request-${SECOND_PILOT_UID}`), request(SECOND_PILOT_UID)))
+    await assertSucceeds(setDoc(inboxDoc(third, PILOT_UID, `friend-request-${THIRD_UID}`), request(THIRD_UID)))
+    const listed = await assertSucceeds(getDocs(query(collection(owner, `users/${PILOT_UID}/notifications`), orderBy('createdAt', 'desc'), limit(20))))
+    expect(listed.size).toBe(2)
+    await assertSucceeds(getDoc(inboxDoc(owner, PILOT_UID, `friend-request-${THIRD_UID}`)))
+    await assertFails(getDoc(inboxDoc(sender, PILOT_UID, `friend-request-${SECOND_PILOT_UID}`)))
+    await assertFails(getDocs(collection(third, `users/${PILOT_UID}/notifications`)))
+    // The sender cancels its own pointer, never someone else's.
+    await assertFails(deleteDoc(inboxDoc(sender, PILOT_UID, `friend-request-${THIRD_UID}`)))
+    await assertSucceeds(deleteDoc(inboxDoc(sender, PILOT_UID, `friend-request-${SECOND_PILOT_UID}`)))
+    // The owner deletes anything in the inbox (an answered request, "Cancella account").
+    await assertSucceeds(deleteDoc(inboxDoc(owner, PILOT_UID, `friend-request-${THIRD_UID}`)))
+  })
+
+  it('consent: the app now writes no diagnostics choice; documents carrying the old field stay valid', async () => {
+    const db = testEnv.authenticatedContext(FRESH_PILOT_UID, { email: FRESH_PILOT_EMAIL, email_verified: true }).firestore()
+    const userRef = doc(db, `users/${FRESH_PILOT_UID}`)
+    const consent = { termsVersion: '2026-10-27', privacyVersion: '2026-10-27', acceptedAt: '2026-10-27T10:00:00.000Z' }
+    await assertSucceeds(setDoc(userRef, initialPilotUserPayload(FRESH_PILOT_UID, { consent: { ...consent, diagnostics: false } })))
+    await assertSucceeds(updateDoc(userRef, { nickname: 'Rinominato' }))
+    await assertSucceeds(updateDoc(userRef, { consent: { ...consent, choicesAt: '2026-10-27T10:01:00.000Z', usage: false, library: true } }))
+  })
+})

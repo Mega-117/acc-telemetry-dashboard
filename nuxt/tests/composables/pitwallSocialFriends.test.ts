@@ -113,3 +113,50 @@ describe('PIP-561 friend diagnostics', () => {
     info.mockRestore()
   })
 })
+
+describe('decision 27/10: bell pointers around the friend actions', () => {
+  function withPointers() {
+    const pointers = { sent: vi.fn(async () => true), withdrawn: vi.fn(async () => true), answered: vi.fn(async () => true) }
+    const trust = { preAuthorise: vi.fn(async () => true), requestLink: vi.fn(async () => true), decide: vi.fn(async () => true), withdrawRequest: vi.fn(async () => true) }
+    const friendViews = ref<PitwallFriendView[]>([])
+    const actions = createPitwallFriendActions({ uid: () => 'A', friendViews, trust, pointers,
+      link: { rooms: ref([]), notice: ref(null), service: () => ({ revoke: vi.fn(), leaveRoom: vi.fn() }) } })
+    return { ...actions, pointers, friendViews, trust }
+  }
+  const view = (state: PitwallFriendView['state'], over: Partial<PitwallFriendView> = {}): PitwallFriendView =>
+    ({ personId: 'B', nickname: 'B', state, iAllow: false, theyAllow: false, mineStatus: null, theirsStatus: null, ...over } as PitwallFriendView)
+
+  it('a new request rings their bell; accepting theirs clears mine', async () => {
+    const s = withPointers()
+    expect(await s.befriend('B')).toBe(true)
+    expect(s.pointers.sent).toHaveBeenCalledWith('B')
+    expect(s.pointers.answered).not.toHaveBeenCalled()
+    const t = withPointers()
+    t.friendViews.value = [view('received', { theyAllow: true, mineStatus: 'pending', theirsStatus: 'granted' })]
+    expect(await t.befriend('B')).toBe(true)
+    expect(t.pointers.answered).toHaveBeenCalledWith('B')
+    expect(t.pointers.sent).not.toHaveBeenCalled()
+  })
+
+  it('declining clears my pointer, cancelling clears theirs, unfriending touches none; a failure writes nothing', async () => {
+    const s = withPointers()
+    s.friendViews.value = [view('received', { mineStatus: 'pending', theirsStatus: 'granted', theyAllow: true })]
+    await s.unfriend('B')
+    expect(s.pointers.answered).toHaveBeenCalledWith('B')
+    expect(s.pointers.withdrawn).not.toHaveBeenCalled()
+    const t = withPointers()
+    t.friendViews.value = [view('sent', { iAllow: true, mineStatus: 'granted', theirsStatus: 'pending' })]
+    await t.unfriend('B')
+    expect(t.pointers.withdrawn).toHaveBeenCalledWith('B')
+    expect(t.pointers.answered).not.toHaveBeenCalled()
+    const u = withPointers()
+    u.friendViews.value = [view('friends', { iAllow: true, theyAllow: true, mineStatus: 'granted', theirsStatus: 'granted' })]
+    await u.unfriend('B')
+    expect(u.pointers.answered).not.toHaveBeenCalled()
+    expect(u.pointers.withdrawn).not.toHaveBeenCalled()
+    const v = withPointers()
+    v.trust.requestLink.mockResolvedValueOnce(false)
+    expect(await v.befriend('B')).toBe(false)
+    expect(v.pointers.sent).not.toHaveBeenCalled()
+  })
+})
