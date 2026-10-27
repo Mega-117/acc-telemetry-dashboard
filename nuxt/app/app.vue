@@ -821,6 +821,15 @@ body:has(.sessions-page),
 #app:has(.sessions-page) {
   overflow: clip;
 }
+// PIP-639: in the coach view of a pilot on a phone the header takes half the screen; there the whole
+// page scrolls (pages/piloti/[id].vue lets the list grow).
+@media (max-width: 600px) {
+  html:has(.pilot-view .sessions-page),
+  body:has(.pilot-view .sessions-page),
+  #app:has(.pilot-view .sessions-page) {
+    overflow: visible;
+  }
+}
 #app:has(.electron-titlebar) > .dashboard-wrapper:has(.sessions-page) {
   // hidden retains the stable gutter; clip would remove it and shift the shell.
   overflow: hidden;

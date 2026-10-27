@@ -329,9 +329,18 @@ onBeforeUnmount(() => { window.removeEventListener('resize', measureContent); he
     background: transparent;
   }
 }
+// PIP-639: on a phone the tabs start after the back arrow and slide sideways when they do not fit.
 @media (max-width: 600px) {
-  .pilot-tabs { gap: 0; }
-  .pilot-tab { flex: 1; min-width: 0; padding-inline: 8px; font-size: 13px; }
+  .pilot-topbar { justify-content: flex-start; padding-left: 44px; }
+  .pilot-tabs { flex: 1 1 auto; gap: 0; justify-content: flex-start; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .pilot-tab { flex: 0 0 auto; padding-inline: 10px; font-size: 13px; }
+  .pilot-header { padding-inline: 12px; }
+  // The header takes half a phone screen: the whole page scrolls instead of a small box under it.
+  // Sessioni too: app.vue lifts its page clip here, and the list grows instead of scrolling inside.
+  .pilot-content { height: auto !important; overflow: visible; }
+  .tab-content, .tab-content :deep(.sessions-page) { height: auto; }
+  // The coach layout already keeps 12 px from the screen edge: no second page margin inside.
+  .tab-content :deep(.page-container) { padding-inline: 0; }
 }
 
 // === CONTENT ===

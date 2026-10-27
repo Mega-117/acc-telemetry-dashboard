@@ -239,9 +239,23 @@ const isAdminRouteActive = (path: string) => route.path === path || route.path.s
     gap: 12px;
   }
 
+  // PIP-639: on a narrow screen the admin links slide sideways inside their row instead of widening the page.
   .admin-nav {
     order: 3;
     width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .admin-nav a {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 700px) {
+  .coach-main {
+    padding-inline: 12px;
   }
 }
 

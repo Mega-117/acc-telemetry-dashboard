@@ -528,7 +528,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 
 <style scoped lang="scss">
 // Racer Core language: dark cells, thin borders, red accent, italic display titles.
-.analysis { display: grid; gap: 10px; }
+.analysis { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 // Sticky: lap pickers and layout stay in sight while the charts scroll under them.
 .analysis-bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 6px 0; background: #0b0b10f2; box-shadow: 0 8px 12px -10px #000; }
 // PIP-635: sugli schermi larghi una riga sola: i selettori dei giri si stringono, lo switcher non va a capo.
@@ -619,9 +619,9 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .sq { display: inline-block; width: 10px; height: 10px; flex: 0 0 10px; &--lap { background: #38bdf8; } &--ref { background: #fbbf24; } }
 .tracce-btn { height: 28px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font-size: 12px; cursor: pointer; &.active { border-color: #ff0024; } }
 
-@media (max-width: 1100px) {
-  .layout-tracce, .layout-pilota { grid-template-columns: 1fr; }
-  .layout-tracce { grid-template-areas: "left" "center" "right"; }
-  .tracce-left, .tracce-center { position: static; }
-}
+// PIP-639: stacked (phone) or lists beside the map (tablet): the page scrolls, not each column (nested scroll areas
+// trap the thumb on a phone), so the fitted window height (inline style) and the sticky bar are for desktop only.
+@media (max-width: 1100px) { .layout-tracce, .layout-pilota { grid-template-columns: minmax(0, 1fr); overflow: visible; height: auto !important; } .analysis-bar { position: static; }
+  .layout-tracce { grid-template-areas: "left" "center" "right"; } .tracce-left, .tracce-center, .tracce-right, .pilota-left, .pilota-right { position: static; height: auto; overflow: visible; } }
+@media (min-width: 701px) and (max-width: 1100px) { .layout-tracce { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "left center" "right right"; } }
 </style>
