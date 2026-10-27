@@ -27,13 +27,15 @@
 .race-modal--racing {
   width: min(680px, 100%); max-height: calc(100dvh - 84px); padding: 28px; gap: 20px;
   border-radius: 0; border-color: var(--rc-section-line);
-  background: #0a0a0d73;
+  background: #0a0a0da6;
   box-shadow: none;
   header { align-items: flex-start; padding-bottom: 20px; border-bottom: 1px solid var(--rc-section-line); }
   .eyebrow { display: block; margin-bottom: 7px; color: #aaa; font-size: 11px; letter-spacing: 1.5px; font-weight: 500; }
   h2 { font: italic 700 28px/1.2 'Racer Display', sans-serif; text-transform: uppercase; }
   .modal-close { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; border: 1px solid var(--rc-section-line); border-radius: 0; background: transparent; }
-  .modal-close:hover { color: #ff0024; border-color: #ff0024; }
+  // Hover: the white gets brighter (no red: red is for actions and errors).
+  .modal-close { color: #ffffffc7; transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease; }
+  .modal-close:hover { color: #fff; border-color: #ffffffa6; background: #ffffff12; }
   // Fields stay at the top of their row when the date picker opens beside them.
   .form-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
   label { min-width: 0; gap: 8px; align-content: start; }
@@ -99,8 +101,9 @@
     position: absolute; right: 0; top: calc(100% + 6px); width: 216px;
     max-width: calc(100vw - 48px); display: grid; gap: 2px;
     border: 1px solid var(--rc-section-line); padding: 6px;
-    // Over the card content: opaque, or the rows and buttons behind read through it.
-    background: #0a0a0d;
+    // Same see-through look as the race modal, a little denser: the blur does not reach the card behind here (an
+    // ancestor isolates it), so at the modal's 65% the dots and buttons under the menu read through.
+    background: #0a0a0deb; backdrop-filter: blur(16px);
     box-shadow: 0 12px 32px #000b;
   }
   .race-options__menu a, .race-options__menu button {
@@ -114,8 +117,9 @@
   .race-options__menu a + .race-options__edit { border-top: 1px solid #ffffff24; margin-top: 4px; }
   .race-options__menu .race-options__delete { color: #ff7a8e; }
   .race-options__menu .race-options__delete svg { color: currentColor; }
-  .race-options__menu a:hover, .race-options__menu button:hover:not(:disabled) { background: #ff002418; border-left-color: #ff0024; }
-  .race-options__menu a:focus-visible, .race-options__menu button:focus-visible { outline: 1px solid #fff; outline-offset: -2px; background: #ffffff0a; }
+  // Hover: a light white veil, no red fill or red edge.
+  .race-options__menu a:hover, .race-options__menu button:hover:not(:disabled) { background: #ffffff14; }
+  .race-options__menu a:focus-visible, .race-options__menu button:focus-visible { outline: 1px solid #ffffffa6; outline-offset: -2px; background: #ffffff14; }
   button:disabled { opacity: .4; cursor: default; }
   summary:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid white; outline-offset: 2px; }
   .race-list-block { border-top: 1px solid var(--rc-section-line); padding-top: 8px; }

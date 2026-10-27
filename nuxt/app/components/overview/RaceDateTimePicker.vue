@@ -7,8 +7,9 @@ import {
 } from '~/utils/raceDateTime'
 
 // PIP-641: date and time of a race in the site's style, instead of the browser's own picker. The calendar opens
-// inside the form, under the field (a floating layer would be cut by the modal's scroll); the arrow keys move
-// the day, Escape closes it without closing the modal.
+// over the fields below (absolute, inside the modal: on a short screen it extends the modal's scroll instead of being
+// cut, and it is brought into view); a click outside closes it; the arrow keys move the day, Escape closes it
+// without closing the modal.
 const props = defineProps<{ modelValue: string, invalid?: boolean, describedby?: string, fieldId?: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 // Most league races are in the evening; the time stays editable.
@@ -24,6 +25,7 @@ const hourText = ref('')
 const minuteText = ref('')
 const field = ref<HTMLButtonElement | null>(null)
 const grid = ref<HTMLElement | null>(null)
+const panel = ref<HTMLElement | null>(null)
 const cells = computed(() => monthCells(view.value.year, view.value.month))
 const dayLabel = (day: RaceDay) => new Intl.DateTimeFormat('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   .format(new Date(day.year, day.month, day.day))
@@ -40,6 +42,7 @@ function toggle() {
   view.value = { year: start.year, month: start.month }
   focusDay.value = { year: start.year, month: start.month, day: start.day }
   open.value = true
+  void nextTick(() => panel.value?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }))
 }
 function shiftMonth(delta: number) {
   const date = new Date(view.value.year, view.value.month + delta, 1)
@@ -82,7 +85,7 @@ function onEscape(event: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="dt-picker" @keydown.esc="onEscape">
+  <div v-click-outside="() => { open = false }" class="dt-picker" @keydown.esc="onEscape">
     <button
       :id="fieldId" ref="field" type="button" class="dt-picker__field" :class="{ 'is-invalid': invalid, 'is-open': open }"
       :aria-expanded="open" :aria-invalid="invalid || undefined" :aria-describedby="describedby" @click="toggle"
@@ -91,7 +94,7 @@ function onEscape(event: KeyboardEvent) {
       <CalendarDays :size="18" :stroke-width="1.6" aria-hidden="true" />
     </button>
     <Transition name="dt-drawer">
-      <div v-if="open" class="dt-picker__panel" role="group" aria-label="Scegli data e ora">
+      <div v-if="open" ref="panel" class="dt-picker__panel" role="group" aria-label="Scegli data e ora">
         <div class="dt-picker__head">
           <button type="button" aria-label="Mese precedente" @click="shiftMonth(-1)"><ChevronLeft :size="18" aria-hidden="true" /></button>
           <strong aria-live="polite">{{ monthLabel(view.year, view.month) }}</strong>
@@ -119,7 +122,7 @@ function onEscape(event: KeyboardEvent) {
 </template>
 
 <style scoped lang="scss">
-.dt-picker { min-width: 0; }
+.dt-picker { position: relative; min-width: 0; }
 .dt-picker__field {
   display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; height: 46px; padding: 0 14px;
   border: 1px solid #ffffff30; background: #ffffff04; color: #fff; font: 400 14px 'Inter', sans-serif; text-align: left; cursor: pointer;
@@ -129,7 +132,11 @@ function onEscape(event: KeyboardEvent) {
   &.is-invalid { border-color: #ff0024; }
   .is-placeholder { color: #888; }
 }
-.dt-picker__panel { margin-top: 8px; padding: 12px; border: 1px solid var(--rc-section-line); background: #ffffff05; }
+// Over the fields below: see-through like the modal, blurred so the fields under it do not read through.
+.dt-picker__panel {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; width: max(100%, 300px); max-width: calc(100vw - 48px);
+  padding: 12px; border: 1px solid #ffffff40; background: #0a0a0dd9; backdrop-filter: blur(16px); box-shadow: 0 16px 40px #000c;
+}
 .dt-picker__head {
   display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
   strong { font: italic 700 15px 'Racer Display', sans-serif; text-transform: uppercase; letter-spacing: .02em; }
