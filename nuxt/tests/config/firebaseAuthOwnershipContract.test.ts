@@ -8,7 +8,7 @@ function source(relativePath: string) {
 }
 
 describe('Firebase Auth renderer ownership contract', () => {
-  it('keeps getAuth out of the app and Firestore module shared by overlays', () => {
+  it('keeps Auth initialisation out of the app and Firestore module shared by overlays', () => {
     const firebase = source('../../app/config/firebase.ts')
     const firebaseAuth = source('../../app/config/firebaseAuth.ts')
     const activityFeed = source('../../app/composables/useActivityFeed.ts')
@@ -16,7 +16,10 @@ describe('Firebase Auth renderer ownership contract', () => {
     expect(firebase).not.toContain("from 'firebase/auth'")
     expect(firebase).not.toContain('getAuth(')
     expect(activityFeed).not.toContain('getAuth(')
-    expect(firebaseAuth).toContain('export const auth = getAuth(app)')
+    // PIP-640: initializeAuth with the getAuth persistence, without the popup resolver (no apis.google.com).
+    expect(firebaseAuth).toContain('initializeAuth(app, { persistence: [indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence] })')
+    expect(firebaseAuth).toContain('export const auth = createAuth()')
+    expect(firebaseAuth).not.toContain('PopupRedirectResolver')
   })
 
   it('loads Auth only after the primary/browser role gate', () => {

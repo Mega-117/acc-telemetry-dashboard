@@ -2,9 +2,10 @@ import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { PRODUCT } from './shared/productIdentity'
 import { removeDesktopExcludedPages } from './shared/desktopBundleRoutes'
 import { siteRobotsMeta } from './shared/siteIndexing'
-import { readFileSync } from 'node:fs'
+import { spaLoadingHtml } from './shared/spaLoading'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 // Determina baseURL: '/' per dev locale, path completo per produzione
 const isDev = process.env.NODE_ENV === 'development'
@@ -14,6 +15,11 @@ const qaEmulatorPorts = isDev ? [process.env.VITE_ACC_AUTH_EMULATOR_PORT, proces
 const qaEmulatorSources = [...new Set(qaEmulatorPorts)].map(port => ` http://127.0.0.1:${port} ws://127.0.0.1:${port}`).join('')
 const baseURL = isDev || desktopBundle ? '/' : '/acc-telemetry-dashboard/docs/'
 const robotsMeta = siteRobotsMeta(process.env)
+// PIP-640: the HTML loading screen (logo at once, before the JavaScript) needs the base path of this build,
+// so it is written next to the build cache and handed to Nuxt as its spaLoadingTemplate.
+const spaLoadingTemplatePath = join(process.cwd(), 'node_modules', '.cache', 'racer-spa-loading.html')
+mkdirSync(dirname(spaLoadingTemplatePath), { recursive: true })
+writeFileSync(spaLoadingTemplatePath, spaLoadingHtml(baseURL), 'utf8')
 // The source ICO is mirrored from the suite root; its hash invalidates browser caches.
 const iconRevision = createHash('sha256')
   .update(readFileSync(new URL('./public/favicon.ico', import.meta.url)))
@@ -55,6 +61,7 @@ async function patchWindowsNitroPrerenderImports(dir: string) {
 
 export default defineNuxtConfig({
   ssr: false,
+  spaLoadingTemplate: spaLoadingTemplatePath,
   // diagnosticsIngestUrl (PIP-567): vuoto = Worker di produzione; durante i collaudi
   // NUXT_PUBLIC_DIAGNOSTICS_INGEST_URL=http://127.0.0.1:8787 punta il pannello admin a `wrangler dev`.
   runtimeConfig: { public: { desktopUiContract: desktopBundle ? 1 : 0, diagnosticsIngestUrl: '' } },
@@ -107,8 +114,8 @@ export default defineNuxtConfig({
             // riferimenti nella release desktop (PIP-211).
             "media-src 'self' data: blob: acc-voice: http://127.0.0.1:5112 http://localhost:5112",
             `connect-src 'self' http://127.0.0.1:5112 http://localhost:5112${isDev ? ' http://127.0.0.1:8080 http://localhost:8080 http://127.0.0.1:9099 http://localhost:9099 http://127.0.0.1:9000 http://localhost:9000 ws://127.0.0.1:9000 ws://localhost:9000 http://127.0.0.1:8787 http://localhost:8787' : ''}${qaEmulatorSources} https://*.googleapis.com https://racercore-diagnostics-ingest.enricosaian.workers.dev https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app`,
-
-            "frame-ancestors 'none'",
+            // PIP-640: no frame-ancestors here: browsers ignore it in a <meta> CSP and log an error
+            // (GitHub Pages cannot send it as a header).
           ].join('; ')
         }
       ],
@@ -131,9 +138,12 @@ export default defineNuxtConfig({
         // Google Fonts: Inter + Outfit
         ...(desktopBundle ? [] : [{ rel: 'preconnect', href: 'https://fonts.googleapis.com' },
           { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' as const },
+        // PIP-640: loaded without blocking the first paint (text shows in the fallback font, then swaps).
         {
           rel: 'stylesheet',
-          href: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&display=swap'
+          href: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&display=swap',
+          media: 'print',
+          onload: "this.media='all'"
         }])
       ]
     }

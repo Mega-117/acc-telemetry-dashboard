@@ -309,6 +309,13 @@ watch(
 
 // === CONFIG ===
 const transitionName = 'shell-motion'
+// PIP-640: the first screen after the start (login or dashboard) appears at once, without the fade: content
+// that first paints at opacity 0 is never counted by Chrome as first contentful paint (PageSpeed fails with
+// NO_FCP) and the user waits for nothing. Later login/logout changes keep the crossfade.
+const shellAnimated = ref(false)
+watch(appState, (state, previous) => {
+  if (previous === 'initializing' && state !== 'initializing') requestAnimationFrame(() => requestAnimationFrame(() => { shellAnimated.value = true }))
+})
 const dashboardRoutePrefixes = [
   '/panoramica',
   '/sessioni',
@@ -635,7 +642,7 @@ provide('goToSettings', handleGoToSettings)
       <NuxtRouteAnnouncer />
 
       <!-- Main Content with Transitions -->
-      <Transition :name="transitionName" :mode="appState === 'auth' ? 'out-in' : undefined" @before-leave="el => el.setAttribute('inert', '')">
+      <Transition :name="shellAnimated ? transitionName : 'shell-instant'" :mode="shellAnimated && appState === 'auth' ? 'out-in' : undefined" @before-leave="el => el.setAttribute('inert', '')">
         <!-- Initializing - waiting for Firebase auth check -->
         <div v-if="appState === 'initializing'" key="initializing" class="initializing-screen">
           <div class="initializing-content">
