@@ -193,7 +193,7 @@ it('renders unknown stint as a dash and removes the whole column when disabled',
   const value = model()
   value.rows[0]!.stintTime = null
   const render = () => renderToString(createSSRApp(StandingsHud, { model: value, backgroundOpacity: 0.5 }))
-  expect(await render()).toMatch(/class="standings-row__stint"[^>]*>\u2014<\/strong>/)
+  expect(await render()).toMatch(/class="standings-row__stint"[^>]*><span class="hud-fixed-digits"[^>]*>\u2014<\/span><\/strong>/)
   value.columns.stint = false
   expect(await render()).not.toContain('standings-row__stint')
 })
@@ -229,7 +229,7 @@ describe('HUD style v2 (27/10) standings', () => {
 
   it('puts session type then time on the left and the temperatures on the right', async () => {
     const html = await renderToString(createSSRApp(StandingsHud, { model: model(), backgroundOpacity: 0.5 }))
-    expect(html).toMatch(/standings-header__left[^>]*>[\s\S]*?standings-header__session[^>]*>Practice<[\s\S]*?standings-header__time[^>]*>01:02:03</)
+    expect(html).toMatch(/standings-header__left[^>]*>[\s\S]*?standings-header__session[^>]*>Practice<[\s\S]*?standings-header__time[^>]*><span class="hud-fixed-digits"[^>]*aria-label="01:02:03"/)
     expect(html.indexOf('standings-header__temperature')).toBeGreaterThan(html.indexOf('standings-header__time'))
   })
 })

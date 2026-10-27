@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import HudOverlayBackground from '~/components/overlay/HudOverlayBackground.vue'
+import HudFixedDigits from '~/components/overlay/HudFixedDigits.vue'
 import type { StandingsPresentation } from '~/services/overlay/standingsPresentation'
 
 const props = defineProps<{
@@ -53,7 +54,7 @@ const gridTemplateColumns = computed(() => [
       <div class="standings-header__meta">
         <span class="standings-header__left">
           <strong v-if="model.header.sessionType" class="standings-header__session">{{ model.header.sessionType }}</strong>
-          <strong v-if="model.header.timeLeft" class="standings-header__time">{{ model.header.timeLeft }}</strong>
+          <strong v-if="model.header.timeLeft" class="standings-header__time"><HudFixedDigits :value="model.header.timeLeft" /></strong>
         </span>
         <strong
           v-if="model.header.temperatures"
@@ -129,9 +130,9 @@ const gridTemplateColumns = computed(() => [
         <strong
           class="standings-row__gap"
           :class="`is-${row.relativeGapTone}`"
-        >{{ row.relativeGap }}</strong>
+        ><HudFixedDigits :value="row.relativeGap" /></strong>
         <!-- Stint is the last column on the right (user request 14/10). -->
-        <strong v-if="model.columns.stint" class="standings-row__stint">{{ row.stintTime ?? '—' }}</strong>
+        <strong v-if="model.columns.stint" class="standings-row__stint"><HudFixedDigits :value="row.stintTime ?? '—'" /></strong>
         <span
           v-if="model.columns.progress"
           class="standings-row__progress-track"
@@ -160,7 +161,8 @@ const gridTemplateColumns = computed(() => [
 .standings-header { display:grid;grid-template-rows:24px 24px;min-width:0;overflow:hidden;color:#f4f4f6;font-weight:700;white-space:nowrap;box-shadow:inset 0 -1px rgba(255,255,255,0.15); }
 .standings-header__meta { display:flex;align-items:center;min-width:0;gap:28px;padding:0 4px;font-size:18px; }
 .standings-header__left { display:flex;min-width:0;gap:10px;align-items:baseline;overflow:hidden;text-overflow:ellipsis; }
-.standings-header__session { color:#a3a5ae;font:700 15px/1 var(--hud-font-label);letter-spacing:0.08em;text-transform:uppercase; }
+/* 28/10: the session type in the same font as the time next to it, kept grey. */
+.standings-header__session { color:#a3a5ae;font:italic 700 17px/1 var(--hud-font-num);letter-spacing:0.04em;text-transform:uppercase; }
 .standings-header__time { font:italic 700 17px/1 var(--hud-font-num); }
 .standings-header__temperature { flex:none;margin-left:auto;font:italic 700 16px/1 var(--hud-font-num); }
 .standings-columns { display:grid;column-gap:var(--standings-column-gap);align-items:center;min-width:0;padding:0 0 2px;color:#a3a5ae;font:700 12px/1 var(--hud-font-label);letter-spacing:0.08em;text-transform:uppercase; }
