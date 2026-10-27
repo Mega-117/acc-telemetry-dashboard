@@ -207,7 +207,7 @@ function goToStats() {
 .performance-table { width: 100%; table-layout: fixed; border-collapse: collapse; background: transparent; }
 .performance-table tr { border-bottom: 1px solid var(--rc-section-line); }
 .performance-table td { position: relative; padding: 14px 18px; vertical-align: top; }
-.performance-table td + td::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 1px; background: #ffffff65; }
+.performance-table td + td::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 1px; background: var(--rc-section-line); }
 // Etichette dei tempi nel font del sito (Inter), come le scritte di Attività: uguali su ogni PC.
 .time-label { display: block; font: 400 11.5px/1.3 'Inter', 'Segoe UI', sans-serif; letter-spacing: .5px; text-transform: uppercase; color: #c4c4c4; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .performance-table strong { font: italic 700 clamp(18px, 1.6vw, 25px)/1.2 'Racer Display', sans-serif; font-variant-numeric: tabular-nums; }
