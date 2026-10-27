@@ -3,8 +3,9 @@ import { useI18n } from '~/i18n'
 import { hudSourcePolicy } from '~/services/sim/hudSourceAdapter'
 
 import { computed } from 'vue'
+import HudFixedDigits from '~/components/overlay/HudFixedDigits.vue'
 import type { FastOverlayState, FastStateTyre } from '~/composables/useFastStatePoller'
-import { tyreSlipBarStyle, tyreSlipStateLabel } from '~/utils/tyreSlipPresentation'
+import { TYRE_SLIP_GAUGE_TICKS, tyreSlipBarStyle, tyreSlipStateLabel } from '~/utils/tyreSlipPresentation'
 
 const props = defineProps<{
   fastState: FastOverlayState
@@ -60,22 +61,34 @@ const { t } = useI18n()
       <span>{{ t('overlays.tyres') }}</span>
     </header>
     <div class="tyre-slip-grid">
+      <!-- Classic v2 (28/10): cut top-right corner, slip-colour band on the left, square state tag. -->
       <div
         v-for="tyre in visibleTyres"
         :key="tyre.id"
         class="tyre-slip"
         :class="[`tyre-slip--${tyre.slipBand}`, `tyre-slip--state-${tyre.slipState}`, { 'tyre-slip--waiting': !hasSlipData(tyre) }]"
       >
+        <!-- clip-path removes the border on the cut corner: this line draws it back. -->
+        <i class="tyre-slip__cut" aria-hidden="true" />
         <div class="tyre-slip__topline">
-          <strong>{{ tyre.id }}</strong>
+          <strong class="tyre-slip__id">{{ tyre.id }}</strong>
           <span class="tyre-slip__state">{{ tyreSlipStateLabel(tyre.slipState, hasLiveTyres && hasSlipPolicy && tyre.wheelSlip !== null) }}</span>
         </div>
+        <!-- One continuous fill seen through ten slanted tick windows, under the tick outlines. -->
         <div class="tyre-slip__bar" aria-hidden="true">
-          <span :style="tyreFillStyle(tyre)" />
+          <span class="tyre-slip__track"><span class="tyre-slip__fill" :style="tyreFillStyle(tyre)" /></span>
+          <i
+            v-for="tick in TYRE_SLIP_GAUGE_TICKS"
+            :key="tick"
+            class="tyre-slip__tick"
+          />
         </div>
         <div class="tyre-slip__meta">
-          <span>{{ formatSlip(tyre) }}</span>
-          <span v-if="!compact && tyre.pressurePsi !== null">{{ tyre.pressurePsi.toFixed(1) }} psi</span>
+          <span class="tyre-slip__slip"><HudFixedDigits :value="formatSlip(tyre)" /><small> slip</small></span>
+          <span
+            v-if="!compact && tyre.pressurePsi !== null"
+            class="tyre-slip__psi"
+          ><HudFixedDigits :value="tyre.pressurePsi.toFixed(1)" /><small> psi</small></span>
         </div>
       </div>
     </div>

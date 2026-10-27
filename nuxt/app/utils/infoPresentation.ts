@@ -21,7 +21,7 @@ export interface InfoRow {
   id: string
   label: string
   value: string
-  tone: 'default' | 'yellow' | 'orange' | 'green' | 'red'
+  tone: 'default' | 'yellow' | 'orange' | 'green' | 'red' | 'purple'
   localTime?: boolean
 }
 
@@ -195,7 +195,8 @@ export function buildInfoPresentation(
   if (options.showGrip) rows.push({ id: 'grip', label: 'Grip:', value: info?.grip || info?.initialGrip || '--', tone: 'default' })
   if (options.showPitExitTraffic && state.sessionType === 2) rows.push({ id: 'pit-exit', label: 'Pit Exit:', value: traffic.value, tone: traffic.tone })
   if (options.showOptimal) rows.push({ id: 'optimal', label: 'Optimal:', value: formatInfoLapTime(info?.optimalLapTimeMs), tone: 'default' })
-  if (options.showBest) rows.push({ id: 'best', label: 'Best:', value: formatInfoLapTime(info?.bestLapTimeMs), tone: 'default' })
+  // Info style A (28/10): a set best lap reads in the session-best purple.
+  if (options.showBest) rows.push({ id: 'best', label: 'Best:', value: formatInfoLapTime(info?.bestLapTimeMs), tone: positive(info?.bestLapTimeMs) === null ? 'default' : 'purple' })
   if (options.showDamage) rows.push({ id: 'damage', label: 'Damage:', value: formatInfoLapTime(info?.damageTimeMs), tone: 'default' })
   if (options.showTime) rows.push({ id: 'local-time', label: 'Time:', value: '--:--:--', tone: 'default', localTime: true })
   return {
@@ -209,4 +210,20 @@ export function buildInfoPresentation(
     },
     rows,
   }
+}
+
+/**
+ * Info style A (28/10): the Delta bar grows from a centre line. Faster (negative) fills toward
+ * the left, slower (positive) toward the right; a full ratio fills one half of the bar.
+ */
+export function infoDeltaFillStyle(delta: InfoPresentation['delta']): Record<'left' | 'right' | 'width', string> {
+  const width = delta.side === 'zero' ? '0%' : `${clamp(delta.ratio, 0, 1) * 50}%`
+  return delta.side === 'negative'
+    ? { left: 'auto', right: '50%', width }
+    : { left: '50%', right: 'auto', width }
+}
+
+// Row labels keep their English text; style A shows them without the trailing colon.
+export function infoRowLabel(label: string): string {
+  return label.replace(/:\s*$/, '')
 }

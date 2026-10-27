@@ -10,10 +10,12 @@ describe('tyre overlay minimum readability contract', () => {
   it('keeps essential slip values and labels above the minimum type floors', () => {
     const page = source('app/pages/tyres-overlay.vue')
 
-    expect(page).toContain('max(16px, calc(18px * var(--hud-scale)))')
-    expect(page).toContain('max(14px, calc(15px * var(--hud-scale)))')
-    // HUD v2: pressure shares the slip row, so its floor rose from 10px to 12px.
-    expect(page).toContain('max(12px, calc(14px * var(--hud-scale)))')
+    // Classic v2 (28/10): wheel id, slip and psi values, state tag and units; the 0.6 minimum
+    // renders 16 / 14 / 12 / 12 px (owner: labels never below 12px).
+    expect(page).toContain('max(16px, calc(20px * var(--hud-scale)))')
+    expect(page).toContain('max(14px, calc(18px * var(--hud-scale)))')
+    expect(page).toContain('max(12px, calc(13px * var(--hud-scale)))')
+    expect(page).not.toMatch(/max\((10|11)px, calc\(1[1-3]px \* var\(--hud-scale\)\)\)\/1 var\(--hud-font-label\)/)
   })
 
   it('does not reintroduce sub-10px text at the compact tyres breakpoint', () => {

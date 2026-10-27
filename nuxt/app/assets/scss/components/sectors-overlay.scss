@@ -38,6 +38,18 @@
   background: rgba(13, 14, 18, var(--hud-sectors-bg-opacity, 1));
 }
 
+// Yellow flag (owner 28/10): the same frame as the tyres HUD, 4px at scale 1 and scaling with the HUD,
+// on the whole panel for Classic and Compact. An overlay above the content: nothing moves.
+.hud-overlay__panel--yellow-flag::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  border: calc(4px * var(--hud-scale)) solid #ffd400;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
 // ── L'HUD riempie il pannello ────────────────────────────────────────────────
 .hud-overlay__panel--compact {
   padding: calc(8px * var(--hud-scale)) calc(14px * var(--hud-scale)) calc(10px * var(--hud-scale));

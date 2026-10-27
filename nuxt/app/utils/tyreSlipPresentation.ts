@@ -16,6 +16,10 @@ export function tyreSlipStateLabel(state: FastStateSlipState, hasData: boolean):
 
 export type TyreSlipBarAxis = 'horizontal' | 'vertical'
 
+// Classic v2 (28/10): the slip gauge is drawn as ten slanted ticks. They are only windows:
+// the fill below them stays one continuous bar sized by tyreSlipFillPercent.
+export const TYRE_SLIP_GAUGE_TICKS = 10
+
 export function tyreSlipFillPercent(wheelSlipScaled: number | null | undefined): number {
   const scaled = typeof wheelSlipScaled === 'number' ? wheelSlipScaled : 0
   return Math.max(4, Math.min(100, (scaled / 18) * 100))

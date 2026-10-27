@@ -10,6 +10,8 @@ import {
   formatInfoLocalTime,
   formatInfoRunningLapTime,
   formatInfoStintDuration,
+  infoDeltaFillStyle,
+  infoRowLabel,
 } from '~/utils/infoPresentation'
 
 const state = {
@@ -172,5 +174,28 @@ describe('Info presentation', () => {
     expect(evaluateInfoTarget(90_500, true, target)).toBe('inside')
     expect(evaluateInfoTarget(90_501, true, target)).toBe('outside')
     expect(evaluateInfoTarget(90_501, false, target)).toBe('neutral')
+  })
+})
+
+describe('Info style A (28/10)', () => {
+  it('grows the Delta fill from the centre line: faster to the left, slower to the right', () => {
+    const delta = { visible: true, value: '', purple: false }
+    expect(infoDeltaFillStyle({ ...delta, side: 'negative', ratio: 0.5 })).toEqual({ left: 'auto', right: '50%', width: '25%' })
+    expect(infoDeltaFillStyle({ ...delta, side: 'positive', ratio: 1 })).toEqual({ left: '50%', right: 'auto', width: '50%' })
+    expect(infoDeltaFillStyle({ ...delta, side: 'positive', ratio: 3 }).width).toBe('50%')
+    expect(infoDeltaFillStyle({ ...delta, side: 'zero', ratio: 0.8 }).width).toBe('0%')
+  })
+
+  it('shows a set best lap in purple and keeps the waiting best neutral', () => {
+    const model = buildInfoPresentation(state)
+    expect(model.rows.find(row => row.id === 'best')).toMatchObject({ value: '1:30.456', tone: 'purple' })
+    const empty = buildInfoPresentation({ ...state, info: { ...state.info, bestLapTimeMs: null } })
+    expect(empty.rows.find(row => row.id === 'best')).toMatchObject({ value: '--:--.---', tone: 'default' })
+  })
+
+  it('drops only the trailing colon from row labels', () => {
+    expect(infoRowLabel('Fuel Left:')).toBe('Fuel Left')
+    expect(infoRowLabel('Q-Fuel:')).toBe('Q-Fuel')
+    expect(infoRowLabel('Time')).toBe('Time')
   })
 })

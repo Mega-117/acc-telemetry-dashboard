@@ -138,7 +138,8 @@ const { t } = useI18n()
   -webkit-app-region: drag;
   padding: calc(12px * var(--hud-scale));
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 12px;
+  // Owner (28/10): square outer corners and an even 12px inner margin (scaled) on every side.
+  border-radius: 0;
   // Sfondo completamente OPACO (nessuna trasparenza) e nessuna ombra.
   background: #0d0e12;
 }
@@ -206,7 +207,7 @@ const { t } = useI18n()
 
   span {
     color: #f4f4f6;
-    font: 700 max(11px, calc(12px * var(--hud-scale)))/1 var(--hud-font-label);
+    font: 700 max(12px, calc(12px * var(--hud-scale)))/1 var(--hud-font-label);
     letter-spacing: .14em;
     text-transform: uppercase;
   }
@@ -214,21 +215,54 @@ const { t } = useI18n()
 
 .hud-overlay .tyre-slip-grid {
   flex: 1;
-  grid-template-columns: repeat(2, minmax(0, calc(256px * var(--hud-scale))));
+  // The cards fill the panel width, so the 12px panel padding is the same margin on all four sides.
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-rows: 1fr 1fr;
   justify-content: center;
-  gap: calc(10px * var(--hud-scale)) calc(14px * var(--hud-scale));
+  gap: calc(8px * var(--hud-scale)) calc(14px * var(--hud-scale));
 }
 
-// The background takes more of the slip colour as the state worsens: limit < slide < spin/lock.
+// Classic v2 (28/10): the top-right corner is cut; the gradient warms up with the slip colour
+// as the state worsens: limit < slide < spin/lock, none while waiting.
 .hud-overlay .tyre-slip {
+  --tyre-slip-cut: calc(10px * var(--hud-scale));
+  --tyre-slip-line: rgba(255, 255, 255, 0.15);
+  position: relative;
   grid-template-columns: 1fr;
   align-content: space-between;
-  gap: calc(6px * var(--hud-scale));
-  padding: calc(10px * var(--hud-scale)) calc(8px * var(--hud-scale));
-  border: 0;
+  gap: calc(10px * var(--hud-scale) - 2px);
+  // Vertical padding and gap shrink faster than the scale (9px/8px at 1, 4.2px/4px at 0.6): the text
+  // floors (id 16px, values 14px, tags 12px) keep the four cards inside the 268px window at the minimum.
+  padding: calc(12px * var(--hud-scale) - 3px) calc(12px * var(--hud-scale)) calc(12px * var(--hud-scale) - 3px) calc(14px * var(--hud-scale));
+  border: 1px solid var(--tyre-slip-line);
   border-radius: 0;
-  background: color-mix(in srgb, var(--tyre-slip-color) var(--tyre-slip-alarm, 0%), rgba(255, 255, 255, 0.045));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--tyre-slip-color) var(--tyre-slip-alarm, 0%), #15171c) 0%, #0b0c0f 100%);
+  clip-path: polygon(0 0, calc(100% - var(--tyre-slip-cut)) 0, 100% var(--tyre-slip-cut), 100% 100%, 0 100%);
+}
+
+// Band on the left edge in the slip colour (muted while waiting for data).
+.hud-overlay .tyre-slip::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: calc(4px * var(--hud-scale));
+  background: var(--tyre-slip-color);
+}
+
+.hud-overlay .tyre-slip--waiting::before { background: rgba(255, 255, 255, 0.22); }
+
+// The clip-path also removes the border on the cut: a 45° line of the same colour draws it back.
+.hud-overlay .tyre-slip__cut {
+  position: absolute;
+  top: -1px;
+  left: calc(100% + 1px - var(--tyre-slip-cut));
+  width: calc(var(--tyre-slip-cut) * 1.4142);
+  height: 1px;
+  background: var(--tyre-slip-line);
+  transform: rotate(45deg);
+  transform-origin: 0 0;
+  pointer-events: none;
 }
 
 .hud-overlay .tyre-slip--state-limit { --tyre-slip-alarm: 12%; }
@@ -238,30 +272,29 @@ const { t } = useI18n()
 .hud-overlay .tyre-slip--waiting { --tyre-slip-alarm: 0%; }
 
 .hud-overlay .tyre-slip__topline strong {
-  font-family: var(--hud-font-label);
-  font-size: max(16px, calc(18px * var(--hud-scale)));
-  letter-spacing: .08em;
-  color: #a3a5ae;
+  color: #f4f4f6;
+  font: italic 700 max(16px, calc(20px * var(--hud-scale)))/1 var(--hud-font-num);
+  letter-spacing: .04em;
 }
 
-// The state sits in a pill filled with the slip colour.
+// The state sits in a square tag filled with the slip colour.
 .hud-overlay .tyre-slip__state,
 .hud-overlay .tyre-slip--state-limit .tyre-slip__state,
 .hud-overlay .tyre-slip--state-sliding .tyre-slip__state,
 .hud-overlay .tyre-slip--state-wheelspin .tyre-slip__state,
 .hud-overlay .tyre-slip--state-lockup .tyre-slip__state {
   max-width: none;
-  padding: calc(2px * var(--hud-scale)) calc(6px * var(--hud-scale));
-  border-radius: 999px;
+  padding: calc(2px * var(--hud-scale)) calc(8px * var(--hud-scale));
+  border-radius: 0;
   background: var(--tyre-slip-color, #fff);
   color: #000;
-  font: 700 max(11px, calc(13px * var(--hud-scale)))/1 var(--hud-font-label);
-  letter-spacing: .1em;
+  font: 700 max(12px, calc(13px * var(--hud-scale)))/1 var(--hud-font-label);
+  letter-spacing: .12em;
 }
 
 .hud-overlay .tyre-slip--waiting .tyre-slip__state {
   background: rgba(255, 255, 255, 0.12);
-  color: #a3a5ae;
+  color: #d0d2d8;
 }
 
 // Slip bottom-left and pressure bottom-right on the same row.
@@ -269,38 +302,69 @@ const { t } = useI18n()
   align-items: baseline;
 }
 
-.hud-overlay .tyre-slip__meta span {
+.hud-overlay .tyre-slip__slip,
+.hud-overlay .tyre-slip__psi {
+  overflow: visible;
   color: #f4f4f6;
-  font-family: var(--hud-font-num);
-  font-style: italic;
+  font: italic 700 max(14px, calc(18px * var(--hud-scale)))/1 var(--hud-font-num);
 }
 
-.hud-overlay .tyre-slip__meta span:first-child {
-  font-size: max(14px, calc(15px * var(--hud-scale)));
-  font-weight: 700;
+// The shared base styles size every `.tyre-slip__meta span` at 10px: the fixed-digit slots inherit instead.
+.hud-overlay .tyre-slip__meta .hud-fixed-digits,
+.hud-overlay .tyre-slip__meta .hud-fixed-digits__glyph {
+  overflow: visible;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
 }
 
-.hud-overlay .tyre-slip__meta span:first-child::after {
-  content: ' slip';
-  font-family: var(--hud-font-label);
-  font-size: 0.72em;
-  font-style: normal;
-  color: #a3a5ae;
+.hud-overlay .tyre-slip__meta small {
+  color: #d0d2d8;
+  font: 700 max(12px, calc(13px * var(--hud-scale)))/1 var(--hud-font-label);
+  letter-spacing: .04em;
 }
 
-.hud-overlay .tyre-slip__meta span + span {
-  font-size: max(12px, calc(14px * var(--hud-scale)));
-  color: #a3a5ae;
-}
-
+// Slip gauge: the whole gauge is slanted, so tick windows and the fill mask stay aligned.
+// The track is masked into ten windows (period 10%, gap at the end of each); the fill inside it
+// is ONE continuous bar, so a partial value shows a partly filled tick, never ticks lighting up.
 .hud-overlay .tyre-slip__bar {
-  height: calc(7px * var(--hud-scale));
+  --tyre-slip-tick-gap: calc(3px * var(--hud-scale));
+  position: relative;
+  display: flex;
+  height: calc(10px * var(--hud-scale));
+  margin-inline: calc(2px * var(--hud-scale));
+  overflow: visible;
   border-radius: 0;
-  background: rgba(255, 255, 255, 0.08);
+  background: transparent;
+  transform: skewX(-18deg);
 }
 
-.hud-overlay .tyre-slip__bar span {
+.hud-overlay .tyre-slip__bar .tyre-slip__track {
+  position: absolute;
+  inset: 0;
+  display: block;
   border-radius: 0;
+  background: rgba(255, 255, 255, 0.06);
+  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 calc(10% - var(--tyre-slip-tick-gap)), transparent calc(10% - var(--tyre-slip-tick-gap)) 10%);
+  mask-image: repeating-linear-gradient(90deg, #000 0 calc(10% - var(--tyre-slip-tick-gap)), transparent calc(10% - var(--tyre-slip-tick-gap)) 10%);
+}
+
+.hud-overlay .tyre-slip__bar .tyre-slip__fill {
+  display: block;
+  height: 100%;
+  border-radius: 0;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--tyre-slip-color) 55%, transparent), var(--tyre-slip-color));
+}
+
+.hud-overlay .tyre-slip--waiting .tyre-slip__bar .tyre-slip__fill { background: rgba(255, 255, 255, 0.2); }
+
+.hud-overlay .tyre-slip__tick {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  flex: 0 0 calc(10% - var(--tyre-slip-tick-gap));
+  margin-right: var(--tyre-slip-tick-gap);
+  border: 1px solid rgba(255, 255, 255, 0.26);
 }
 }
 </style>

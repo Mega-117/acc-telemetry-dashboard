@@ -278,6 +278,7 @@ onBeforeUnmount(() => {
       :class="{
         'hud-overlay__panel--compact': variant === 'compact',
         'hud-overlay__panel--target': onTargetPage,
+        'hud-overlay__panel--yellow-flag': fastState.flag === 2,
       }"
       :style="{ '--hud-sectors-bg-opacity': String(panelBackgroundOpacity) }"
     >

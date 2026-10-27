@@ -46,7 +46,8 @@ const options = computed(() => ({
 const liveModel = stableComputed(() => buildInfoPresentation(telemetry.fastState.value, options.value))
 const model = useHudPresentationMemory(liveModel, telemetry.fastState)
 const localTimeValue = computed(() => formatInfoLocalTime(clockMs.value))
-const canvasStyle = computed(() => ({ transform: `scale(${overlay.scale.value})` }))
+// The canvas scales by transform; --hud-scale lets InfoHud keep pixel floors on the RENDERED text size.
+const canvasStyle = computed(() => ({ 'transform': `scale(${overlay.scale.value})`, '--hud-scale': String(overlay.scale.value) }))
 
 async function syncInfoViewport() {
   await nextTick()
