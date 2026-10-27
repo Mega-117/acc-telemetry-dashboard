@@ -176,11 +176,12 @@ function goToTrack(id: string) {
 .track-card--unplayed .card-track-image { opacity: .55; }
 .track-card--unplayed .card-content { opacity: .65; }
 .card-image-section { aspect-ratio: 1; overflow: hidden; background: #090b0e; }
-.common-best-label, .track-reference { color: var(--rc-muted); font-size: 10px; align-self: center; }
+// PIP-640: 12 px, the legible minimum on a phone (PageSpeed flagged half the Piste text at 10-11 px).
+.common-best-label, .track-reference { color: var(--rc-muted); font-size: 12px; align-self: center; }
 .card-track-image { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center top; }
 .card-content { padding: 12px; }
 .track-name { margin: 0 0 6px; font-size: 14px; font-weight: 600; line-height: 18px; overflow-wrap: anywhere; }
-.track-stats { display: flex; flex-wrap: wrap; gap: 5px; color: var(--rc-muted); font-size: 11px; line-height: 1.4; }
+.track-stats { display: flex; flex-wrap: wrap; gap: 5px; color: var(--rc-muted); font-size: 12px; line-height: 1.4; }
 .track-times { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-top: 10px; }
 .time-badge { min-width: 0; width: 100%; box-sizing: border-box; padding: 4px 6px; border: 1px solid color-mix(in srgb,var(--time-color) 45%,transparent); background: color-mix(in srgb,var(--time-color) 10%,transparent); color: var(--time-color); text-align: center; font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .time-badge--qualy { --time-color: var(--racing-qualify); }.time-badge--race { --time-color: var(--racing-race); }.time-badge--empty { --time-color: #626971; }

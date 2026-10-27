@@ -2491,7 +2491,7 @@ const gripZones = computed(() => {
         <h2 class="master-title">Stint</h2>
         <div class="analysis-mode" role="group" aria-label="Modalità analisi">
           <button type="button" :aria-pressed="!comparisonOpen" @click="comparisonOpen = false">Analisi</button>
-          <button type="button" :aria-pressed="comparisonOpen" aria-controls="session-comparison-builder" @click="comparisonOpen = true">Confronto</button>
+          <button type="button" :aria-pressed="comparisonOpen" :aria-controls="comparisonOpen ? 'session-comparison-builder' : undefined" @click="comparisonOpen = true">Confronto</button>
         </div>
         <div v-if="comparisonOpen" class="builder-panel" id="session-comparison-builder">
           <div class="builder-panel-header">
@@ -2985,10 +2985,10 @@ const gripZones = computed(() => {
         <!-- Chart -->
         <div class="chart-section">
           <div class="chart-header-row">
-            <h4 class="chart-title">
+            <h3 class="chart-title">
               <template v-if="isAnyComparison">Confronto tempi — {{ comparisonTitle }}</template>
               <template v-else>Tempi Giro — Stint {{ displayedStintNumber }}</template>
-            </h4>
+            </h3>
             <!-- Chart Toolbar -->
             <div class="chart-toolbar">
               <button class="toolbar-btn" @click="zoomIn" title="Zoom In">

@@ -25,8 +25,9 @@ export const BOOT_LOADER_CSS = [
   '.rc-boot__laser{position:relative;width:min(300px,64vw);height:60px;margin:-24px 0;-webkit-mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent)}',
   ".rc-boot__laser::before{content:'';position:absolute;left:0;right:0;top:29px;height:2px;background:#ff1f3d40;box-shadow:0 0 6px #ff1f3d40}",
   ".rc-boot__laser::after{content:'';position:absolute;left:0;top:29px;width:38%;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,#ff2d4b99 25%,#ff3a55 62%,#ffc2cb 88%,#fff 96%,transparent);box-shadow:0 0 3px 1px #ff5a70,0 0 10px 2px #ff1f3dcc,0 0 22px 5px #ff002466;animation:rc-boot-laser 1.7s cubic-bezier(.45,0,.25,1) infinite}",
-  // Starts just above zero, not at zero: a frame at opacity 0 does not count as a first paint for PageSpeed.
-  '@keyframes rc-boot-in{from{opacity:.01;transform:scale(.97)}}',
+  // Entry by scale only: any opacity animation on the logo (even from .01) held back Chrome's first and largest
+  // contentful paint until the app mounted (Lighthouse mobile 61, LCP render delay 7 s).
+  '@keyframes rc-boot-in{from{transform:scale(.96)}}',
   '@keyframes rc-boot-glow{50%{filter:drop-shadow(0 0 28px #ff002480)}}',
   '@keyframes rc-boot-laser{from{transform:translateX(-100%)}to{transform:translateX(264%)}}',
   '@media (prefers-reduced-motion:reduce){.rc-boot__inner,.rc-boot__inner img,.rc-boot__laser::after{animation:none!important;transition:none!important}}',

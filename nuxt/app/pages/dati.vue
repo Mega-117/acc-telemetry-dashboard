@@ -304,16 +304,21 @@ const repairTotal = computed(() => {
         <p class="tele-section">Giro e settori</p>
         <!-- One table on the same five columns: labels, then lap and sectors to read across. -->
         <div class="tele-table" role="table" aria-label="Giro e settori">
+          <!-- Rows are display: contents (the grid keeps its five columns); they give readers the table's rows. -->
+          <div class="tele-tr" role="row">
           <span class="tele-th" role="columnheader" />
           <span v-for="col in lapColumns" :key="col.title" class="tele-th" role="columnheader">{{ col.title }}</span>
+          </div>
+          <div class="tele-tr" role="row">
           <span class="tele-rh" role="rowheader" title="Tempo del giro e dei settori; in viola i migliori settori della sessione">Tempo</span>
           <span v-for="col in lapColumns" :key="`t-${col.title}`" class="tele-td tele-td--time" role="cell"
             :class="{ 'lap-time': col.lap, invalid: col.lap && lap?.is_valid === false, best: col.best, 'stint-best': col.stintBest, unreliable: col.unreliable }"
             :title="col.unreliable ? 'Settore non affidabile (giro di uscita dai box)' : undefined">{{ time(col.time) }}<small v-if="col.unreliable"> *</small></span>
-          <template v-for="row in lapRows" :key="row.label">
+          </div>
+          <div v-for="row in lapRows" :key="row.label" class="tele-tr" role="row">
             <span class="tele-rh" role="rowheader" :title="row.hint">{{ row.label }}</span>
             <span v-for="col in lapColumns" :key="`${row.label}-${col.title}`" class="tele-td" role="cell">{{ row.value(col.data) }}</span>
-          </template>
+          </div>
         </div>
 
         <!-- Session, stint, damage, conditions -->
@@ -424,6 +429,7 @@ select { @include controls.select; }
 .tele-section::after { order: 1; }
 [title] { cursor: help; }
 // Lap and sectors: label column + four value columns, aligned to the five-column grid.
+.tele-tr { display: contents; }
 .tele-table { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); column-gap: 10px; border: 1px solid $line; background: $cell; padding: 6px 0; font-variant-numeric: tabular-nums;
   > span { padding: 2px 12px; font-size: 13px; }
   .tele-th { color: #fff; font: italic 700 13px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; text-align: center; padding-bottom: 6px; border-bottom: 1px solid $line; margin-bottom: 3px; }

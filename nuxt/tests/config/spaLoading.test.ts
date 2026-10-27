@@ -15,12 +15,13 @@ describe('spaLoadingHtml', () => {
     expect(spaLoadingHtml('/')).toContain('src="/branding/auth/racer_core_exact.svg"')
   })
 
-  it('has a laser, a glowing logo and an entry fade that starts above zero opacity (still a first paint)', () => {
+  it('has a laser, a glowing logo and an entry by scale only (no opacity: it would delay the first paint)', () => {
     const html = spaLoadingHtml('/')
     expect(html).toContain('class="rc-boot__laser"')
     expect(html).toContain('@keyframes rc-boot-glow')
     expect(html).toContain('@keyframes rc-boot-laser')
-    expect(html).toContain('@keyframes rc-boot-in{from{opacity:.01')
+    expect(html).toContain('@keyframes rc-boot-in{from{transform:scale(.96)}}')
+    expect(html).not.toMatch(/rc-boot-in{from{opacity/)
     expect(html).toContain('prefers-reduced-motion')
   })
 

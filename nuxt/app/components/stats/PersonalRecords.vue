@@ -37,7 +37,7 @@ const kinds = [
           <div v-for="k in kinds" :key="k.id" :class="k.cls">
             <dt>{{ k.label }}</dt>
             <dd>{{ formatLapTime(r[k.id]?.ms ?? null) }}</dd>
-            <small>{{ when(r[k.id]) }}</small>
+            <dd class="record__when">{{ when(r[k.id]) }}</dd>
           </div>
         </dl>
       </li>
@@ -64,7 +64,8 @@ h2 { margin: 0; font: italic 700 18px/1.2 'Racer Display', sans-serif; text-tran
 .record__times div { border-left: 3px solid var(--k); padding-left: 8px; }
 .record__times dt { font: 400 11px/1.2 'Arial Narrow', 'Segoe UI', sans-serif; text-transform: uppercase; color: #bdbdbd; }
 .record__times dd { margin: 2px 0 0; font: 600 16px/1.2 'Segoe UI', sans-serif; font-variant-numeric: tabular-nums; }
-.record__times small { font-size: 11px; color: #8a8a8a; }
+// The date is a second <dd> of the same term (a <dl> group may hold only <dt>/<dd>, PIP-640 accessibility).
+.record__times .record__when { margin: 0; font: 400 11px/1.3 'Segoe UI', sans-serif; color: #8a8a8a; }
 .k-qualy { --k: var(--racing-qualify, #ffc400); }
 .k-race { --k: var(--racing-race, #ff0024); }
 .k-avg { --k: var(--racing-practice, #0076ff); }

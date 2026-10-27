@@ -72,7 +72,9 @@
   &:focus-visible { outline: none; box-shadow: inset 0 0 0 2px #fff; }
   &:disabled { opacity: .4; cursor: default; }
   // Il principale e' rosso pieno, con lo stesso bordo bianco leggero del secondario.
-  &--primary { background: #ff0024; &:hover:not(:disabled), &:focus-visible { background: #ff2a45; } }
+  // PIP-640: #eb0020, a touch deeper than the brand red, so white text reaches the 4.5:1 contrast (#ff0024 gave
+  // 3.9:1, flagged by PageSpeed); hover goes darker, not lighter, for the same reason.
+  &--primary { background: #eb0020; &:hover:not(:disabled), &:focus-visible { background: #d1001c; } }
   &--compact { min-height: 34px; padding: 6px 12px 6px 10px; gap: 8px; font-size: 13px; }
   // Se il bottone comincia col testo (nessuna icona davanti, solo la freccia in fondo) serve piu' aria a
   // sinistra, altrimenti il testo sembra attaccato al bordo rispetto a freccia + margine a destra.
