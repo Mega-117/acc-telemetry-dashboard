@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { Gauge, LoaderCircle } from '@lucide/vue'
 import { usePresentationInterval } from '~/composables/usePresentationVisibility'
 import { readableReason, type ControlKStatusMessage } from '~/services/overlay/controlKStatus'
+import { useI18n } from '~/i18n'
 
 type Snapshot = {
   available?: boolean
@@ -25,6 +26,7 @@ const props = defineProps<{ api?: {
   /** PIP-556: progress goes to the Control K status line; only final outcomes go to the feedback target. */
   statusLine?: boolean }>()
 const emit = defineEmits<{ status: [message: ControlKStatusMessage | null]; outcome: [message: ControlKStatusMessage | null] }>()
+const { t } = useI18n()
 const state = ref<Snapshot>({})
 const requesting = ref(false)
 let generation = 0
@@ -33,13 +35,13 @@ const psi = (value: number) => value.toFixed(1).replace('.', ',')
 // One line for the Control K status: progress, error, or the four applied PSI.
 // An expired estimate (PIP-556) is a state of the button, never a message.
 const statusMessage = computed<ControlKStatusMessage | null>(() => {
-  if (pending.value) return { tone: 'progress', text: `Stima pressioni: ${state.value.message || 'calcolo in corso…'}` }
-  if (state.value.status === 'error') return { tone: 'error', text: `Stima pressioni: ${readableReason(state.value.reason)}${state.value.partial ? ' Controlla il setup.' : ''}` }
+  if (pending.value) return { tone: 'progress', text: t('quickPanel.estimate.statusProgress', { message: state.value.message || t('quickPanel.estimate.calculatingLower') }) }
+  if (state.value.status === 'error') return { tone: 'error', text: t('quickPanel.estimate.statusError', { reason: readableReason(state.value.reason) }) + (state.value.partial ? t('quickPanel.estimate.checkSetup') : '') }
   if (state.value.status === 'ready' && state.value.result) {
     const values = state.value.result.wheels.map(w => `${w.wheel} ${psi(w.cold)}`).join(' · ')
     return state.value.applied
-      ? { tone: 'ok', text: `Stima applicata: ${values} PSI` }
-      : { tone: 'error', text: `Stima ${values} PSI: applicazione non confermata, controlla il setup.` }
+      ? { tone: 'ok', text: t('quickPanel.estimate.applied', { values }) }
+      : { tone: 'error', text: t('quickPanel.estimate.notConfirmed', { values }) }
   }
   return null
 })
@@ -53,11 +55,11 @@ async function run() {
   if (pending.value || props.disabled) return
   requesting.value = true
   generation++
-  state.value = { available: true, status: 'reading', message: 'Leggo condizioni e setup…' }
+  state.value = { available: true, status: 'reading', message: t('quickPanel.estimate.reading') }
   try {
     const result = await props.api?.trainingOverlayPressureTest?.()
-    state.value = result ? { ...result, available: true } : { available: true, status: 'error', reason: 'Comando non disponibile.' }
-  } catch { state.value = { available: true, status: 'error', reason: 'Stima interrotta. Controlla il setup prima di riprovare.' } }
+    state.value = result ? { ...result, available: true } : { available: true, status: 'error', reason: t('quickPanel.estimate.commandUnavailable') }
+  } catch { state.value = { available: true, status: 'error', reason: t('quickPanel.estimate.interrupted') } }
   finally { generation++; requesting.value = false; emit('outcome', statusMessage.value) }
 }
 const polling = usePresentationInterval(() => { void refresh() }, 1000)
@@ -65,30 +67,30 @@ onMounted(() => { void refresh(); polling.start() })
 </script>
 
 <template>
-  <section v-if="state.available" class="pressure-test" :class="{ 'pressure-test--horizontal': horizontal }" aria-label="Stima pressioni">
+  <section v-if="state.available" class="pressure-test" :class="{ 'pressure-test--horizontal': horizontal }" :aria-label="t('quickPanel.estimate.aria')">
     <button type="button" class="pressure-test__button" data-overlay-wheel-action="pressure-test"
-      title="Legge il setup e applica le pressioni iniziali stimate" aria-label="Stima pressioni BETA"
-      :disabled="pending || disabled" :aria-busy="pending" @click="run"><LoaderCircle v-if="pending" class="pressure-test__spinner" :size="20" aria-hidden="true" /><Gauge v-else :size="20" aria-hidden="true" /><span>Stima<br>pressioni</span><small class="quick-action-badge">BETA</small></button>
+      :title="t('quickPanel.estimate.buttonTitle')" :aria-label="t('quickPanel.estimate.buttonAria')"
+      :disabled="pending || disabled" :aria-busy="pending" @click="run"><LoaderCircle v-if="pending" class="pressure-test__spinner" :size="20" aria-hidden="true" /><Gauge v-else :size="20" aria-hidden="true" /><span>{{ t('quickPanel.estimate.line1') }}<br>{{ t('quickPanel.estimate.line2') }}</span><small class="quick-action-badge">BETA</small></button>
     <Teleport defer :to="feedbackTarget || '#quick-panel-horizontal-feedback'" :disabled="!feedbackTarget && !horizontal">
     <div class="pressure-test__feedback" aria-live="polite">
-    <p v-if="pending && !statusLine" class="launcher-hint" role="status">{{ state.message || 'Calcolo in corso…' }}</p>
+    <p v-if="pending && !statusLine" class="launcher-hint" role="status">{{ state.message || t('quickPanel.estimate.calculating') }}</p>
     <div v-else-if="!pending && state.status === 'error'" class="launcher-hint pressure-test__error" role="alert">
       <p :title="state.reason">{{ statusLine ? readableReason(state.reason) : state.reason }}</p>
-      <p v-if="state.partial">Applicazione incompleta: alcune pressioni potrebbero essere cambiate. Controlla il setup.</p>
-      <p v-if="state.partial && state.result">Previste: {{ state.result.wheels.map(w => `${w.wheel} ${psi(w.cold)}`).join(' · ') }} PSI</p>
-      <p v-if="state.observed">Ultime lette: {{ Object.entries(state.observed).map(([w, v]) => `${w} ${psi(v / 10)}`).join(' · ') }} PSI</p>
+      <p v-if="state.partial">{{ t('quickPanel.estimate.partial') }}</p>
+      <p v-if="state.partial && state.result">{{ t('quickPanel.estimate.expected', { values: state.result.wheels.map(w => `${w.wheel} ${psi(w.cold)}`).join(' · ') }) }}</p>
+      <p v-if="state.observed">{{ t('quickPanel.estimate.lastRead', { values: Object.entries(state.observed).map(([w, v]) => `${w} ${psi(v / 10)}`).join(' · ') }) }}</p>
     </div>
     <div v-else-if="!pending && state.status === 'ready' && state.result" class="pressure-test__result" role="status">
-      <strong>Stima iniziale · obiettivo {{ psi(state.result.target) }} PSI</strong>
+      <strong>{{ t('quickPanel.estimate.resultTitle', { psi: psi(state.result.target) }) }}</strong>
       <dl>
         <div v-for="wheel in state.result.wheels" :key="wheel.wheel">
           <dt>{{ wheel.name }}</dt><dd>{{ psi(wheel.cold) }} <small>PSI</small></dd>
         </div>
       </dl>
-      <p>{{ state.result.context.track }} · Aria {{ psi(state.result.context.air) }} °C · Pista {{ psi(state.result.context.road) }} °C</p>
-      <p>{{ state.applied ? 'Pressioni applicate e verificate nel setup.' : 'Applicazione non confermata.' }}</p>
-      <p>Obiettivo a caldo stimato · gomme nuove · BETA.</p>
-      <p>Ricalcola se modifichi setup o condizioni.</p>
+      <p>{{ t('quickPanel.estimate.conditions', { track: state.result.context.track, air: psi(state.result.context.air), road: psi(state.result.context.road) }) }}</p>
+      <p>{{ state.applied ? t('quickPanel.estimate.appliedVerified') : t('quickPanel.estimate.applyNotConfirmed') }}</p>
+      <p>{{ t('quickPanel.estimate.hotTarget') }}</p>
+      <p>{{ t('quickPanel.estimate.recalc') }}</p>
     </div>
     </div>
     </Teleport>

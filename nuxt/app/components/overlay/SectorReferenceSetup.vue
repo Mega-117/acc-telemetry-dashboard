@@ -10,9 +10,11 @@ import { fieldStartPart, fieldWheelCommand, type NumberFieldSpec } from '~/utils
 import ControlKNumberField from '~/components/overlay/ControlKNumberField.vue'
 import ControlKViewHeader from '~/components/overlay/ControlKViewHeader.vue'
 import { normalizeSectorDeltaReference, type SectorDeltaReference } from '~/utils/sectorDeltaPresentation'
+import { useI18n, type TranslationKey } from '~/i18n'
 
 const props = withDefaults(defineProps<{ keyboardOverlay?: boolean }>(), { keyboardOverlay: false })
 const emit = defineEmits<{ saved: [settings: HudOverlaySettings], cancel: [] }>()
+const { t } = useI18n()
 function getApi(): any { return typeof window === 'undefined' ? null : (window as any).electronAPI }
 const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStatePoller(getApi)
 const settings = ref<HudOverlaySettings | null>(null)
@@ -32,8 +34,8 @@ const contextChanged = computed(() => boundKey.value !== null && boundKey.value 
 const parsed = computed(() => draft.value.map(parseSectorReferenceTime))
 const valid = computed(() => mode.value !== 'custom' || !!boundKey.value && !contextChanged.value && parsed.value.every(ms => ms !== null))
 const total = computed(() => parsed.value.every(ms => ms !== null) ? (parsed.value.reduce<number>((sum, ms) => sum + (ms || 0), 0) / 1000).toFixed(1).replace('.', ',') : '—')
-const modes: { id: SectorDeltaReference, label: string }[] = [
-  { id: 'bestSector', label: 'Miglior settore' }, { id: 'custom', label: 'Personalizzati' },
+const modes: { id: SectorDeltaReference, labelKey: TranslationKey }[] = [
+  { id: 'bestSector', labelKey: 'hudSetup.sectors.modeBest' }, { id: 'custom', labelKey: 'hudSetup.sectors.modeCustom' },
 ]
 let disposed = false
 function bindContext() {
@@ -50,7 +52,7 @@ function bindContext() {
 const formatSectorTime = formatSectorReferenceTime
 const contextLine = computed(() => boundContext.value
   ? `${boundContext.value.track} · ${boundContext.value.car}${boundContext.value.variant ? ` · ${boundContext.value.variant}` : ''}`
-  : 'Avvia il gioco e seleziona pista e vettura.')
+  : t('hudSetup.sectors.noContext'))
 function bestSectorDraft(): string[] | null {
   const sectors = fastState.value.sectorHud?.sectors ?? []
   const count = boundContext.value?.sectorCount ?? 3
@@ -100,21 +102,21 @@ async function requestKeyboard(event: PointerEvent) {
       if (disposed) { await getApi()?.trainingOverlayKeyboardEditing?.(false); return }
       input.focus(); input.select()
     }
-  } catch { error.value = 'Tastiera non disponibile. Usa i pulsanti o apri questo pannello dalla pagina HUD.' }
+  } catch { error.value = t('hudSetup.sectors.keyboardUnavailable') }
 }
 async function submit() {
   if (!loaded.value || !valid.value || saving.value) return
   error.value = ''; saving.value = true
   try {
     const api = getApi()
-    if (!api?.hudOverlaySaveSettings) throw new Error('Collegamento al programma non disponibile.')
+    if (!api?.hudOverlaySaveSettings) throw new Error(t('hudSetup.sectors.linkUnavailable'))
     const next = await api.hudOverlaySaveSettings('sectors', {
       deltaReference: mode.value,
       ...(mode.value === 'custom' ? { customSectorReference: { ...boundContext.value, timesMs: parsed.value } } : {}),
     })
-    if (!next || next.deltaReference !== mode.value) throw new Error('Salvataggio non riuscito. Riprova.')
+    if (!next || next.deltaReference !== mode.value) throw new Error(t('hudSetup.sectors.saveFailedRetry'))
     if (!disposed) emit('saved', next)
-  } catch (cause) { if (!disposed) error.value = cause instanceof Error ? cause.message : 'Salvataggio non riuscito.' }
+  } catch (cause) { if (!disposed) error.value = cause instanceof Error ? cause.message : t('hudSetup.sectors.saveFailed') }
   finally { saving.value = false }
 }
 function onKey(event: KeyboardEvent) {
@@ -126,9 +128,9 @@ onMounted(async () => {
   try {
     const results = await Promise.all([getApi()?.hudOverlayGetSettings?.('sectors'), startFastStatePolling()])
     if (disposed) return
-    if (!results[0]) throw new Error('Impostazioni non disponibili. Riapri il pannello.')
+    if (!results[0]) throw new Error(t('hudSetup.sectors.settingsUnavailable'))
     settings.value = results[0]; mode.value = normalizeSectorDeltaReference(results[0].deltaReference); loaded.value = true
-  } catch (cause) { if (!disposed) error.value = cause instanceof Error ? cause.message : 'Caricamento non riuscito.' }
+  } catch (cause) { if (!disposed) error.value = cause instanceof Error ? cause.message : t('hudSetup.sectors.loadFailed') }
 })
 onBeforeUnmount(() => {
   disposed = true; stopFastStatePolling()
@@ -137,57 +139,57 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="sector-reference-setup" :class="{ 'sector-reference-setup--quick': keyboardOverlay }" data-overlay-interactive aria-label="Riferimenti settori" @keydown="onKey">
+  <section class="sector-reference-setup" :class="{ 'sector-reference-setup--quick': keyboardOverlay }" data-overlay-interactive :aria-label="t('hudSetup.sectors.aria')" @keydown="onKey">
     <!-- PIP-556: Control K editor structure: ← header, choices, fields, hint, one primary action. -->
     <template v-if="keyboardOverlay">
-      <ControlKViewHeader title="Settori obiettivo" :subtitle="contextLine" action="sector-cancel" @back="!saving && emit('cancel')" />
-      <div class="ck-editor__shortcuts" role="group" aria-label="Confronta con">
-        <button v-for="item in modes" :key="item.id" type="button" :data-overlay-wheel-action="`sector-mode-${item.id}`" :aria-pressed="mode === item.id" :disabled="saving" @click="mode = item.id">{{ item.label }}</button>
-        <button v-if="mode === 'custom' && bestAvailable" type="button" data-overlay-wheel-action="sector-use-best" :disabled="saving || !boundKey || contextChanged" @click="useBestSectors">Usa i migliori</button>
+      <ControlKViewHeader :title="t('hudSetup.sectors.quickTitle')" :subtitle="contextLine" action="sector-cancel" @back="!saving && emit('cancel')" />
+      <div class="ck-editor__shortcuts" role="group" :aria-label="t('hudSetup.sectors.compareWith')">
+        <button v-for="item in modes" :key="item.id" type="button" :data-overlay-wheel-action="`sector-mode-${item.id}`" :aria-pressed="mode === item.id" :disabled="saving" @click="mode = item.id">{{ t(item.labelKey) }}</button>
+        <button v-if="mode === 'custom' && bestAvailable" type="button" data-overlay-wheel-action="sector-use-best" :disabled="saving || !boundKey || contextChanged" @click="useBestSectors">{{ t('hudSetup.sectors.useBest') }}</button>
       </div>
       <template v-if="mode === 'custom'">
         <div class="ck-editor__fields ck-sector-fields">
           <ControlKNumberField v-for="(_, index) in draft" :key="index" class="ck-field--sector" :value="fieldTenths(index)" :spec="SECTOR_SPEC"
-            :label="`S${index + 1}`" :action="`sector-${index}`" :name="`Settore ${index + 1}`" suffix=" s"
+            :label="`S${index + 1}`" :action="`sector-${index}`" :name="t('hudSetup.sectors.sectorName', { n: index + 1 })" suffix=" s"
             :part="editing?.index === index ? editing.part : null" :disabled="saving || !boundKey || contextChanged"
             @toggle="toggleEditing(index)" @release="editing = null" @update:value="setField(index, $event)" />
         </div>
-        <p class="ck-editor__hint">Totale {{ total }} s<template v-if="editing"> · Su/Giù cambiano {{ SECTOR_SPEC.parts[editing.part]!.label }} · OK passa al successivo</template></p>
-        <p v-if="contextChanged" class="ck-editor__alert" role="alert">Gioco, pista, variante o vettura cambiati. Torna indietro e riapri.</p>
-        <p v-else-if="draft.some(value => value !== '') && !valid" class="ck-editor__alert" role="status">Inserisci tutti i tempi, da 10,0 secondi a 4:00,0.</p>
+        <p class="ck-editor__hint">{{ t('hudSetup.sectors.totalSeconds', { total }) }}<template v-if="editing"> · {{ t('hudSetup.sectors.editingHint', { part: SECTOR_SPEC.parts[editing.part]!.label }) }}</template></p>
+        <p v-if="contextChanged" class="ck-editor__alert" role="alert">{{ t('hudSetup.sectors.changedGoBack') }}</p>
+        <p v-else-if="draft.some(value => value !== '') && !valid" class="ck-editor__alert" role="status">{{ t('hudSetup.sectors.fillAllRange') }}</p>
       </template>
-      <p v-else class="ck-editor__hint">Ogni settore è confrontato con il tuo miglior settore.</p>
+      <p v-else class="ck-editor__hint">{{ t('hudSetup.sectors.bestHint') }}</p>
       <p v-if="error" class="ck-editor__alert" role="alert">{{ error }}</p>
       <div class="ck-editor__actions">
-        <button type="button" class="ck-editor__primary" data-overlay-wheel-action="sector-save" :disabled="!loaded || !valid || saving" @click="submit">{{ saving ? 'Salvataggio…' : 'Salva e usa' }}</button>
+        <button type="button" class="ck-editor__primary" data-overlay-wheel-action="sector-save" :disabled="!loaded || !valid || saving" @click="submit">{{ saving ? t('hudSetup.sectors.saving') : t('hudSetup.sectors.saveAndUse') }}</button>
       </div>
     </template>
     <template v-else>
-    <header><span>SETTORI</span><h2>Riferimenti settori</h2><p>{{ boundContext ? `${boundContext.track} · ${boundContext.car}${boundContext.variant ? ` · ${boundContext.variant}` : ''}` : 'Avvia il gioco e seleziona pista e vettura.' }}</p></header>
-    <div class="sector-reference-modes" role="group" aria-label="Confronta con">
-      <button v-for="item in modes" :key="item.id" type="button" :data-overlay-wheel-action="`sector-mode-${item.id}`" :aria-pressed="mode === item.id" :disabled="saving" @click="mode = item.id">{{ item.label }}</button>
+    <header><span>{{ t('hudSetup.sectors.kicker') }}</span><h2>{{ t('hudSetup.sectors.title') }}</h2><p>{{ contextLine }}</p></header>
+    <div class="sector-reference-modes" role="group" :aria-label="t('hudSetup.sectors.compareWith')">
+      <button v-for="item in modes" :key="item.id" type="button" :data-overlay-wheel-action="`sector-mode-${item.id}`" :aria-pressed="mode === item.id" :disabled="saving" @click="mode = item.id">{{ t(item.labelKey) }}</button>
     </div>
     <template v-if="mode === 'custom'">
-      <p v-if="!keyboardOverlay" class="sector-reference-help">Da 10,0 secondi a 4:00,0 per settore.</p>
+      <p v-if="!keyboardOverlay" class="sector-reference-help">{{ t('hudSetup.sectors.rangeHelp') }}</p>
       <div class="sector-reference-drums" :style="{ gridTemplateColumns: `repeat(${Math.min(draft.length, 4)},minmax(0,1fr))` }">
         <article v-for="(_, index) in draft" :key="index" class="sector-reference-drum" @wheel.prevent="!saving && boundKey && !contextChanged && $event.deltaY !== 0 && adjust(index, $event.deltaY < 0 ? 1 : -1)">
           <label :for="`sector-reference-${index}`">S{{ index + 1 }}</label>
           <div class="sector-reference-arrows">
-            <button v-for="step in [10, 1]" :key="step" type="button" :disabled="saving || !boundKey || contextChanged" :data-overlay-wheel-action="`sector-${index}-plus-${step}`" :aria-label="`Aumenta S${index + 1} di ${step === 10 ? 'un secondo' : 'un decimo'}`" @click="adjust(index, step)">▲<small>{{ step === 10 ? '1 s' : '0,1 s' }}</small></button>
+            <button v-for="step in [10, 1]" :key="step" type="button" :disabled="saving || !boundKey || contextChanged" :data-overlay-wheel-action="`sector-${index}-plus-${step}`" :aria-label="t(step === 10 ? 'hudSetup.sectors.increaseSecond' : 'hudSetup.sectors.increaseTenth', { n: index + 1 })" @click="adjust(index, step)">▲<small>{{ step === 10 ? '1 s' : '0,1 s' }}</small></button>
           </div>
-          <input v-if="!keyboardOverlay" :id="`sector-reference-${index}`" v-model="draft[index]" type="text" inputmode="decimal" maxlength="5" placeholder="—" :disabled="saving || !boundKey || contextChanged" :aria-invalid="draft[index] !== '' && parsed[index] === null" :aria-label="`Tempo S${index + 1} in secondi`" @pointerdown="requestKeyboard" />
+          <input v-if="!keyboardOverlay" :id="`sector-reference-${index}`" v-model="draft[index]" type="text" inputmode="decimal" maxlength="5" placeholder="—" :disabled="saving || !boundKey || contextChanged" :aria-invalid="draft[index] !== '' && parsed[index] === null" :aria-label="t('hudSetup.sectors.timeAria', { n: index + 1 })" @pointerdown="requestKeyboard" />
           <div v-if="!keyboardOverlay" class="sector-reference-arrows">
-            <button v-for="step in [10, 1]" :key="step" type="button" :disabled="saving || !boundKey || contextChanged" :data-overlay-wheel-action="`sector-${index}-minus-${step}`" :aria-label="`Riduci S${index + 1} di ${step === 10 ? 'un secondo' : 'un decimo'}`" @click="adjust(index, -step)">▼<small>{{ step === 10 ? '1 s' : '0,1 s' }}</small></button>
+            <button v-for="step in [10, 1]" :key="step" type="button" :disabled="saving || !boundKey || contextChanged" :data-overlay-wheel-action="`sector-${index}-minus-${step}`" :aria-label="t(step === 10 ? 'hudSetup.sectors.decreaseSecond' : 'hudSetup.sectors.decreaseTenth', { n: index + 1 })" @click="adjust(index, -step)">▼<small>{{ step === 10 ? '1 s' : '0,1 s' }}</small></button>
           </div>
         </article>
       </div>
-      <p class="sector-reference-help">Totale: <strong>{{ total }} s</strong><span v-if="!keyboardOverlay"> · Il target giro resta indipendente.</span>
-        <span v-else> · {{ editing ? 'Su/Giù cambia solo questo campo · OK fatto' : 'OK su secondi o decimi per cambiarli' }}</span></p>
-      <p v-if="contextChanged" role="alert">Gioco, pista, variante o vettura cambiati. Chiudi e riapri il pannello.</p>
-      <p v-else-if="draft.some(value => value !== '') && !valid" role="status">Inserisci tutti i tempi, con al massimo un decimale.</p>
+      <p class="sector-reference-help">{{ t('hudSetup.sectors.total') }} <strong>{{ total }} s</strong><span v-if="!keyboardOverlay"> · {{ t('hudSetup.sectors.targetIndependent') }}</span>
+        <span v-else> · {{ editing ? t('hudSetup.sectors.fieldEditing') : t('hudSetup.sectors.fieldIdle') }}</span></p>
+      <p v-if="contextChanged" role="alert">{{ t('hudSetup.sectors.changedReopen') }}</p>
+      <p v-else-if="draft.some(value => value !== '') && !valid" role="status">{{ t('hudSetup.sectors.fillAllDecimal') }}</p>
     </template>
     <p v-if="error" role="alert">{{ error }}</p>
-    <footer><button type="button" class="sector-reference-save" data-overlay-wheel-action="sector-save" :disabled="!loaded || !valid || saving" @click="submit">{{ saving ? 'Salvataggio…' : 'Salva e usa' }}</button><button type="button" data-overlay-wheel-action="sector-cancel" :disabled="saving" @click="emit('cancel')">Annulla</button></footer>
+    <footer><button type="button" class="sector-reference-save" data-overlay-wheel-action="sector-save" :disabled="!loaded || !valid || saving" @click="submit">{{ saving ? t('hudSetup.sectors.saving') : t('hudSetup.sectors.saveAndUse') }}</button><button type="button" data-overlay-wheel-action="sector-cancel" :disabled="saving" @click="emit('cancel')">{{ t('common.cancel') }}</button></footer>
     </template>
   </section>
 </template>

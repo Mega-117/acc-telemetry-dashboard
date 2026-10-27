@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { pressureActionPresentation, pressureOriginLine, pressureOutcomeMessage, pressureProgressBadge } from '~/services/overlay/pressureActionPresentation'
+import { setLocale } from '~/i18n'
+
+// Assertions below read the Italian texts (jsdom starts in English).
+setLocale('it')
 
 describe('pressureActionPresentation', () => {
   it('keeps the actual reason visible for recoverable and uncertain failures', () => {
@@ -186,5 +190,16 @@ describe('PIP-522 badge and outcome messages', () => {
     expect(pressureOutcomeMessage({ state: 'running' })?.tone).toBe('progress')
     expect(pressureOutcomeMessage({ state: 'blocked', reason: 'Setup non trovato.' })).toEqual({ text: 'Setup non trovato.', tone: 'error' })
     expect(pressureOutcomeMessage({ state: 'ready', actionReasonCode: 'pause_menu_required' })?.tone).toBe('error')
+  })
+})
+
+describe('pressure action texts follow the interface language (PIP-665)', () => {
+  it('gives English guidance and origin while keeping the logger reason untouched', () => {
+    setLocale('en')
+    try {
+      expect(pressureActionPresentation({ state: 'ready' }).guidance).toBe('Correction ready: press Pressure correction.')
+      expect(pressureOriginLine({ session_type: 1, stint_number: 1, source_lap: 5, air_temp_c: 26 })).toBe('Calculated in Qualifying · stint 1 · lap 5 · air 26 °C')
+      expect(pressureActionPresentation({ state: 'blocked', reason: 'Esito incerto.' }).guidance).toBe('Esito incerto.')
+    } finally { setLocale('it') }
   })
 })

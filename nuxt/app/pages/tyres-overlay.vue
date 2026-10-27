@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from '~/i18n'
 import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
 import { useHudPresentationMemory } from '~/services/overlay/hudPresentationMemory'
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
@@ -66,6 +67,7 @@ onBeforeUnmount(() => {
   stopFastStatePolling()
   stop()
 })
+const { t } = useI18n()
 </script>
 
 <template>
@@ -90,8 +92,8 @@ onBeforeUnmount(() => {
         :data-active-page="racePage"
       >
         <nav class="race-hud__switcher" data-overlay-interactive aria-label="Pagina Race HUD">
-          <button type="button" :class="{ active: racePage === 'tyres' }" @click="selectRacePage('tyres')">GOMME</button>
-          <button type="button" :class="{ active: racePage === 'damage' }" @click="selectRacePage('damage')">DANNI</button>
+          <button type="button" :class="{ active: racePage === 'tyres' }" @click="selectRacePage('tyres')">{{ t('overlays.tabTyres') }}</button>
+          <button type="button" :class="{ active: racePage === 'damage' }" @click="selectRacePage('damage')">{{ t('overlays.tabDamage') }}</button>
         </nav>
         <TyreRaceHud v-if="racePage === 'tyres'" :fast-state="displayFastState" />
         <DamageRaceHud v-else :fast-state="displayFastState" :flash="raceDamageFlash" />

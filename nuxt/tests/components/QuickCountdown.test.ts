@@ -2,6 +2,10 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import QuickCountdown from '~/components/overlay/QuickCountdown.vue'
+import { setLocale } from '~/i18n'
+
+// Assertions below read the Italian texts (jsdom starts in English).
+setLocale('it')
 
 describe('quick timer view', () => {
   // PIP-611: one MM:SS field shared with the other editors: wheel, mouse scroll, typed digits.

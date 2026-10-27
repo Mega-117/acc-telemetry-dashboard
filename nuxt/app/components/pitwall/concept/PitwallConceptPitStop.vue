@@ -33,16 +33,18 @@ import {
   formatToggle,
   stepFuel,
 } from "~/utils/pitwallPresentation";
+import { useI18n } from "~/i18n";
 
 const { stop } = usePitwallStore();
+const { t } = useI18n();
 
 /**
  * Le due righe che "Sostituisci freni" apre: davanti e dietro, da 1 a 4.
  * Stanno in una lista sola perche' sono la stessa riga due volte.
  */
 const BRAKE_ROWS = [
-  { field: "brakeFront", which: "front", label: "Freno anteriore" },
-  { field: "brakeRear", which: "rear", label: "Freno posteriore" },
+  { field: "brakeFront", which: "front", labelKey: "pitwallConcept.pitStop.brakeFront" },
+  { field: "brakeRear", which: "rear", labelKey: "pitwallConcept.pitStop.brakeRear" },
 ] as const;
 
 /**
@@ -58,10 +60,10 @@ const observed = computed<PitwallConceptSource>(() => {
 });
 const freshness = computed(() => (
   stop.carFresh.value
-    ? "Dati macchina collegati"
+    ? t("pitwallConcept.pitStop.carLinked")
     : stop.presenceAgeSeconds.value == null
-    ? "In attesa dei dati macchina"
-    : `Dati macchina di ${stop.presenceAgeSeconds.value}s fa`
+    ? t("pitwallConcept.pitStop.waitingCar")
+    : t("pitwallConcept.pitStop.carAge", { seconds: stop.presenceAgeSeconds.value })
 ));
 
 /**
@@ -113,7 +115,7 @@ const sourceOf = (field: string): PitwallConceptSource => (seen(field) ? "screen
 const carDriver = computed(() => {
   const id = seen("driverId") ? String(seenOnScreen.value.get("driverId")) : (last.value?.driverId ?? null);
   if (id == null) return "—";
-  return stop.drivers.value.find(driver => driver.id === String(id))?.name ?? `Pilota ${id}`;
+  return stop.drivers.value.find(driver => driver.id === String(id))?.name ?? t("pitwallConcept.pitStop.driver", { id: String(id) });
 });
 
 function stepAll(direction: 1 | -1) {
@@ -124,7 +126,7 @@ function stepAll(direction: 1 | -1) {
 <template>
   <section class="pwc-panel pwc-strategy">
     <header class="pwc-panel__head">
-      <h2>Pit stop</h2>
+      <h2>{{ t('pitwallConcept.pitStop.title') }}</h2>
       <span
         class="pwc-fresh"
         :class="`is-${observed}`"
@@ -136,15 +138,15 @@ function stepAll(direction: 1 | -1) {
     <PitwallApplicationPanel :port="stop.application" />
     <div v-if="method === 'standard'">
     <div class="pwc-pit-head">
-      <b>Campo</b><b>Strategia</b><b>In macchina</b>
+      <b>{{ t('pitwallConcept.pitStop.field') }}</b><b>{{ t('pitwallConcept.pitStop.strategy') }}</b><b>{{ t('pitwallConcept.pitStop.inCar') }}</b>
     </div>
 
     <div class="pwc-pit-row">
-      <span>Preset strategia</span>
+      <span>{{ t('pitwallConcept.pitStop.preset') }}</span>
       <div class="pwc-step">
         <button
           type="button"
-          aria-label="Preset precedente"
+          :aria-label="t('pitwallConcept.pitStop.presetPrev')"
           @click="stop.stepPitStrategy(-1)"
         >
           −
@@ -152,7 +154,7 @@ function stepAll(direction: 1 | -1) {
         <b>{{ stop.pitStrategy.value ?? "Off" }}</b>
         <button
           type="button"
-          aria-label="Preset successivo"
+          :aria-label="t('pitwallConcept.pitStop.presetNext')"
           @click="stop.stepPitStrategy(1)"
         >
           +
@@ -170,11 +172,11 @@ function stepAll(direction: 1 | -1) {
     </div>
 
     <div class="pwc-pit-row">
-      <span>Carburante</span>
+      <span>{{ t('pitwallConcept.pitStop.fuel') }}</span>
       <div class="pwc-step">
         <button
           type="button"
-          aria-label="Meno carburante"
+          :aria-label="t('pitwallConcept.pitStop.fuelLess')"
           @click="stop.fuelLiters.value = stepFuel(stop.fuelLiters.value, -1)"
         >
           −
@@ -182,7 +184,7 @@ function stepAll(direction: 1 | -1) {
         <b>{{ stop.fuelLiters.value }} L</b>
         <button
           type="button"
-          aria-label="Più carburante"
+          :aria-label="t('pitwallConcept.pitStop.fuelMore')"
           @click="stop.fuelLiters.value = stepFuel(stop.fuelLiters.value, 1)"
         >
           +
@@ -198,10 +200,10 @@ function stepAll(direction: 1 | -1) {
     </div>
 
     <div class="pwc-pit-row">
-      <span>Cambio gomme</span>
+      <span>{{ t('pitwallConcept.pitStop.changeTyres') }}</span>
       <PitwallToggleField
         v-model="stop.changeTyres.value"
-        label="Cambio gomme"
+        :label="t('pitwallConcept.pitStop.changeTyres')"
         hide-label
       />
       <span class="pwc-pit-car">
@@ -214,11 +216,11 @@ function stepAll(direction: 1 | -1) {
     </div>
 
     <div class="pwc-pit-row">
-      <span>Set pneumatici</span>
+      <span>{{ t('pitwallConcept.pitStop.tyreSet') }}</span>
       <div class="pwc-step">
         <button
           type="button"
-          aria-label="Set precedente"
+          :aria-label="t('pitwallConcept.pitStop.setPrev')"
           @click="stop.adjustTyreSet(-1)"
         >
           −
@@ -226,7 +228,7 @@ function stepAll(direction: 1 | -1) {
         <b>{{ stop.tyreSet.value ?? '—' }}</b>
         <button
           type="button"
-          aria-label="Set successivo"
+          :aria-label="t('pitwallConcept.pitStop.setNext')"
           @click="stop.adjustTyreSet(1)"
         >
           +
@@ -239,10 +241,10 @@ function stepAll(direction: 1 | -1) {
     <p v-if="stop.tyreSetNotice.value" class="pwc-tyreset-note">{{ stop.tyreSetNotice.value }}</p>
 
     <div class="pwc-pit-row">
-      <span>Mescola</span>
+      <span>{{ t('pitwallConcept.pitStop.compound') }}</span>
       <select
         :value="stop.compound.value"
-        aria-label="Mescola"
+        :aria-label="t('pitwallConcept.pitStop.compound')"
         @change="stop.setCompound(($event.target as HTMLSelectElement).value)"
       >
         <option value="dry">Dry</option>
@@ -258,19 +260,19 @@ function stepAll(direction: 1 | -1) {
     </div>
 
     <div class="pwc-pit-row">
-      <span>Pressioni</span>
+      <span>{{ t('pitwallConcept.pitStop.pressures') }}</span>
       <div class="pwc-step">
         <button
           type="button"
-          aria-label="Abbassa tutte le pressioni"
+          :aria-label="t('pitwallConcept.pitStop.allDown')"
           @click="stepAll(-1)"
         >
           −
         </button>
-        <b>Tutte</b>
+        <b>{{ t('pitwallConcept.pitStop.all') }}</b>
         <button
           type="button"
-          aria-label="Alza tutte le pressioni"
+          :aria-label="t('pitwallConcept.pitStop.allUp')"
           @click="stepAll(1)"
         >
           +
@@ -288,7 +290,7 @@ function stepAll(direction: 1 | -1) {
       <div class="pwc-step">
         <button
           type="button"
-          :aria-label="`Abbassa ${wheel}`"
+          :aria-label="t('pitwallConcept.pitStop.wheelDown', { wheel })"
           @click="stop.adjustPressure(wheel, -1)"
         >
           −
@@ -296,7 +298,7 @@ function stepAll(direction: 1 | -1) {
         <b>{{ stop.pressures.value[wheel].toFixed(1) }}</b>
         <button
           type="button"
-          :aria-label="`Alza ${wheel}`"
+          :aria-label="t('pitwallConcept.pitStop.wheelUp', { wheel })"
           @click="stop.adjustPressure(wheel, 1)"
         >
           +
@@ -312,10 +314,10 @@ function stepAll(direction: 1 | -1) {
     </div>
 
     <div class="pwc-pit-row">
-      <span>Sostituisci freni</span>
+      <span>{{ t('pitwallConcept.pitStop.brakes') }}</span>
       <PitwallToggleField
         v-model="stop.brakes.value"
-        label="Sostituisci freni"
+        :label="t('pitwallConcept.pitStop.brakes')"
         hide-label
       />
       <span class="pwc-pit-car">
@@ -337,19 +339,19 @@ function stepAll(direction: 1 | -1) {
         :key="brake.field"
         class="pwc-pit-row is-sub"
       >
-        <span>{{ brake.label }}</span>
+        <span>{{ t(brake.labelKey) }}</span>
         <div class="pwc-step">
           <button
             type="button"
-            :aria-label="`${brake.label}: mescola precedente`"
+            :aria-label="t('pitwallConcept.pitStop.compoundPrev', { brake: t(brake.labelKey) })"
             @click="stop.stepBrakeCompound(brake.which, -1)"
           >
             −
           </button>
-          <b>{{ stop[brake.field].value ?? "Non toccare" }}</b>
+          <b>{{ stop[brake.field].value ?? t('pitwallConcept.pitStop.dontTouch') }}</b>
           <button
             type="button"
-            :aria-label="`${brake.label}: mescola successiva`"
+            :aria-label="t('pitwallConcept.pitStop.compoundNext', { brake: t(brake.labelKey) })"
             @click="stop.stepBrakeCompound(brake.which, 1)"
           >
             +
@@ -366,12 +368,12 @@ function stepAll(direction: 1 | -1) {
     </template>
 
     <div class="pwc-pit-row">
-      <span>Prossimo pilota</span>
+      <span>{{ t('pitwallConcept.pitStop.nextDriver') }}</span>
       <select
         v-model="stop.driverId.value"
-        aria-label="Prossimo pilota"
+        :aria-label="t('pitwallConcept.pitStop.nextDriver')"
       >
-        <option :value="null">Nessun cambio</option>
+        <option :value="null">{{ t('pitwallConcept.pitStop.noChange') }}</option>
         <option
           v-for="driver in stop.drivers.value"
           :key="driver.id"
@@ -389,16 +391,16 @@ function stepAll(direction: 1 | -1) {
       </span>
     </div>
 
-    <p class="pwc-repair-note">Le sospensioni richiedono anche la riparazione della carrozzeria</p>
+    <p class="pwc-repair-note">{{ t('pitwallConcept.pitStop.suspensionNote') }}</p>
     <div class="pwc-pit-row is-group">
-      <span>Riparazioni</span>
+      <span>{{ t('pitwallConcept.pitStop.repairs') }}</span>
     </div>
 
     <div class="pwc-pit-row is-sub">
-      <span>Sospensioni</span>
+      <span>{{ t('pitwallConcept.pitStop.suspension') }}</span>
       <PitwallToggleField
         v-model="stop.repairSuspension.value"
-        label="Sospensioni"
+        :label="t('pitwallConcept.pitStop.suspension')"
         hide-label
       />
       <span class="pwc-pit-car">
@@ -411,10 +413,10 @@ function stepAll(direction: 1 | -1) {
     </div>
 
     <div class="pwc-pit-row is-sub">
-      <span>Carrozzeria</span>
+      <span>{{ t('pitwallConcept.pitStop.bodywork') }}</span>
       <PitwallToggleField
         v-model="stop.repairBodywork.value"
-        label="Carrozzeria"
+        :label="t('pitwallConcept.pitStop.bodywork')"
         hide-label
       />
       <span class="pwc-pit-car">
@@ -427,11 +429,11 @@ function stepAll(direction: 1 | -1) {
     </div>
 
     <div class="pwc-pit-row is-total">
-      <span>Tempo stop stimato</span>
+      <span>{{ t('pitwallConcept.pitStop.stopTime') }}</span>
       <b>{{ stopTime }}</b>
       <span class="pwc-pit-car">
         <b>—</b>
-        <em class="pwc-src is-calculated">CALCOLATO</em>
+        <em class="pwc-src is-calculated">{{ t('pitwallConcept.pitStop.calculated') }}</em>
       </span>
     </div>
 

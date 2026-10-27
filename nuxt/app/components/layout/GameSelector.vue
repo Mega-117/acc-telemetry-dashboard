@@ -7,6 +7,8 @@ import { useDevToolsAccess } from '~/composables/useDevToolsAccess'
 import { GAME_OPTIONS, gameLabel, simulatorConnection } from '~/services/telemetry/gameCatalog'
 import SourceChoice from './SourceChoice.vue'
 import { gameSwitchDestination } from '~/services/ui/gameSwitchDestination'
+import { useI18n } from '~/i18n'
+const { t } = useI18n()
 const router = useRouter()
 const { consultedGame, selectGame } = useGameContext()
 const { canAccessDevTools } = useDevToolsAccess()
@@ -66,17 +68,17 @@ function change(gameId: string) {
 <template>
   <div class="game-selector">
     <details ref="menu" @keydown.esc.prevent="menu && (menu.open = false)">
-      <summary :aria-label="`Gioco consultato: ${gameLabel(consultedGame)}. Cambia gioco`">
+      <summary :aria-label="t('game.selectorAria', { game: gameLabel(consultedGame) })">
         <GameLogo :game-id="consultedGame" />
         <svg class="arrow-icon" width="18" height="18" viewBox="0 0 12 12" fill="none" aria-hidden="true">
           <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
       </summary>
-      <div class="game-options" aria-label="Scegli il gioco">
+      <div class="game-options" :aria-label="t('game.choose')">
         <button v-for="game in GAME_OPTIONS" :key="game.id" type="button" :aria-pressed="consultedGame === game.id" @click="change(game.id)">
-          <GameLogo :game-id="game.id" /><span>{{ game.name }}<small v-if="game.experimental">Sperimentale</small></span><span v-if="consultedGame === game.id" aria-hidden="true">✓</span>
+          <GameLogo :game-id="game.id" /><span>{{ game.name }}<small v-if="game.experimental">{{ t('game.experimental') }}</small></span><span v-if="consultedGame === game.id" aria-hidden="true">✓</span>
         </button>
-        <button v-if="canAccessDevTools" type="button" @click="change('synthetic')">Simulatore di test · DEV</button>
+        <button v-if="canAccessDevTools" type="button" @click="change('synthetic')">{{ t('game.syntheticDev') }}</button>
       </div>
     </details>
     <span class="connection" :class="{ 'is-connected': isConnected, 'is-started': connection.state === 'started' }" :title="connectedLabel" role="status">

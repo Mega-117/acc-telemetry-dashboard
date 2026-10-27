@@ -4,6 +4,7 @@ import {
   toggleSpotterSessionMode,
   type SpotterSessionMode,
 } from '~/services/spotter/spotterSessionPolicy'
+import { useI18n, type TranslationKey } from '~/i18n'
 
 const props = defineProps<{
   modelValue: SpotterSessionMode[]
@@ -14,10 +15,12 @@ const emit = defineEmits<{
   'update:modelValue': [value: SpotterSessionMode[]]
 }>()
 
-const labels: Record<SpotterSessionMode, string> = {
-  practice: 'Prove libere',
-  qualify: 'Qualifica',
-  race: 'Gara',
+const { t } = useI18n()
+// Mode ids stay as stored; only their names follow the interface language.
+const labels: Record<SpotterSessionMode, TranslationKey> = {
+  practice: 'spotter.sessions.practice',
+  qualify: 'spotter.sessions.qualify',
+  race: 'spotter.sessions.race',
 }
 
 function toggle(mode: SpotterSessionMode) {
@@ -40,7 +43,7 @@ function toggle(mode: SpotterSessionMode) {
         :aria-pressed="modelValue.includes(mode)"
         @click="toggle(mode)"
       >
-        {{ labels[mode] }}
+        {{ t(labels[mode]) }}
       </button>
     </div>
   </div>

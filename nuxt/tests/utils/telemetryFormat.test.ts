@@ -15,6 +15,10 @@ import {
     MAX_REASONABLE_LAP_MS,
     CAR_CATEGORIES,
 } from '~/utils/telemetryFormat'
+import { setLocale } from '~/i18n'
+
+// Italian assertions below; the English month names have their own case.
+setLocale('it')
 
 // ─────────────────────────────────────────────────────────────────────────────
 // formatLapTime
@@ -230,6 +234,18 @@ describe('formatDate', () => {
 describe('formatDateFull', () => {
     it('formato "15 MAGGIO 2024"', () => {
         expect(formatDateFull('2024-05-15T10:00:00')).toBe('15 MAGGIO 2024')
+    })
+
+    it('follows the interface language, while an explicit Italian path stays Italian (stored projections)', () => {
+        setLocale('en')
+        try {
+            expect(formatDateFull('2024-05-15T10:00:00')).toBe('15 MAY 2024')
+            expect(formatDate('2024-09-03T10:00:00')).toBe('3 Sep 2024')
+            expect(formatDate('2024-05-15T10:00:00', 'it')).toBe('15 Mag 2024')
+            expect(formatDateFull('2024-05-15T10:00:00', 'it')).toBe('15 MAGGIO 2024')
+        } finally {
+            setLocale('it')
+        }
     })
 
     it('restituisce - per stringa vuota', () => {

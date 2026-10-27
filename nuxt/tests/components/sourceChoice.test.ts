@@ -3,6 +3,10 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import SourceChoice from '~/components/layout/SourceChoice.vue'
 import { useGameContext } from '~/composables/useGameContext'
+import { setLocale } from '~/i18n'
+
+// Italian assertions (jsdom defaults to English).
+setLocale('it')
 
 const state = () => ({ status: 'choice-required', generation: 'a'.repeat(32), available: ['acc', 'evo'], observed_at_ms: Date.now() })
 let getSourceSelection: ReturnType<typeof vi.fn>

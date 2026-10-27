@@ -33,7 +33,8 @@ export function buildCommonOverviewProjection(input: SessionDocument[], gameId: 
   }
   return {
     lastCar: { rawName: last?.meta.car ?? null, displayName: last?.meta.car || 'Nessuna auto',
-      lastUsedDate: last ? formatDate(getTelemetryActivityDateKey(last.meta.date_start)!) : 'Nessuna sessione registrata' },
+      // Cached projection: stored in Italian (PanoramicaPage localizes it at display time).
+      lastUsedDate: last ? formatDate(getTelemetryActivityDateKey(last.meta.date_start)!, 'it') : 'Nessuna sessione registrata' },
     lastTrack: last ? { id: historyTrackId(last.meta.track, last.meta.trackVariant), name: [last.meta.track, last.meta.trackVariant].filter(Boolean).join(' · '), image: '',
       lastSession: last.meta.date_start, bestQualy: '', bestRace: '', bestAvgRace: '', bestQualyGrip: null, bestRaceGrip: null, bestAvgRaceGrip: null } : null,
     previousTrack: null,

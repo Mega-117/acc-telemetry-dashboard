@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from '~/i18n'
 import { computed, onMounted, onBeforeUnmount, provide, type Component } from 'vue'
 import { OVERLAY_REGION_API } from '~/composables/useOverlayRegionApi'
 import { createSurfaceRegionBridge } from '~/services/overlay/surfaceRegionBridge'
@@ -44,13 +45,14 @@ function up() {
   drag = null
 }
 onBeforeUnmount(up)
+const { t } = useI18n()
 </script>
 
 <template>
   <section :data-surface-region="region.id" :data-presentation-hidden="!presentationVisible" class="surface-region" :style="style"
     @pointerdown="down" @pointermove="move" @pointerup="up" @pointercancel="up" @lostpointercapture="up">
     <component :is="component" />
-    <span v-if="dataStale && !['runtime-bootstrap', 'spotter-audio-runtime'].includes(region.id)" class="hud-stale-status">Dati non aggiornati</span>
+    <span v-if="dataStale && !['runtime-bootstrap', 'spotter-audio-runtime'].includes(region.id)" class="hud-stale-status">{{ t('overlays.staleData') }}</span>
   </section>
 </template>
 

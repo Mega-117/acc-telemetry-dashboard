@@ -8,6 +8,7 @@ import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'
 import { referenceMatchesContext, resolveTrackVoiceReferenceAudioPath } from '~/services/spotter/trackVoiceReferences'
 import { presentVoiceRuntimeMessage } from '~/services/spotter/voiceRuntimePresentation'
 import SessionModePicker from '~/components/spotter/SessionModePicker.vue'
+import { useI18n } from '~/i18n'
 
 definePageMeta({ layout: 'dashboard' })
 
@@ -36,6 +37,8 @@ interface TrackVoicePointCatalog {
 }
 
 const { isAdmin } = useFirebaseAuth()
+// Screen texts only: the spoken phrases stay Italian, engine messages arrive as they are.
+const { t } = useI18n()
 const { consultedGame } = useGameContext()
 const support = computed(() => gameUiSupport(consultedGame.value))
 const selectedVariant = ref('')
@@ -62,7 +65,7 @@ const catalog = ref<TrackVoicePointCatalog>({ tracks: ['Spa'], points: [] })
 const catalogBusy = ref(false)
 const catalogError = ref('')
 const runtimeState = ref<RuntimeState>('checking')
-const runtimeMessage = ref('Controllo motore vocale...')
+const runtimeMessage = ref(t('spotter.engineChecking'))
 
 
 const availableVariants = computed(() => [...new Set(['', ...catalog.value.points
@@ -86,10 +89,10 @@ const readyReferences = computed(() => activeReferences.value.filter(point => re
 const missingReferences = computed(() => Math.max(0, activeReferences.value.length - readyReferences.value.length))
 const disabledReferences = computed(() => selectedTrackPoints.value.filter(point => point.enabled === false).length)
 const referenceStatusLabel = computed(() => {
-  if (!selectedTrackPoints.value.length) return 'Nessun riferimento registrato'
-  if (!activeReferences.value.length) return 'Tutti i riferimenti sono disattivati'
-  if (missingReferences.value === 0) return 'Riferimenti audio pronti'
-  return 'Audio da rigenerare'
+  if (!selectedTrackPoints.value.length) return t('spotter.noReferences')
+  if (!activeReferences.value.length) return t('spotter.allDisabled')
+  if (missingReferences.value === 0) return t('spotter.audioReady')
+  return t('spotter.audioToRegenerate')
 })
 const referenceVoiceLabLink = computed(() => `/dev-voice-lab?section=references&game=${encodeURIComponent(consultedGame.value)}&variant=${encodeURIComponent(selectedVariant.value)}&track=${encodeURIComponent(selectedTrack.value)}`)
 
@@ -101,7 +104,7 @@ async function loadCatalog() {
     catalog.value = await voiceLabRuntime.readVoicePoints<TrackVoicePointCatalog>()
     if (!availableTracks.value.includes(selectedTrack.value)) selectedTrack.value = availableTracks.value[0] ?? ''
   } catch (error: any) {
-    catalogError.value = error?.data?.statusMessage || error?.message || 'Riferimenti non disponibili'
+    catalogError.value = error?.data?.statusMessage || error?.message || t('spotter.referencesUnavailable')
   } finally {
     catalogBusy.value = false
   }
@@ -114,12 +117,13 @@ async function checkRuntime() {
     runtimeState.value = data.state
     runtimeMessage.value = presentVoiceRuntimeMessage(
       data.message,
-      data.state === 'online' ? 'Motore vocale online.' : 'Motore vocale non pronto.',
+      data.state === 'online' ? t('spotter.engineOnline') : t('spotter.engineNotReady'),
     )
   } catch (error: any) {
     runtimeState.value = 'offline'
     runtimeMessage.value = presentVoiceRuntimeMessage(
       error?.data?.statusMessage || error?.message,
+      t('spotter.engineUnavailable'),
     )
   }
 }
@@ -133,18 +137,18 @@ onMounted(() => {
   <LayoutPageContainer>
     <section class="spotter-page">
       <header class="spotter-hero">
-        <h1>Avvisi vocali</h1>
+        <h1>{{ t('spotter.title') }}</h1>
       </header>
       <div class="spotter-grid">
         <div class="spotter-main racing-panel">
           <section
             class="voice-profile"
-            aria-label="Voce dello spotter"
+            :aria-label="t('spotter.voiceAria')"
           >
             <div
               class="voice-options"
               role="group"
-              aria-label="Voce predefinita"
+              :aria-label="t('spotter.defaultVoiceAria')"
             >
               <button
                 v-for="voice in spotterVoiceOptions"
@@ -167,86 +171,86 @@ onMounted(() => {
           </section>
           <section
             class="features"
-            aria-label="Funzionalità vocali"
+            :aria-label="t('spotter.featuresAria')"
           >
             <div class="feature-head">
-              <span>Funzionalità</span><span>Sessioni abilitate</span>
+              <span>{{ t('spotter.features') }}</span><span>{{ t('spotter.enabledSessions') }}</span>
             </div>
             <div class="feature-row">
-              <h3>Riferimenti pista</h3>
+              <h3>{{ t('spotter.trackReferences') }}</h3>
               <div class="feature-control" />
               <SessionModePicker
                 :model-value="referenceSessionModes"
-                label="Sessioni abilitate per i riferimenti pista"
+                :label="t('spotter.trackReferencesSessions')"
                 @update:model-value="setReferenceSessionModes"
               />
             </div>
             <div v-if="support.adaptiveCoach" class="feature-row">
-              <h3>Feedback coach</h3>
+              <h3>{{ t('spotter.coachFeedback') }}</h3>
               <div class="feature-control">
                 <div class="select-shell"><select
                   class="racing-select"
-                  aria-label="Modalità feedback coach"
+                  :aria-label="t('spotter.coachModeAria')"
                   :value="adaptiveCoachMode"
                   :disabled="!adaptiveCoachSessionModes.length"
                   @change="setAdaptiveCoachMode(($event.target as HTMLSelectElement).value as 'focus' | 'all')"
                 >
                   <option value="focus">
-                    Focus curva
+                    {{ t('spotter.coachFocus') }}
                   </option><option value="all">
-                    Tutte le curve
+                    {{ t('spotter.coachAll') }}
                   </option>
                 </select></div>
               </div>
               <SessionModePicker
                 :model-value="adaptiveCoachSessionModes"
-                label="Sessioni abilitate per il feedback coach"
+                :label="t('spotter.coachSessions')"
                 @update:model-value="setAdaptiveCoachSessionModes"
               />
             </div>
             <div class="feature-row">
-              <h3>Avvisi giro</h3>
+              <h3>{{ t('spotter.lapAlerts') }}</h3>
               <div class="feature-control" />
               <SessionModePicker
                 :model-value="lapTimeSessionModes"
-                label="Sessioni abilitate per gli avvisi giro"
+                :label="t('spotter.lapAlertsSessions')"
                 @update:model-value="setLapTimeSessionModes"
               />
             </div>
             <div v-if="support.pressureAdvice" class="feature-row">
-              <h3 title="Correzioni pressioni alla fine del terzo giro di ogni stint">
-                Avvisi pressioni
+              <h3 :title="t('spotter.pressureAlertsTitle')">
+                {{ t('spotter.pressureAlerts') }}
               </h3>
               <div class="feature-control" />
               <SessionModePicker
                 :model-value="pressureWarningSessionModes"
-                label="Sessioni abilitate per gli avvisi pressioni"
+                :label="t('spotter.pressureAlertsSessions')"
                 @update:model-value="setPressureWarningSessionModes"
               />
             </div>
             <!-- PIP-533: the target lap voice follows sessions like the other alerts. -->
             <div class="feature-row">
-              <h3>Voce target</h3>
+              <h3>{{ t('spotter.targetVoice') }}</h3>
               <div class="feature-control" />
               <SessionModePicker
                 :model-value="targetLapSessionModes"
-                label="Sessioni abilitate per la voce target"
+                :label="t('spotter.targetVoiceSessions')"
                 @update:model-value="setTargetLapSessionModes"
               />
             </div>
           </section>
         </div>
         <section class="reference-panel racing-panel">
-          <h2>Riferimenti pista</h2>
+          <h2>{{ t('spotter.trackReferences') }}</h2>
           <p>{{ gameLabel(consultedGame) }}</p>
-          <div v-if="availableVariants.length > 1" class="select-shell"><select v-model="selectedVariant" class="racing-select" aria-label="Variante riferimenti">
-            <option v-for="variant in availableVariants" :key="variant" :value="variant">{{ variant || 'Senza variante' }}</option>
+          <div v-if="availableVariants.length > 1" class="select-shell"><select v-model="selectedVariant" class="racing-select" :aria-label="t('spotter.variantAria')">
+            <option v-for="variant in availableVariants" :key="variant" :value="variant">{{ variant || t('spotter.noVariant') }}</option>
           </select></div>
           <div class="select-shell"><select
             v-model="selectedTrack"
             :disabled="!availableTracks.length"
             class="racing-select"
-            aria-label="Pista riferimenti"
+            :aria-label="t('spotter.trackAria')"
           >
             <option
               v-for="track in availableTracks"
@@ -257,12 +261,12 @@ onMounted(() => {
             </option>
           </select></div>
           <dl class="reference-metrics">
-            <div><dt>Attivi</dt><dd>{{ activeReferences.length }}</dd></div>
-            <div><dt>Pronti con {{ voiceLabel }}</dt><dd>{{ readyReferences.length }}</dd></div>
+            <div><dt>{{ t('spotter.active') }}</dt><dd>{{ activeReferences.length }}</dd></div>
+            <div><dt>{{ t('spotter.readyWith', { voice: voiceLabel }) }}</dt><dd>{{ readyReferences.length }}</dd></div>
             <div :class="{ 'is-warning': missingReferences > 0 }">
-              <dt>Da rigenerare</dt><dd>{{ missingReferences }}</dd>
+              <dt>{{ t('spotter.toRegenerate') }}</dt><dd>{{ missingReferences }}</dd>
             </div>
-            <div><dt>Disattivati</dt><dd>{{ disabledReferences }}</dd></div>
+            <div><dt>{{ t('spotter.disabled') }}</dt><dd>{{ disabledReferences }}</dd></div>
           </dl>
           <p
             v-if="catalogError"
@@ -272,19 +276,19 @@ onMounted(() => {
             {{ catalogError }}
           </p>
           <div class="reference-status">
-            <span>{{ catalogBusy ? 'Caricamento…' : referenceStatusLabel }}</span><button
+            <span>{{ catalogBusy ? t('spotter.loading') : referenceStatusLabel }}</span><button
               type="button"
               :disabled="catalogBusy"
               @click="loadCatalog"
             >
-              Aggiorna
+              {{ t('spotter.refresh') }}
             </button>
           </div>
           <NuxtLink
             class="rc-btn rc-btn--primary"
             :to="referenceVoiceLabLink"
           >
-            Gestisci in Voice Lab
+            {{ t('spotter.manageVoiceLab') }}
           </NuxtLink>
         </section>
       </div>
@@ -299,13 +303,13 @@ onMounted(() => {
           <nav
             v-if="isAdmin"
             class="admin-links"
-            aria-label="Strumenti voce"
+            :aria-label="t('spotter.toolsAria')"
           >
             <NuxtLink to="/dev-voice-lab?section=script">
-              Copione allenamenti
+              {{ t('spotter.trainingScript') }}
             </NuxtLink>
             <NuxtLink to="/dev-voice-lab?section=script&scenario=pressureAdjustmentNeeded">
-              Personalizza avviso pressioni
+              {{ t('spotter.customizePressure') }}
             </NuxtLink>
           </nav>
     </section>

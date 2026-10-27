@@ -4,6 +4,8 @@ import type { usePitwallRoom } from '~/composables/usePitwallRoom'
 import { canUseDevTools } from '~/utils/devToolsAccess'
 import { boundPitwallStrategy, boundPitwallTyreCondition, describePitwallOrderStatus } from '~/services/pitwall/pitwallLink'
 import { usePitwallApplicationMethod } from '~/composables/usePitwallApplicationMethod'
+import { useI18n } from '~/i18n'
+const { t } = useI18n()
 const props = defineProps<{ port?: ReturnType<typeof usePitwallRoom> }>()
 // Public assets share Nuxt's deployment base, including static hosted builds.
 const formUrl = `${useRuntimeConfig().app.baseURL}mfd-v4-online.html`
@@ -25,7 +27,7 @@ async function associate(save = false) {
   try { identity.value = await localApi.pitwallV4Identity(save
     ? { action: 'associate', key: identity.value?.key, driverIndex: selectedIdentity.value }
     : { action: 'status' }) }
-  catch { identity.value = { ok: false, reason: 'Identità locale non disponibile.' } }
+  catch { identity.value = { ok: false, reason: t('pitwall.v4.identityUnavailable') } }
 }
 const development = ref(false)
 const recipientLabel = computed(() => props.port?.availableTargets?.value.find(target => target.uid === props.port?.selectedTargetUid?.value)?.nickname || '')
@@ -41,13 +43,13 @@ const car = computed(() => boundPitwallStrategy(props.port?.carSnapshot.value?.s
 const receive = computed(() => props.port?.driverReceive?.value ?? null)
 const reason = computed(() => !props.port?.canSend.value
   ? (receive.value && receive.value.state !== 'ready' ? receive.value.label : null)
-    || props.port?.sendReadiness.value.reason || 'Seleziona una stanza con un solo pilota disponibile.'
-  : !car.value?.applicationMethods?.includes('mfd-v4') ? 'Il PC del pilota non annuncia V4 online.'
-    : !car.value.mfdV4?.ready ? car.value.mfdV4?.reason || 'V4 non disponibile sul PC del pilota.' : null)
+    || props.port?.sendReadiness.value.reason || t('pitwall.v4.selectRoom')
+  : !car.value?.applicationMethods?.includes('mfd-v4') ? t('pitwall.v4.noV4')
+    : !car.value.mfdV4?.ready ? car.value.mfdV4?.reason || t('pitwall.v4.v4Unavailable') : null)
 const outcome = computed(() => props.port?.orderMethod.value === 'mfd-v4'
   ? [props.port.orderDiary?.value, props.port.orderReason.value, ...Object.entries(props.port.orderFields.value).map(([key, value]) => `${key}: ${JSON.stringify(value)}`)].filter(Boolean).join('\n') : '')
 const result = computed(() => {
-  if (error.value) return { label: 'Non inviata', reason: error.value, problem: true }
+  if (error.value) return { label: t('pitwall.v4.notSent'), reason: error.value, problem: true }
   const port = props.port
   if (port?.orderMethod.value !== 'mfd-v4' || !port.orderStatus.value) return null
   const status = describePitwallOrderStatus(port.orderStatus.value)
@@ -59,8 +61,8 @@ const result = computed(() => {
     && typeof preset === 'number' && Number.isInteger(preset) && preset >= 1 && preset <= 30
     && (detail?.includes('Preset richiesto non disponibile: selezione ferma o limite raggiunto.')
       || detail?.includes('Preset non applicato: selezione non avanzata entro il tempo previsto.'))) {
-    return { ...status, label: `Preset ${preset} non applicato`,
-      reason: 'Il MFD non ha consentito di selezionare il preset richiesto.' }
+    return { ...status, label: t('pitwall.v4.presetNotApplied', { preset }),
+      reason: t('pitwall.v4.presetReason') }
   }
   return { ...status, reason: detail }
 })
@@ -98,10 +100,10 @@ async function message(event: MessageEvent) {
   error.value = ''
   try {
     const plan = event.data.value
-    if (!plan || typeof plan !== 'object' || JSON.stringify(plan).length > 4000 || plan.contextId !== car.value?.mfdV4?.contextId) throw new Error('Contesto V4 cambiato: controlla il destinatario.')
+    if (!plan || typeof plan !== 'object' || JSON.stringify(plan).length > 4000 || plan.contextId !== car.value?.mfdV4?.contextId) throw new Error(t('pitwall.v4.contextChanged'))
     const sent = await props.port.sendPlan({ method: 'mfd-v4', mfdV4: plan })
-    if (!sent) error.value = props.port.lastError.value || props.port.orderReason.value || 'Invio non riuscito.'
-  } catch (cause) { error.value = cause instanceof Error ? cause.message : 'Invio non riuscito.' }
+    if (!sent) error.value = props.port.lastError.value || props.port.orderReason.value || t('pitwall.v4.sendFailed')
+  } catch (cause) { error.value = cause instanceof Error ? cause.message : t('pitwall.v4.sendFailed') }
   finally { publish() }
 }
 watch(draftKey, () => { frameReady.value = false; frameHeight.value = 1040; error.value = '' }, { flush: 'sync' })
@@ -113,14 +115,14 @@ onBeforeUnmount(() => window.removeEventListener('message', message))
   <div class="v4-online">
     <p v-if="error || (!frameReady && reason)" role="status">{{ error || reason }}</p>
     <label v-if="port?.availableTargets && recipientChoiceNeeded" class="v4-target v4-target--choice">
-      <span>Più piloti al volante: scegli a chi inviare la strategia</span>
-      <select :value="port.selectedTargetUid.value ?? ''" :disabled="busy" aria-label="Destinatario strategia"
+      <span>{{ t('pitwall.v4.chooseRecipient') }}</span>
+      <select :value="port.selectedTargetUid.value ?? ''" :disabled="busy" :aria-label="t('pitwall.v4.recipient')"
         @change="port.selectTarget(($event.target as HTMLSelectElement).value || null)">
-        <option value="">Seleziona un pilota</option>
+        <option value="">{{ t('pitwall.v4.selectDriver') }}</option>
         <option v-for="target in port.availableTargets.value" :key="target.uid" :value="target.uid">{{ target.nickname }}</option>
       </select>
     </label>
-    <p v-else class="v4-recipient">Destinatario strategia <strong>{{ recipientLabel || 'Nessun pilota disponibile' }}</strong></p>
+    <p v-else class="v4-recipient">{{ t('pitwall.v4.recipient') }} <strong>{{ recipientLabel || t('pitwall.v4.noDriver') }}</strong></p>
     <p v-if="receive" class="v4-receive" :class="`v4-receive--${receive.state}`" role="status">{{ receive.label }}</p>
     <details v-if="development" class="v4-tools">
       <summary>Strumenti di sviluppo</summary>
@@ -147,7 +149,7 @@ onBeforeUnmount(() => window.removeEventListener('message', message))
       </template>
     </details>
     </details>
-    <iframe :key="draftKey" ref="frame" title="Strategia V4 online" :src="formUrl" sandbox="allow-scripts" class="v4-frame" :style="{ height: `${frameHeight}px` }" />
+    <iframe :key="draftKey" ref="frame" :title="t('pitwall.v4.frameTitle')" :src="formUrl" sandbox="allow-scripts" class="v4-frame" :style="{ height: `${frameHeight}px` }" />
   </div>
 </template>
 <style scoped>

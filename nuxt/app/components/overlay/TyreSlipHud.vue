@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from '~/i18n'
 import { hudSourcePolicy } from '~/services/sim/hudSourceAdapter'
 
 import { computed } from 'vue'
@@ -34,7 +35,7 @@ const visibleTyres = computed(() => idleTyres.map(idle => hasLiveTyres.value
 const hasSlipPolicy = computed(() => hudSourcePolicy(props.fastState).slipBands)
 const speedLabel = computed(() => props.fastState.speedKmh !== null
   ? `${Math.round(props.fastState.speedKmh)} km/h`
-  : 'in attesa')
+  : t('overlays.waiting'))
 
 function tyreFillStyle(tyre: FastStateTyre) {
   return tyreSlipBarStyle(tyre.wheelSlipScaled)
@@ -43,6 +44,7 @@ function tyreFillStyle(tyre: FastStateTyre) {
 function formatSlip(tyre: FastStateTyre) {
   return typeof tyre.wheelSlip === 'number' ? tyre.wheelSlip.toFixed(1) : '--'
 }
+const { t } = useI18n()
 </script>
 
 <template>
@@ -52,7 +54,7 @@ function formatSlip(tyre: FastStateTyre) {
     aria-label="Scivolamento pneumatici live"
   >
     <header class="tyre-slip-hud__header">
-      <span>Gomme</span>
+      <span>{{ t('overlays.tyres') }}</span>
       <strong>{{ speedLabel }}</strong>
     </header>
     <div class="tyre-slip-grid">

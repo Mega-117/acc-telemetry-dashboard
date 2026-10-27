@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from '~/i18n'
 
 /**
  * OverlayHud.vue
@@ -33,6 +34,7 @@ defineProps<{
 defineEmits<{
     'cancel-auto-advance': []
 }>()
+const { t } = useI18n()
 </script>
 
 <template>
@@ -60,13 +62,13 @@ defineEmits<{
                 <div class="hud-side">
                     <time class="hud-timer" aria-label="Tempo rimanente">{{ formattedTime }}</time>
                     <Transition name="chip-pop">
-                        <span v-if="muted" class="mute-chip" role="status" aria-label="Audio disattivato">MUTO</span>
+                        <span v-if="muted" class="mute-chip" role="status" aria-label="Audio disattivato">{{ t('overlays.trainingHud.muted') }}</span>
                     </Transition>
                 </div>
             </div>
 
             <Transition name="fade">
-                <span v-if="isSaving" class="saving-indicator" aria-live="polite">salvataggio…</span>
+                <span v-if="isSaving" class="saving-indicator" aria-live="polite">{{ t('overlays.trainingHud.saving') }}</span>
             </Transition>
 
             <div
@@ -75,7 +77,7 @@ defineEmits<{
                 role="status"
                 aria-live="assertive"
             >
-                <span>Pronto per lo step successivo</span>
+                <span>{{ t('overlays.trainingHud.readyNext') }}</span>
                 <Transition name="block-reveal">
                     <div v-if="autoAdvanceRemainingSec !== null" class="block-reveal">
                         <div class="expiry-auto-advance">
@@ -86,7 +88,7 @@ defineEmits<{
                                 aria-label="Annulla avanzamento automatico"
                                 @click="$emit('cancel-auto-advance')"
                             >
-                                Avanti tra {{ autoAdvanceRemainingSec }}s — clicca per restare
+                                {{ t('overlays.trainingHud.autoAdvance', { seconds: autoAdvanceRemainingSec }) }}
                             </button>
                             <span class="auto-advance-track" aria-hidden="true">
                                 <span :style="{ width: `${Math.max(0, Math.min(100, (autoAdvanceRemainingSec / Math.max(1, autoAdvanceTotalSec)) * 100))}%` }" />
@@ -103,8 +105,8 @@ defineEmits<{
                         role="status"
                         aria-live="assertive"
                     >
-                        <span>Conferma stop</span>
-                        <strong>Ctrl+Alt+S o Ctrl+N conferma &middot; si annulla da solo dopo 5s</strong>
+                        <span>{{ t('overlays.trainingHud.confirmStop') }}</span>
+                        <strong>{{ t('overlays.trainingHud.confirmStopHint') }}</strong>
                     </div>
                 </div>
             </Transition>

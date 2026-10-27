@@ -2,6 +2,10 @@
 import { mount } from '@vue/test-utils'
 import { expect, it } from 'vitest'
 import Toggle from '~/components/overlay/QuickPanelLayoutToggle.vue'
+import { setLocale } from '~/i18n'
+
+// Assertions below read the Italian texts (jsdom starts in English).
+setLocale('it')
 
 it('exposes icon-only choices with names and the selected layout', async () => {
   const wrapper = mount(Toggle, { props: { modelValue: 'vertical' } })

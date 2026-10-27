@@ -6,6 +6,9 @@
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useConfirmedLogout } from '~/composables/useConfirmedLogout'
 import { provideHeaderBack } from '~/composables/useHeaderBack'
+import { useI18n } from '~/i18n'
+
+const { t } = useI18n()
 
 const router = useRouter()
 const headerBack = provideHeaderBack(() => router.back())
@@ -38,7 +41,7 @@ const activeTab = computed(() => {
 const displayName = computed(() => {
   if (userDisplayName.value) return userDisplayName.value
   if (userEmail.value) return userEmail.value.split('@')[0]
-  return 'Utente'
+  return t('topBar.user')
 })
 
 // Handlers

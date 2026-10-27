@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { loadCoachLessons, type CoachFeedbackItem, type CoachFeedbackType, type CoachLesson } from '~/repositories/coachLessonsRepository'
+import { loadCoachLessons, type CoachLesson } from '~/repositories/coachLessonsRepository'
+import { coachFeedbackContext, coachFeedbackTypeLabel, coachLessonLinks, formatCoachDate } from '~/utils/coachLessonPresentation'
+import { useI18n } from '~/i18n'
 
 const { currentUser } = useFirebaseAuth()
+const { t } = useI18n()
 
 const lessons = ref<CoachLesson[]>([])
 const selectedLesson = ref<CoachLesson | null>(null)
@@ -25,8 +28,8 @@ const filteredLessons = computed(() => {
 })
 const hasActiveFilters = computed(() => Boolean(trackFilter.value.trim() || carFilter.value.trim()))
 const visibleLessonsLabel = computed(() => {
-  if (!hasActiveFilters.value) return `${lessons.value.length} lezioni`
-  return `${filteredLessons.value.length} di ${lessons.value.length} lezioni`
+  if (!hasActiveFilters.value) return t('coachLessons.lessonsCount', { count: lessons.value.length })
+  return t('coachLessons.lessonsFiltered', { shown: filteredLessons.value.length, total: lessons.value.length })
 })
 const activeLesson = computed(() => {
   if (selectedLesson.value && filteredLessons.value.some((lesson) => lesson.id === selectedLesson.value?.id)) {
@@ -36,42 +39,12 @@ const activeLesson = computed(() => {
 })
 const lessonLinks = computed(() => {
   if (!activeLesson.value) return []
-  return [
-    { label: 'TrackTitan pilota', url: activeLesson.value.trackTitanPilotUrl },
-    { label: 'TrackTitan coach', url: activeLesson.value.trackTitanReferenceUrl },
-    { label: 'Registrazione', url: activeLesson.value.recordingUrl }
-  ].filter((link) => Boolean(link.url))
+  return coachLessonLinks(activeLesson.value)
 })
 
-const feedbackTypeLabels: Record<CoachFeedbackType, string> = {
-  issue: 'Errore',
-  action: 'Azione',
-  positive: 'Positivo'
-}
-
-function feedbackTypeLabel(type: CoachFeedbackType): string {
-  return feedbackTypeLabels[type] || 'Feedback'
-}
-
-function feedbackContext(item: CoachFeedbackItem): string {
-  const parts = []
-  if (item.turn) parts.push(/^curva/i.test(item.turn) ? item.turn : `Curva ${item.turn}`)
-  if (item.category) parts.push(item.category)
-  return parts.join(' - ')
-}
-
-function formatDate(value: string): string {
-  if (!value) return 'Data non impostata'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('it-IT', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  }).format(date)
-}
+const feedbackTypeLabel = coachFeedbackTypeLabel
+const feedbackContext = coachFeedbackContext
+const formatDate = (value: string) => formatCoachDate(value)
 
 function formatLap(ms?: number | null): string {
   if (!ms) return '-'
@@ -86,7 +59,7 @@ function displayValue(value?: string | null): string {
 }
 
 function lessonTrackLabel(lesson: CoachLesson): string {
-  return lesson.trackName?.trim() || 'Lezione'
+  return lesson.trackName?.trim() || t('coachLessons.lesson')
 }
 
 function toggleLesson(lesson: CoachLesson) {
@@ -143,29 +116,29 @@ onBeforeUnmount(() => {
 <template>
   <section class="profile-card lessons-card">
     <div class="card-head">
-      <h3 class="card-title">Lezioni coach</h3>
+      <h3 class="card-title">{{ t('coachLessons.card.title') }}</h3>
       <span class="card-count">{{ visibleLessonsLabel }}</span>
     </div>
 
-    <div v-if="isLoading" class="empty-state">Caricamento lezioni...</div>
-    <div v-else-if="lessons.length === 0" class="empty-state">Nessuna lezione registrata.</div>
+    <div v-if="isLoading" class="empty-state">{{ t('coachLessons.loadingLessons') }}</div>
+    <div v-else-if="lessons.length === 0" class="empty-state">{{ t('coachLessons.noLessons') }}</div>
 
     <template v-else>
-      <div class="lesson-filters" aria-label="Filtri storico lezioni">
+      <div class="lesson-filters" :aria-label="t('coachLessons.card.filtersAria')">
         <label>
-          <span>Pista</span>
-          <input v-model="trackFilter" type="search" placeholder="Filtra pista" />
+          <span>{{ t('coachLessons.track') }}</span>
+          <input v-model="trackFilter" type="search" :placeholder="t('coachLessons.filterTrack')" />
         </label>
         <label>
-          <span>Vettura</span>
-          <input v-model="carFilter" type="search" placeholder="Filtra vettura" />
+          <span>{{ t('coachLessons.car') }}</span>
+          <input v-model="carFilter" type="search" :placeholder="t('coachLessons.filterCar')" />
         </label>
         <button v-if="hasActiveFilters" class="filter-reset" type="button" @click="resetFilters">
-          Reset
+          {{ t('coachLessons.reset') }}
         </button>
       </div>
 
-      <div v-if="filteredLessons.length === 0" class="empty-state">Nessuna lezione corrisponde ai filtri.</div>
+      <div v-if="filteredLessons.length === 0" class="empty-state">{{ t('coachLessons.card.noMatch') }}</div>
 
       <div v-else class="lessons-list">
       <article
@@ -176,15 +149,15 @@ onBeforeUnmount(() => {
       >
         <button class="lesson-row" type="button" @click="toggleLesson(lesson)">
           <span class="lesson-row__field lesson-row__track" :title="lessonTrackLabel(lesson)">
-            <small>Pista/sessione</small>
+            <small>{{ t('coachLessons.card.trackSession') }}</small>
             <strong>{{ lessonTrackLabel(lesson) }}</strong>
           </span>
           <span class="lesson-row__field lesson-row__car" :title="displayValue(lesson.carName)">
-            <small>Vettura</small>
+            <small>{{ t('coachLessons.car') }}</small>
             <span>{{ displayValue(lesson.carName) }}</span>
           </span>
           <span class="lesson-row__field lesson-row__date" :title="formatDate(lesson.lessonAt)">
-            <small>Data lezione</small>
+            <small>{{ t('coachLessons.card.lessonDate') }}</small>
             <span>{{ formatDate(lesson.lessonAt) }}</span>
           </span>
           <span class="lesson-row__chevron" aria-hidden="true">
@@ -198,31 +171,31 @@ onBeforeUnmount(() => {
           <div v-if="activeLesson?.id === lesson.id" class="lesson-detail">
             <div class="lesson-detail__intro">
               <div>
-                <span>Dettaglio lezione</span>
-                <h4>Analisi sessione</h4>
-                <p>Informazioni operative registrate dal coach.</p>
+                <span>{{ t('coachLessons.detailKicker') }}</span>
+                <h4>{{ t('coachLessons.detailTitle') }}</h4>
+                <p>{{ t('coachLessons.detailIntro') }}</p>
               </div>
             </div>
 
             <div class="meta-grid">
               <div>
-                <span>Durata</span>
-                <strong>{{ lesson.durationMinutes }} min</strong>
+                <span>{{ t('coachLessons.duration') }}</span>
+                <strong>{{ t('coachLessons.minutes', { count: lesson.durationMinutes }) }}</strong>
               </div>
               <div>
-                <span>Coach</span>
+                <span>{{ t('coachLessons.coach') }}</span>
                 <strong>{{ displayValue(lesson.coachName) }}</strong>
               </div>
               <div>
-                <span>Vettura</span>
+                <span>{{ t('coachLessons.car') }}</span>
                 <strong>{{ displayValue(lesson.carName) }}</strong>
               </div>
               <div>
-                <span>Best iniziale</span>
+                <span>{{ t('coachLessons.initialBest') }}</span>
                 <strong>{{ formatLap(lesson.initialBestLapMs) }}</strong>
               </div>
               <div>
-                <span>Best finale</span>
+                <span>{{ t('coachLessons.finalBest') }}</span>
                 <strong>{{ formatLap(lesson.finalBestLapMs) }}</strong>
               </div>
             </div>
@@ -240,7 +213,7 @@ onBeforeUnmount(() => {
               <div v-for="(item, index) in lesson.feedbackItems" :key="index" class="feedback-item" :class="`feedback-item--${item.type}`">
                 <div class="feedback-item__head">
                   <span class="feedback-badge">{{ feedbackTypeLabel(item.type) }}</span>
-                  <strong>{{ feedbackContext(item) || 'Feedback generale' }}</strong>
+                  <strong>{{ feedbackContext(item) || t('coachLessons.generalFeedback') }}</strong>
                 </div>
                 <span>{{ item.message }}</span>
               </div>

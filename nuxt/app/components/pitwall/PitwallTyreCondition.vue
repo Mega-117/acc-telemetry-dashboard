@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { boundPitwallTyreCondition } from '~/services/pitwall/pitwallLink'
+import { useI18n } from '~/i18n'
+const { t } = useI18n()
 const props = defineProps<{ tyreSet: number | null, condition?: unknown, fresh: boolean }>()
 const observation = computed(() => {
   const value = boundPitwallTyreCondition(props.condition)
@@ -9,12 +11,12 @@ const observation = computed(() => {
 </script>
 <template>
   <span class="tyre-condition">
-    <b><span v-if="observation">{{ observation.state === 'new' ? 'Nuovo' : 'Usato' }} · </span>{{ tyreSet ?? '—' }}</b>
+    <b><span v-if="observation">{{ observation.state === 'new' ? t('pitwall.tyreCondition.new') : t('pitwall.tyreCondition.used') }} · </span>{{ tyreSet ?? '—' }}</b>
     <span class="tyre-condition__sources">
-      <em>{{ fresh && tyreSet != null ? 'LIVE' : 'N/D' }}</em>
-      <em v-if="observation" :title="`Condizione letta a schermo: ${observation.observedAt}`">A SCHERMO</em>
+      <em>{{ fresh && tyreSet != null ? t('pitwall.tyreCondition.live') : t('pitwall.tyreCondition.notAvailable') }}</em>
+      <em v-if="observation" :title="t('pitwall.tyreCondition.onScreenTitle', { time: observation.observedAt })">{{ t('pitwall.tyreCondition.onScreen') }}</em>
     </span>
-    <small v-if="!observation">Stato non verificato</small>
+    <small v-if="!observation">{{ t('pitwall.tyreCondition.unverified') }}</small>
   </span>
 </template>
 <style scoped>

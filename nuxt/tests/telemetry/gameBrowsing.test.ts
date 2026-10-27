@@ -4,6 +4,10 @@ import { buildGameActivity, scopeSessionIndex, buildCommonHistoryOverview } from
 import type { SessionDocument } from '~/types/telemetry'
 import { commonSessionPresentation } from '~/services/telemetry/commonSessionPresentation'
 import { gameLabel } from '~/services/telemetry/gameCatalog'
+import { setLocale } from '~/i18n'
+
+// Italian assertions (jsdom defaults to English).
+setLocale('it')
 
 describe('consulted game and recorded facts', () => {
   it('includes a session added by a legacy writer despite a stale per-game aggregate', () => {

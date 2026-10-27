@@ -3,6 +3,10 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { expect, it, vi } from 'vitest'
 import Lock from '~/components/overlay/OverlayPlacementLock.vue'
 import { OVERLAY_REGION_API } from '~/composables/useOverlayRegionApi'
+import { setLocale } from '~/i18n'
+
+// Assertions below read the Italian texts (jsdom starts in English).
+setLocale('it')
 
 function setup(initial: boolean | Promise<boolean> = false) {
   let notify: (active: boolean) => void = () => {}

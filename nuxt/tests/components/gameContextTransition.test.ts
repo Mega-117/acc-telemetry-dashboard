@@ -3,6 +3,10 @@ import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import Transition from '~/components/layout/GameContextTransition.vue'
 import Logo from '~/components/layout/GameLogo.vue'
+import { setLocale } from '~/i18n'
+
+// Italian assertions (jsdom defaults to English).
+setLocale('it')
 beforeEach(()=>vi.useFakeTimers())
 afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals()})
 it('covers content through loading and reveals only the latest game', async()=>{

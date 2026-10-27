@@ -6,6 +6,9 @@
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useConfirmedLogout } from '~/composables/useConfirmedLogout'
 import { waitForAuthSettled } from '~/utils/authRouteGuard'
+import { useI18n } from '~/i18n'
+
+const { t } = useI18n()
 
 const route = useRoute()
 const {
@@ -50,7 +53,7 @@ const goToSettings = () => {
 
 // Dynamic badge and title based on role
 const areaBadge = computed(() => isAdmin.value ? 'ADMIN' : 'COACH')
-const areaTitle = computed(() => isAdmin.value ? 'Cockpit amministratore' : 'Area piloti')
+const areaTitle = computed(() => isAdmin.value ? t('coach.layout.adminTitle') : t('coach.layout.coachTitle'))
 const isAdminRouteActive = (path: string) => route.path === path || route.path.startsWith(`${path}/`)
 </script>
 
@@ -64,7 +67,7 @@ const isAdminRouteActive = (path: string) => route.path === path || route.path.s
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M19 12H5M12 19l-7-7 7-7"/>
           </svg>
-          <span>Dashboard</span>
+          <span>{{ t('coach.layout.dashboard') }}</span>
         </button>
 
         <!-- Area Title -->
@@ -73,23 +76,23 @@ const isAdminRouteActive = (path: string) => route.path === path || route.path.s
           <span class="area-name">{{ areaTitle }}</span>
         </div>
 
-        <nav v-if="isAdmin" class="admin-nav" aria-label="Navigazione amministratore">
+        <nav v-if="isAdmin" class="admin-nav" :aria-label="t('coach.layout.adminNav')">
           <NuxtLink to="/admin/stato" :aria-current="isAdminRouteActive('/admin/stato') ? 'page' : undefined">
-            Stato
+            {{ t('coach.layout.status') }}
           </NuxtLink>
           <NuxtLink to="/admin/cockpit" :aria-current="isAdminRouteActive('/admin/cockpit') ? 'page' : undefined">
-            Cockpit
+            {{ t('coach.layout.cockpit') }}
           </NuxtLink>
           <NuxtLink to="/piloti" :aria-current="isAdminRouteActive('/piloti') ? 'page' : undefined">
-            Utenti
+            {{ t('coach.layout.users') }}
           </NuxtLink>
-          <NuxtLink to="/admin/utilizzo" :aria-current="isAdminRouteActive('/admin/utilizzo') ? 'page' : undefined">Utilizzo</NuxtLink>
-          <NuxtLink to="/admin/archivio-giri" :aria-current="isAdminRouteActive('/admin/archivio-giri') ? 'page' : undefined">Giri</NuxtLink>
+          <NuxtLink to="/admin/utilizzo" :aria-current="isAdminRouteActive('/admin/utilizzo') ? 'page' : undefined">{{ t('coach.layout.usage') }}</NuxtLink>
+          <NuxtLink to="/admin/archivio-giri" :aria-current="isAdminRouteActive('/admin/archivio-giri') ? 'page' : undefined">{{ t('coach.layout.laps') }}</NuxtLink>
           <NuxtLink to="/admin-diagnostics" :aria-current="isAdminRouteActive('/admin-diagnostics') ? 'page' : undefined">
-            Diagnostica
+            {{ t('coach.layout.diagnostics') }}
           </NuxtLink>
           <NuxtLink to="/admin/diagnostic-bundles" :aria-current="isAdminRouteActive('/admin/diagnostic-bundles') ? 'page' : undefined">
-            Pacchetti
+            {{ t('coach.layout.bundles') }}
           </NuxtLink>
         </nav>
 

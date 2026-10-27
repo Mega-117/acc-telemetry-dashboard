@@ -1,6 +1,7 @@
 // PIP-556: Control K shows one status line of fixed height. Every source
 // proposes at most one message; the most important one wins, the rest waits
 // (errors stay readable in Notifiche). Same priority on screen and in tests.
+import { useI18n, type TranslationKey } from '~/i18n'
 
 export type ControlKStatusTone = 'error' | 'progress' | 'ok' | 'hint'
 
@@ -24,18 +25,19 @@ export function pickControlKStatus(candidates: Array<ControlKStatusMessage | nul
 
 // Technical prefixes kept in logs and audits ("[dati:stale]", "[visione:pausa-setup]")
 // become plain words for the driver; unknown ones are simply removed.
-const KNOWN_REASONS: Array<[RegExp, string]> = [
-  [/\[visione:pausa-setup\]/, 'Apri il menu pausa (ESC) ai box o in griglia e riprova.'],
-  [/\[dati:(stale|state-missing|disconnected)\]/, 'Dati di ACC non aggiornati: riprova tra un istante.'],
-  [/\[dati:session\]/, 'Sessione ACC non riconosciuta: riprova tra un istante.'],
-  [/\[dati:capability\]/, 'Comandi verso ACC non pronti: riprova tra un istante.'],
+const KNOWN_REASONS: Array<[RegExp, TranslationKey]> = [
+  [/\[visione:pausa-setup\]/, 'quickPanel.status.pauseSetup'],
+  [/\[dati:(stale|state-missing|disconnected)\]/, 'quickPanel.status.dataStale'],
+  [/\[dati:session\]/, 'quickPanel.status.dataSession'],
+  [/\[dati:capability\]/, 'quickPanel.status.dataCapability'],
 ]
 
 export function readableReason(reason: string | null | undefined): string {
+  const { t } = useI18n()
   const text = String(reason ?? '').trim()
-  for (const [pattern, readable] of KNOWN_REASONS) if (pattern.test(text)) return readable
+  for (const [pattern, readable] of KNOWN_REASONS) if (pattern.test(text)) return t(readable)
   const plain = text.replace(/\[[a-z]+:[^\]]*\]\s*/gi, '').replace(/^[^:]{0,40}…:\s*/, '').trim()
-  return plain || 'Operazione non riuscita.'
+  return plain || t('quickPanel.status.failed')
 }
 
 // ─── Notifications ──────────────────────────────────────────────────────────
@@ -47,16 +49,19 @@ export interface ControlKNotificationError {
   label: string
 }
 
-const CATEGORIES: Array<[string, string]> = [
-  ['fuel-status--error', 'Benzina'],
-  ['quick-panel-pressure-status--error', 'Correggi pressioni'],
-  ['control-k-request__error', 'Amicizie'],
-  ['pressure-test__error', 'Stima pressioni'],
+// Card class -> category shown before the reason. Friend requests are recognised by
+// their class, never by the (translated) category text.
+const FRIENDS_ERROR_CLASS = 'control-k-request__error'
+const CATEGORIES: Array<[string, TranslationKey]> = [
+  ['fuel-status--error', 'quickPanel.status.categoryFuel'],
+  ['quick-panel-pressure-status--error', 'quickPanel.status.categoryPressure'],
+  [FRIENDS_ERROR_CLASS, 'quickPanel.status.categoryFriends'],
+  ['pressure-test__error', 'quickPanel.status.categoryEstimate'],
 ]
 
 /** Reads one error card of the Notifiche view (the first paragraph is its reason). */
 export function notificationErrorFromElement(element: Element): ControlKNotificationError {
-  const category = CATEGORIES.find(([cls]) => element.classList.contains(cls))?.[1] ?? 'Avviso'
+  const category = useI18n().t(CATEGORIES.find(([cls]) => element.classList.contains(cls))?.[1] ?? 'quickPanel.status.categoryOther')
   const reason = readableReason((element.querySelector('p') ?? element).textContent)
   return { key: `${category}|${reason}`, label: `${category}: ${reason}` }
 }
@@ -83,7 +88,7 @@ export function notificationItemFromElement(element: Element): ControlKNotificat
   const errorElement = CATEGORIES.some(([cls]) => classes.contains(cls)) ? element : element.querySelector(CATEGORIES.map(([cls]) => `.${cls}`).join(', '))
   if (errorElement) {
     const error = notificationErrorFromElement(errorElement)
-    return { ...error, kind: 'error', announce: !error.label.startsWith('Amicizie:') }
+    return { ...error, kind: 'error', announce: !errorElement.classList.contains(FRIENDS_ERROR_CLASS) }
   }
   // The whole card is the identity: a new estimate with other values is new information.
   const text = (element.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 240)

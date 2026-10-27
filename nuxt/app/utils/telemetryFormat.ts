@@ -6,6 +6,7 @@
  *
  * Importabile direttamente dai servizi senza caricare il composable pesante.
  */
+import { useI18n, type Locale } from '~/i18n'
 
 // === CAR CATEGORIES ===
 
@@ -173,31 +174,43 @@ export function formatLocalDateKey(date: Date): string {
     return `${year}-${month}-${day}`
 }
 
-/**
- * Formatta una data come "15 Mag 2024"
- */
-export function formatDate(dateStr: string): string {
-    if (!dateStr) return '-'
-    const date = parseTelemetryDate(dateStr)
-    if (!date) return '-'
-    const day = date.getDate()
-    const months = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic']
-    return `${day} ${months[date.getMonth()]} ${date.getFullYear()}`
+// PIP-665: month names per interface language. Fixed lists (not Intl) so the text is the same on every
+// system; Italian stays exactly as before.
+const SHORT_MONTHS: Record<Locale, readonly string[]> = {
+    it: ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'],
+    en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+}
+const FULL_MONTHS: Record<Locale, readonly string[]> = {
+    it: ['GENNAIO', 'FEBBRAIO', 'MARZO', 'APRILE', 'MAGGIO', 'GIUGNO',
+        'LUGLIO', 'AGOSTO', 'SETTEMBRE', 'OTTOBRE', 'NOVEMBRE', 'DICEMBRE'],
+    en: ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
+        'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'],
+}
+
+/** "15 Mag 2024" / "15 May 2024" for an already parsed date. */
+export function formatShortDate(date: Date, locale: Locale = useI18n().locale.value): string {
+    return `${date.getDate()} ${SHORT_MONTHS[locale][date.getMonth()]} ${date.getFullYear()}`
 }
 
 /**
- * Formatta una data come "15 MAGGIO 2024"
+ * Formatta una data come "15 Mag 2024" ("15 May 2024" in English), nella lingua dell'interfaccia.
+ * Chi salva il risultato (proiezioni in cache) passa `'it'`: il valore salvato resta italiano.
  */
-export function formatDateFull(dateStr: string): string {
+export function formatDate(dateStr: string, locale: Locale = useI18n().locale.value): string {
     if (!dateStr) return '-'
     const date = parseTelemetryDate(dateStr)
     if (!date) return '-'
-    const day = date.getDate()
-    const months = [
-        'GENNAIO', 'FEBBRAIO', 'MARZO', 'APRILE', 'MAGGIO', 'GIUGNO',
-        'LUGLIO', 'AGOSTO', 'SETTEMBRE', 'OTTOBRE', 'NOVEMBRE', 'DICEMBRE'
-    ]
-    return `${day} ${months[date.getMonth()]} ${date.getFullYear()}`
+    return formatShortDate(date, locale)
+}
+
+/**
+ * Formatta una data come "15 MAGGIO 2024" ("15 MAY 2024" in English), nella lingua dell'interfaccia.
+ */
+export function formatDateFull(dateStr: string, locale: Locale = useI18n().locale.value): string {
+    if (!dateStr) return '-'
+    const date = parseTelemetryDate(dateStr)
+    if (!date) return '-'
+    return `${date.getDate()} ${FULL_MONTHS[locale][date.getMonth()]} ${date.getFullYear()}`
 }
 
 /**

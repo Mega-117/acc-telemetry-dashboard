@@ -14,6 +14,17 @@ import telemetry from './it/telemetry'
 import stats from './it/stats'
 import tracks from './it/tracks'
 import data from './it/data'
+import game from './it/game'
+import coach from './it/coach'
+import pitwall from './it/pitwall'
+import pitwallConcept from './it/pitwallConcept'
+import controlK from './it/controlK'
+import quickPanel from './it/quickPanel'
+import hud from './it/hud'
+import hudSetup from './it/hudSetup'
+import spotter from './it/spotter'
+import overlays from './it/overlays'
+import coachLessons from './it/coachLessons'
 
 export default {
   ...shell,
@@ -30,4 +41,15 @@ export default {
   ...stats,
   ...tracks,
   ...data,
+  ...game,
+  ...coach,
+  ...pitwall,
+  ...pitwallConcept,
+  ...controlK,
+  ...quickPanel,
+  ...hud,
+  ...hudSetup,
+  ...spotter,
+  ...overlays,
+  ...coachLessons,
 } as const

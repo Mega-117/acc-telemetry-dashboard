@@ -19,6 +19,9 @@ import PitwallConceptSearch from "~/components/pitwall/concept/PitwallConceptSea
 import { usePitwallStore } from "~/composables/usePitwallStore";
 import { usePitwallConceptMode } from "~/composables/usePitwallConceptMode";
 import type { PitwallConceptRace, PitwallConceptScreen } from "~/utils/pitwallConcept";
+import { useI18n } from "~/i18n";
+
+const { t } = useI18n();
 
 const state = usePitwallStore();
 
@@ -112,7 +115,7 @@ function add(personId: string) {
       <section class="pwc-home__mine">
         <header class="pwc-block__head">
           <h2 class="pwc-block__title">
-            Il tuo Pitwall
+            {{ t('pitwallConcept.home.mineTitle') }}
           </h2>
         </header>
 
@@ -130,7 +133,7 @@ function add(personId: string) {
       <section class="pwc-home__races">
         <header class="pwc-block__head">
           <h2 class="pwc-block__title">
-            Pitwall aperti
+            {{ t('pitwallConcept.home.openTitle') }}
           </h2>
           <!-- Gli elenchi ai tetti veri del servizio. Serve a guardare gli edge
                case invece di descriverli, ed esiste solo nella demo. -->
@@ -141,7 +144,7 @@ function add(personId: string) {
             :class="{ 'is-on': state.crowded.value }"
             @click="state.toggleCrowded()"
           >
-            {{ state.crowded.value ? "Torna ai dati di esempio" : "Molti dati" }}
+            {{ state.crowded.value ? t('pitwallConcept.home.demoBack') : t('pitwallConcept.home.demoMany') }}
           </button>
         </header>
 
@@ -149,10 +152,10 @@ function add(personId: string) {
           v-if="isFirstRun"
           class="pwc-start"
         >
-          Aggiungi un amico dalla rubrica per trovare il suo Pitwall.
+          {{ t('pitwallConcept.home.firstRun') }}
         </p>
 
-        <ScrollArea class="pwc-room-scroll" label="Pitwall aperti">
+        <ScrollArea class="pwc-room-scroll" :label="t('pitwallConcept.home.openTitle')">
         <PitwallConceptRaces
           :races="races"
           :people="people"
@@ -163,7 +166,7 @@ function add(personId: string) {
       </section>
 
       </div>
-      <aside class="pwc-home__social" aria-label="Amici e richieste">
+      <aside class="pwc-home__social" :aria-label="t('pitwallConcept.home.socialAria')">
         <PitwallConceptFriends
           class="pwc-home__friends"
           :friends="friends"
@@ -175,13 +178,13 @@ function add(personId: string) {
         >
           <template #heading-action>
             <button type="button" class="pwc-link-btn" :aria-expanded="addingFriend" @click="addingFriend = !addingFriend; search = ''">
-              {{ addingFriend ? 'Torna agli amici' : '+ Aggiungi' }}
+              {{ addingFriend ? t('pitwallConcept.home.backToFriends') : t('pitwallConcept.home.addToggle') }}
             </button>
           </template>
           <template #search>
-            <PitwallConceptSearch v-model="search" :found="found" linked-label="Già collegato">
+            <PitwallConceptSearch v-model="search" :found="found" :linked-label="t('pitwallConcept.home.linked')">
               <template #actions="{ person }">
-                <button type="button" class="rc-btn rc-btn--compact" @click="add(person.id)">Aggiungi</button>
+                <button type="button" class="rc-btn rc-btn--compact" @click="add(person.id)">{{ t('pitwallConcept.home.add') }}</button>
               </template>
             </PitwallConceptSearch>
           </template>

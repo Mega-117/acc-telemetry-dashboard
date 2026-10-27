@@ -8,8 +8,11 @@ import {
 } from '~/services/overlay/tyreSetupViewModel'
 import { tyreTemperatureColor } from '~/utils/tyreTemperaturePresentation'
 import { brakeTemperatureColor } from '~/utils/brakeTemperaturePresentation'
+import { useI18n } from '~/i18n'
 
 const props = defineProps<{ fastState: FastOverlayState }>()
+// The column titles (TYRE PRESSURE, LAST LAP...) are English in both languages; only the empty state is translated.
+const { t } = useI18n()
 
 const setup = computed(() => props.fastState.tyreSetup)
 const hasSnapshot = computed(() => setup.value.status === 'available' && setup.value.lastLap !== null)
@@ -68,15 +71,15 @@ function startingPressure(id: TyreWheelId) {
 </script>
 
 <template>
-  <section class="tyre-setup" aria-label="Dati setup gomme ultimo run">
+  <section class="tyre-setup" :aria-label="t('hudSetup.tyres.aria')">
     <header class="tyre-setup__header">
       <strong>SETUP</strong>
       <span>LAST LAP</span>
     </header>
 
     <div v-if="!hasSnapshot" class="tyre-setup__empty" role="status">
-      <strong>NESSUN DATO</strong>
-      <span>Completa un giro valido</span>
+      <strong>{{ t('hudSetup.tyres.noData') }}</strong>
+      <span>{{ t('hudSetup.tyres.completeLap') }}</span>
     </div>
 
     <div v-else class="tyre-setup__columns">

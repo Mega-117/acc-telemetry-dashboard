@@ -7,6 +7,8 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { endFirebaseScenario, startFirebaseScenario } from '~/composables/useFirebaseTracker'
 import { loadAdminActivityIndexes, summarizeAdminActivity, type ActivityIndex } from '~/repositories/adminActivityRepository'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { useI18n } from '~/i18n'
+import { formatShortDate } from '~/utils/telemetryFormat'
 import {
   PILOT_PAGE_SIZE,
   countPilotDirectory,
@@ -20,6 +22,7 @@ definePageMeta({
 })
 
 const { currentUser, isAdmin, userRole } = useFirebaseAuth()
+const { t } = useI18n()
 
 type Pilot = PilotDirectoryItem
 
@@ -35,10 +38,10 @@ function activityLabel(pilot: Pilot) {
   return activity.count === null ? '—' : `${activity.count}${activity.partial ? '+' : ''}`
 }
 function activityHint(pilot: Pilot) {
-  if (!isAdmin.value) return 'Conteggio riportato dall’ultima sincronizzazione del pilota'
+  if (!isAdmin.value) return t('coach.list.countHintCoach')
   const activity = summarizeAdminActivity(activityIndexes.value.get(pilot.uid) || null, activityNow.value)
-  return activity.count === null ? 'Indice non disponibile: conteggio non verificabile'
-    : `${activity.partial ? 'Conteggio parziale' : 'Sessioni sincronizzate nelle ultime 168 ore'}. Dati aggiornati: ${activity.updatedAt ? formatDate(activity.updatedAt) : 'data non disponibile'}`
+  return activity.count === null ? t('coach.list.indexUnavailable')
+    : t('coach.list.dataUpdated', { scope: activity.partial ? t('coach.list.partialCount') : t('coach.list.syncedLastWeek'), date: activity.updatedAt ? formatDate(activity.updatedAt) : t('coach.list.dateUnavailable') })
 }
 let fetchRevision = 0
 const isLoading = ref(true)
@@ -149,12 +152,12 @@ function getVersionClass(pilot: Pilot): string {
 }
 
 function getFirebaseHealthLabel(status?: string): string {
-  if (status === 'healthy') return 'Struttura verificata'
-  if (status === 'repairing') return 'Verifica in corso'
-  if (status === 'partial') return 'Firebase parziale'
-  if (status === 'blocked') return 'Firebase bloccato'
-  if (status === 'future_schema') return 'Versione futura'
-  return 'Firebase non verificato'
+  if (status === 'healthy') return t('coach.list.health.healthy')
+  if (status === 'repairing') return t('coach.list.health.repairing')
+  if (status === 'partial') return t('coach.list.health.partial')
+  if (status === 'blocked') return t('coach.list.health.blocked')
+  if (status === 'future_schema') return t('coach.list.health.future')
+  return t('coach.list.health.unknown')
 }
 
 function getFirebaseHealthClass(status?: string): string {
@@ -167,12 +170,10 @@ function getFirebaseHealthClass(status?: string): string {
 }
 
 function formatDate(dateStr?: string): string {
-  if (!dateStr) return 'Nessuna sessione ricevuta'
+  if (!dateStr) return t('coach.list.noSessionReceived')
   const date = new Date(dateStr)
-  if (!Number.isFinite(date.getTime())) return 'Data non disponibile'
-  const day = date.getDate()
-  const months = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic']
-  return `${day} ${months[date.getMonth()]} ${date.getFullYear()}`
+  if (!Number.isFinite(date.getTime())) return t('coach.list.dateInvalid')
+  return formatShortDate(date)
 }
 
 onMounted(() => {
@@ -189,12 +190,12 @@ watch(searchQuery, () => {
 
 <template>
   <div class="piloti-page">
-    <h1 class="page-title">{{ isAdmin ? 'TUTTI GLI UTENTI' : 'I MIEI PILOTI' }}</h1>
+    <h1 class="page-title">{{ isAdmin ? t('coach.list.titleAdmin') : t('coach.list.titleCoach') }}</h1>
     
     <div class="page-header">
       <p class="page-subtitle">
-        {{ visibleTotalLabel }} {{ isAdmin ? 'utenti' : 'piloti assegnati' }}
-        <span v-if="visibleTotalLabel > PILOT_PAGE_SIZE" class="page-subtitle__page">pagina {{ currentPage }}</span>
+        {{ visibleTotalLabel }} {{ isAdmin ? t('coach.list.countAdmin') : t('coach.list.countCoach') }}
+        <span v-if="visibleTotalLabel > PILOT_PAGE_SIZE" class="page-subtitle__page">{{ t('coach.list.page', { page: currentPage }) }}</span>
       </p>
       
       <!-- Search Bar -->
@@ -206,38 +207,38 @@ watch(searchQuery, () => {
         <input 
           v-model="searchQuery"
           type="text" 
-          placeholder="Cerca pilota..."
+          :placeholder="t('coach.list.search')"
           class="search-input"
         />
       </div>
     </div>
 
     <p v-if="isAdmin" class="page-subtitle">
-      Sessioni sincronizzate nelle ultime 168 ore. + indica un conteggio parziale; — indica dati non disponibili.
+      {{ t('coach.list.adminLegend') }}
     </p>
 
     <!-- Loading State -->
     <div v-if="isLoading" class="state-box">
-      Caricamento piloti...
+      {{ t('coach.list.loading') }}
     </div>
 
     <!-- Empty State -->
     <div v-else-if="pilots.length === 0" class="state-box state-box--empty">
-      <p>{{ searchQuery ? `Nessun risultato per "${searchQuery}"` : 'Nessun pilota assegnato' }}</p>
+      <p>{{ searchQuery ? t('coach.list.noResults', { query: searchQuery }) : t('coach.list.noPilots') }}</p>
       <small v-if="!searchQuery">
-        L'assegnazione coach deve aggiornare sia <code>users</code> sia <code>pilotDirectory</code>.
-        In sviluppo usa il repair directory da <code>/dev-rebuild</code> se i dati sono stati modificati manualmente.
+        {{ t('coach.list.setupHint1') }} <code>users</code> {{ t('coach.list.setupHintAnd') }} <code>pilotDirectory</code>.
+        {{ t('coach.list.setupHint2') }} <code>/dev-rebuild</code> {{ t('coach.list.setupHint3') }}
       </small>
     </div>
 
     <!-- Pilots List -->
     <div v-else class="pilots-list">
       <div class="list-header" :class="{ 'list-header--admin': isAdmin }">
-        <span class="lh-name">Pilota</span>
-        <span class="lh-nickname">Nickname</span>
-        <span class="lh-sessions">{{ isAdmin ? 'Sessioni (168 h)' : 'Sessioni (7 gg)' }}</span>
-        <span class="lh-last">Ultima sessione</span>
-        <span v-if="isAdmin" class="lh-version" title="Versione dichiarata dall'account all'ultima sincronizzazione; quella di ogni PC è nel Cockpit">Versione account</span>
+        <span class="lh-name">{{ t('coach.list.colPilot') }}</span>
+        <span class="lh-nickname">{{ t('coach.list.colNickname') }}</span>
+        <span class="lh-sessions">{{ isAdmin ? t('coach.list.colSessionsAdmin') : t('coach.list.colSessionsCoach') }}</span>
+        <span class="lh-last">{{ t('coach.list.colLast') }}</span>
+        <span v-if="isAdmin" class="lh-version" :title="t('coach.list.colVersionTitle')">{{ t('coach.list.colVersion') }}</span>
         <span class="lh-cta"></span>
       </div>
       
@@ -262,19 +263,19 @@ watch(searchQuery, () => {
           <span v-if="pilot.suiteVersion" class="version-badge" :class="getVersionClass(pilot)">v{{ pilot.suiteVersion }}</span>
           <span v-else class="version-badge version-badge--unknown">—</span>
           <small class="version-meta">
-            {{ pilot.clientChannel || 'canale sconosciuto' }} · versione segnalata {{ pilot.suiteVersionUpdatedAt ? formatDate(pilot.suiteVersionUpdatedAt) : 'senza data' }}
+            {{ pilot.clientChannel || t('coach.list.unknownChannel') }} · {{ t('coach.list.versionReported', { date: pilot.suiteVersionUpdatedAt ? formatDate(pilot.suiteVersionUpdatedAt) : t('coach.list.noDate') }) }}
           </small>
-          <small v-if="pilot.clientUpdateState === 'pending'" class="version-pending">Aggiornamento in corso</small>
+          <small v-if="pilot.clientUpdateState === 'pending'" class="version-pending">{{ t('coach.list.updating') }}</small>
           <small
             class="firebase-health"
             :class="getFirebaseHealthClass(pilot.firebaseHealthStatus)"
-            :title="pilot.firebaseHealthCode || 'Controllo struttura Firebase non ancora eseguito'"
+            :title="pilot.firebaseHealthCode || t('coach.list.healthNotRun')"
           >
-            {{ getFirebaseHealthLabel(pilot.firebaseHealthStatus) }} · {{ pilot.firebaseHealthCheckedAt ? formatDate(pilot.firebaseHealthCheckedAt) : 'data non disponibile' }}
+            {{ getFirebaseHealthLabel(pilot.firebaseHealthStatus) }} · {{ pilot.firebaseHealthCheckedAt ? formatDate(pilot.firebaseHealthCheckedAt) : t('coach.list.dateUnavailable') }}
           </small>
         </span>
         <span class="lr-cta">
-          Visualizza
+          {{ t('coach.list.view') }}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M9 18l6-6-6-6"/>
           </svg>
@@ -283,11 +284,11 @@ watch(searchQuery, () => {
 
       <div class="pilot-pagination">
         <button class="pilot-pagination__button" :disabled="!hasPreviousPage || isLoading" @click="goPreviousPage">
-          Precedente
+          {{ t('coach.list.prev') }}
         </button>
-        <span class="pilot-pagination__status">Pagina {{ currentPage }}</span>
+        <span class="pilot-pagination__status">{{ t('coach.list.pageOf', { page: currentPage }) }}</span>
         <button class="pilot-pagination__button" :disabled="!hasNextPage || isLoading" @click="goNextPage">
-          Successiva
+          {{ t('coach.list.next') }}
         </button>
       </div>
     </div>

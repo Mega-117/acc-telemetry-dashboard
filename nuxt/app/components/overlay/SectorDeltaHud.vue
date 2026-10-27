@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from '~/i18n'
 import { computed } from 'vue'
 import type { CustomSectorTimes } from '~/utils/customSectorReferences'
 import type { SectorHudState, SectorHudEntry } from '~/composables/useLiveStatePoller'
@@ -149,6 +150,7 @@ function ariaLabel(sector: SectorHudEntry): string {
   const best = props.showBest && sector.bestMs !== null ? `, best ${formatTime(sector.bestMs)} secondi` : ''
   return `${base} ${formatTime(sector.currentMs)} secondi, delta ${formatDelta(sector.deltaMs)}${best}`
 }
+const { t } = useI18n()
 </script>
 
 <template>
@@ -161,7 +163,7 @@ function ariaLabel(sector: SectorHudEntry): string {
     }"
     aria-label="Delta settori"
   >
-    <p v-if="visibleSectors.length === 0" role="status">Settori non disponibili</p>
+    <p v-if="visibleSectors.length === 0" role="status">{{ t('overlays.sectors.unavailable') }}</p>
     <template v-if="variant === 'compact'">
       <div class="sector-compact__header">
         <div class="sector-compact__title">
@@ -182,7 +184,7 @@ function ariaLabel(sector: SectorHudEntry): string {
           class="sector-compact__lap-label"
           :class="{ 'sector-compact__lap-label--target': targetOutcome !== 'neutral' && compactCurrentLapValid === true }"
         >{{ compactCurrentLapValid === true && targetOutcome !== 'neutral'
-          ? `${sectorHud?.mode === 'last_lap' ? 'LAST LAP · ' : ''}${targetOutcome === 'inside' ? 'NEL TARGET' : 'FUORI TARGET'}` : (sectorHud?.mode === 'last_lap' ? 'LAST LAP' : 'CURRENT LAP') }}</small>
+          ? `${sectorHud?.mode === 'last_lap' ? 'LAST LAP · ' : ''}${targetOutcome === 'inside' ? t('overlays.sectors.inTarget') : t('overlays.sectors.outTarget')}` : (sectorHud?.mode === 'last_lap' ? 'LAST LAP' : 'CURRENT LAP') }}</small>
       </div>
       <div class="sector-compact__rows">
         <div
@@ -210,7 +212,7 @@ function ariaLabel(sector: SectorHudEntry): string {
     </template>
     <template v-else>
       <div class="sector-delta-hud__header sector-delta-hud__header--classic">
-        <span class="sector-delta-hud__title">{{ sectorHud?.mode === 'last_lap' ? 'SETTORI · ULTIMO GIRO' : 'SETTORI' }}</span>
+        <span class="sector-delta-hud__title">{{ sectorHud?.mode === 'last_lap' ? t('overlays.sectors.titleLastLap') : t('overlays.sectors.title') }}</span>
         <em class="sector-delta-hud__comparison">VS {{ comparisonToken }}</em>
       </div>
       <div class="sector-delta-hud__grid" :style="{ gridTemplateColumns: `repeat(${visibleSectors.length}, minmax(0, 1fr))` }">
@@ -232,7 +234,7 @@ function ariaLabel(sector: SectorHudEntry): string {
           <small
             v-if="showReference"
             class="sector-delta__ref"
-          >prec {{ sector.referenceMs !== null ? formatTime(sector.referenceMs) : '--' }}</small>
+          >{{ t('overlays.sectors.previous') }} {{ sector.referenceMs !== null ? formatTime(sector.referenceMs) : '--' }}</small>
           <small
             v-if="showBest"
             class="sector-delta__best"

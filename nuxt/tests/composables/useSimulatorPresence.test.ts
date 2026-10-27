@@ -3,6 +3,10 @@ import { effectScope, nextTick, ref } from 'vue'
 import { readCommonLive, RUNNING_TTL_MS, type CommonLive } from '~/services/telemetry/commonLive'
 import { simulatorConnection } from '~/services/telemetry/gameCatalog'
 import { GAME_CLOSED_GRACE_MS, SILENCE_GRACE_MS, useSimulatorPresence } from '~/composables/useSimulatorPresence'
+import { setLocale } from '~/i18n'
+
+// Italian assertions (jsdom defaults to English).
+setLocale('it')
 
 const NOW = 1_000_000
 const frame = (extra: Record<string, unknown> = {}) => ({ schema: 'racercore.live', version: 1, game_id: 'acc', session_id: null,
@@ -23,6 +27,16 @@ describe('PIP-510 simulator connection', () => {
     expect(simulatorConnection({ gameId: 'foreign', connected: false, fresh: true, running: true }).state).toBe('none')
     expect(simulatorConnection({ gameId: 'unknown', connected: false, fresh: true, choiceRequired: true })).toMatchObject({ state: 'choice', label: 'Scegli il gioco' })
     expect(simulatorConnection(null)).toMatchObject({ state: 'none', label: 'Nessun gioco collegato' })
+  })
+  it('shows the label in the interface language while the state stays the same', () => {
+    setLocale('en')
+    try {
+      expect(simulatorConnection({ gameId: 'acc', connected: true, fresh: true })).toMatchObject({ state: 'connected', label: 'Connected: ACC' })
+      expect(simulatorConnection({ gameId: 'acc', connected: false, fresh: true, running: true })).toMatchObject({ state: 'started', label: 'ACC running' })
+      expect(simulatorConnection(null)).toMatchObject({ state: 'none', label: 'No game connected' })
+    } finally {
+      setLocale('it')
+    }
   })
 })
 

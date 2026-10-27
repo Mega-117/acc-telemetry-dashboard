@@ -4,12 +4,14 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import ControlKNumberField from '~/components/overlay/ControlKNumberField.vue'
 import ControlKViewHeader from '~/components/overlay/ControlKViewHeader.vue'
 import { fieldWheelCommand, singleField } from '~/utils/controlKNumberField'
+import { useI18n } from '~/i18n'
 const props = defineProps<{ api: any; separateView?: boolean; editorOnly?: boolean; showHeading?: boolean; statusTarget?: string; previewExpanded?: boolean; bodyTarget?: string
   /** PIP-556: unavailable commands stay pressable and explain why through `notice`. */
   reportUnavailable?: boolean
   /** PIP-556: minutes as the shared number field (wheel, mouse scroll, digits) instead of -/input/+. */
   numberField?: boolean }>()
 const emit = defineEmits<{ open: []; cancel: []; notice: [text: string, tone: 'ok' | 'error'] }>()
+const { t } = useI18n()
 const minutes = defineModel<number>('minutes', { default: 10 })
 const open = ref(props.editorOnly === true || props.previewExpanded === true), pending = ref(false), error = ref('')
 const applicationSucceeded = ref(false)
@@ -25,7 +27,9 @@ const plan = computed(() => state.value?.plan)
 // whole-session button can be disabled outside qualifying/race (PIP-423).
 const sessionType = ref<number | null>(null)
 const sessionAllowsAuto = computed(() => sessionType.value === 1 || sessionType.value === 2)
-const sessionHint = computed(() => sessionType.value === null ? 'Carburante intera sessione: in attesa della telemetria.' : 'Carburante intera sessione: disponibile solo in qualifica e gara.')
+// The reason alone feeds the notice; the hint adds the 'whole session' prefix.
+const sessionReason = computed(() => sessionType.value === null ? t('hudSetup.fuel.sessionWaiting') : t('hudSetup.fuel.sessionOnlyQualifyRace'))
+const sessionHint = computed(() => t('hudSetup.fuel.sessionHint', { reason: sessionReason.value }))
 let sessionTimer: ReturnType<typeof setTimeout> | undefined
 async function pollSession() {
   clearTimeout(sessionTimer)
@@ -39,18 +43,20 @@ async function pollSession() {
   if (!disposed) sessionTimer = setTimeout(pollSession, 5000)
 }
 void pollSession()
-const statusMessage = computed(() => pending.value ? 'Preparazione carburante…'
+const statusMessage = computed(() => pending.value ? t('hudSetup.fuel.preparing')
   : error.value || state.value?.conflict || state.value?.unavailableReason
   || (plan.value && !plan.value.ok ? plan.value.reason : '')
-  || state.value?.result?.reason || (state.value?.available ? 'Pronto: premi Applica dal menu Pausa; la schermata verrà verificata.' : 'Verifica delle condizioni…'))
+  || state.value?.result?.reason || (state.value?.available ? t('hudSetup.fuel.ready') : t('hudSetup.fuel.checking')))
 // The minutes editor shows actionable problems, never successful sequence diagnostics.
 const minutesProblem = computed(() => {
   if (pending.value) return ''
   return (!applicationSucceeded.value ? error.value : '')
     || state.value?.conflict || state.value?.unavailableReason
     || (plan.value?.ok === false ? plan.value.reason : '')
-    || (state.value?.available === false ? 'Carburante non disponibile: verifica le condizioni nel gioco.' : '')
+    || (state.value?.available === false ? t('hudSetup.fuel.unavailable') : '')
 })
+// The preview error shown last (identity, not text): a later good preview clears only that one.
+let previewErrorShown = ''
 async function refresh(background = false) {
   if (disposed || pending.value) return
   const token = ++generation
@@ -61,9 +67,9 @@ async function refresh(background = false) {
     if (token !== generation) return
     state.value = value
     if (value && typeof value.sessionType === 'number') sessionType.value = value.sessionType
-    if (value && error.value.startsWith('Anteprima carburante')) error.value = ''
-    if (!value) { applicationSucceeded.value = false; error.value = 'Riavvia Racer Core per attivare il comando carburante.' }
-  } catch { if (token === generation) { state.value = null; applicationSucceeded.value = false; error.value = 'Anteprima carburante non disponibile. Riprovo automaticamente.' } }
+    if (value && previewErrorShown && error.value === previewErrorShown) error.value = ''
+    if (!value) { applicationSucceeded.value = false; error.value = t('hudSetup.fuel.restart') }
+  } catch { if (token === generation) { state.value = null; applicationSucceeded.value = false; error.value = previewErrorShown = t('hudSetup.fuel.previewUnavailable') } }
   finally { if (token === generation) previewPending.value = false }
   if (token === generation && open.value) timer = setTimeout(() => refresh(true), 1500)
 }
@@ -108,8 +114,8 @@ async function beginApplication() {
 async function applyPlan(mode: 'auto' | 'minutes', expected: any) {
   const result = await props.api.trainingOverlayApplySetupFuel({ mode, minutes: Number(minutes.value), contextKey: expected.contextKey, totalLitres: expected.totalLitres })
   applicationSucceeded.value = result?.ok === true
-  error.value = result?.reason || 'Esito non disponibile.'
-  emit('notice', applicationSucceeded.value ? `Benzina impostata${expected?.totalLitres ? `: ${expected.totalLitres} L` : '.'}` : `Benzina: ${error.value}`,
+  error.value = result?.reason || t('hudSetup.fuel.noOutcome')
+  emit('notice', applicationSucceeded.value ? (expected?.totalLitres ? t('hudSetup.fuel.setLitres', { litres: expected.totalLitres }) : t('hudSetup.fuel.set')) : t('hudSetup.fuel.failure', { reason: error.value }),
     applicationSucceeded.value ? 'ok' : 'error')
   // PIP-522: a success message leaves after 5 s; a failure stays until the next action.
   clearTimeout(successTimer)
@@ -123,7 +129,7 @@ function finishApplication() {
 }
 async function applySession() {
   if (pending.value) return
-  if (!sessionAllowsAuto.value) { emit('notice', `Benzina sessione: ${sessionHint.value.replace(/^Carburante intera sessione: /, '')}`, 'error'); return }
+  if (!sessionAllowsAuto.value) { emit('notice', t('hudSetup.fuel.sessionNotice', { reason: sessionReason.value }), 'error'); return }
   await beginApplication()
   try {
     if (disposed) return
@@ -131,12 +137,12 @@ async function applySession() {
     const value = await props.api?.trainingOverlayPreviewSetupFuel?.({ mode: 'auto', minutes: Number(minutes.value) })
     if (disposed) return
     if (!value?.available || !value?.plan?.ok) {
-      error.value = value?.conflict || value?.unavailableReason || value?.plan?.reason || 'Carburante sessione non disponibile.'
-      emit('notice', `Benzina sessione: ${error.value}`, 'error')
+      error.value = value?.conflict || value?.unavailableReason || value?.plan?.reason || t('hudSetup.fuel.sessionUnavailable')
+      emit('notice', t('hudSetup.fuel.sessionNotice', { reason: error.value }), 'error')
       return
     }
     await applyPlan('auto', value.plan)
-  } catch { error.value = 'Applicazione interrotta: controlla il carburante nel setup.'; emit('notice', `Benzina: ${error.value}`, 'error') }
+  } catch { error.value = t('hudSetup.fuel.interrupted'); emit('notice', t('hudSetup.fuel.failure', { reason: error.value }), 'error') }
   finally { finishApplication() }
 }
 async function apply() {
@@ -147,7 +153,7 @@ async function apply() {
     if (disposed) return
     await applyPlan('minutes', expected)
   }
-  catch { error.value = 'Applicazione interrotta: controlla il carburante nel setup.'; emit('notice', `Benzina: ${error.value}`, 'error') }
+  catch { error.value = t('hudSetup.fuel.interrupted'); emit('notice', t('hudSetup.fuel.failure', { reason: error.value }), 'error') }
   finally { finishApplication() }
 }
 onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); clearTimeout(successTimer); clearTimeout(sessionTimer); void props.api?.trainingOverlayKeyboardEditing?.(false) })
@@ -155,34 +161,34 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); clea
 
 <template>
   <section class="fuel-panel" :class="{ 'fuel-panel--editor': editorOnly }">
-    <h2 v-if="showHeading && !editorOnly" class="quick-panel-heading">Benzina</h2>
-    <button v-if="!editorOnly" class="fuel-open" type="button" data-overlay-wheel-action="fuel-session" aria-label="Carburante intera sessione" :aria-busy="pending" :disabled="pending || (!sessionAllowsAuto && !reportUnavailable)" :data-unavailable="!sessionAllowsAuto && reportUnavailable ? '' : undefined" :title="sessionAllowsAuto ? undefined : sessionHint" @click="applySession"><LoaderCircle v-if="pending" class="fuel-pending-spinner" :size="16" aria-hidden="true" /><Fuel v-else :size="22" aria-hidden="true" /><span>Sessione</span></button>
+    <h2 v-if="showHeading && !editorOnly" class="quick-panel-heading">{{ t('hudSetup.fuel.heading') }}</h2>
+    <button v-if="!editorOnly" class="fuel-open" type="button" data-overlay-wheel-action="fuel-session" :aria-label="t('hudSetup.fuel.sessionAria')" :aria-busy="pending" :disabled="pending || (!sessionAllowsAuto && !reportUnavailable)" :data-unavailable="!sessionAllowsAuto && reportUnavailable ? '' : undefined" :title="sessionAllowsAuto ? undefined : sessionHint" @click="applySession"><LoaderCircle v-if="pending" class="fuel-pending-spinner" :size="16" aria-hidden="true" /><Fuel v-else :size="22" aria-hidden="true" /><span>{{ t('hudSetup.fuel.session') }}</span></button>
     <Teleport defer :to="statusTarget || 'body'" :disabled="!statusTarget">
-      <div v-if="!open && (pending || error)" class="fuel-status" :class="{ 'fuel-status--error': !pending && !applicationSucceeded }" role="status" aria-live="polite"><strong>{{ pending ? 'Carburante' : applicationSucceeded ? 'Carburante impostato' : 'Problema carburante' }}</strong><p>{{ statusMessage }}</p></div>
+      <div v-if="!open && (pending || error)" class="fuel-status" :class="{ 'fuel-status--error': !pending && !applicationSucceeded }" role="status" aria-live="polite"><strong>{{ pending ? t('hudSetup.fuel.statusFuel') : applicationSucceeded ? t('hudSetup.fuel.statusSet') : t('hudSetup.fuel.statusProblem') }}</strong><p>{{ statusMessage }}</p></div>
     </Teleport>
-    <button v-if="!editorOnly" class="fuel-open" type="button" data-overlay-wheel-action="fuel" aria-label="Carburante durata stint" :aria-expanded="open" :disabled="pending" @click="separateView ? emit('open') : open = !open"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8 3 5l3-2 2 3h10a2 2 0 0 1 2 2v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V10a2 2 0 0 1 1-2Z" /><path d="M10 6V3h7v3M8 11l8 6m0-6-8 6" /></svg><span>A minuti</span></button>
+    <button v-if="!editorOnly" class="fuel-open" type="button" data-overlay-wheel-action="fuel" :aria-label="t('hudSetup.fuel.stintAria')" :aria-expanded="open" :disabled="pending" @click="separateView ? emit('open') : open = !open"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8 3 5l3-2 2 3h10a2 2 0 0 1 2 2v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V10a2 2 0 0 1 1-2Z" /><path d="M10 6V3h7v3M8 11l8 6m0-6-8 6" /></svg><span>{{ t('hudSetup.fuel.byMinutes') }}</span></button>
     <!-- PIP-556: in Control K ACC the editor has the shared ← header. -->
-    <ControlKViewHeader v-if="editorOnly && numberField" title="Benzina a minuti" action="fuel-back" @back="!pending && emit('cancel')" />
-    <button v-else-if="editorOnly" type="button" class="utility-action overlay-menu-back" data-overlay-wheel-action="fuel-back" :disabled="pending" @click="emit('cancel')">← Torna al pannello</button>
+    <ControlKViewHeader v-if="editorOnly && numberField" :title="t('hudSetup.fuel.minutesTitle')" action="fuel-back" @back="!pending && emit('cancel')" />
+    <button v-else-if="editorOnly" type="button" class="utility-action overlay-menu-back" data-overlay-wheel-action="fuel-back" :disabled="pending" @click="emit('cancel')">{{ t('hudSetup.fuel.back') }}</button>
     <Teleport defer :to="bodyTarget || 'body'" :disabled="!bodyTarget">
     <div v-if="open" class="fuel-body">
-      <strong v-if="!numberField">Prepara il carburante per lo stint</strong>
-      <ControlKNumberField v-if="numberField" class="fuel-minutes-field" :value="Number(minutes)" label="MINUTI" action="fuel-minutes"
-        name="Minuti stint" :spec="MINUTES_SPEC" suffix=" min" :disabled="pending" :part="editingMinutes ? 0 : null"
+      <strong v-if="!numberField">{{ t('hudSetup.fuel.prepare') }}</strong>
+      <ControlKNumberField v-if="numberField" class="fuel-minutes-field" :value="Number(minutes)" :label="t('hudSetup.fuel.minutesField')" action="fuel-minutes"
+        :name="t('hudSetup.fuel.minutesName')" :spec="MINUTES_SPEC" suffix=" min" :disabled="pending" :part="editingMinutes ? 0 : null"
         @toggle="editingMinutes = !editingMinutes" @release="editingMinutes = false" @update:value="setMinutes" />
       <div v-else class="fuel-duration" :inert="pending || undefined">
-        <button type="button" data-overlay-wheel-action="fuel-minus" aria-label="Un minuto in meno" @click="adjust(-1)">−</button>
-        <label><input v-model.number="minutes" type="number" min="1" max="180" step="1" aria-label="Minuti stint" :disabled="pending" @wheel="wheelMinutes" @pointerdown="keyboard" @keydown.stop @blur="api?.trainingOverlayKeyboardEditing?.(false)"> min</label>
-        <button type="button" data-overlay-wheel-action="fuel-plus" aria-label="Un minuto in più" @click="adjust(1)">+</button>
+        <button type="button" data-overlay-wheel-action="fuel-minus" :aria-label="t('hudSetup.fuel.minuteLess')" @click="adjust(-1)">−</button>
+        <label><input v-model.number="minutes" type="number" min="1" max="180" step="1" :aria-label="t('hudSetup.fuel.minutesName')" :disabled="pending" @wheel="wheelMinutes" @pointerdown="keyboard" @keydown.stop @blur="api?.trainingOverlayKeyboardEditing?.(false)"> min</label>
+        <button type="button" data-overlay-wheel-action="fuel-plus" :aria-label="t('hudSetup.fuel.minuteMore')" @click="adjust(1)">+</button>
       </div>
       <!-- PIP-526: common stint lengths in one press from the wheel. -->
-      <div class="fuel-presets" role="group" aria-label="Durate rapide" :inert="pending || undefined">
+      <div class="fuel-presets" role="group" :aria-label="t('hudSetup.fuel.presetsAria')" :inert="pending || undefined">
         <button v-for="value in [10, 20, 30, 45]" :key="value" type="button" :data-overlay-wheel-action="`fuel-preset-${value}`"
           :aria-pressed="Number(minutes) === value" :disabled="pending" @click="minutes = value">{{ value }} min</button>
       </div>
-      <p v-if="numberField && editingMinutes" class="ck-editor__hint">Su/Giù cambiano i minuti · OK fatto</p>
-      <button class="fuel-apply" type="button" data-overlay-wheel-action="fuel-apply" :aria-busy="pending" :aria-label="pending ? 'Applicazione in corso' : undefined" :disabled="!state?.available || pending || previewPending" @click="apply"><template v-if="pending">Applicazione<span class="fuel-pending-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></template><template v-else>{{ `Applica carburante${plan?.ok ? ` · ${plan.totalLitres} L` : ''}` }}</template></button>
-      <div v-if="minutesProblem" class="fuel-status" role="status" aria-live="polite"><strong>Problema carburante</strong><p>{{ minutesProblem }}</p></div>
+      <p v-if="numberField && editingMinutes" class="ck-editor__hint">{{ t('hudSetup.fuel.editingHint') }}</p>
+      <button class="fuel-apply" type="button" data-overlay-wheel-action="fuel-apply" :aria-busy="pending" :aria-label="pending ? t('hudSetup.fuel.applyingAria') : undefined" :disabled="!state?.available || pending || previewPending" @click="apply"><template v-if="pending">{{ t('hudSetup.fuel.applying') }}<span class="fuel-pending-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></template><template v-else>{{ plan?.ok ? t('hudSetup.fuel.applyLitres', { litres: plan.totalLitres }) : t('hudSetup.fuel.apply') }}</template></button>
+      <div v-if="minutesProblem" class="fuel-status" role="status" aria-live="polite"><strong>{{ t('hudSetup.fuel.statusProblem') }}</strong><p>{{ minutesProblem }}</p></div>
     </div>
     </Teleport>
   </section>

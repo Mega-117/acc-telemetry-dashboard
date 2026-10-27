@@ -15,6 +15,7 @@ import { describePitwallConceptOrderStatus } from "~/utils/pitwallConcept";
 import { describePitwallFieldOutcome } from "~/utils/pitwallPresentation";
 import type { PitwallDisplayOrderStatus as PitwallOrderStatus } from "~/services/pitwall/pitwallLink";
 import type { PitwallFieldOutcomeRow } from "~/composables/usePitwallController";
+import { useI18n } from "~/i18n";
 
 const props = defineProps<{
   status: PitwallOrderStatus | null;
@@ -27,6 +28,7 @@ const props = defineProps<{
 }>();
 
 defineEmits<{ send: [] }>();
+const { t } = useI18n();
 
 const order = computed(() => describePitwallConceptOrderStatus(props.status, props.reason, props.outcomes));
 const busy = computed(() => props.status === "pending" || props.status === "applying");
@@ -42,9 +44,9 @@ const summary = computed(() => {
   const verified = rows.filter(entry => entry.outcome === "verified").length;
   const onScreen = rows.filter(entry => entry.outcome === "verified" && entry.via === "screen").length;
   const mismatch = rows.filter(entry => entry.outcome === null && entry.observed != null).length;
-  const parts = [`${verified}/${rows.length} confermati`];
-  if (onScreen) parts.push(`${onScreen} a schermo`);
-  if (mismatch) parts.push(`${mismatch} in disaccordo`);
+  const parts = [t("pitwallConcept.order.confirmed", { verified, total: rows.length })];
+  if (onScreen) parts.push(t("pitwallConcept.order.onScreen", { count: onScreen }));
+  if (mismatch) parts.push(t("pitwallConcept.order.mismatch", { count: mismatch }));
   return parts.join(" · ");
 });
 
@@ -111,7 +113,7 @@ const chips = computed(() => props.outcomes.map((entry) => {
       :disabled="Boolean(blocked)"
       @click="$emit('send')"
     >
-      {{ busy ? "Invia di nuovo" : "Invia strategia" }}
+      {{ busy ? t('pitwallConcept.order.resend') : t('pitwallConcept.order.send') }}
     </button>
   </div>
 </template>

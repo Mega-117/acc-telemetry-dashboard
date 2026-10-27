@@ -1,8 +1,14 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { translate, type TranslationKey } from '~/i18n'
 
-const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8')
+// PIP-665: visible words live in the Italian dictionary. Each `t('key'` call in a source is
+// followed by its Italian text, so these contracts keep reading the words the user sees
+// and still prove the component uses that exact key.
+const withItalian = (source: string) => source.replace(/\bt\((['"])([\w.]+)\1/g,
+  (call, _quote: string, key: string) => `${call} /* ${translate('it', key as TranslationKey)} */`)
+const read = (path: string) => withItalian(readFileSync(resolve(process.cwd(), path), 'utf8'))
 const panel = read('app/components/pages/PitwallPage.vue')
 const valueField = read('app/components/pitwall/PitwallValueField.vue')
 const orderBar = read('app/components/pitwall/PitwallOrderBar.vue')
@@ -364,7 +370,7 @@ describe('Pitwall wiring', () => {
     ]
     let cursore = -1
     for (const voce of voci) {
-      const trovato = conceptPitStop.indexOf(`<span>${voce}</span>`)
+      const trovato = conceptPitStop.indexOf(`/* ${voce} */) }}</span>`)
       expect(trovato, voce).toBeGreaterThan(cursore)
       cursore = trovato
     }
@@ -444,10 +450,12 @@ describe('Pitwall wiring', () => {
     // mostrarle sempre inviterebbe a impostare una cosa che non si puo'
     // mandare, perche' senza quella casella quelle righe non esistono.
     expect(conceptPitStop).toContain('v-if="brakeRowsVisible"')
-    expect(conceptPitStop).toContain('Freno anteriore')
-    expect(conceptPitStop).toContain('Freno posteriore')
+    expect(conceptPitStop).toContain('labelKey: "pitwallConcept.pitStop.brakeFront"')
+    expect(conceptPitStop).toContain('labelKey: "pitwallConcept.pitStop.brakeRear"')
+    expect(translate('it', 'pitwallConcept.pitStop.brakeFront')).toBe('Freno anteriore')
+    expect(translate('it', 'pitwallConcept.pitStop.brakeRear')).toBe('Freno posteriore')
     expect(conceptPitStop).toContain('stop.stepBrakeCompound(brake.which')
-    expect(conceptPitStop).toContain('stop[brake.field].value ?? "Non toccare"')
+    expect(conceptPitStop).toContain("stop[brake.field].value ?? t('pitwallConcept.pitStop.dontTouch' /* Non toccare */)")
     // Il valore in macchina e' quello visto a schermo, o l'ultimo ordine: ACC non rilegge queste righe.
     expect(conceptPitStop).toContain('seenValue(brake.field, last?.[brake.field])')
     // La casella resta accesa dopo un ordine, quindi le righe restano visibili
@@ -674,12 +682,12 @@ describe('Pitwall wiring', () => {
     // Una ricerca sola per tutto il prototipo: la home aggiunge amici, la
     // gara invita. Chi la monta decide i bottoni, il campo resta uno.
     expect(conceptState).toContain('searchPitwallConceptDirectory')
-    expect(conceptSearch).toContain('placeholder: "Cerca nickname"')
-    expect(conceptSearch).toContain('emptyLabel: "Nessuno con questo nickname."')
+    expect(conceptSearch).toContain('props.placeholder ?? t("pitwallConcept.search.placeholder" /* Cerca nickname */)')
+    expect(conceptSearch).toContain('props.emptyLabel ?? t("pitwallConcept.search.empty" /* Nessuno con questo nickname. */)')
     expect(concept).toContain('<PitwallConceptSearch')
     expect(conceptLive).toContain('<PitwallConceptSearch')
     expect(concept).toContain('Aggiungi un amico')
-    expect(concept).toContain('linked-label="Già collegato"')
+    expect(concept).toContain(`:linked-label="t('pitwallConcept.home.linked' /* Già collegato */)"`)
     expect(concept).toContain('if (next === "home") search.value = "";')
   })
 
@@ -741,7 +749,7 @@ describe('Pitwall wiring', () => {
     // L'esito per campo e' la stessa riga del controller, senza ricopiarla.
     expect(conceptOrder).toContain('outcomes: PitwallFieldOutcomeRow[]')
     expect(conceptPitStop).toContain(':outcomes="stop.fieldOutcomes.value"')
-    expect(conceptPitStop).toContain('`Dati macchina di ${stop.presenceAgeSeconds.value}s fa`')
+    expect(conceptPitStop).toContain('t("pitwallConcept.pitStop.carAge" /* Dati macchina di {seconds}s fa */, { seconds: stop.presenceAgeSeconds.value })')
   })
 
   it('tiene un solo foglio di stile con ritmo e allineamenti dichiarati', () => {
@@ -782,8 +790,8 @@ describe('Pitwall wiring', () => {
     expect(conceptBell).toContain('describePitwallConceptNotice')
     expect(conceptBell).toContain('is-accept')
     expect(conceptBell).toContain('is-reject')
-    expect(conceptBell).toContain('aria-label="`Accetta ${describe(notice).title.toLowerCase()}`"')
-    expect(conceptBell).toContain('aria-label="`Rifiuta ${describe(notice).title.toLowerCase()}`"')
+    expect(conceptBell).toContain(`aria-label="t('pitwallConcept.bell.acceptAria' /* Accetta {what} */, { what: describe(notice).title.toLowerCase() })"`)
+    expect(conceptBell).toContain(`aria-label="t('pitwallConcept.bell.rejectAria' /* Rifiuta {what} */, { what: describe(notice).title.toLowerCase() })"`)
     expect(conceptBell).not.toMatch(/crew/i)
     expect(conceptBell).not.toMatch(/useActivityFeed|useFirebase/)
   })

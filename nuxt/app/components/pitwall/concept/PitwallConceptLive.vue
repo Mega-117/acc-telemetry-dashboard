@@ -16,9 +16,11 @@ import {
   pitwallConceptIsManager,
   pitwallConceptRoomIsFull,
 } from "~/utils/pitwallConcept";
+import { useI18n } from "~/i18n";
 
 const emit = defineEmits<{ back: [] }>();
-const hasHeaderBack = useHeaderBack(() => emit("back"), () => "Torna ai Pitwall", 'view');
+const { t } = useI18n();
+const hasHeaderBack = useHeaderBack(() => emit("back"), () => t("pitwallConcept.live.back"), 'view');
 
 const state = usePitwallStore();
 const race = computed(() => state.selectedRace.value);
@@ -74,11 +76,11 @@ function leave() {
       class="pwc-back pwc-live__back"
       @click="$emit('back')"
     >
-      ← Pit Wall
+      {{ t('pitwallConcept.live.backButton') }}
     </button>
 
     <header class="pwc-live__heading"><h2>{{ race?.label || 'Pitwall' }}</h2>
-      <button v-if="isManager && !isFull && race?.membershipModel !== 'social'" type="button" class="rc-btn rc-btn--compact" @click="guestOpen = true">+ Ospite</button>
+      <button v-if="isManager && !isFull && race?.membershipModel !== 'social'" type="button" class="rc-btn rc-btn--compact" @click="guestOpen = true">{{ t('pitwallConcept.live.guest') }}</button>
     </header>
     <PitwallConceptWall
       v-if="race"
@@ -108,22 +110,22 @@ function leave() {
         <button
           type="button"
           class="pwc-close"
-          aria-label="Chiudi"
+          :aria-label="t('pitwallConcept.live.close')"
           @click="closeGuest"
         >
           ×
         </button>
         <h2 id="pwc-guest-title">
-          Ospite per oggi
+          {{ t('pitwallConcept.live.guestTitle') }}
         </h2>
-        <p>Vede la gara e può mandare strategie. Scade a mezzanotte.</p>
+        <p>{{ t('pitwallConcept.live.guestBody') }}</p>
 
         <PitwallConceptSearch
           v-model="guestQuery"
           :found="guestFound"
-          placeholder="Cerca chi invitare"
-          linked-label="Già dentro"
-          empty-label="Nessuno con questo nickname."
+          :placeholder="t('pitwallConcept.live.guestSearch')"
+          :linked-label="t('pitwallConcept.live.guestLinked')"
+          :empty-label="t('pitwallConcept.search.empty')"
         >
           <template #actions="{ person }">
             <button
@@ -131,7 +133,7 @@ function leave() {
               class="rc-btn rc-btn--compact rc-btn--primary"
               @click="invite(person.id)"
             >
-              Invita
+              {{ t('pitwallConcept.live.invite') }}
             </button>
           </template>
         </PitwallConceptSearch>

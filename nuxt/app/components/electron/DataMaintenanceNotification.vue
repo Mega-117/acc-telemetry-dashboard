@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from '~/i18n'
 import type { OwnerDataMaintenanceStatus } from '~/services/sync/ownerDataMaintenanceService'
 
 const props = defineProps<{
@@ -10,6 +11,8 @@ const props = defineProps<{
   error?: string | null
   canRetry?: boolean
 }>()
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
   close: []
@@ -35,11 +38,11 @@ function close() {
     <Transition name="maintenance">
       <div v-if="visible" :class="['maintenance-notification', bannerType]" @click="close">
         <div class="notification-header">
-          <span class="notification-title">{{ status === 'failed' ? 'Controllo dati non completato' : 'Aggiornamento dati' }}</span>
-          <button v-if="canClose" class="notification-close" aria-label="Chiudi notifica" @click.stop="close">×</button>
+          <span class="notification-title">{{ status === 'failed' ? t('game.maintenance.failed') : t('game.maintenance.title') }}</span>
+          <button v-if="canClose" class="notification-close" :aria-label="t('game.maintenance.close')" @click.stop="close">×</button>
         </div>
-        <p class="notification-message">{{ error || message || 'Operazione in corso...' }}</p>
-        <button v-if="status === 'failed' && canRetry" class="rc-btn notification-retry" @click.stop="emit('retry')">Riprova</button>
+        <p class="notification-message">{{ error || message || t('game.maintenance.running') }}</p>
+        <button v-if="status === 'failed' && canRetry" class="rc-btn notification-retry" @click.stop="emit('retry')">{{ t('game.maintenance.retry') }}</button>
         <div v-if="status !== 'failed'" class="notification-progress">
           <div class="progress-bar"><div class="progress-fill" :style="{ width: `${normalizedProgress}%` }"></div></div>
           <span class="progress-label">{{ normalizedProgress }}%</span>

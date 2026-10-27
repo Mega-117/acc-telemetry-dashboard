@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
 import { notificationErrorFromElement, notificationItemFromElement, pickControlKStatus, readableReason } from '~/services/overlay/controlKStatus'
+import { setLocale } from '~/i18n'
+
+// Assertions below read the Italian texts (jsdom starts in English).
+setLocale('it')
 
 const card = (className: string, html: string) => {
   const element = document.createElement('div')
@@ -18,6 +22,16 @@ describe('notification kinds (PIP-556)', () => {
   it('an error is announced in the status line, except friend requests', () => {
     expect(notificationItemFromElement(card('fuel-status fuel-status--error', '<p>Carburante non disponibile.</p>'))).toMatchObject({ kind: 'error', announce: true, label: 'Benzina: Carburante non disponibile.' })
     expect(notificationItemFromElement(card('control-k-request', '<p class="control-k-request__error">Rete assente.</p>'))).toMatchObject({ kind: 'error', announce: false })
+  })
+
+  it('recognises friend request errors by their card, whatever the interface language', () => {
+    setLocale('en')
+    try {
+      expect(notificationItemFromElement(card('control-k-request', '<p class="control-k-request__error">No network.</p>')))
+        .toMatchObject({ kind: 'error', announce: false, label: 'Friends: No network.' })
+      expect(notificationItemFromElement(card('fuel-status fuel-status--error', '<p>[dati:stale] x</p>')))
+        .toMatchObject({ kind: 'error', announce: true, label: 'Fuel: ACC data not up to date: try again in a moment.' })
+    } finally { setLocale('it') }
   })
 
   it('an outcome is information read once; new values are new information', () => {

@@ -45,7 +45,7 @@ describe('HUD settings page layout contract', () => {
     expect(source).toContain('if (enabled[id]) await api.hudOverlayClose(id)')
     expect(source).toContain("else await api.hudOverlayOpen(id, { scale: scale[id] })")
     expect(source).toContain("open[overlay.id] = await api.hudOverlayIsOpen(overlay.id)")
-    expect(source).toContain("open[overlay.id] ? 'Visibile ora'")
+    expect(source).toContain("open[overlay.id] ? t('hud.visibleNow')")
   })
 
   it('gates secondary settings without resetting persisted values', () => {
@@ -67,7 +67,7 @@ describe('HUD settings page layout contract', () => {
     expect(source).toContain('supportsHudOverlayBackground(selectedOverlayId)')
     expect(source).toContain("v-if=\"sectorSupports('sectorCurrentLap')\"")
     expect(source).toContain(':disabled="selectedSettingsDisabled || !option.supported"')
-    expect(source).toContain("key: 'showStintTimer', label: 'Tempo stint', supported: true")
+    expect(source).toContain("key: 'showStintTimer', labelKey: 'hud.standings.stintTime', supported: true")
   })
 
   it('provides keyboard-visible selection semantics', () => {

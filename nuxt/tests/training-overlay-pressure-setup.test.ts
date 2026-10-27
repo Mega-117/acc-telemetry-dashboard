@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { translate, type TranslationKey } from '~/i18n'
 
 const source = readFileSync(fileURLToPath(new URL('../app/pages/training-overlay.vue', import.meta.url)), 'utf8')
 const styles = readFileSync(fileURLToPath(new URL('../app/assets/scss/_training-overlay.scss', import.meta.url)), 'utf8')
@@ -28,7 +29,8 @@ describe('training overlay Setup pressure contract', () => {
     // PIP-527: one target in the header; per tyre measured pressure and clicks only.
     expect(source).toContain('row.compensatedPsi')
     expect(source).not.toContain('row.totalLossPsi')
-    expect(source).toContain('<thead><tr><th>Gomma</th><th>Misurata</th><th>Click</th></tr></thead>')
+    expect(source).toContain("<thead><tr><th>{{ t('controlK.tyre') }}</th><th>{{ t('controlK.measured') }}</th><th>{{ t('controlK.clicks') }}</th></tr></thead>")
+    expect(['tyre', 'measured', 'clicks'].map(key => translate('it', `controlK.${key}` as TranslationKey))).toEqual(['Gomma', 'Misurata', 'Click'])
     expect(source).toContain('row?.targetPsi')
     expect(source).toContain('pressure-plan__table')
     // PIP-552: origin line of a retained correction under the meta row.

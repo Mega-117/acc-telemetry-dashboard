@@ -1,20 +1,27 @@
 import { describe, expect, it } from 'vitest'
+import { setLocale } from '~/i18n'
 import {
-  TYRE_SLIP_STATE_LABELS,
   tyreSlipBarStyle,
   tyreSlipFillPercent,
   tyreSlipStateLabel,
 } from '../../app/utils/tyreSlipPresentation'
 
+// The Italian labels are the HUD contract; English is checked separately below.
+setLocale('it')
+
 describe('tyre slip presentation', () => {
   it('uses the same labels as the tyre HUD contract', () => {
-    expect(TYRE_SLIP_STATE_LABELS).toEqual({
+    const states = ['ok', 'limit', 'sliding', 'wheelspin', 'lockup'] as const
+    expect(Object.fromEntries(states.map(state => [state, tyreSlipStateLabel(state, true)]))).toEqual({
       ok: 'OK',
       limit: 'LIMITE',
       sliding: 'SCIVOLA',
       wheelspin: 'PATTINA',
       lockup: 'BLOCCAGGIO',
     })
+    setLocale('en')
+    expect(states.map(state => tyreSlipStateLabel(state, true))).toEqual(['OK', 'LIMIT', 'SLIDE', 'SPIN', 'LOCK'])
+    setLocale('it')
   })
 
   it('shows WAIT instead of a slip judgement when telemetry is unavailable', () => {

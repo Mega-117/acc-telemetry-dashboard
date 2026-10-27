@@ -5,6 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Spotter from '~/pages/spotter.vue'
 import RacingSwitch from '~/components/ui/RacingSwitch.vue'
 import { useGameContext } from '~/composables/useGameContext'
+import { setLocale } from '~/i18n'
+
+// Screen texts are asserted in Italian; jsdom starts in English.
+setLocale('it')
 
 const fake = vi.hoisted(() => ({ settings: {} as any, points: [] as any[] }))
 vi.mock('~/composables/useFirebaseAuth', () => ({ useFirebaseAuth: () => ({ isAdmin: ref(false) }) }))

@@ -4,6 +4,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import ControlKFriendRequests from '~/components/overlay/ControlKFriendRequests.vue'
 import { useOverlayActionSelection } from '~/composables/useOverlayActionSelection'
 import type { FriendRequestSnapshot } from '~/services/pitwall/friendRequestQueue'
+import { setLocale } from '~/i18n'
+
+// Assertions below read the Italian texts (jsdom starts in English).
+setLocale('it')
 
 let app: ReturnType<typeof createApp>
 afterEach(() => { app?.unmount(); document.body.innerHTML = ''; vi.restoreAllMocks() })

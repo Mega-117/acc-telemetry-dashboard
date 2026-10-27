@@ -5,13 +5,15 @@
  * attiva. Mostra il budget corrente (es. "TEST 90s"). Solo-sviluppo.
  */
 import { useDevTestMode } from '~/composables/useDevTestMode'
+import { useI18n } from '~/i18n'
 
 const { isTestMode, badgeLabel } = useDevTestMode()
+const { t } = useI18n()
 </script>
 
 <template>
   <Transition name="chip-pop">
-    <span v-if="isTestMode" class="test-mode-badge" role="status" aria-label="Modalità test attiva">
+    <span v-if="isTestMode" class="test-mode-badge" role="status" :aria-label="t('quickPanel.testModeAria')">
       {{ badgeLabel }}
     </span>
   </Transition>

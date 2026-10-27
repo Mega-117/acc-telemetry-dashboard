@@ -37,7 +37,12 @@ import {
   resolvePitwallConceptExecutor,
   searchPitwallConceptDirectory,
   stepPitwallConceptPressure,
+  PITWALL_CONCEPT_SOURCE_LABELS,
 } from '~/utils/pitwallConcept'
+import { setLocale } from '~/i18n'
+
+// These tests read the Italian texts (jsdom defaults to English).
+setLocale('it')
 
 describe('Pitwall Concept mock model', () => {
   it('conosce le persone solo per nickname, mai per nome e cognome', () => {
@@ -363,5 +368,20 @@ describe('nessuna falsa applicazione parziale', () => {
   })
   it('mantiene parziale quando qualche campo e verificato', () => {
     expect(describePitwallConceptOrderStatus('partial', null, [{ outcome: 'verified' }, { outcome: 'not-verifiable' }]).label).toBe('Applicata in parte')
+  })
+})
+
+describe('Pitwall Concept words follow the interface language (PIP-665)', () => {
+  it('translates its own words and keeps the driver PC reason as written', () => {
+    setLocale('en')
+    try {
+      expect(describePitwallConceptOrderStatus('applied').label).toBe('Applied')
+      expect(describePitwallConceptOrderStatus('failed', 'Motivo dal PC').detail).toBe('Motivo dal PC')
+      expect(PITWALL_CONCEPT_SOURCE_LABELS.stale).toBe('OLD DATA')
+      expect(describePitwallConceptWall(['mario', 'luca', 'marco'], 2)).toBe('mariorossi, lucab and 1 more')
+    } finally {
+      setLocale('it')
+    }
+    expect(PITWALL_CONCEPT_SOURCE_LABELS.stale).toBe('DATI VECCHI')
   })
 })

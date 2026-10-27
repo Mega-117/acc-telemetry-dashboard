@@ -2,6 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useRuntimeCapabilityGate } from '~/composables/useRuntimeCapabilityGate'
+import { formatCoachDate } from '~/utils/coachLessonPresentation'
+import { useI18n } from '~/i18n'
 import {
   createRaceCalendarEvent,
   loadRaceCalendarEvents,
@@ -13,6 +15,7 @@ const props = defineProps<{
 }>()
 
 const { currentUser } = useFirebaseAuth()
+const { t } = useI18n()
 const cloudWriteGate = useRuntimeCapabilityGate().gate('cloudWrite')
 
 const events = ref<RaceCalendarEvent[]>([])
@@ -31,17 +34,7 @@ const form = ref({
 
 const upcomingEvents = computed(() => events.value.filter((event) => event.startsAt))
 
-function formatEventDate(value: string): string {
-  if (!value) return 'Data non impostata'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('it-IT', {
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit'
-  }).format(date)
-}
+const formatEventDate = (value: string) => formatCoachDate(value, false)
 
 function resetForm() {
   form.value = {
@@ -84,7 +77,7 @@ async function addEvent() {
   }
 
   if (!form.value.title.trim() || !form.value.startsAt || !form.value.trackName.trim()) {
-    errorMessage.value = 'Titolo, data e pista sono obbligatori.'
+    errorMessage.value = t('coachLessons.races.required')
     return
   }
 
@@ -123,16 +116,16 @@ onBeforeUnmount(() => {
   <section class="race-panel">
     <div class="section-head">
       <div>
-        <h3>Prossime gare</h3>
-        <p>Programma del pilota.</p>
+        <h3>{{ t('coachLessons.races.title') }}</h3>
+        <p>{{ t('coachLessons.races.intro') }}</p>
       </div>
-      <button v-if="!isAdding" class="ghost-action" type="button" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Aggiungi gara' : cloudWriteGate.message" @click="openForm">Aggiungi</button>
-      <button v-else class="ghost-action" type="button" @click="closeForm">Annulla</button>
+      <button v-if="!isAdding" class="ghost-action" type="button" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? t('coachLessons.races.addRace') : cloudWriteGate.message" @click="openForm">{{ t('coachLessons.races.add') }}</button>
+      <button v-else class="ghost-action" type="button" @click="closeForm">{{ t('coachLessons.races.cancel') }}</button>
     </div>
 
     <div class="race-list">
-      <div v-if="isLoading" class="empty-state">Caricamento calendario...</div>
-      <div v-else-if="upcomingEvents.length === 0" class="empty-state">Nessuna gara salvata.</div>
+      <div v-if="isLoading" class="empty-state">{{ t('coachLessons.races.loading') }}</div>
+      <div v-else-if="upcomingEvents.length === 0" class="empty-state">{{ t('coachLessons.races.empty') }}</div>
       <template v-else>
         <article v-for="event in upcomingEvents" :key="event.id" class="event-row">
           <div class="event-date">{{ formatEventDate(event.startsAt) }}</div>
@@ -142,7 +135,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="event-links">
             <a v-if="event.simGridUrl" :href="event.simGridUrl" target="_blank" rel="noopener noreferrer">SimGrid</a>
-            <a v-if="event.raceUrl" :href="event.raceUrl" target="_blank" rel="noopener noreferrer">Discord / link gara</a>
+            <a v-if="event.raceUrl" :href="event.raceUrl" target="_blank" rel="noopener noreferrer">{{ t('coachLessons.races.raceLink') }}</a>
           </div>
         </article>
       </template>
@@ -152,23 +145,23 @@ onBeforeUnmount(() => {
       <form v-if="isAdding" class="event-form" @submit.prevent="addEvent">
         <div class="form-row">
           <label>
-            <span>Titolo gara</span>
-            <input v-model="form.title" type="text" placeholder="Es. Gara team" />
+            <span>{{ t('coachLessons.races.raceTitle') }}</span>
+            <input v-model="form.title" type="text" :placeholder="t('coachLessons.races.raceTitlePlaceholder')" />
           </label>
           <label>
-            <span>Data e ora</span>
+            <span>{{ t('coachLessons.races.dateTime') }}</span>
             <input v-model="form.startsAt" type="datetime-local" />
           </label>
         </div>
 
         <div class="form-row">
           <label>
-            <span>Pista</span>
-            <input v-model="form.trackName" type="text" placeholder="Es. Spa-Francorchamps" />
+            <span>{{ t('coachLessons.track') }}</span>
+            <input v-model="form.trackName" type="text" :placeholder="t('coachLessons.races.trackPlaceholder')" />
           </label>
           <label>
-            <span>Vettura</span>
-            <input v-model="form.carName" type="text" placeholder="Es. Ferrari 296 GT3" />
+            <span>{{ t('coachLessons.car') }}</span>
+            <input v-model="form.carName" type="text" :placeholder="t('coachLessons.races.carPlaceholder')" />
           </label>
         </div>
 
@@ -178,14 +171,14 @@ onBeforeUnmount(() => {
             <input v-model="form.simGridUrl" type="url" placeholder="https://..." />
           </label>
           <label>
-            <span>Link gara</span>
-            <input v-model="form.raceUrl" type="url" placeholder="Briefing, Discord, sito evento..." />
+            <span>{{ t('coachLessons.races.link') }}</span>
+            <input v-model="form.raceUrl" type="url" :placeholder="t('coachLessons.races.linkPlaceholder')" />
           </label>
         </div>
 
         <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
-        <button class="primary-action" type="submit" :disabled="isSaving || !cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Aggiungi gara al pilota' : cloudWriteGate.message">
-          {{ isSaving ? 'Aggiungo...' : 'Aggiungi gara al pilota' }}
+        <button class="primary-action" type="submit" :disabled="isSaving || !cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? t('coachLessons.races.addToPilot') : cloudWriteGate.message">
+          {{ isSaving ? t('coachLessons.races.adding') : t('coachLessons.races.addToPilot') }}
         </button>
       </form>
     </Transition>

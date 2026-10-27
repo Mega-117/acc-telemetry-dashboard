@@ -14,6 +14,17 @@ import telemetry from './en/telemetry'
 import stats from './en/stats'
 import tracks from './en/tracks'
 import data from './en/data'
+import game from './en/game'
+import coach from './en/coach'
+import pitwall from './en/pitwall'
+import pitwallConcept from './en/pitwallConcept'
+import controlK from './en/controlK'
+import quickPanel from './en/quickPanel'
+import hud from './en/hud'
+import hudSetup from './en/hudSetup'
+import spotter from './en/spotter'
+import overlays from './en/overlays'
+import coachLessons from './en/coachLessons'
 
 const en: PartialDictionary = {
   ...shell,
@@ -30,6 +41,17 @@ const en: PartialDictionary = {
   ...stats,
   ...tracks,
   ...data,
+  ...game,
+  ...coach,
+  ...pitwall,
+  ...pitwallConcept,
+  ...controlK,
+  ...quickPanel,
+  ...hud,
+  ...hudSetup,
+  ...spotter,
+  ...overlays,
+  ...coachLessons,
 }
 
 export default en

@@ -14,6 +14,7 @@ import type {
     TrainingOverlayTraining,
 } from '~/config/trainingOverlayCatalog'
 import { autoAdvanceSecondsOptions } from '~/composables/useOverlaySettings'
+import { useI18n } from '~/i18n'
 
 interface PlanChip {
     id: string
@@ -47,6 +48,8 @@ const props = defineProps<{
     autoAdvanceSeconds: number
 }>()
 
+const { t } = useI18n()
+
 const emit = defineEmits<{
     'select-training': [id: TrainingOverlayId]
     'select-mode': [id: TrainingOverlayDurationModeId]
@@ -72,15 +75,15 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
         <div
             class="training-picker"
             :class="{ 'is-open': isTrainingPickerOpen }"
-            aria-label="Tipo allenamento"
+            :aria-label="t('hudSetup.training.typeAria')"
         >
-            <span>Allenamento</span>
+            <span>{{ t('hudSetup.training.training') }}</span>
             <button
                 type="button"
                 class="training-current"
                         data-overlay-wheel-action="training-picker"
                 :aria-expanded="isTrainingPickerOpen"
-                aria-label="Apri selezione tipo allenamento"
+                :aria-label="t('hudSetup.training.openPicker')"
                 @click="emit('toggle-training-picker')"
             >
                 <span>
@@ -106,7 +109,7 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
                             { 'is-active': selectedTrainingId === training.id }
                         ]"
                         :style="trainingOptionStyle(training)"
-                        :aria-label="`Seleziona allenamento ${training.label}`"
+                        :aria-label="t('hudSetup.training.select', { label: training.label })"
                         :aria-pressed="selectedTrainingId === training.id"
                         @click="emit('select-training', training.id)"
                     >
@@ -117,8 +120,8 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
         </div>
 
         <!-- Duration selector -->
-        <div class="duration-row" aria-label="Durata allenamento">
-            <span>Durata</span>
+        <div class="duration-row" :aria-label="t('hudSetup.training.durationAria')">
+            <span>{{ t('hudSetup.training.duration') }}</span>
             <div class="duration-options">
                 <button
                     v-for="mode in selectedModeList"
@@ -126,7 +129,7 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
                         :data-overlay-wheel-action="`duration-${mode.id}`"
                     type="button"
                     :class="{ 'is-active': selectedModeId === mode.id }"
-                    :aria-label="`Durata ${mode.title}`"
+                    :aria-label="t('hudSetup.training.durationOf', { title: mode.title })"
                     :aria-pressed="selectedModeId === mode.id"
                     @click="emit('select-mode', mode.id)"
                 >
@@ -136,9 +139,9 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
         </div>
 
         <!-- Training plan preview -->
-        <div class="training-plan-preview" aria-label="Piano allenamento">
+        <div class="training-plan-preview" :aria-label="t('hudSetup.training.plan')">
             <div class="training-plan-head">
-                <span>Piano allenamento</span>
+                <span>{{ t('hudSetup.training.plan') }}</span>
                 <strong>{{ selectedMode.title }}</strong>
             </div>
             <div class="training-plan-chips">
@@ -163,17 +166,17 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
         <div
             class="settings-panel"
             :class="{ 'is-open': isSettingsOpen }"
-            aria-label="Impostazioni overlay"
+            :aria-label="t('hudSetup.training.settingsAria')"
         >
             <button
                 type="button"
                 class="settings-toggle"
                         data-overlay-wheel-action="settings"
                 :aria-expanded="isSettingsOpen"
-                aria-label="Apri pannello impostazioni"
+                :aria-label="t('hudSetup.training.openSettings')"
                 @click="emit('toggle-settings')"
             >
-                <span>Impostazioni</span>
+                <span>{{ t('hudSetup.training.settings') }}</span>
                 <span class="accordion-chevron" aria-hidden="true" />
             </button>
 
@@ -189,51 +192,51 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
                             <button
                                 type="button"
                                 class="setting-row setting-row--button"
-                                :aria-label="`Audio ${soundEnabled ? 'attivo' : 'disattivo'} — clicca per cambiare`"
+                                :aria-label="soundEnabled ? t('hudSetup.training.audioOnAria') : t('hudSetup.training.audioOffAria')"
                                 :aria-pressed="soundEnabled"
                                 data-overlay-wheel-action="sound"
                                 @click="emit('toggle-sound')"
                             >
-                                <span>Audio</span>
+                                <span>{{ t('hudSetup.training.audio') }}</span>
                                 <strong :class="{ 'is-active': soundEnabled }">
-                                    {{ soundEnabled ? 'On' : 'Off' }}
+                                    {{ soundEnabled ? t('hudSetup.training.on') : t('hudSetup.training.off') }}
                                 </strong>
                             </button>
 
                             <button
                                 type="button"
                                 class="setting-row setting-row--button"
-                                :aria-label="`Opacita ridotta in guida ${autoDimDuringRun ? 'attiva' : 'disattiva'} — clicca per cambiare`"
+                                :aria-label="autoDimDuringRun ? t('hudSetup.training.autoDimOnAria') : t('hudSetup.training.autoDimOffAria')"
                                 :aria-pressed="autoDimDuringRun"
                                 @click="emit('toggle-auto-dim')"
                         data-overlay-wheel-action="auto-dim"
                             >
-                                <span>Opacit&agrave; ridotta in guida</span>
+                                <span>{{ t('hudSetup.training.autoDim') }}</span>
                                 <strong :class="{ 'is-active': autoDimDuringRun }">
-                                    {{ autoDimDuringRun ? 'On' : 'Off' }}
+                                    {{ autoDimDuringRun ? t('hudSetup.training.on') : t('hudSetup.training.off') }}
                                 </strong>
                             </button>
 
                             <button
                                 type="button"
                                 class="setting-row setting-row--button"
-                                :aria-label="`Avanzamento automatico a fine step ${autoAdvanceStep ? 'attivo' : 'disattivo'} — clicca per cambiare`"
+                                :aria-label="autoAdvanceStep ? t('hudSetup.training.autoAdvanceOnAria') : t('hudSetup.training.autoAdvanceOffAria')"
                                 :aria-pressed="autoAdvanceStep"
                                 @click="emit('toggle-auto-advance')"
                         data-overlay-wheel-action="auto-advance"
                             >
-                                <span>Avanza da solo a fine step</span>
+                                <span>{{ t('hudSetup.training.autoAdvance') }}</span>
                                 <strong :class="{ 'is-active': autoAdvanceStep }">
-                                    {{ autoAdvanceStep ? 'On' : 'Off' }}
+                                    {{ autoAdvanceStep ? t('hudSetup.training.on') : t('hudSetup.training.off') }}
                                 </strong>
                             </button>
 
                             <div
                                 v-if="autoAdvanceStep"
                                 class="setting-row auto-advance-seconds"
-                                aria-label="Durata countdown avanzamento automatico"
+                                :aria-label="t('hudSetup.training.countdownAria')"
                             >
-                                <span>Countdown avanzamento</span>
+                                <span>{{ t('hudSetup.training.countdown') }}</span>
                                 <span class="seconds-options" role="group">
                                     <button
                                         v-for="s in autoAdvanceSecondsOptions"
@@ -241,7 +244,7 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
                         :data-overlay-wheel-action="`countdown-${s}`"
                                         type="button"
                                         :class="{ 'is-active': autoAdvanceSeconds === s }"
-                                        :aria-label="`Countdown ${s} secondi`"
+                                        :aria-label="t('hudSetup.training.countdownSeconds', { seconds: s })"
                                         :aria-pressed="autoAdvanceSeconds === s"
                                         @click="emit('select-auto-advance-seconds', s)"
                                     >
@@ -260,8 +263,7 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
                                     <strong>{{ shortcut.value }}</strong>
                                 </div>
                                 <p class="shortcut-note">
-                                    Per volante o button box (es. Fanatec via SimHub), mappa i bottoni
-                                    su questi tasti: bastano pressioni singole, niente hold.
+                                    {{ t('hudSetup.training.shortcutNote') }}
                                 </p>
                             </div>
                         </div>

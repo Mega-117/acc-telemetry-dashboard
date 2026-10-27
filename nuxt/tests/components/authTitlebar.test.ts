@@ -3,6 +3,10 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { ref } from 'vue'
 import { afterEach, expect, it, vi } from 'vitest'
 import ElectronTitlebar from '~/components/electron/ElectronTitlebar.vue'
+import { setLocale } from '~/i18n'
+
+// Italian assertions (jsdom defaults to English).
+setLocale('it')
 
 vi.mock('~/composables/useElectronSync', () => ({ useElectronSync: () => ({
   isSyncing: ref(false), syncTelemetryFiles: vi.fn().mockResolvedValue([]),

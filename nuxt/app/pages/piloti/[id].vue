@@ -13,6 +13,7 @@ import { endFirebaseScenario, startFirebaseScenario, trackedGetDoc } from '~/com
 import { provideHeaderBack } from '~/composables/useHeaderBack'
 import { formatTrackName } from '~/utils/telemetryFormat'
 import { pilotTrail } from '~/utils/pilotTrail'
+import { useI18n, type TranslationKey } from '~/i18n'
 
 definePageMeta({
   layout: 'coach',
@@ -20,6 +21,7 @@ definePageMeta({
 })
 
 const route = useRoute()
+const { t } = useI18n()
 const { consultedGame } = useGameContext()
 const pilotId = route.params.id as string
 
@@ -48,12 +50,14 @@ watch(consultedGame, () => {
 })
 
 // Pilot navigation tabs
-const pilotTabs = [
-  { id: 'panoramica', label: 'PANORAMICA' },
-  { id: 'sessioni', label: 'SESSIONI' },
-  { id: 'piste', label: 'PISTE' },
-  { id: 'lezioni', label: 'PILOTA' }
+// Ids drive the view; labels are display only (keys, read in the current language).
+const pilotTabKeys: { id: string, labelKey: TranslationKey }[] = [
+  { id: 'panoramica', labelKey: 'nav.overview' },
+  { id: 'sessioni', labelKey: 'nav.sessions' },
+  { id: 'piste', labelKey: 'nav.tracks' },
+  { id: 'lezioni', labelKey: 'coach.pilot.tabPilot' }
 ]
+const pilotTabs = computed(() => pilotTabKeys.map(tab => ({ id: tab.id, label: t(tab.labelKey) })))
 
 // Load pilot data
 onMounted(async () => {
@@ -76,7 +80,7 @@ const pilotName = computed(() => {
   if (pilot.value?.firstName && pilot.value?.lastName) {
     return `${pilot.value.firstName} ${pilot.value.lastName}`
   }
-  return pilot.value?.nickname || 'Pilota'
+  return pilot.value?.nickname || t('coach.pilot.fallbackName')
 })
 
 // === NAVIGATION HANDLERS ===
@@ -112,7 +116,7 @@ function goBackToList() {
 provideHeaderBack()
 const trail = computed(() => pilotTrail({
   pilotName: pilotName.value,
-  tabLabel: pilotTabs.find(t => t.id === activeTab.value)?.label ?? '',
+  tabLabel: pilotTabs.value.find(tab => tab.id === activeTab.value)?.label ?? '',
   detail: detailView.value,
   trackName: selectedTrackId.value ? formatTrackName(selectedTrackId.value) : null,
 }))
@@ -125,7 +129,7 @@ function selectTab(id: string) {
   goBackToList()
 }
 // La freccia: dalla sessione o dalla pista alla scheda da cui sei arrivato; dalla scheda alla lista dei piloti.
-const backLabel = computed(() => detailView.value === 'none' ? 'Torna ai piloti' : `Torna a ${trail.value.find(c => c.target === 'tab')?.label ?? 'Panoramica'}`)
+const backLabel = computed(() => detailView.value === 'none' ? t('coach.pilot.backToList') : t('coach.pilot.backTo', { page: trail.value.find(c => c.target === 'tab')?.label ?? t('coach.pilot.overview') }))
 function goBack() {
   if (detailView.value === 'none') void navigateTo('/piloti')
   else goBackToList()
@@ -154,7 +158,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', measureContent); he
       <button type="button" class="pilot-back" :aria-label="backLabel" :title="backLabel" @click="goBack">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7" /></svg>
       </button>
-      <nav class="pilot-tabs" aria-label="Sezioni del pilota">
+      <nav class="pilot-tabs" :aria-label="t('coach.pilot.sectionsAria')">
         <button
           v-for="tab in pilotTabs"
           :key="tab.id"
@@ -171,7 +175,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', measureContent); he
 
     <!-- Sotto: percorso a sinistra (il pilota in arancio: stai guardando i suoi dati), gioco a destra. -->
     <div class="pilot-header">
-      <nav class="pilot-trail" aria-label="Percorso">
+      <nav class="pilot-trail" :aria-label="t('coach.pilot.trailAria')">
         <template v-for="(crumb, i) in trail" :key="i">
           <span v-if="i" class="pilot-trail__sep" aria-hidden="true">›</span>
           <NuxtLink v-if="crumb.target === 'pilots'" to="/piloti" class="pilot-trail__link">{{ crumb.label }}</NuxtLink>
@@ -187,7 +191,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', measureContent); he
 
     <!-- Content Area -->
     <div ref="contentRef" class="pilot-content" :style="{ height: contentTop ? `calc(100dvh - ${contentTop}px)` : undefined }">
-      <div v-if="isLoading" class="loading">Caricamento...</div>
+      <div v-if="isLoading" class="loading">{{ t('coach.pilot.loading') }}</div>
       
       <template v-else>
         <!-- Show detail views when selected -->

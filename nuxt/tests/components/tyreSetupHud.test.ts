@@ -3,6 +3,10 @@ import { renderToString } from 'vue/server-renderer'
 import { describe, expect, it } from 'vitest'
 import TyreAdvancedHud from '~/components/overlay/TyreAdvancedHud.vue'
 import { emptyTyreSetupViewModel } from '~/services/overlay/tyreSetupViewModel'
+import { setLocale } from '~/i18n'
+
+// The empty state is asserted in Italian; the Node test runtime may report an English system.
+setLocale('it')
 
 function setupModel() {
   return {

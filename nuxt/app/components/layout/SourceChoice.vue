@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { gameLabel } from '~/services/telemetry/gameCatalog'
+import { useI18n } from '~/i18n'
+
+const { t } = useI18n()
 
 interface Choice { generation: string; available: string[]; observed_at_ms: number }
 interface Bridge {
@@ -39,8 +42,8 @@ async function choose(gameId: string) {
     const result = await bridge()?.selectSource?.({ generation: choice.generation, gameId })
     if (stopped) return
     if (result?.ok) pending.value = null
-    else error.value = 'La disponibilità è cambiata. Riprova con i giochi indicati.'
-  } catch { if (!stopped) error.value = 'Scelta non salvata. Riprova.' }
+    else error.value = t('game.source.changed')
+  } catch { if (!stopped) error.value = t('game.source.failed') }
   finally { busy.value = false; if (!stopped) await refresh() }
 }
 onMounted(() => { void refresh(); timer = setInterval(() => { void refresh() }, 1000) })
@@ -48,9 +51,9 @@ onBeforeUnmount(() => { stopped = true; if (timer) clearInterval(timer) })
 </script>
 
 <template>
-  <section v-if="pending" class="source-choice" aria-label="Sorgente di registrazione" role="alert">
-    <strong>Quale gioco vuoi registrare?</strong>
-    <p>ACC ed EVO sono aperti. Il gioco consultato nello storico resta invariato.</p>
+  <section v-if="pending" class="source-choice" :aria-label="t('game.source.aria')" role="alert">
+    <strong>{{ t('game.source.title') }}</strong>
+    <p>{{ t('game.source.body') }}</p>
     <div>
       <button v-for="game in pending.available" :key="game" type="button" :disabled="busy" @click="choose(game)">{{ gameLabel(game) }}</button>
     </div>

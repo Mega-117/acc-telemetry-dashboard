@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from '~/i18n'
 import { hudSourcePolicy } from '~/services/sim/hudSourceAdapter'
 
 import { computed } from 'vue'
@@ -12,10 +13,11 @@ const weather = computed(() => [
   raceWeatherItem(props.fastState.rainIntensity10Min, 10, props.fastState.isFresh && props.fastState.isLive),
   raceWeatherItem(props.fastState.rainIntensity30Min, 30, props.fastState.isFresh && props.fastState.isLive),
 ])
+const { t } = useI18n()
 </script>
 <template>
     <header class="tyre-race__weather">
-      <small v-if="unavailableForecast" class="tyre-race__weather-unavailable" role="status">Previsioni meteo non disponibili</small>
+      <small v-if="unavailableForecast" class="tyre-race__weather-unavailable" role="status">{{ t('overlays.weather.unavailable') }}</small>
       <template v-else><div v-for="item in weather" :key="item.horizon" :title="item.title" :aria-label="item.title" :data-rain-intensity="item.intensity">
         <strong>{{ item.horizon }}</strong><span><RaceWeatherIcon :item="item" /></span>
       </div></template>

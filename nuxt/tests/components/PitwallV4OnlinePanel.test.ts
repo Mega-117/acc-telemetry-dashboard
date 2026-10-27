@@ -6,6 +6,10 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import Panel from '~/components/pitwall/PitwallV4OnlinePanel.vue'
 import Application from '~/components/pitwall/PitwallApplicationPanel.vue'
 import * as hostAccess from '~/utils/devToolsAccess'
+import { setLocale } from '~/i18n'
+
+// These tests read the Italian texts (jsdom defaults to English).
+setLocale('it')
 const actualIsDevToolsHost = hostAccess.isDevToolsHost
 const contextId = 'a'.repeat(64)
 beforeEach(() => vi.stubGlobal('useRuntimeConfig', () => ({ app: { baseURL: '/' } })))

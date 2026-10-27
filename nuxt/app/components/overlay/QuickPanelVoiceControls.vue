@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { Flag, Route, Gauge, Target } from '@lucide/vue'
+import { useI18n } from '~/i18n'
+
+const { t } = useI18n()
 
 withDefaults(defineProps<{
   coach: boolean
@@ -20,31 +23,31 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <section class="quick-panel-section" aria-label="Avvisi vocali">
-    <h2 class="quick-panel-heading">Avvisi vocali<template v-if="sessionLabel"> · {{ sessionLabel }}</template></h2>
+  <section class="quick-panel-section" data-quick-panel-section="voice" :aria-label="t('controlK.voiceAlerts')">
+    <h2 class="quick-panel-heading">{{ t('controlK.voiceAlerts') }}<template v-if="sessionLabel"> · {{ sessionLabel }}</template></h2>
     <div class="quick-panel-voice-grid">
       <button type="button" role="switch" class="quick-panel-voice-button" :class="{ 'is-on': coach }"
-        :aria-checked="coach" aria-label="Avvisi giro" :disabled="disabled"
+        :aria-checked="coach" :aria-label="t('quickPanel.voice.lapsAria')" :disabled="disabled"
         data-overlay-wheel-action="coach" @click="emit('toggle-coach')">
-        <Flag :size="20" aria-hidden="true" /><span>Giri</span>
+        <Flag :size="20" aria-hidden="true" /><span>{{ t('quickPanel.voice.laps') }}</span>
         <small aria-hidden="true">{{ coach ? 'ON' : 'OFF' }}</small>
       </button>
       <button type="button" role="switch" class="quick-panel-voice-button" :class="{ 'is-on': references }"
-        :aria-checked="references" aria-label="Riferimenti giro" :disabled="disabled"
+        :aria-checked="references" :aria-label="t('quickPanel.voice.referencesAria')" :disabled="disabled"
         data-overlay-wheel-action="references" @click="emit('toggle-references')">
-        <Route :size="20" aria-hidden="true" /><span>Riferimenti</span>
+        <Route :size="20" aria-hidden="true" /><span>{{ t('quickPanel.voice.references') }}</span>
         <small aria-hidden="true">{{ references ? 'ON' : 'OFF' }}</small>
       </button>
       <button v-if="extendedControls" type="button" role="switch" class="quick-panel-voice-button" :class="{ 'is-on': pressure }"
-        :aria-checked="pressure" aria-label="Avvisi pressioni" :disabled="disabled"
+        :aria-checked="pressure" :aria-label="t('quickPanel.voice.pressuresAria')" :disabled="disabled"
         data-overlay-wheel-action="pressure-audio" @click="emit('toggle-pressure')">
-        <Gauge :size="20" aria-hidden="true" /><span>Pressioni</span>
+        <Gauge :size="20" aria-hidden="true" /><span>{{ t('quickPanel.voice.pressures') }}</span>
         <small aria-hidden="true">{{ pressure ? 'ON' : 'OFF' }}</small>
       </button>
       <button v-if="extendedControls" type="button" role="switch" class="quick-panel-voice-button" :class="{ 'is-on': target }"
-        :aria-checked="target" aria-label="Voce target" :disabled="disabled"
+        :aria-checked="target" :aria-label="t('quickPanel.voice.targetAria')" :disabled="disabled"
         data-overlay-wheel-action="target-voice" @click="emit('toggle-target')">
-        <Target :size="20" aria-hidden="true" /><span>Target</span>
+        <Target :size="20" aria-hidden="true" /><span>{{ t('quickPanel.voice.target') }}</span>
         <small aria-hidden="true">{{ target ? 'ON' : 'OFF' }}</small>
       </button>
     </div>

@@ -2,6 +2,10 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import Notification from '~/components/electron/DataMaintenanceNotification.vue'
+import { setLocale } from '~/i18n'
+
+// Italian assertions (jsdom defaults to English).
+setLocale('it')
 
 describe('DataMaintenanceNotification', () => {
   it('mostra errore recuperabile senza percentuale o falsa riuscita', async () => {

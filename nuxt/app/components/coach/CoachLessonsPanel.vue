@@ -6,6 +6,8 @@ import { ACC_CAR_OPTIONS, ACC_TRACK_OPTIONS } from '~/constants/accCatalog'
 import CoachRaceCalendarPanel from '~/components/coach/CoachRaceCalendarPanel.vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { canCreateCoachLesson, canEditCoachLesson, coachLessonSaveErrorMessage } from '~/utils/coachLessonPermissions'
+import { COACH_FEEDBACK_CATEGORIES, DEFAULT_COACH_FEEDBACK_CATEGORY, coachFeedbackContext, coachFeedbackTypeLabel, coachLessonLinks, formatCoachDate } from '~/utils/coachLessonPresentation'
+import { useI18n } from '~/i18n'
 import { trackedGetDoc } from '~/composables/useFirebaseTracker'
 import {
   countCoachLessons,
@@ -30,6 +32,7 @@ interface PilotPrivateProfile {
 }
 
 const { currentUser, userDisplayName, isCoach } = useFirebaseAuth()
+const { t } = useI18n()
 const CUSTOM_OPTION = '__custom__'
 const durationPresets = [
   { label: '30 min', value: 30 },
@@ -73,7 +76,7 @@ const form = ref({
   writtenNotes: '',
   feedbackType: 'issue' as CoachFeedbackType,
   feedbackTurn: '',
-  feedbackCategory: 'Entrata curva',
+  feedbackCategory: DEFAULT_COACH_FEEDBACK_CATEGORY as string,
   feedbackMessage: ''
 })
 
@@ -94,10 +97,10 @@ const hasActiveHistoryFilters = computed(() => Boolean(
 ))
 
 const hardwareRows = computed(() => [
-  { label: 'Volante / base', value: equipment.value.volante },
-  { label: 'Corona', value: equipment.value.corona },
-  { label: 'Pedaliera', value: equipment.value.pedaliera },
-  { label: 'Rig', value: equipment.value.struttura }
+  { label: t('coachLessons.panel.wheelBase'), value: equipment.value.volante },
+  { label: t('coachLessons.panel.rim'), value: equipment.value.corona },
+  { label: t('coachLessons.panel.pedals'), value: equipment.value.pedaliera },
+  { label: t('coachLessons.panel.rig'), value: equipment.value.struttura }
 ].filter((row) => hasDisplayValue(row.value)))
 
 const setupRows = computed(() => [
@@ -119,30 +122,9 @@ const setupRows = computed(() => [
 
 const hasEquipmentContext = computed(() => hardwareRows.value.length > 0 || setupRows.value.length > 0)
 
-function lessonLinksFor(lesson: CoachLesson) {
-  return [
-    { label: 'TrackTitan pilota', url: lesson.trackTitanPilotUrl },
-    { label: 'TrackTitan coach', url: lesson.trackTitanReferenceUrl },
-    { label: 'Registrazione', url: lesson.recordingUrl }
-  ].filter((link) => Boolean(link.url))
-}
-
-const feedbackTypeLabels: Record<CoachFeedbackType, string> = {
-  issue: 'Errore',
-  action: 'Azione',
-  positive: 'Positivo'
-}
-
-function feedbackTypeLabel(type: CoachFeedbackType): string {
-  return feedbackTypeLabels[type] || 'Feedback'
-}
-
-function feedbackContext(item: CoachFeedbackItem): string {
-  const parts = []
-  if (item.turn) parts.push(/^curva/i.test(item.turn) ? item.turn : `Curva ${item.turn}`)
-  if (item.category) parts.push(item.category)
-  return parts.join(' - ')
-}
+const lessonLinksFor = coachLessonLinks
+const feedbackTypeLabel = coachFeedbackTypeLabel
+const feedbackContext = coachFeedbackContext
 
 function feedbackSummary(item: CoachFeedbackItem): string {
   return [feedbackTypeLabel(item.type), feedbackContext(item), item.message].filter(Boolean).join(' - ')
@@ -181,18 +163,7 @@ function toDatetimeLocalValue(value: string): string {
   return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16)
 }
 
-function formatDate(value: string): string {
-  if (!value) return 'Data non impostata'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('it-IT', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  }).format(date)
-}
+const formatDate = (value: string) => formatCoachDate(value)
 
 function hasDisplayValue(value: unknown): boolean {
   return value !== null && value !== undefined && String(value).trim() !== ''
@@ -207,7 +178,7 @@ function displayValue(value?: unknown, suffix = ''): string {
 function addFeedback() {
   errorMessage.value = ''
   if (!form.value.feedbackCategory.trim() || !form.value.feedbackMessage.trim()) {
-    errorMessage.value = 'Categoria e nota feedback sono obbligatorie.'
+    errorMessage.value = t('coachLessons.errors.feedbackRequired')
     return
   }
 
@@ -243,7 +214,7 @@ function resetForm() {
     writtenNotes: '',
     feedbackType: 'issue',
     feedbackTurn: '',
-    feedbackCategory: 'Entrata curva',
+    feedbackCategory: DEFAULT_COACH_FEEDBACK_CATEGORY,
     feedbackMessage: ''
   }
   feedbackDraft.value = []
@@ -318,7 +289,7 @@ function startEditLesson(lesson: CoachLesson) {
     writtenNotes: lesson.writtenNotes || '',
     feedbackType: 'issue',
     feedbackTurn: '',
-    feedbackCategory: 'Entrata curva',
+    feedbackCategory: DEFAULT_COACH_FEEDBACK_CATEGORY,
     feedbackMessage: ''
   }
   feedbackDraft.value = [...lesson.feedbackItems]
@@ -381,7 +352,7 @@ async function saveLesson() {
   errorMessage.value = ''
 
   if (!form.value.lessonAt || !form.value.trackName.trim()) {
-    errorMessage.value = 'Data lezione e pista sono obbligatorie.'
+    errorMessage.value = t('coachLessons.errors.lessonRequired')
     return
   }
 
@@ -389,7 +360,7 @@ async function saveLesson() {
   const finalBestLapMs = parseLapToMs(form.value.finalBestLap)
 
   if ((form.value.initialBestLap && !initialBestLapMs) || (form.value.finalBestLap && !finalBestLapMs)) {
-    errorMessage.value = 'Usa formato tempo giro tipo 1:47.235.'
+    errorMessage.value = t('coachLessons.errors.lapFormat')
     return
   }
 
@@ -455,25 +426,25 @@ onBeforeUnmount(() => {
   <div class="coach-lessons-panel">
     <header class="panel-header">
       <div>
-        <h2>Area pilota</h2>
-        <p>Contesto, gare e lezioni condivise con il pilota.</p>
+        <h2>{{ t('coachLessons.panel.title') }}</h2>
+        <p>{{ t('coachLessons.panel.intro') }}</p>
       </div>
     </header>
 
     <section class="pilot-context-card">
       <div class="context-head">
         <div>
-          <h3>Contesto pilota</h3>
-          <p>Hardware e gare pianificate.</p>
+          <h3>{{ t('coachLessons.panel.contextTitle') }}</h3>
+          <p>{{ t('coachLessons.panel.contextIntro') }}</p>
         </div>
-        <span v-if="isLoadingProfile">Caricamento...</span>
+        <span v-if="isLoadingProfile">{{ t('coachLessons.loading') }}</span>
       </div>
 
       <div class="pilot-context-grid">
         <div class="pilot-equipment-column">
           <div v-if="hasEquipmentContext" class="equipment-summary">
             <div v-if="hardwareRows.length" class="context-group">
-              <span class="context-label">Hardware</span>
+              <span class="context-label">{{ t('coachLessons.panel.hardware') }}</span>
               <div class="context-chips">
                 <div v-for="row in hardwareRows" :key="row.label" class="context-chip" :title="displayValue(row.value)">
                   <span>{{ row.label }}</span>
@@ -484,8 +455,8 @@ onBeforeUnmount(() => {
 
             <div v-if="setupRows.length" class="context-group">
               <button class="accordion-trigger" type="button" @click="isSetupOpen = !isSetupOpen">
-                <span>Setup base</span>
-                <strong>{{ isSetupOpen ? 'Chiudi' : 'Apri' }}</strong>
+                <span>{{ t('coachLessons.panel.baseSetup') }}</span>
+                <strong>{{ isSetupOpen ? t('coachLessons.panel.close') : t('coachLessons.panel.open') }}</strong>
               </button>
               <Transition name="context-expand">
                 <div v-if="isSetupOpen" class="context-chips context-chips--dense">
@@ -497,7 +468,7 @@ onBeforeUnmount(() => {
               </Transition>
             </div>
           </div>
-          <div v-else class="compact-empty">Attrezzatura non configurata.</div>
+          <div v-else class="compact-empty">{{ t('coachLessons.panel.noEquipment') }}</div>
         </div>
 
         <CoachRaceCalendarPanel :pilot-id="pilotId" />
@@ -508,28 +479,28 @@ onBeforeUnmount(() => {
       <section class="lesson-form-card">
         <div class="lesson-form-heading">
           <div>
-            <h3>{{ isEditingLesson ? 'Modifica lezione' : 'Nuova lezione' }}</h3>
-            <span v-if="feedbackDraft.length" class="form-substatus">{{ feedbackDraft.length }} feedback aggiunti</span>
+            <h3>{{ isEditingLesson ? t('coachLessons.panel.editLesson') : t('coachLessons.panel.newLesson') }}</h3>
+            <span v-if="feedbackDraft.length" class="form-substatus">{{ t('coachLessons.panel.feedbackAdded', { count: feedbackDraft.length }) }}</span>
           </div>
           <button v-if="isEditingLesson" class="ghost-action ghost-action--compact" type="button" @click="cancelEditLesson">
-            Annulla modifica
+            {{ t('coachLessons.panel.cancelEdit') }}
           </button>
         </div>
         <form class="lesson-form" @submit.prevent="saveLesson">
           <section class="lesson-form-section">
-            <span class="section-label">Sessione</span>
+            <span class="section-label">{{ t('coachLessons.panel.session') }}</span>
             <div class="form-row form-row--schedule">
               <label>
-                <span>Data e ora</span>
+                <span>{{ t('coachLessons.panel.dateTime') }}</span>
                 <input v-model="form.lessonAt" type="datetime-local" />
               </label>
               <label class="duration-field">
-                <span>Durata</span>
+                <span>{{ t('coachLessons.duration') }}</span>
                 <select :value="selectedDurationPreset" @change="selectDurationFromEvent">
                   <option v-for="preset in durationPresets" :key="preset.value" :value="preset.value">
                     {{ preset.label }}
                   </option>
-                  <option :value="CUSTOM_OPTION">Custom</option>
+                  <option :value="CUSTOM_OPTION">{{ t('coachLessons.panel.custom') }}</option>
                 </select>
                 <input
                   v-if="selectedDurationPreset === CUSTOM_OPTION"
@@ -537,22 +508,22 @@ onBeforeUnmount(() => {
                   type="number"
                   min="1"
                   step="5"
-                  placeholder="Minuti"
+                  :placeholder="t('coachLessons.panel.minutesPlaceholder')"
                 />
               </label>
             </div>
 
             <div class="form-row form-row--main">
               <label>
-                <span>Pista</span>
-                <input v-model="form.trackName" list="acc-track-options" type="text" placeholder="Cerca o scrivi pista" />
+                <span>{{ t('coachLessons.track') }}</span>
+                <input v-model="form.trackName" list="acc-track-options" type="text" :placeholder="t('coachLessons.panel.trackPlaceholder')" />
                 <datalist id="acc-track-options">
                   <option v-for="track in ACC_TRACK_OPTIONS" :key="track.id" :value="track.name" />
                 </datalist>
               </label>
               <label>
-                <span>Vettura</span>
-                <input v-model="form.carName" list="acc-car-options" type="text" placeholder="Cerca o scrivi vettura" />
+                <span>{{ t('coachLessons.car') }}</span>
+                <input v-model="form.carName" list="acc-car-options" type="text" :placeholder="t('coachLessons.panel.carPlaceholder')" />
                 <datalist id="acc-car-options">
                   <option v-for="car in ACC_CAR_OPTIONS" :key="car.id" :value="car.name" :label="car.category" />
                 </datalist>
@@ -561,124 +532,118 @@ onBeforeUnmount(() => {
 
             <div class="form-row form-row--laps">
               <label>
-                <span>Best iniziale</span>
+                <span>{{ t('coachLessons.initialBest') }}</span>
                 <input v-model="form.initialBestLap" type="text" placeholder="1:48.200" />
               </label>
               <label>
-                <span>Best finale</span>
+                <span>{{ t('coachLessons.finalBest') }}</span>
                 <input v-model="form.finalBestLap" type="text" placeholder="1:47.650" />
               </label>
             </div>
           </section>
 
           <section class="lesson-form-section lesson-form-section--quiet">
-            <span class="section-label">Risorse</span>
+            <span class="section-label">{{ t('coachLessons.panel.resources') }}</span>
             <div class="form-row form-row--links">
               <label>
-                <span>TrackTitan pilota</span>
+                <span>{{ t('coachLessons.links.pilotTrackTitan') }}</span>
                 <input v-model="form.trackTitanPilotUrl" type="url" placeholder="https://..." />
               </label>
               <label>
-                <span>TrackTitan coach</span>
+                <span>{{ t('coachLessons.links.coachTrackTitan') }}</span>
                 <input v-model="form.trackTitanReferenceUrl" type="url" placeholder="https://..." />
               </label>
               <label>
-                <span>Registrazione</span>
+                <span>{{ t('coachLessons.links.recording') }}</span>
                 <input v-model="form.recordingUrl" type="url" placeholder="https://..." />
               </label>
             </div>
 
             <label>
-              <span>Note scritte</span>
-              <textarea v-model="form.writtenNotes" rows="3" placeholder="Sintesi della lezione, contesto, obiettivo prossimo..." />
+              <span>{{ t('coachLessons.panel.notes') }}</span>
+              <textarea v-model="form.writtenNotes" rows="3" :placeholder="t('coachLessons.panel.notesPlaceholder')" />
             </label>
           </section>
 
           <section class="feedback-builder">
-            <span class="section-label">Feedback</span>
+            <span class="section-label">{{ t('coachLessons.panel.feedback') }}</span>
             <div class="form-row form-row--three">
               <label>
-                <span>Tipo</span>
+                <span>{{ t('coachLessons.panel.type') }}</span>
                 <select v-model="form.feedbackType">
-                  <option value="issue">Errore</option>
-                  <option value="action">Azione</option>
-                  <option value="positive">Positivo</option>
+                  <option value="issue">{{ t('coachLessons.feedbackType.issue') }}</option>
+                  <option value="action">{{ t('coachLessons.feedbackType.action') }}</option>
+                  <option value="positive">{{ t('coachLessons.feedbackType.positive') }}</option>
                 </select>
               </label>
               <label>
-                <span>Curva</span>
-                <input v-model="form.feedbackTurn" type="text" placeholder="Opzionale" />
+                <span>{{ t('coachLessons.panel.turn') }}</span>
+                <input v-model="form.feedbackTurn" type="text" :placeholder="t('coachLessons.panel.optional')" />
               </label>
               <label>
-                <span>Categoria</span>
+                <span>{{ t('coachLessons.panel.category') }}</span>
                 <select v-model="form.feedbackCategory">
-                  <option>Commento generale</option>
-                  <option>Entrata curva</option>
-                  <option>Punto di frenata</option>
-                  <option>Rilascio freno</option>
-                  <option>Corda</option>
-                  <option>Uscita curva</option>
-                  <option>Gestione traffico</option>
-                  <option>Costanza passo</option>
+                  <!-- The stored value stays the Italian category; only the label follows the language. -->
+                  <option v-for="category in COACH_FEEDBACK_CATEGORIES" :key="category.id" :value="category.value">{{ t(`coachLessons.category.${category.id}`) }}</option>
                 </select>
               </label>
             </div>
             <label>
-              <span>Feedback diretto</span>
-              <input v-model="form.feedbackMessage" type="text" placeholder="Errore: entrata troppo veloce, anticipa il rilascio freno." />
+              <span>{{ t('coachLessons.panel.directFeedback') }}</span>
+              <input v-model="form.feedbackMessage" type="text" :placeholder="t('coachLessons.panel.directFeedbackPlaceholder')" />
             </label>
-            <button class="ghost-action" type="button" @click="addFeedback">Aggiungi feedback</button>
+            <button class="ghost-action" type="button" @click="addFeedback">{{ t('coachLessons.panel.addFeedback') }}</button>
           </section>
 
           <div v-if="feedbackDraft.length" class="feedback-draft">
             <div v-for="(item, index) in feedbackDraft" :key="index" class="draft-row">
               <span>{{ feedbackSummary(item) }}</span>
-              <button type="button" @click="removeFeedback(index)">Rimuovi</button>
+              <button type="button" @click="removeFeedback(index)">{{ t('coachLessons.panel.remove') }}</button>
             </div>
           </div>
 
           <p v-if="!canWriteLessons && !isLoadingProfile" class="form-error">
-            Solo il coach assegnato a questo pilota può scrivere lezioni: qui puoi leggerle.
+            {{ t('coachLessons.panel.readOnly') }}
           </p>
           <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
           <div class="form-actions">
             <button class="primary-action" type="submit" :disabled="!canSaveLesson">
-              {{ isSaving ? 'Salvataggio...' : isEditingLesson ? 'Salva modifiche' : 'Salva lezione' }}
+              {{ isSaving ? t('coachLessons.panel.saving') : isEditingLesson ? t('coachLessons.panel.saveChanges') : t('coachLessons.panel.saveLesson') }}
             </button>
-            <button v-if="isEditingLesson" class="ghost-action" type="button" @click="cancelEditLesson">Annulla</button>
+            <button v-if="isEditingLesson" class="ghost-action" type="button" @click="cancelEditLesson">{{ t('coachLessons.panel.cancel') }}</button>
           </div>
         </form>
       </section>
 
       <section class="lesson-history-card">
         <div class="lesson-history-heading">
-          <h3>Storico lezioni</h3>
-          <span class="lesson-total-count">{{ isLoadingLessonCount ? '...' : `${totalLessonsCount} lezioni` }}</span>
+          <h3>{{ t('coachLessons.panel.history') }}</h3>
+          <span class="lesson-total-count">{{ isLoadingLessonCount ? '...' : t('coachLessons.lessonsCount', { count: totalLessonsCount }) }}</span>
         </div>
         <form class="history-filters" @submit.prevent="refreshLessons">
           <label>
-            <span>Pista</span>
-            <input v-model="historyFilters.trackName" list="history-track-options" type="text" placeholder="Filtra pista" />
+            <span>{{ t('coachLessons.track') }}</span>
+            <input v-model="historyFilters.trackName" list="history-track-options" type="text" :placeholder="t('coachLessons.filterTrack')" />
             <datalist id="history-track-options">
               <option v-for="track in ACC_TRACK_OPTIONS" :key="track.id" :value="track.name" />
             </datalist>
           </label>
           <label>
-            <span>Vettura</span>
-            <input v-model="historyFilters.carName" list="history-car-options" type="text" placeholder="Filtra vettura" />
+            <span>{{ t('coachLessons.car') }}</span>
+            <input v-model="historyFilters.carName" list="history-car-options" type="text" :placeholder="t('coachLessons.filterCar')" />
             <datalist id="history-car-options">
               <option v-for="car in ACC_CAR_OPTIONS" :key="car.id" :value="car.name" :label="car.category" />
             </datalist>
           </label>
           <div class="history-filter-actions">
-            <button class="ghost-action ghost-action--compact" type="submit" :disabled="isLoading">Filtra</button>
+            <button class="ghost-action ghost-action--compact" type="submit" :disabled="isLoading">{{ t('coachLessons.panel.filter') }}</button>
             <button v-if="hasActiveHistoryFilters" class="ghost-action ghost-action--compact" type="button" @click="resetHistoryFilters">
-              Reset
+              {{ t('coachLessons.reset') }}
             </button>
           </div>
         </form>
-        <div v-if="isLoading" class="empty-state">Caricamento lezioni...</div>
-        <div v-else-if="lessons.length === 0" class="empty-state">Nessuna lezione registrata.</div>
+        <div v-if="isLoading" class="empty-state">{{ t('coachLessons.loadingLessons') }}</div>
+        <div v-else-if="lessons.length === 0" class="empty-state">{{ t('coachLessons.noLessons') }}</div>
         <template v-else>
           <div class="lesson-list">
             <article
@@ -703,22 +668,22 @@ onBeforeUnmount(() => {
                 <div v-if="activeLesson?.id === lesson.id" class="lesson-detail">
                   <header>
                     <div>
-                      <span class="detail-kicker">Dettaglio lezione</span>
-                      <h4>Analisi sessione</h4>
-                      <p>Informazioni operative registrate dal coach.</p>
+                      <span class="detail-kicker">{{ t('coachLessons.detailKicker') }}</span>
+                      <h4>{{ t('coachLessons.detailTitle') }}</h4>
+                      <p>{{ t('coachLessons.detailIntro') }}</p>
                     </div>
                     <button v-if="canEditLesson(lesson)" class="ghost-action ghost-action--compact" type="button" @click="startEditLesson(lesson)">
-                      Modifica
+                      {{ t('coachLessons.panel.edit') }}
                     </button>
                   </header>
                   <div class="lesson-detail__body">
                     <div class="meta-grid">
-                      <div><span>Durata</span><strong>{{ lesson.durationMinutes }} min</strong></div>
-                      <div><span>Coach</span><strong>{{ displayValue(lesson.coachName) }}</strong></div>
+                      <div><span>{{ t('coachLessons.duration') }}</span><strong>{{ t('coachLessons.minutes', { count: lesson.durationMinutes }) }}</strong></div>
+                      <div><span>{{ t('coachLessons.coach') }}</span><strong>{{ displayValue(lesson.coachName) }}</strong></div>
                     </div>
                     <div class="lap-grid">
-                      <div><span>Best iniziale</span><strong>{{ formatLap(lesson.initialBestLapMs) }}</strong></div>
-                      <div><span>Best finale</span><strong>{{ formatLap(lesson.finalBestLapMs) }}</strong></div>
+                      <div><span>{{ t('coachLessons.initialBest') }}</span><strong>{{ formatLap(lesson.initialBestLapMs) }}</strong></div>
+                      <div><span>{{ t('coachLessons.finalBest') }}</span><strong>{{ formatLap(lesson.finalBestLapMs) }}</strong></div>
                     </div>
                     <div v-if="lessonLinksFor(lesson).length" class="resource-links">
                       <a v-for="link in lessonLinksFor(lesson)" :key="link.label" :href="link.url" target="_blank" rel="noopener noreferrer">
@@ -735,7 +700,7 @@ onBeforeUnmount(() => {
                       <div v-for="(item, index) in lesson.feedbackItems" :key="index" class="feedback-item" :class="`feedback-item--${item.type}`">
                         <div class="feedback-item__head">
                           <span class="feedback-badge">{{ feedbackTypeLabel(item.type) }}</span>
-                          <strong>{{ feedbackContext(item) || 'Feedback generale' }}</strong>
+                          <strong>{{ feedbackContext(item) || t('coachLessons.generalFeedback') }}</strong>
                         </div>
                         <span>{{ item.message }}</span>
                       </div>
@@ -746,7 +711,7 @@ onBeforeUnmount(() => {
             </article>
           </div>
           <button v-if="hasMoreLessons" class="show-more-action" type="button" @click="showMoreLessons">
-            {{ isLoadingMoreLessons ? 'Caricamento...' : 'Mostra altre lezioni' }}
+            {{ isLoadingMoreLessons ? t('coachLessons.loading') : t('coachLessons.panel.showMore') }}
           </button>
         </template>
       </section>

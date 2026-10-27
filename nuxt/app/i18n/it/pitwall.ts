@@ -1,0 +1,59 @@
+// Wave 3 (PIP-665): Pitwall page and shared Pitwall controls (components/pitwall/*.vue).
+// Status messages produced by the Pitwall services/store and the dev-only views stay Italian.
+export default {
+  pitwall: {
+    unavailable: {
+      title: 'Attualmente non disponibile',
+      body: 'Pitwall non è ancora disponibile per {game}.',
+      hint: 'Puoi utilizzarlo selezionando Assetto Corsa Competizione.',
+    },
+    localCrew: {
+      aria: 'Equipaggio della vettura locale',
+      title: 'Vettura locale',
+      noName: 'Nome non disponibile',
+      atWheel: 'Al volante nel simulatore',
+    },
+    overlayButton: {
+      close: 'Chiudi Pitwall',
+      arming: 'Pitwall: si apre in sessione',
+      open: 'Apri Pitwall',
+      hintUnavailable: 'Pitwall: si apre dall’app della suite.',
+      hintOpen: 'Pitwall: aperto, gli amici possono entrare.',
+      hintArming: 'Pitwall: {reason}',
+      armingDefault: 'si apre appena ACC è in sessione.',
+      hintClosed: 'Pitwall: chiuso.',
+    },
+    tyreCondition: {
+      new: 'Nuovo',
+      used: 'Usato',
+      live: 'LIVE',
+      notAvailable: 'N/D',
+      onScreen: 'A SCHERMO',
+      onScreenTitle: 'Condizione letta a schermo: {time}',
+      unverified: 'Stato non verificato',
+    },
+    toggle: {
+      skipTitle: 'Non toccare questa voce',
+      yes: 'Sì',
+      onTitle: 'Accendi',
+      no: 'No',
+      offTitle: 'Spegni',
+    },
+    v4: {
+      identityUnavailable: 'Identità locale non disponibile.',
+      selectRoom: 'Seleziona una stanza con un solo pilota disponibile.',
+      noV4: 'Il PC del pilota non annuncia V4 online.',
+      v4Unavailable: 'V4 non disponibile sul PC del pilota.',
+      notSent: 'Non inviata',
+      presetNotApplied: 'Preset {preset} non applicato',
+      presetReason: 'Il MFD non ha consentito di selezionare il preset richiesto.',
+      contextChanged: 'Contesto V4 cambiato: controlla il destinatario.',
+      sendFailed: 'Invio non riuscito.',
+      chooseRecipient: 'Più piloti al volante: scegli a chi inviare la strategia',
+      recipient: 'Destinatario strategia',
+      selectDriver: 'Seleziona un pilota',
+      noDriver: 'Nessun pilota disponibile',
+      frameTitle: 'Strategia V4 online',
+    },
+  },
+} as const

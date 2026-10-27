@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import { Columns2, Rows2 } from '@lucide/vue'
+import { useI18n } from '~/i18n'
 
 defineProps<{ modelValue: 'vertical' | 'horizontal' }>()
+const { t } = useI18n()
 const emit = defineEmits<{ 'update:modelValue': [value: 'vertical' | 'horizontal'] }>()
 </script>
 
 <template>
   <!-- Mouse controls: intentionally omit data-overlay-wheel-action. -->
-  <div class="quick-panel-layout" role="group" aria-label="Disposizione pannello">
-    <button type="button" title="Layout verticale" aria-label="Layout verticale"
+  <div class="quick-panel-layout" role="group" :aria-label="t('quickPanel.layout.aria')">
+    <button type="button" data-quick-panel-hint="layout-vertical" :title="t('quickPanel.layout.vertical')" :aria-label="t('quickPanel.layout.vertical')"
       :aria-pressed="modelValue === 'vertical'" @click="emit('update:modelValue', 'vertical')">
       <Rows2 :size="16" aria-hidden="true" />
     </button>
-    <button type="button" title="Layout orizzontale" aria-label="Layout orizzontale"
+    <button type="button" data-quick-panel-hint="layout-horizontal" :title="t('quickPanel.layout.horizontal')" :aria-label="t('quickPanel.layout.horizontal')"
       :aria-pressed="modelValue === 'horizontal'" @click="emit('update:modelValue', 'horizontal')">
       <Columns2 :size="16" aria-hidden="true" />
     </button>

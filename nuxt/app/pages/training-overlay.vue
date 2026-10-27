@@ -45,7 +45,7 @@ import { useQuickCountdown } from '~/composables/useQuickCountdown'
 import QuickPanelLayoutToggle from '~/components/overlay/QuickPanelLayoutToggle.vue'
 import QuickPanelVoiceControls from '~/components/overlay/QuickPanelVoiceControls.vue'
 import PressureTestPanel from '~/components/overlay/PressureTestPanel.vue'
-import { SPOTTER_SESSION_LABELS, isSpotterFeatureAllowed, resolveSpotterSessionMode, toggleCurrentSessionMode, voiceSessionType, type SpotterSessionMode } from '~/services/spotter/spotterSessionPolicy'
+import { isSpotterFeatureAllowed, resolveSpotterSessionMode, toggleCurrentSessionMode, voiceSessionType, type SpotterSessionMode } from '~/services/spotter/spotterSessionPolicy'
 import { quickPanelActionHint } from '~/services/overlay/quickPanelActionHint'
 import OverlaySelectSetup from '~/components/overlay/OverlaySelectSetup.vue'
 import OverlayHud from '~/components/overlay/OverlayHud.vue'
@@ -76,10 +76,12 @@ import { useDevTestMode } from '~/composables/useDevTestMode'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { resolveLocalRuntimeCapability } from '~/services/auth/localIdentityBridge'
 import { useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
+import { useI18n, type TranslationKey } from '~/i18n'
 
 definePageMeta({ layout: false })
 
 const { getPublicPath } = usePublicPath()
+const { t } = useI18n()
 useHead({
   htmlAttrs: { class: 'training-overlay-document' },
   bodyAttrs: { class: 'training-overlay-runtime' },
@@ -118,13 +120,13 @@ const AUTO_DIM_OPACITY = 0.6
 const PRIMARY_ACTION_DEBOUNCE_MS = 450
 // Le dimensioni delle card vivono solo nello SCSS (fonte unica, PIP-92);
 // la finestra Electron si adatta alla superficie misurata via useOverlaySize.
-const overlayShortcuts = [
-  { label: 'Overlay', value: 'Ctrl+K' },
-  { label: 'Bottone azione', value: 'Ctrl+N' },
-  { label: 'Mute', value: 'Ctrl+M' },
-  { label: 'Stop (2 pressioni)', value: 'Ctrl+Alt+S' },
-  { label: 'Indietro (solo focus)', value: 'Ctrl+B' },
-]
+const overlayShortcuts = computed(() => [
+  { label: t('controlK.shortcuts.overlay'), value: 'Ctrl+K' },
+  { label: t('controlK.shortcuts.action'), value: 'Ctrl+N' },
+  { label: t('controlK.shortcuts.mute'), value: 'Ctrl+M' },
+  { label: t('controlK.shortcuts.stop'), value: 'Ctrl+Alt+S' },
+  { label: t('controlK.shortcuts.back'), value: 'Ctrl+B' },
+])
 
 // ─── Core State ──────────────────────────────────────────────────────────────
 const selectedTrainingId = ref<TrainingOverlayId>('tracktitan_input')
@@ -197,12 +199,12 @@ const hoveredQuickPanelAction = ref<string | null>(null)
 // instead of what it does; every other action keeps its description.
 const quickPanelHint = computed(() => {
   const actionId = hoveredQuickPanelAction.value ?? selectedWheelActionId.value
-  if (actionId === 'pressure' && quickPanelPressureState.value.state !== 'ready') return `Pressioni: ${dryPressurePresentation.value.guidance}`
+  if (actionId === 'pressure' && quickPanelPressureState.value.state !== 'ready') return t('controlK.pressureHint', { guidance: dryPressurePresentation.value.guidance })
   return quickPanelActionHint(actionId)
 })
 function updateQuickPanelHint(event: Event) {
   const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('button') : null
-  hoveredQuickPanelAction.value = button?.dataset.overlayWheelAction ?? button?.getAttribute('aria-label') ?? null
+  hoveredQuickPanelAction.value = button?.dataset.overlayWheelAction ?? button?.dataset.quickPanelHint ?? null
 }
 watch(selectedWheelActionId, () => { hoveredQuickPanelAction.value = null })
 const preparingReopen = ref(false)
@@ -335,14 +337,14 @@ async function disableReference(kind: 'target' | 'sectors') {
       const current = await getOverlayApi()?.hudOverlayGetSettings?.('sectors')
       if (current?.deltaReference === 'custom' && !current.normalDeltaReference) {
         isSectorReferenceSetupOpen.value = true
-        showVoicePointNotice('Scegli Giro precedente o Miglior settore.', 'ok')
+        showVoicePointNotice(t('controlK.notices.pickSectorReference'), 'ok')
         return
       }
       const saved = await getOverlayApi()?.hudOverlaySaveSettings?.('sectors', { restoreNormalReference: true })
       if (!saved || saved.deltaReference === 'custom') throw new Error('Riferimenti non disattivati')
       customSectorsActive.value = false
     }
-  } catch { showVoicePointNotice('Operazione non riuscita. Riprova.', 'error') }
+  } catch { showVoicePointNotice(t('controlK.notices.failed'), 'error') }
   finally { referenceBusy.value = false }
 }
 const sectorReferenceSetup = ref<InstanceType<typeof SectorReferenceSetup> | null>(null)
@@ -359,7 +361,7 @@ async function saveSectorReferenceSetup() {
   closeSectorReferenceSetup()
   // PIP-556: ACC keeps Control K open on the grid and confirms in the status line.
   if (usesAccLayout.value) {
-    showVoicePointNotice(customSectorsActive.value ? 'Settori obiettivo attivi per questa sessione.' : 'Confronto settori: miglior settore.', 'ok')
+    showVoicePointNotice(customSectorsActive.value ? t('controlK.notices.sectorTargetsOn') : t('controlK.notices.sectorBest'), 'ok')
     return
   }
   await getOverlayApi()?.trainingOverlayClose?.()
@@ -469,7 +471,7 @@ async function applyDryPressure() {
   if (isDryPressureApplying.value) return
   // PIP-556: in ACC a press on an unavailable correction says why, at once.
   if (quickPanelPressureState.value.state !== 'ready') {
-    showVoicePointNotice(`Correggi pressioni: ${dryPressurePresentation.value.guidance}`, 'error')
+    showVoicePointNotice(t('controlK.notices.fixPressures', { guidance: dryPressurePresentation.value.guidance }), 'error')
     return
   }
   isDryPressureApplying.value = true
@@ -527,7 +529,7 @@ const { fastState, startFastStatePolling, stopFastStatePolling } =
 // PIP-533: Ctrl+K shows and changes each alert for the session being driven;
 // the webapp keeps the same per-session choices (one source: the settings store).
 const voiceSessionMode = computed<SpotterSessionMode | null>(() => resolveSpotterSessionMode(voiceSessionType(fastState.value)))
-const voiceSessionLabel = computed(() => voiceSessionMode.value ? SPOTTER_SESSION_LABELS[voiceSessionMode.value] : null)
+const voiceSessionLabel = computed(() => voiceSessionMode.value ? t(`controlK.session.${voiceSessionMode.value}`) : null)
 const voiceOnForSession = (enabled: boolean, modes: SpotterSessionMode[]) => isSpotterFeatureAllowed(enabled, modes, voiceSessionType(fastState.value))
 const coachVoiceOn = computed(() => voiceOnForSession(spotterEnabled.value, lapTimeSessionModes.value))
 const referencesVoiceOn = computed(() => voiceOnForSession(trackVoiceReferencesEnabled.value, referenceSessionModes.value))
@@ -579,12 +581,12 @@ const controlKStatus = computed<ControlKStatusMessage | null>(() => pickControlK
   // The newest unread error, with its category; more of them are counted.
   !isNotificationsOpen.value && unreadNotificationErrors.value.length > 0 && {
     tone: 'error',
-    text: `${unreadNotificationErrors.value.at(-1)!.label}${unreadNotificationErrors.value.length > 1 ? ` (+${unreadNotificationErrors.value.length - 1} nelle notifiche)` : ''}`,
+    text: `${unreadNotificationErrors.value.at(-1)!.label}${unreadNotificationErrors.value.length > 1 ? t('controlK.notices.moreInNotifications', { count: unreadNotificationErrors.value.length - 1 }) : ''}`,
   },
   // PIP-612: no pop-up in the driver's flow; when the pressure plan can be applied the
   // menu itself says so, where the driver is already looking.
   usesAccLayout.value && quickPanelPressureState.value.state === 'ready' && !isDryPressureApplying.value
-    && { tone: 'ok', text: 'Pressioni pronte: premi Correggi pressioni.' },
+    && { tone: 'ok', text: t('controlK.notices.pressuresReady') },
   effectiveControlKContext.value === 'pause' && { tone: 'hint', text: quickPanelHint.value },
 ]))
 const accLayoutClasses = computed(() => usesAccLayout.value ? [
@@ -709,11 +711,12 @@ const primaryAction = computed<PrimaryOverlayAction>(() => {
   if (phase.value === 'completed') return 'reset'
   return 'none'
 })
-const primaryActionLabel = computed(() => ({
-  'open-selection': 'Inizia allenamento',
-  start: 'Avvia', pause: 'Pausa', resume: 'Riprendi', 'complete-step': 'Skippa',
-  next: 'Avanti', reset: 'Scegli allenamento', none: 'Azione',
-}[primaryAction.value]))
+const PRIMARY_ACTION_LABELS: Record<PrimaryOverlayAction, TranslationKey> = {
+  'open-selection': 'controlK.actions.openSelection',
+  start: 'controlK.actions.start', pause: 'controlK.actions.pause', resume: 'controlK.actions.resume', 'complete-step': 'controlK.actions.completeStep',
+  next: 'controlK.actions.next', reset: 'controlK.actions.reset', none: 'controlK.actions.none',
+}
+const primaryActionLabel = computed(() => t(PRIMARY_ACTION_LABELS[primaryAction.value]))
 const stopHoldProgressPercent = computed(() => `${Math.round(stopHoldProgress.value * 100)}%`)
 const progressPercent = computed(() => {
   // Stesso budget del cronometro (PIP-106): in test-mode la barra resta coerente.
@@ -727,10 +730,10 @@ const formattedTime = computed(() => {
 })
 const activeTask = computed(() => {
   if (phase.value === 'select') return ''
-  if (phase.value === 'launcher') return 'Apri la scelta allenamento.'
-  if (phase.value === 'paused') return `Timer fermo. ${activeStep.value.hud}`
-  if (phase.value === 'expired') return 'Step finito. Passa al prossimo.'
-  if (phase.value === 'completed') return 'Allenamento completato.'
+  if (phase.value === 'launcher') return t('controlK.task.launcher')
+  if (phase.value === 'paused') return t('controlK.task.paused', { hud: activeStep.value.hud })
+  if (phase.value === 'expired') return t('controlK.task.expired')
+  if (phase.value === 'completed') return t('controlK.task.completed')
   return activeStep.value.hud
 })
 const accMenuStateLogMessage = ref('')
@@ -978,13 +981,13 @@ function trainingSourceReady(): boolean {
   if (!fastState.value.isFresh || !fastState.value.isLive) return false
   const live = fastState.value.commonLive
   if (trainingSourceKey && commonContextKey(live) !== trainingSourceKey) {
-    showVoicePointNotice('La sessione di guida è cambiata. Ferma e riavvia l’allenamento.', 'error')
+    showVoicePointNotice(t('controlK.notices.sessionChanged'), 'error')
     return false
   }
   if (!live || live.gameId === 'acc') return true
   const availability = trainingAvailability(live, selectedTrainingId.value)
   if (!availability.available || live.lifecycle !== 'live') {
-    showVoicePointNotice(availability.available ? 'Riprendi la guida per avviare l’allenamento.' : availabilityLabel(availability.reason), 'error')
+    showVoicePointNotice(availability.available ? t('controlK.notices.resumeDriving') : availabilityLabel(availability.reason), 'error')
     return false
   }
   return true
@@ -1065,7 +1068,7 @@ async function confirmInfoTarget() {
   closeInfoTargetSetup()
   // PIP-556: ACC keeps Control K open on the grid and confirms in the status line.
   if (usesAccLayout.value) {
-    showVoicePointNotice(saved?.active ? `Giro obiettivo ${formatInfoLapTime(infoTargetTimeMs.value)} attivo per questa sessione.` : 'Giro obiettivo non salvato. Riprova.', saved?.active ? 'ok' : 'error')
+    showVoicePointNotice(saved?.active ? t('controlK.notices.targetLapOn', { time: formatInfoLapTime(infoTargetTimeMs.value) }) : t('controlK.notices.targetLapNotSaved'), saved?.active ? 'ok' : 'error')
     return
   }
   await getOverlayApi()?.trainingOverlayClose?.()
@@ -1096,7 +1099,7 @@ function toggleTargetVoice() {
 function toggleCoachAudio() {
   if (!canUseSpotterControls.value) {
     stopVoice()
-    showVoicePointNotice('Login richiesto per gli avvisi vocali.', 'error')
+    showVoicePointNotice(t('controlK.notices.loginVoice'), 'error')
     return
   }
   const enabled = toggleVoiceForSession(coachVoiceOn.value, spotterEnabled.value, setCoachEnabled,
@@ -1238,13 +1241,13 @@ function showVoicePointNotice(text: string, tone: 'ok' | 'error' = 'ok') {
 
 function toggleTrackVoiceReferences() {
   if (!canUseSpotterControls.value) {
-    showVoicePointNotice('Login richiesto per i riferimenti vocali.', 'error')
+    showVoicePointNotice(t('controlK.notices.loginReferences'), 'error')
     return
   }
   const enabled = toggleVoiceForSession(referencesVoiceOn.value, trackVoiceReferencesEnabled.value, setReferencesEnabled,
     referenceSessionModes.value, setReferenceSessionModes)
   if (enabled === null) return
-  showVoicePointNotice(enabled ? 'Riferimenti vocali attivi.' : 'Riferimenti vocali disattivi.', 'ok')
+  showVoicePointNotice(enabled ? t('controlK.notices.referencesOn') : t('controlK.notices.referencesOff'), 'ok')
 }
 
 function toggleVoicePointRecorder() {
@@ -1570,37 +1573,37 @@ onBeforeUnmount(() => {
             >
 
               <template v-if="phase === 'launcher'">
-                <div v-if="!isTargetSetupOpen && !isSectorReferenceSetupOpen && !isFuelSetupOpen && !isQuickTimerOpen" class="launcher-tools" :class="accLayoutClasses" aria-label="Strumenti live overlay"
+                <div v-if="!isTargetSetupOpen && !isSectorReferenceSetupOpen && !isFuelSetupOpen && !isQuickTimerOpen" class="launcher-tools" :class="accLayoutClasses" :aria-label="t('controlK.toolsAria')"
                   @pointerover="updateQuickPanelHint" @pointerleave="hoveredQuickPanelAction = null"
                   @focusin="updateQuickPanelHint" @focusout="hoveredQuickPanelAction = null">
                   <header class="launcher-tools__header">
                     <img class="quick-panel-logo" src="/branding/auth/racercore-rc.svg" alt="Racer Core" width="56" height="28">
                     <!-- PIP-532: the Notifiche view owns the corner (its X); the switch steps aside. -->
                     <!-- PIP-657: no game yet -> the waiting note takes the switch's place, right of the logo. -->
-                    <p v-if="waitingForSimulator" class="quick-panel-waiting quick-panel-waiting--header" role="status">{{ simulatorPresence.choiceRequired.value ? 'Scegli il gioco nella webapp' : 'In attesa del simulatore' }}</p>
+                    <p v-if="waitingForSimulator" class="quick-panel-waiting quick-panel-waiting--header" role="status">{{ simulatorPresence.choiceRequired.value ? t('controlK.chooseGame') : t('controlK.waiting') }}</p>
                     <QuickPanelLayoutToggle v-else-if="!usesAccLayout" v-show="!isNotificationsOpen" :model-value="quickPanelLayout" @update:model-value="setQuickPanelLayout" />
                     <div class="quick-panel-header-actions" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
                     <!-- PIP-556: ACC Pausa keeps the four voice alerts behind one button (own view). -->
-                    <button v-if="usesAccLayout && !isVoiceViewOpen" type="button" class="launcher-tool-button ck-voice-alerts" title="Avvisi vocali"
-                      aria-label="Avvisi vocali" data-overlay-wheel-action="voice-alerts" @click="openVoiceView">
-                      <Volume2 :size="20" aria-hidden="true" /><span>Avvisi</span>
+                    <button v-if="usesAccLayout && !isVoiceViewOpen" type="button" class="launcher-tool-button ck-voice-alerts" :title="t('controlK.voiceAlerts')"
+                      :aria-label="t('controlK.voiceAlerts')" data-overlay-wheel-action="voice-alerts" @click="openVoiceView">
+                      <Volume2 :size="20" aria-hidden="true" /><span>{{ t('controlK.alerts') }}</span>
                       <small class="quick-action-badge" aria-hidden="true">{{ [coachVoiceOn, referencesVoiceOn, pressureVoiceOn, targetVoiceOn].filter(Boolean).length }}/4</small>
                     </button>
                     <!-- PIP-556: the same ← as every other view. -->
-                    <button v-if="usesAccLayout && isVoiceViewOpen" type="button" class="launcher-tool-button ck-view-close" title="Indietro"
-                      aria-label="Indietro" data-overlay-wheel-action="voice-close" @click="closeVoiceView">
+                    <button v-if="usesAccLayout && isVoiceViewOpen" type="button" class="launcher-tool-button ck-view-close" :title="t('controlK.back')"
+                      :aria-label="t('controlK.back')" data-overlay-wheel-action="voice-close" @click="closeVoiceView">
                       <ArrowLeft :size="16" aria-hidden="true" />
                     </button>
                     <!-- PIP-526: reachable from the wheel, last in the cycle (data-overlay-wheel-last). -->
-                    <button v-if="!waitingForSimulator" type="button" class="launcher-tool-button quick-panel-timer" title="Timer" aria-label="Timer" data-overlay-wheel-action="timer" :data-overlay-wheel-last="usesAccLayout ? undefined : ''" @click="openQuickTimer">
-                      <Timer :size="18" aria-hidden="true" /><span v-if="usesAccLayout">Timer</span>
+                    <button v-if="!waitingForSimulator" type="button" class="launcher-tool-button quick-panel-timer" :title="t('controlK.timer')" :aria-label="t('controlK.timer')" data-overlay-wheel-action="timer" :data-overlay-wheel-last="usesAccLayout ? undefined : ''" @click="openQuickTimer">
+                      <Timer :size="18" aria-hidden="true" /><span v-if="usesAccLayout">{{ t('controlK.timer') }}</span>
                     </button>
                     <!-- PIP-532: next to the timer only while something is waiting to be read.
                          PIP-556: ACC Pausa keeps its place in the grid, disabled when empty. -->
                     <button v-if="(usesAccLayout || notificationCount > 0) && !isNotificationsOpen" type="button" class="launcher-tool-button quick-panel-notifications-button"
-                      :title="`Notifiche (${notificationCount})`" :aria-label="`Apri notifiche (${notificationCount})`" :disabled="notificationCount === 0"
+                      :title="t('controlK.notificationsCount', { count: notificationCount })" :aria-label="t('controlK.openNotifications', { count: notificationCount })" :disabled="notificationCount === 0"
                       data-overlay-wheel-action="notifications" :data-overlay-wheel-last="usesAccLayout ? undefined : ''" @click="openNotifications">
-                      <Bell :size="18" aria-hidden="true" :class="{ 'ck-bell-pulse': notificationPulse }" /><span v-if="usesAccLayout">Notifiche</span>
+                      <Bell :size="18" aria-hidden="true" :class="{ 'ck-bell-pulse': notificationPulse }" /><span v-if="usesAccLayout">{{ t('controlK.notifications') }}</span>
                       <!-- PIP-556: the badge counts only what is new (ACC); elsewhere every card. -->
                       <small v-if="usesAccLayout ? notificationUnread > 0 : notificationCount > 0" class="quick-action-badge"
                         :class="{ 'quick-action-badge--error': notificationErrors > 0 }" aria-hidden="true">{{ usesAccLayout ? notificationUnread : notificationCount }}</small>
@@ -1609,7 +1612,7 @@ onBeforeUnmount(() => {
                       v-if="!hideStintWhileDriving"
                       type="button"
                       class="launcher-tool-button launcher-tool-button--training quick-panel-training"
-                      title="Allenamento"
+                      :title="t('controlK.training')"
                       :aria-label="primaryActionLabel"
                       @click="executePrimaryAction"
                     >
@@ -1621,8 +1624,8 @@ onBeforeUnmount(() => {
                     <!-- PIP-509: no simulator yet -> no partial tools (the waiting note is in the header, PIP-657). -->
                     <div v-if="!waitingForSimulator" class="quick-panel-main" :class="{ 'quick-panel-main--behind-notifications': isNotificationsOpen }" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
                     <div class="quick-panel-categories">
-                    <section v-if="usesAccLayout || !quickPanelSupport.quickAutomations || showAllQuickPanelButtons || !fastState.isEngineRunning" class="quick-panel-section" aria-label="Riferimenti numerici">
-                      <h2 class="quick-panel-heading">Riferimenti</h2>
+                    <section v-if="usesAccLayout || !quickPanelSupport.quickAutomations || showAllQuickPanelButtons || !fastState.isEngineRunning" class="quick-panel-section" data-quick-panel-section="references" :aria-label="t('controlK.referencesAria')">
+                      <h2 class="quick-panel-heading">{{ t('controlK.references') }}</h2>
                       <div class="quick-panel-pair">
                     <div class="quick-reference" :class="{ 'is-active': (isFullQuickPanelPreview || infoTargetActive) }">
                     <button
@@ -1632,27 +1635,27 @@ onBeforeUnmount(() => {
                       data-overlay-wheel-action="target"
                       :aria-pressed="(isFullQuickPanelPreview || infoTargetActive)"
                       :aria-current="selectedWheelActionId === 'target' ? 'true' : undefined"
-                      aria-label="Configura Giro obiettivo HUD Info"
+                      :aria-label="t('controlK.targetLapAria')"
                       @focus="selectedWheelActionId = 'target'"
                       @click="openInfoTargetSetup"
                     >
-                      <Check v-if="(isFullQuickPanelPreview || infoTargetActive)" class="quick-reference-check" :size="12" aria-hidden="true" /><Target :size="22" aria-hidden="true" /><span>Giro obiettivo</span>
+                      <Check v-if="(isFullQuickPanelPreview || infoTargetActive)" class="quick-reference-check" :size="12" aria-hidden="true" /><Target :size="22" aria-hidden="true" /><span>{{ t('controlK.targetLap') }}</span>
                     </button>
-                    <button v-if="(isFullQuickPanelPreview || infoTargetActive)" class="quick-reference-off" data-overlay-wheel-action="target-disable" title="Disattiva tempo giro" aria-label="Disattiva tempo giro" :disabled="referenceBusy" @click="disableReference('target')"><Power :size="14" /></button>
+                    <button v-if="(isFullQuickPanelPreview || infoTargetActive)" class="quick-reference-off" data-overlay-wheel-action="target-disable" :title="t('controlK.targetLapOff')" :aria-label="t('controlK.targetLapOff')" :disabled="referenceBusy" @click="disableReference('target')"><Power :size="14" /></button>
                     </div>
                     <div v-if="quickPanelSupport.quickSectorReferences" class="quick-reference" :class="{ 'is-active': (isFullQuickPanelPreview || customSectorsActive) }">
-                    <button type="button" class="launcher-tool-button" :aria-pressed="(isFullQuickPanelPreview || customSectorsActive)" title="Configura riferimenti settori" data-overlay-wheel-action="sector-references" @click="isSectorReferenceSetupOpen = true">
-                      <Check v-if="(isFullQuickPanelPreview || customSectorsActive)" class="quick-reference-check" :size="12" aria-hidden="true" /><Flag :size="22" aria-hidden="true" /><span>Settori obiettivo</span>
+                    <button type="button" class="launcher-tool-button" :aria-pressed="(isFullQuickPanelPreview || customSectorsActive)" :title="t('controlK.sectorsTitle')" data-overlay-wheel-action="sector-references" @click="isSectorReferenceSetupOpen = true">
+                      <Check v-if="(isFullQuickPanelPreview || customSectorsActive)" class="quick-reference-check" :size="12" aria-hidden="true" /><Flag :size="22" aria-hidden="true" /><span>{{ t('controlK.sectorTargets') }}</span>
                     </button>
-                    <button v-if="(isFullQuickPanelPreview || customSectorsActive)" class="quick-reference-off" data-overlay-wheel-action="sector-disable" title="Disattiva personalizzati e ripristina il confronto abituale" aria-label="Disattiva riferimenti personalizzati" :disabled="referenceBusy" @click="disableReference('sectors')"><Power :size="14" /></button>
+                    <button v-if="(isFullQuickPanelPreview || customSectorsActive)" class="quick-reference-off" data-overlay-wheel-action="sector-disable" :title="t('controlK.sectorsOffTitle')" :aria-label="t('controlK.sectorsOffAria')" :disabled="referenceBusy" @click="disableReference('sectors')"><Power :size="14" /></button>
                     </div>
                       </div>
                     </section>
-                    <section v-if="quickPanelSupport.quickAutomations" class="quick-panel-section quick-panel-automations" :class="{ 'quick-panel-show-all': showAllQuickPanelButtons, 'quick-panel-driving': hideStintWhileDriving && !usesAccLayout }" aria-label="Automazioni">
+                    <section v-if="quickPanelSupport.quickAutomations" class="quick-panel-section quick-panel-automations" :class="{ 'quick-panel-show-all': showAllQuickPanelButtons, 'quick-panel-driving': hideStintWhileDriving && !usesAccLayout }" :aria-label="t('controlK.automationsAria')">
                     <SetupFuelPanel :key="isFullQuickPanelPreview ? 'preview' : 'live'" :preview-expanded="isFullQuickPanelPreview" :body-target="isFullQuickPanelPreview ? '#control-k-fuel-preview' : undefined" show-heading :minutes="isFullQuickPanelPreview ? 30 : fuelStintMinutes" @update:minutes="!isFullQuickPanelPreview && (fuelStintMinutes = $event)" :api="isFullQuickPanelPreview ? quickPanelPreview!.api : getOverlayApi()" status-target="#quick-panel-notification-fuel" separate-view @open="openFuelSetup"
                       :report-unavailable="usesAccLayout" @notice="(text, tone) => usesAccLayout && showVoicePointNotice(text, tone)" />
                     <div class="quick-panel-pair quick-panel-secondary">
-                    <h2 class="quick-panel-heading">Pit</h2>
+                    <h2 class="quick-panel-heading">{{ t('controlK.pit') }}</h2>
                     <PitwallOverlayButton
                       :key="isFullQuickPanelPreview ? 'preview' : 'live'"
                       :api="isFullQuickPanelPreview ? quickPanelPreview!.api : getOverlayApi()"
@@ -1662,7 +1665,7 @@ onBeforeUnmount(() => {
                     />
 
                     </div>
-                    <div class="quick-panel-pressure-pair" aria-label="Pressioni pneumatici">
+                    <div class="quick-panel-pressure-pair" :aria-label="t('controlK.tyrePressuresAria')">
                     <PressureTestPanel :api="getOverlayApi()" :disabled="isFullQuickPanelPreview" :horizontal="isHorizontalQuickPanel"
                       :feedback-target="usesAccLayout ? '#quick-panel-notification-estimate' : '#quick-panel-pressure-test-feedback'"
                       :status-line="usesAccLayout" @status="onPressureTestStatus" @outcome="onPressureTestOutcome" />
@@ -1684,7 +1687,7 @@ onBeforeUnmount(() => {
                       <LoaderCircle v-if="isDryPressureApplying" class="quick-state-icon" :size="16" aria-hidden="true" />
                       <CircleCheck v-else-if="quickPanelPressureState.state === 'ready'" class="quick-state-icon" :size="16" aria-hidden="true" />
                       <CircleMinus v-else class="quick-state-icon" :size="16" aria-hidden="true" />
-                      <span>Correggi<br>pressioni</span>
+                      <span>{{ t('controlK.fixPressuresLine1') }}<br>{{ t('controlK.fixPressuresLine2') }}</span>
                       <small v-if="pressureBadge" class="quick-action-badge" aria-hidden="true">{{ pressureBadge }}</small>
                     </button>
                     </div>
@@ -1698,7 +1701,7 @@ onBeforeUnmount(() => {
                   <!-- PIP-522: the permanent pressure line became the button badge and
                        the context line; only command outcomes are shown as messages. -->
                   <p id="pressure-action-status" class="quick-panel-visually-hidden">
-                    Pressioni: {{ dryPressurePresentation.stateLabel }} · {{ dryPressurePresentation.guidance }}
+                    {{ t('controlK.pressureStatus', { state: dryPressurePresentation.stateLabel, guidance: dryPressurePresentation.guidance }) }}
                   </p>
                   <p class="quick-panel-action-hint" role="status" aria-live="polite" :title="quickPanelHint">
                     <Info :size="12" aria-hidden="true" />
@@ -1711,16 +1714,16 @@ onBeforeUnmount(() => {
                     role="status" aria-live="polite" :title="pressureOutcome.text">
                     {{ pressureOutcome.text }}
                   </p>
-                  <div v-if="showQuickPanelPressurePreview" class="pressure-plan" role="status" aria-label="Anteprima regolazione pressioni Setup">
+                  <div v-if="showQuickPanelPressurePreview" class="pressure-plan" role="status" :aria-label="t('controlK.pressurePlanAria')">
                     <!-- PIP-527: one target for all tyres in the header; per tyre only the
                          measured (compensated) pressure and the clicks to apply. -->
                     <div class="pressure-plan__meta">
-                      <strong v-if="pressurePlanTargetPsi !== null">Obiettivo {{ pressurePlanTargetPsi.toFixed(1).replace('.', ',') }} psi</strong>
-                      <span>{{ quickPanelPressureState.recommendation?.completed_laps || 0 }}/3 giri · {{ quickPanelPressureState.recommendation?.compound || '—' }}</span>
+                      <strong v-if="pressurePlanTargetPsi !== null">{{ t('controlK.pressureTarget', { psi: pressurePlanTargetPsi.toFixed(1).replace('.', ',') }) }}</strong>
+                      <span>{{ t('controlK.pressureLaps', { done: quickPanelPressureState.recommendation?.completed_laps || 0, compound: quickPanelPressureState.recommendation?.compound || '—' }) }}</span>
                     </div>
                     <p v-if="pressureOrigin" class="pressure-plan__origin" :title="pressureOrigin">{{ pressureOrigin }}</p>
                     <table v-if="quickPanelPressureState.recommendation?.wheels" class="pressure-plan__table">
-                      <thead><tr><th>Gomma</th><th>Misurata</th><th>Click</th></tr></thead>
+                      <thead><tr><th>{{ t('controlK.tyre') }}</th><th>{{ t('controlK.measured') }}</th><th>{{ t('controlK.clicks') }}</th></tr></thead>
                       <tbody>
                         <tr v-for="row in quickPanelPressureState.preview || []" :key="row.wheel">
                           <th>{{ row.wheel }}</th><td>{{ row.compensatedPsi?.toFixed?.(1)?.replace('.', ',') ?? '—' }}</td><td class="pressure-plan__clicks">{{ row.clicks > 0 ? '+' : '' }}{{ row.clicks ?? '—' }}</td>
@@ -1741,7 +1744,7 @@ onBeforeUnmount(() => {
                       :references="isFullQuickPanelPreview || referencesVoiceOn"
                       :pressure="isFullQuickPanelPreview || pressureVoiceOn"
                       :target="isFullQuickPanelPreview || targetVoiceOn"
-                      :session-label="isFullQuickPanelPreview ? 'Gara' : voiceSessionLabel"
+                      :session-label="isFullQuickPanelPreview ? t('controlK.session.race') : voiceSessionLabel"
                       :disabled="!isFullQuickPanelPreview && (!canUseSpotterControls || !voiceSessionMode)"
                       @toggle-coach="toggleCoachAudio"
                       @toggle-references="toggleTrackVoiceReferences"
@@ -1755,25 +1758,25 @@ onBeforeUnmount(() => {
                       <div id="quick-panel-horizontal-feedback" class="quick-panel-horizontal-feedback" />
                     </div>
                     <!-- PIP-532: one view for everything worth reading; the buttons give way to it. -->
-                    <section v-show="isNotificationsOpen && !waitingForSimulator" class="quick-panel-notifications" aria-label="Notifiche"
+                    <section v-show="isNotificationsOpen && !waitingForSimulator" class="quick-panel-notifications" :aria-label="t('controlK.notifications')"
                       :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
                       <!-- PIP-556: one card at a time (errors, then decisions, then outcomes), ‹ n/N ›,
                            "Svuota" clears what is only to read; decisions (plan, friend requests) stay. -->
-                      <ControlKViewHeader v-if="usesAccLayout" title="Notifiche"
-                        :subtitle="notificationPages > 1 ? `${notificationPage + 1} di ${notificationPages}` : null"
+                      <ControlKViewHeader v-if="usesAccLayout" :title="t('controlK.notifications')"
+                        :subtitle="notificationPages > 1 ? t('controlK.pageOf', { page: notificationPage + 1, total: notificationPages }) : null"
                         action="notifications-close" @back="closeNotifications">
                         <template v-if="notificationPages > 1">
-                          <button type="button" class="launcher-tool-button quick-panel-notifications__page" aria-label="Notifica precedente"
+                          <button type="button" class="launcher-tool-button quick-panel-notifications__page" :aria-label="t('controlK.prevNotification')"
                             data-overlay-wheel-action="notifications-prev" @click="showNotificationPage(-1)"><ChevronLeft :size="16" aria-hidden="true" /></button>
-                          <button type="button" class="launcher-tool-button quick-panel-notifications__page" aria-label="Notifica successiva"
+                          <button type="button" class="launcher-tool-button quick-panel-notifications__page" :aria-label="t('controlK.nextNotification')"
                             data-overlay-wheel-action="notifications-next" @click="showNotificationPage(1)"><ChevronRight :size="16" aria-hidden="true" /></button>
                         </template>
-                        <button type="button" class="launcher-tool-button quick-panel-notifications__clear" title="Svuota le notifiche da leggere"
-                          data-overlay-wheel-action="notifications-clear" @click="clearNotifications(['info', 'error'])">Svuota</button>
+                        <button type="button" class="launcher-tool-button quick-panel-notifications__clear" :title="t('controlK.clearTitle')"
+                          data-overlay-wheel-action="notifications-clear" @click="clearNotifications(['info', 'error'])">{{ t('controlK.clear') }}</button>
                       </ControlKViewHeader>
                       <header v-else class="quick-panel-notifications__header">
-                        <h2 class="quick-panel-heading">Notifiche</h2>
-                        <button type="button" class="launcher-tool-button quick-panel-notifications__close" title="Chiudi notifiche" aria-label="Chiudi notifiche"
+                        <h2 class="quick-panel-heading">{{ t('controlK.notifications') }}</h2>
+                        <button type="button" class="launcher-tool-button quick-panel-notifications__close" :title="t('controlK.closeNotifications')" :aria-label="t('controlK.closeNotifications')"
                           data-overlay-wheel-action="notifications-close" @click="closeNotifications">
                           <X :size="16" aria-hidden="true" />
                         </button>
@@ -1862,12 +1865,12 @@ onBeforeUnmount(() => {
               <template v-else-if="phase === 'completed'">
                 <div v-if="!soundEnabled" class="overlay-topline">
                   <div class="overlay-topline-actions">
-                    <em class="mute-chip" role="status" aria-label="Audio disattivato">MUTO</em>
+                    <em class="mute-chip" role="status" :aria-label="t('controlK.mutedAria')">{{ t('controlK.muted') }}</em>
                   </div>
                 </div>
                 <div class="completed-banner" role="status">
                   <span class="completed-check" aria-hidden="true">&#10003;</span>
-                  <strong>Allenamento completato</strong>
+                  <strong>{{ t('controlK.trainingDone') }}</strong>
                 </div>
                 <div class="overlay-actions">
                   <button type="button" class="primary" data-overlay-wheel-action="reset-training" :aria-label="primaryActionLabel" @click="executePrimaryAction">
@@ -1878,11 +1881,11 @@ onBeforeUnmount(() => {
               </template>
 
               <template v-else-if="phase === 'select'">
-                <button type="button" class="utility-action overlay-menu-back" data-overlay-wheel-action="main-menu" @click="returnToMainMenu">← Menu principale</button>
+                <button type="button" class="utility-action overlay-menu-back" data-overlay-wheel-action="main-menu" @click="returnToMainMenu">{{ t('controlK.mainMenu') }}</button>
                 <div class="overlay-main">
                   <div v-if="!soundEnabled" class="overlay-topline">
                     <div class="overlay-topline-actions">
-                      <em class="mute-chip" role="status" aria-label="Audio disattivato">MUTO</em>
+                      <em class="mute-chip" role="status" :aria-label="t('controlK.mutedAria')">{{ t('controlK.muted') }}</em>
                     </div>
                   </div>
                   <h1>{{ selectedTraining.title }}</h1>
@@ -1919,7 +1922,7 @@ onBeforeUnmount(() => {
 
                 </div>
                 <p class="launcher-hint" aria-hidden="true">
-                  Ctrl+K chiude &middot; Ctrl+N avvia
+                  {{ t('controlK.selectHint') }}
                 </p>
               </template>
 
@@ -1948,10 +1951,10 @@ onBeforeUnmount(() => {
                     type="button"
                     class="primary"
                     :data-overlay-wheel-action="isShortcutStopConfirmOpen ? 'confirm-stop' : primaryAction"
-                    :aria-label="isShortcutStopConfirmOpen ? 'Conferma stop sessione' : primaryActionLabel"
+                    :aria-label="isShortcutStopConfirmOpen ? t('controlK.confirmStopAria') : primaryActionLabel"
                     @click="executePrimaryAction"
                   >
-                    {{ isShortcutStopConfirmOpen ? 'Conferma' : primaryActionLabel }}
+                    {{ isShortcutStopConfirmOpen ? t('controlK.confirm') : primaryActionLabel }}
                     <span v-if="!isShortcutStopConfirmOpen" class="key-hint" aria-hidden="true">Ctrl+N</span>
                   </button>
                   <Transition name="chip-pop">
@@ -1960,11 +1963,11 @@ onBeforeUnmount(() => {
                       type="button"
                       class="utility-action skip-step-action"
                       data-overlay-wheel-action="skip-step"
-                      aria-label="Skippa lo step corrente"
-                      title="Skippa step"
+                      :aria-label="t('controlK.skipStepAria')"
+                      :title="t('controlK.skipStep')"
                       @click="skipPausedStepIfSourceReady"
                     >
-                      Skippa step
+                      {{ t('controlK.skipStep') }}
                     </button>
                   </Transition>
                   <button
@@ -1974,7 +1977,7 @@ onBeforeUnmount(() => {
                     class="secondary-action danger-action stop-hold-action"
                     :class="{ 'is-holding': stopHoldProgress > 0 }"
                     :style="{ '--stop-progress': stopHoldProgressPercent }"
-                    aria-label="Stop: tieni premuto col mouse oppure attiva e conferma dal volante"
+                    :aria-label="t('controlK.stopAria')"
                     @click="$event.detail === 0 && handleGlobalStop()"
                     @pointerdown.prevent="startStopHold('pointer')"
                     @pointerup.prevent="cancelStopHold"
@@ -1983,10 +1986,10 @@ onBeforeUnmount(() => {
                     @keydown.space.prevent="startStopHold('keyboard')"
                     @keyup.space.prevent="cancelStopHold"
                   >
-                    Stop
+                    {{ t('controlK.stop') }}
                   </button>
                   <button v-else type="button" class="secondary-action" data-overlay-wheel-action="cancel-stop" @click="closeShortcutStopConfirm">
-                    Annulla stop
+                    {{ t('controlK.cancelStop') }}
                   </button>
                 </div>
               </template>

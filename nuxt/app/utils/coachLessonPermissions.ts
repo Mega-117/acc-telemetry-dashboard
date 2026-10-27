@@ -1,6 +1,8 @@
 // PIP-591 (X-A06-14): cosa il pannello lezioni puo' offrire, con le stesse condizioni delle Rules
 // `users/{pilot}/coachLessons`: scrive solo un coach che e' il coach assegnato del pilota, e
 // modifica solo le lezioni di cui e' autore. Admin e coach subentrati leggono, non scrivono.
+import { useI18n } from '~/i18n'
+
 export function canCreateCoachLesson(params: {
   isCoach: boolean
   uid: string | null | undefined
@@ -18,10 +20,10 @@ export function canEditCoachLesson(params: {
   return canCreateCoachLesson(params) && params.lessonCoachId === params.uid
 }
 
-/** Messaggio per un salvataggio rifiutato, in italiano e senza dettagli tecnici. */
+/** Messaggio per un salvataggio rifiutato, nella lingua dell'interfaccia e senza dettagli tecnici. */
 export function coachLessonSaveErrorMessage(error: unknown): string {
   const code = (error as { code?: string } | null)?.code
   return code === 'permission-denied'
-    ? 'Non puoi salvare: solo il coach assegnato al pilota può scrivere le sue lezioni.'
-    : 'Salvataggio non riuscito. Riprova.'
+    ? useI18n().t('coachLessons.errors.permissionDenied')
+    : useI18n().t('coachLessons.errors.saveFailed')
 }

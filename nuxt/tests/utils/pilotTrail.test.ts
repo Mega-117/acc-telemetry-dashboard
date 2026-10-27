@@ -1,6 +1,9 @@
 // PIP-637: percorso unico nella vista admin/coach di un pilota.
 import { describe, expect, it } from 'vitest'
 import { pilotTrail } from '~/utils/pilotTrail'
+import { setLocale } from '~/i18n'
+
+setLocale('it')
 
 describe('pilotTrail', () => {
   it('ends on the open tab when no page is open', () => {

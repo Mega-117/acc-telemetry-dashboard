@@ -347,7 +347,8 @@ export function useTelemetryGateway(explicitGameId?: string) {
             formatLapTime,
             formatCarName,
             formatTrackName,
-            formatDate
+            // Cached projection: the stored date stays Italian (PanoramicaPage localizes it at display time).
+            formatDate: (date: string) => formatDate(date, 'it')
         })
     }
 
@@ -431,7 +432,7 @@ export function useTelemetryGateway(explicitGameId?: string) {
                 formatLapTime,
                 formatCarName,
                 formatTrackName,
-                formatDate
+                formatDate: (date: string) => formatDate(date, 'it')
             })
         } finally {
             endFirebaseScenario(scenarioId)

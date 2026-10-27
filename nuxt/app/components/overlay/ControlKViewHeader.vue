@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { ArrowLeft } from '@lucide/vue'
+import { useI18n } from '~/i18n'
 
 // PIP-556: the same header for every Control K view: the ← arrow (same as the
 // wheel Back: leaves without saving), the title with its context, and an
 // optional slot on the right (pager, session).
 defineProps<{ title: string; subtitle?: string | null; action: string }>()
 const emit = defineEmits<{ back: [] }>()
+const { t } = useI18n()
 </script>
 
 <template>
   <header class="ck-view-header">
-    <button type="button" class="ck-view-back" :data-overlay-wheel-action="action" aria-label="Indietro" title="Indietro" @click="emit('back')">
+    <button type="button" class="ck-view-back" :data-overlay-wheel-action="action" :aria-label="t('controlK.back')" :title="t('controlK.back')" @click="emit('back')">
       <ArrowLeft :size="16" aria-hidden="true" />
     </button>
     <div class="ck-view-title"><strong>{{ title }}</strong><small v-if="subtitle">{{ subtitle }}</small></div>

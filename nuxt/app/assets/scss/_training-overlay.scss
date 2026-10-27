@@ -2318,8 +2318,8 @@ button.is-active {
   .quick-panel-section { min-width: 0; padding-top: 0; border-top: 0; }
   .quick-panel-section + .quick-panel-section { border-left: 1px solid #ffffff25; padding-left: 10px; }
   .quick-panel-voice-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-  .quick-panel-section[aria-label="Riferimenti numerici"] .quick-panel-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .launcher-tools__actions:not(:has([aria-label='Riferimenti numerici'])) { grid-template-columns: repeat(2, max-content); }
+  .quick-panel-section[data-quick-panel-section='references'] .quick-panel-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .launcher-tools__actions:not(:has([data-quick-panel-section='references'])) { grid-template-columns: repeat(2, max-content); }
   .quick-panel-heading { line-height: 12px; }
   .quick-panel-section + .quick-panel-section {
     border-left: 0;
@@ -2512,8 +2512,8 @@ button.is-active {
   }
   // The component's own width: 100% would take the whole row.
   .quick-panel-automations > .fuel-panel { order: 2; width: auto; }
-  .quick-panel-section[aria-label='Riferimenti numerici'] { order: 3; }
-  .quick-panel-section[aria-label='Avvisi vocali'] { order: 4; }
+  .quick-panel-section[data-quick-panel-section='references'] { order: 3; }
+  .quick-panel-section[data-quick-panel-section='voice'] { order: 4; }
   .quick-panel-horizontal-side { order: 5; }
   .quick-panel-automations > :not(.fuel-panel, .quick-panel-secondary),
   .quick-panel-dev { order: 6; flex-basis: 100%; }
@@ -2521,8 +2521,8 @@ button.is-active {
   .quick-panel-automations > .control-k-fuel-status { display: none; }
   // One divider before every group after Tools (Tools always holds Pitwall).
   .quick-panel-automations > .fuel-panel,
-  .quick-panel-section[aria-label='Riferimenti numerici'],
-  .quick-panel-section[aria-label='Avvisi vocali'],
+  .quick-panel-section[data-quick-panel-section='references'],
+  .quick-panel-section[data-quick-panel-section='voice'],
   .quick-panel-horizontal-side {
     position: relative; padding-left: 10px; border-left: 0;
     &::before { content: ''; position: absolute; left: 0; top: 20px; height: 64px; width: 1px; background: #ffffff25; }
@@ -2605,7 +2605,7 @@ button.is-active {
   .quick-panel-secondary {
     display: flex; flex-direction: column; align-items: center; flex: none; width: 56px; padding: 12px 0 0; gap: 8px;
   }
-  .quick-panel-section[aria-label='Avvisi vocali'] { flex: none; padding-top: 0; border-top: 0; }
+  .quick-panel-section[data-quick-panel-section='voice'] { flex: none; padding-top: 0; border-top: 0; }
   .quick-panel-voice-grid { gap: 5px; justify-content: flex-start; }
   .quick-panel-voice-grid > button,
   .quick-panel-secondary > .launcher-tool-button { width: 56px; min-width: 56px; flex: none; }
@@ -2659,10 +2659,10 @@ button.is-active {
     gap: 8px 10px;
     align-items: start;
   }
-  .quick-panel-section[aria-label='Avvisi vocali'],
+  .quick-panel-section[data-quick-panel-section='voice'],
   .quick-panel-dev { grid-column: 1 / -1; }
   // PIP-509: audio alerts are the last row, after every other button group.
-  .quick-panel-section[aria-label='Avvisi vocali'] {
+  .quick-panel-section[data-quick-panel-section='voice'] {
     order: 98;
     padding-top: 8px;
     border-top: 1px solid #ffffff1a;
@@ -2671,7 +2671,7 @@ button.is-active {
   .quick-panel-automations { display: contents; }
   .quick-panel-automations > .fuel-panel,
   .quick-panel-secondary,
-  .quick-panel-section[aria-label='Riferimenti numerici'] {
+  .quick-panel-section[data-quick-panel-section='references'] {
     display: grid;
     grid-row: 1;
     grid-template-columns: minmax(0, 1fr);
@@ -2686,9 +2686,9 @@ button.is-active {
   }
   .quick-panel-automations > .fuel-panel { grid-column: 1; }
   .quick-panel-secondary { grid-column: 2; }
-  .quick-panel-section[aria-label='Riferimenti numerici'] { grid-column: 3 / span 2; }
+  .quick-panel-section[data-quick-panel-section='references'] { grid-column: 3 / span 2; }
   .quick-panel-secondary::before,
-  .quick-panel-section[aria-label='Riferimenti numerici']::before {
+  .quick-panel-section[data-quick-panel-section='references']::before {
     content: '';
     position: absolute;
     left: -5px;
@@ -2698,7 +2698,7 @@ button.is-active {
     background: #ffffff25;
     pointer-events: none;
   }
-  .quick-panel-section[aria-label='Riferimenti numerici'] > .quick-panel-pair {
+  .quick-panel-section[data-quick-panel-section='references'] > .quick-panel-pair {
     grid-template-columns: repeat(2, 64px);
     gap: 8px;
   }
@@ -2714,7 +2714,7 @@ button.is-active {
       grid-column: 1;
       &::before { display: none; }
     }
-    .quick-panel-section[aria-label='Riferimenti numerici'] { grid-column: 2 / span 2; }
+    .quick-panel-section[data-quick-panel-section='references'] { grid-column: 2 / span 2; }
   }
 }
 
@@ -2744,10 +2744,10 @@ button.is-active {
     // Four full-size voice controls retain the established full-panel width.
     .quick-panel-main:has(.quick-panel-voice-grid > button:nth-child(4)) { min-width: 300px; }
     .quick-panel-voice-grid:has(> button:nth-child(4)) { justify-content: space-between; }
-    .quick-panel-section[aria-label='Avvisi vocali'] { padding-top: 8px; border-top: 1px solid #ffffff1a; }
+    .quick-panel-section[data-quick-panel-section='voice'] { padding-top: 8px; border-top: 1px solid #ffffff1a; }
     .quick-panel-automations { display: contents; }
     .quick-panel-categories { justify-content: space-between; }
-    .quick-panel-section[aria-label='Riferimenti numerici'],
+    .quick-panel-section[data-quick-panel-section='references'],
     .fuel-panel,
     .quick-panel-secondary {
       display: flex; flex-direction: column; align-items: center; gap: 8px;
@@ -2756,7 +2756,7 @@ button.is-active {
     }
     .fuel-panel { order: 1; }
     .quick-panel-secondary { order: 2; }
-    .quick-panel-section[aria-label='Riferimenti numerici'] { order: 3; }
+    .quick-panel-section[data-quick-panel-section='references'] { order: 3; }
     .quick-panel-automations > :not(.fuel-panel, .quick-panel-secondary) {
       order: 4; flex-basis: 100%; width: 0; min-width: 100%;
       overflow-wrap: anywhere;
@@ -2787,15 +2787,15 @@ button.is-active {
       position: relative;
       > .quick-panel-heading { position: absolute; top: 0; left: 0; width: 100%; }
     }
-    .quick-panel-section[aria-label='Riferimenti numerici'] { padding-left: 10px; position: relative; }
-    .quick-panel-section[aria-label='Riferimenti numerici']::before {
+    .quick-panel-section[data-quick-panel-section='references'] { padding-left: 10px; position: relative; }
+    .quick-panel-section[data-quick-panel-section='references']::before {
       content: ''; position: absolute; left: 0; top: 20px; height: 64px;
       width: 1px; background: #ffffff25;
     }
-    .quick-panel-main:not(:has(.quick-panel-voice-grid)) .quick-panel-section[aria-label='Riferimenti numerici'] {
+    .quick-panel-main:not(:has(.quick-panel-voice-grid)) .quick-panel-section[data-quick-panel-section='references'] {
       padding-left: 0; &::before { display: none; }
     }
-    .quick-panel-main:not(:has(.quick-panel-voice-grid, [aria-label='Riferimenti numerici'])) .quick-panel-automations {
+    .quick-panel-main:not(:has(.quick-panel-voice-grid, [data-quick-panel-section='references'])) .quick-panel-automations {
       padding-left: 0; &::before { display: none; }
     }
     .quick-panel-automations.quick-panel-driving:not(.quick-panel-show-all) > .fuel-panel { display: none; }
@@ -3000,7 +3000,7 @@ $ck-width: 56px + 5 * $ck-cell + 5 * $ck-gap;
   .launcher-tools.ck {
     :is(.pressure-test__button, .launcher-tool-button--pressure, .fuel-open, [data-overlay-wheel-action='pitwall'],
       .quick-reference, .ck-voice-alerts, .quick-panel-timer, .quick-panel-notifications-button, .quick-panel-voice-button,
-      .ck-view-close, .quick-panel-notifications, .quick-panel-section[aria-label='Avvisi vocali'] > .quick-panel-heading,
+      .ck-view-close, .quick-panel-notifications, .quick-panel-section[data-quick-panel-section='voice'] > .quick-panel-heading,
       .fuel-status, .pressure-plan, .control-k-request, .quick-panel-pressure-status, .pressure-test__result, .pressure-test__error) {
       animation: ck-view-in 260ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
     }
@@ -3017,7 +3017,7 @@ $ck-width: 56px + 5 * $ck-cell + 5 * $ck-gap;
     grid-template-rows: 32px $ck-cell auto;
     .quick-panel-logo { grid-area: 1 / 1 / 3 / 2; }
     .ck-view-close { display: grid; place-items: center; grid-area: 1 / 2 / 2 / 3; width: 32px; height: 32px; min-height: 32px; padding: 0; }
-    .quick-panel-section[aria-label='Avvisi vocali'] > .quick-panel-heading {
+    .quick-panel-section[data-quick-panel-section='voice'] > .quick-panel-heading {
       // Starts where every view title starts: after the 32 px ← and its 8 px gap.
       display: block; grid-area: 1 / 2 / 2 / -1; align-self: center; margin: 0; padding-left: 40px; text-align: left; pointer-events: none;
       // Same title look as every other view header.

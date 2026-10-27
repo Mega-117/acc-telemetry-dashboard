@@ -2,6 +2,8 @@
 import { createApp, nextTick } from 'vue'
 import { afterEach, expect, it, vi } from 'vitest'
 import InfoTargetSetup from '~/components/overlay/InfoTargetSetup.vue'
+import { setLocale } from '~/i18n'
+setLocale('it')
 let app: ReturnType<typeof createApp> | null = null
 afterEach(() => { app?.unmount(); document.body.innerHTML = '' })
 function mountSetup() {

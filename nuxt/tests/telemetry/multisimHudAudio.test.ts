@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
+import { setLocale } from '~/i18n'
 import { mount } from '@vue/test-utils'
 import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
 import RaceWeatherHud from '~/components/overlay/RaceWeatherHud.vue'
@@ -15,6 +16,9 @@ import { routeOverlayTelemetry } from '~/services/overlay/spectatorTelemetry'
 import { commonSectorHud } from '~/services/telemetry/commonSectorHud'
 import { featureAvailability, TELEMETRY_FEATURES } from '~/services/telemetry/featureAvailability'
 import { buildInfoPresentation } from '~/utils/infoPresentation'
+
+// The HUD texts below are asserted in Italian (jsdom defaults to English).
+setLocale('it')
 
 const live = (): CommonLive => ({ gameId: 'synthetic', sessionId: '1', connected: true, fresh: true,
   lifecycle: 'live', sessionKind: 'race', identity: { track: 'Spa', car: 'EV', variant: 'short' },

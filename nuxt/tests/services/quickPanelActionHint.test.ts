@@ -2,7 +2,10 @@
 import { computed, effectScope, nextTick, ref } from 'vue'
 import { describe, expect, it, vi } from 'vitest'
 import { quickPanelActionHint } from '~/services/overlay/quickPanelActionHint'
+import { setLocale } from '~/i18n'
 import { useOverlayActionSelection } from '~/composables/useOverlayActionSelection'
+
+setLocale('it')
 
 describe('vertical quick panel command help', () => {
   it.each([
@@ -16,12 +19,24 @@ describe('vertical quick panel command help', () => {
     ['target', 'Giro obiettivo: imposta il tempo da battere.'],
     ['target-disable', 'Tempo giro:'],
     ['sector-references', 'Settori obiettivo:'], ['sector-disable', 'Settori:'], ['timer', 'Timer:'],
-    ['Timer', 'Timer:'], ['Layout verticale', 'Layout:'], ['Layout orizzontale', 'Layout:'],
+    ['layout-vertical', 'Layout:'], ['layout-horizontal', 'Layout:'],
     ['fuel-minus', 'Durata:'], ['fuel-plus', 'Durata:'], ['fuel-apply', 'Carburante:'],
     ['friend-accept:demo-1', 'Amicizia: accetta'], ['friend-reject:demo-1', 'Amicizia: rifiuta'],
   ])('briefly explains %s without activating it', (id, beginning) => {
     expect(quickPanelActionHint(id)).toContain(beginning)
     expect(quickPanelActionHint(id).length).toBeLessThanOrEqual(46)
+  })
+  it('follows the interface language and never treats a visible label as an id', () => {
+    setLocale('en')
+    try {
+      expect(quickPanelActionHint('layout-vertical')).toBe('Layout: arrange the panel vertically.')
+      expect(quickPanelActionHint('friend-accept:demo-1')).toBe('Friends: accept the request.')
+      for (const id of ['coach', 'references', 'pressure-audio', 'target-voice', 'fuel', 'fuel-session', 'pitwall', 'pressure', 'target',
+        'target-disable', 'sector-references', 'sector-disable', 'timer', 'layout-vertical', 'layout-horizontal', 'fuel-minus', 'fuel-plus', 'fuel-apply']) {
+        expect(quickPanelActionHint(id).length, id).toBeLessThanOrEqual(46)
+      }
+    } finally { setLocale('it') }
+    expect(quickPanelActionHint('Layout verticale')).toBe('Seleziona un comando per i dettagli.')
   })
   it('uses a neutral prompt when no known command is selected', () => {
     for (const id of [null, undefined, 'unknown', 'toString']) {

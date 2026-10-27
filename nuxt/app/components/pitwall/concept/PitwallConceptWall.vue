@@ -20,6 +20,7 @@ import {
   PITWALL_CONCEPT_LIST_LIMITS,
 } from "~/utils/pitwallConcept";
 import type { PitwallConceptMember, PitwallConceptPerson, PitwallConceptRace } from "~/utils/pitwallConcept";
+import { useI18n } from "~/i18n";
 
 const props = defineProps<{
   race: PitwallConceptRace;
@@ -35,6 +36,7 @@ const emit = defineEmits<{
   close: [];
 }>();
 
+const { t } = useI18n();
 const expanded = ref(false);
 
 const me = computed(() => props.meId ?? "");
@@ -74,14 +76,14 @@ const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
   <section class="pwc-panel pwc-roster">
     <header class="pwc-panel__head">
       <h2>
-        Equipaggio
+        {{ t('pitwallConcept.wall.crew') }}
         <span class="pwc-count">{{ race.members.length }}</span>
       </h2>
       <small v-if="isFull">
-        Questa gara è piena: {{ capacity }} persone è il massimo.
+        {{ t('pitwallConcept.wall.full', { count: capacity }) }}
       </small>
 
-      <small v-else-if="race.membershipModel !== 'social' && !isManager">Solo chi gestisce la gara può invitare o togliere.</small>
+      <small v-else-if="race.membershipModel !== 'social' && !isManager">{{ t('pitwallConcept.wall.managersOnly') }}</small>
     </header>
 
     <div
@@ -96,13 +98,13 @@ const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
       <span class="pwc-avatar is-small">{{ initials(member.personId) }}</span>
       <strong class="pwc-person__name">
         {{ nick(member.personId) }}
-        <template v-if="member.personId === me"> (tu)</template>
+        <template v-if="member.personId === me"> {{ t('pitwallConcept.wall.you') }}</template>
       </strong>
       <span
         class="pwc-chip"
         :class="member.driving ? 'is-always' : 'is-waiting'"
       >
-        {{ member.driving ? 'Al volante' : member.reconnecting ? 'Riconnessione' : member.connecting ? 'Collegamento in corso' : member.role === 'invited' ? describePitwallConceptMember(member) : 'Guida non segnalata' }}
+        {{ member.driving ? t('pitwallConcept.wall.driving') : member.reconnecting ? t('pitwallConcept.wall.reconnecting') : member.connecting ? t('pitwallConcept.wall.connecting') : member.role === 'invited' ? describePitwallConceptMember(member) : t('pitwallConcept.wall.notReported') }}
       </span>
       <span class="pwc-person__actions">
         <button
@@ -111,7 +113,7 @@ const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
           class="pwc-link-btn"
           @click="emit('promote', member.personId)"
         >
-          Promuovi
+          {{ t('pitwallConcept.wall.promote') }}
         </button>
         <button
           v-if="pitwallConceptCanRemove(race, member, me)"
@@ -119,7 +121,7 @@ const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
           class="pwc-link-btn"
           @click="emit('remove', member.personId)"
         >
-          Togli
+          {{ t('pitwallConcept.wall.remove') }}
         </button>
       </span>
     </div>
@@ -127,8 +129,8 @@ const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
     <PitwallConceptMore
       :hidden="split.hidden"
       :expanded="expanded"
-      noun="persone"
-      noun-one="persona"
+      :noun="t('pitwallConcept.more.people')"
+      :noun-one="t('pitwallConcept.more.person')"
       class="pwc-roster__more"
       @toggle="expanded = !expanded"
     />
@@ -143,7 +145,7 @@ const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
         class="pwc-link-btn"
         @click="emit('leave')"
       >
-        Esci dalla gara
+        {{ t('pitwallConcept.wall.leave') }}
       </button>
       <button
         v-if="isManager && !race.closed"
@@ -151,7 +153,7 @@ const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
         class="pwc-link-btn"
         @click="emit('close')"
       >
-        Chiudi gara
+        {{ t('pitwallConcept.wall.close') }}
       </button>
     </footer>
   </section>

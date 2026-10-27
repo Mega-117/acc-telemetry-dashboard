@@ -3,6 +3,10 @@ import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import TyreCondition from '~/components/pitwall/PitwallTyreCondition.vue'
 import { boundPitwallStrategy, boundPitwallTyreCondition } from '~/services/pitwall/pitwallLink'
+import { setLocale } from '~/i18n'
+
+// These tests read the Italian texts (jsdom defaults to English).
+setLocale('it')
 
 const condition = { tyreSet: 11, compound: 'dry', state: 'new', via: 'screen', observedAt: '2026-09-07T11:53:55Z' }
 describe('tyre condition presentation and transport', () => {

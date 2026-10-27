@@ -2,6 +2,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import HudPage from '../../app/pages/hud.vue'
+import { setLocale } from '~/i18n'
+
+// The settings page texts are asserted in Italian; jsdom starts in English.
+setLocale('it')
 
 vi.mock('~/composables/useHudOverlay', () => ({ getHudOverlayScaleMin: () => 0.6, getHudOverlayScaleMax: () => 1.6 }))
 vi.mock('~/utils/hudRoutePerformance', () => ({

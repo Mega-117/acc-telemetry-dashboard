@@ -5,6 +5,10 @@ import { createQuickPanelPreview, blockQuickPanelPreviewAction } from '~/service
 import SetupFuelPanel from '~/components/overlay/SetupFuelPanel.vue'
 import ControlKFriendRequests from '~/components/overlay/ControlKFriendRequests.vue'
 import PitwallOverlayButton from '~/components/pitwall/PitwallOverlayButton.vue'
+import { setLocale } from '~/i18n'
+
+// Assertions below read the Italian texts (jsdom starts in English).
+setLocale('it')
 
 let app: ReturnType<typeof createApp> | undefined
 async function mount(component: any, props: any) {

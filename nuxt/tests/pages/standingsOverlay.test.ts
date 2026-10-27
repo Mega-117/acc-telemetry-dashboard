@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { translate } from '~/i18n'
 
 describe('Standings overlay contract', () => {
   const page = readFileSync(resolve(process.cwd(), 'app/pages/standings-overlay.vue'), 'utf8')
@@ -96,26 +97,31 @@ describe('Standings overlay contract', () => {
   it('non renderizza celle prive di provider', () => {
     expect(hud).not.toMatch(/LFM|Safety Rating|Elo|Incident|BoP|turn/i)
     expect(settings).not.toMatch(/showLfm|LFM Safety Rating|LFM Elo Rating|LFM BOP/)
-    expect(settings).toContain("{ key: 'showIncidents', label: 'Incidenti', supported: false")
+    expect(settings).toContain("{ key: 'showIncidents', labelKey: 'hud.standings.incidents', supported: false, dependencyKey: 'hud.standings.needsIncidents' }")
     expect(settings).toContain(':disabled="selectedSettingsDisabled || !option.supported"')
-    expect(settings).toContain('Richiede provider incidenti.')
+    expect(translate('it', 'hud.standings.needsIncidents')).toBe('Richiede provider incidenti.')
   })
 
   it('usa slider 0..5 visibili e step scala 0.1 solo per Standings', () => {
     expect(overlayComposable).toContain('showIncidents?: boolean')
     expect(settings).toContain(':step="selectedOverlayId === \'standings\' ? 0.1 : 0.05"')
-    for (const label of ['Auto in testa', 'Auto davanti', 'Auto dietro']) {
-      expect(settings).toContain(`<span><strong>${label}</strong></span>`)
-      expect(settings).toContain(`aria-label="${label}"`)
+    // PIP-665: labels are dictionary keys; the Italian texts stay the same.
+    for (const [key, label] of [['topCars', 'Auto in testa'], ['carsAhead', 'Auto davanti'], ['carsBehind', 'Auto dietro']] as const) {
+      expect(settings).toContain(`<span><strong>{{ t('hud.standings.${key}') }}</strong></span>`)
+      expect(settings).toContain(`:aria-label="t('hud.standings.${key}')"`)
+      expect(translate('it', `hud.standings.${key}`)).toBe(label)
     }
     expect(settings.match(/type="range"/g)?.length).toBeGreaterThanOrEqual(5)
     expect(settings).toContain('<b>{{ standingsSettings.topCars }}</b>')
     expect(settings).toContain('<b>{{ standingsSettings.carsAhead }}</b>')
     expect(settings).toContain('<b>{{ standingsSettings.carsBehind }}</b>')
-    for (const label of [
-      'Numero auto', 'Giro migliore', 'Ultimo giro', 'Tempo stint', 'Avanzamento giro',
-      'Incidenti', 'Numero curva',
-    ]) expect(settings).toContain(`label: '${label}'`)
+    for (const [key, label] of [
+      ['carNumber', 'Numero auto'], ['fastestLap', 'Giro migliore'], ['lastLap', 'Ultimo giro'], ['stintTime', 'Tempo stint'],
+      ['lapProgress', 'Avanzamento giro'], ['incidents', 'Incidenti'], ['turnNumber', 'Numero curva'],
+    ] as const) {
+      expect(settings).toContain(`labelKey: 'hud.standings.${key}'`)
+      expect(translate('it', `hud.standings.${key}`)).toBe(label)
+    }
   })
 })
 
@@ -123,5 +129,5 @@ it('wires the existing stint preference to the route and enables its settings co
   const page = readFileSync(resolve(process.cwd(), 'app/pages/standings-overlay.vue'), 'utf8')
   const settings = readFileSync(resolve(process.cwd(), 'app/pages/hud.vue'), 'utf8')
   expect(page).toContain("showStintTimer: setting('showStintTimer')")
-  expect(settings).toContain("{ key: 'showStintTimer', label: 'Tempo stint', supported: true }")
+  expect(settings).toContain("{ key: 'showStintTimer', labelKey: 'hud.standings.stintTime', supported: true }")
 })

@@ -6,6 +6,10 @@ import MyRoom from '../../app/components/pitwall/concept/PitwallConceptMyRoom.vu
 import Feedback from '../../app/components/pitwall/concept/PitwallConceptFeedback.vue'
 import Friends from '../../app/components/pitwall/concept/PitwallConceptFriends.vue'
 import Wall from '../../app/components/pitwall/concept/PitwallConceptWall.vue'
+import { setLocale } from '~/i18n'
+
+// These tests read the Italian texts (jsdom defaults to English).
+setLocale('it')
 
 describe('current social party presentation', () => {
   it.each([

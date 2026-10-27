@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { setLocale } from '~/i18n'
 import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import { accRainIntensity, raceWeatherItem } from '~/utils/raceWeatherPresentation'
 import RaceWeatherIcon from '~/components/overlay/RaceWeatherIcon.vue'
+
+// The HUD texts below are asserted in Italian (jsdom defaults to English).
+setLocale('it')
 
 describe('ACC Race weather', () => {
   it('preserves all six ACC categories with distinct accessible labels and symbols', async () => {
@@ -24,5 +28,14 @@ describe('ACC Race weather', () => {
     const item = raceWeatherItem(0, 0, false)
     expect(item.intensity).toBeNull()
     expect(await renderToString(createSSRApp(RaceWeatherIcon, { item }))).toContain('—')
+  })
+
+  it('follows the interface language for the tooltip only', () => {
+    setLocale('en')
+    expect(raceWeatherItem(0, 0, true).title).toBe('Now: No rain')
+    expect(raceWeatherItem(5, 30, true).title).toBe('ACC forecast in 30 game minutes: Thunderstorm')
+    expect(raceWeatherItem(5, 30, true).horizon).toBe('30′')
+    setLocale('it')
+    expect(raceWeatherItem(0, 0, true).title).toBe('Ora: Nessuna pioggia')
   })
 })

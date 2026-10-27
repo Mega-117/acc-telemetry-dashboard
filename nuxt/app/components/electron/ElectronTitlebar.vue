@@ -10,6 +10,9 @@ import { useElectronSync } from '~/composables/useElectronSync'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useRuntimeCapabilityGate } from '~/composables/useRuntimeCapabilityGate'
 import { invalidateTelemetryCaches } from '~/services/cache/telemetryCacheInvalidationService'
+import { useI18n } from '~/i18n'
+
+const { t } = useI18n()
 
 const brandBase = useRuntimeConfig().app.baseURL
 const distributionName = ref('Racer Core')
@@ -156,7 +159,7 @@ const closeMaintenanceNotification = () => {
       <button v-if="developerRefreshVisible"
         class="titlebar-btn" 
         :class="{ 'refreshing': isRefreshing }"
-        :title="isRefreshing ? 'Aggiornamento in corso...' : 'Aggiorna pagina'"
+        :title="isRefreshing ? t('game.titlebar.refreshing') : t('game.titlebar.refresh')"
         :disabled="isRefreshing"
         @click="handleRefresh"
       >
@@ -168,8 +171,8 @@ const closeMaintenanceNotification = () => {
       <button v-if="manualSyncVisible"
         class="titlebar-btn"
         :class="{ 'syncing': isSyncing }"
-        :title="isSyncing ? 'Sincronizzazione in corso...' : syncGate.allowed ? `Force Sync via RuntimeWindow (${runtimeLifecycle})` : syncGate.message"
-        :aria-label="syncGate.allowed ? 'Avvia sincronizzazione cloud' : `Sincronizzazione non disponibile: ${syncGate.message}`"
+        :title="isSyncing ? t('game.titlebar.syncing') : syncGate.allowed ? `Force Sync via RuntimeWindow (${runtimeLifecycle})` : syncGate.message"
+        :aria-label="syncGate.allowed ? t('game.titlebar.syncAria') : t('game.titlebar.syncUnavailable', { reason: syncGate.message })"
         :aria-disabled="isSyncing || !syncGate.allowed"
         :disabled="isSyncing || !syncGate.allowed"
         @click="handleSync"
@@ -184,17 +187,17 @@ const closeMaintenanceNotification = () => {
     
     <!-- Right buttons: Min, Max, Close -->
     <div class="titlebar-buttons-right">
-      <button class="titlebar-btn" title="Minimizza" @click="handleMinimize">
+      <button class="titlebar-btn" :title="t('game.titlebar.minimize')" @click="handleMinimize">
         <svg width="12" height="12" viewBox="0 0 12 12">
           <rect y="5" width="12" height="2" fill="currentColor" />
         </svg>
       </button>
-      <button class="titlebar-btn" title="Massimizza" @click="handleMaximize">
+      <button class="titlebar-btn" :title="t('game.titlebar.maximize')" @click="handleMaximize">
         <svg width="12" height="12" viewBox="0 0 12 12">
           <rect x="1" y="1" width="10" height="10" stroke="currentColor" stroke-width="2" fill="none" />
         </svg>
       </button>
-      <button class="titlebar-btn titlebar-close" title="Nascondi nel tray (sync continua)" @click="handleClose">
+      <button class="titlebar-btn titlebar-close" :title="t('game.titlebar.hide')" @click="handleClose">
         <svg width="12" height="12" viewBox="0 0 12 12">
           <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="2" />
         </svg>

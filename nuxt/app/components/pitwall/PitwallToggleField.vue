@@ -9,6 +9,9 @@
 // nella macchina, ed e' il difetto che questo controllo chiude.
 // ============================================
 
+import { computed } from 'vue'
+import { useI18n } from '~/i18n'
+
 defineProps<{
   /** Nome della voce, come compare nel Pit MFD del pilota. */
   label: string
@@ -26,11 +29,12 @@ defineProps<{
 
 defineEmits<{ 'update:modelValue': [value: boolean | null] }>()
 
-const OPTIONS: { value: boolean | null, label: string, title: string }[] = [
-  { value: null, label: '—', title: 'Non toccare questa voce' },
-  { value: true, label: 'Sì', title: 'Accendi' },
-  { value: false, label: 'No', title: 'Spegni' },
-]
+const { t } = useI18n()
+const OPTIONS = computed<{ value: boolean | null, label: string, title: string }[]>(() => [
+  { value: null, label: '—', title: t('pitwall.toggle.skipTitle') },
+  { value: true, label: t('pitwall.toggle.yes'), title: t('pitwall.toggle.onTitle') },
+  { value: false, label: t('pitwall.toggle.no'), title: t('pitwall.toggle.offTitle') },
+])
 </script>
 
 <template>

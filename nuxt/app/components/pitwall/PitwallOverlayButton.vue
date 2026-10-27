@@ -9,6 +9,7 @@
 import { Headset, LoaderCircle } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { PitwallIntentStatus } from '~/composables/usePitwallIntent'
+import { useI18n } from '~/i18n'
 
 const props = defineProps<{
   /** Il ponte Electron dell'overlay, o `null` nel browser. */
@@ -17,21 +18,23 @@ const props = defineProps<{
 }>()
 defineEmits<{ focus: [] }>()
 
+const { t } = useI18n()
 const status = ref<PitwallIntentStatus>({ state: 'off', roomId: null, reason: null, available: false })
 const pending = ref(false)
 let stopListening: (() => void) | null = null
 
 const label = computed(() => {
-  if (status.value.state === 'open') return 'Chiudi Pitwall'
-  if (status.value.state === 'arming') return 'Pitwall: si apre in sessione'
-  return 'Apri Pitwall'
+  if (status.value.state === 'open') return t('pitwall.overlayButton.close')
+  if (status.value.state === 'arming') return t('pitwall.overlayButton.arming')
+  return t('pitwall.overlayButton.open')
 })
 
 const hint = computed(() => {
-  if (!status.value.available) return 'Pitwall: si apre dall’app della suite.'
-  if (status.value.state === 'open') return 'Pitwall: aperto, gli amici possono entrare.'
-  if (status.value.state === 'arming') return `Pitwall: ${status.value.reason ?? 'si apre appena ACC è in sessione.'}`
-  return 'Pitwall: chiuso.'
+  if (!status.value.available) return t('pitwall.overlayButton.hintUnavailable')
+  if (status.value.state === 'open') return t('pitwall.overlayButton.hintOpen')
+  // The reason comes from the desktop program and stays as it was written.
+  if (status.value.state === 'arming') return t('pitwall.overlayButton.hintArming', { reason: status.value.reason ?? t('pitwall.overlayButton.armingDefault') })
+  return t('pitwall.overlayButton.hintClosed')
 })
 
 async function refresh() {

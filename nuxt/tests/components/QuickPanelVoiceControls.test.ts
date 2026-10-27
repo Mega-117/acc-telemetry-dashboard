@@ -5,6 +5,10 @@ import QuickPanelVoiceControls from '~/components/overlay/QuickPanelVoiceControl
 import PitwallOverlayButton from '~/components/pitwall/PitwallOverlayButton.vue'
 import { useOverlayActionSelection } from '~/composables/useOverlayActionSelection'
 import { gameUiSupport } from '~/services/telemetry/gameCatalog'
+import { setLocale } from '~/i18n'
+
+// Assertions below read the Italian texts (jsdom starts in English).
+setLocale('it')
 
 let app: ReturnType<typeof createApp> | undefined
 afterEach(() => { app?.unmount(); document.body.innerHTML = ''; vi.restoreAllMocks() })

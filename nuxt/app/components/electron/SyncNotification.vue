@@ -1,6 +1,9 @@
 <script setup lang="ts">
 // SyncNotification - Shows sync results banner
 import { ref, watch, computed } from 'vue'
+import { useI18n } from '~/i18n'
+
+const { t } = useI18n()
 
 interface SyncResult {
   status: 'created' | 'updated' | 'unchanged' | 'skipped' | 'error'
@@ -54,13 +57,13 @@ const bannerType = computed(() => {
 // Message
 const message = computed(() => {
   const s = stats.value
-  if (s.total === 0) return 'Nessun file da sincronizzare'
-  if (s.errors > 0) return `${s.errors} errori durante la sincronizzazione`
-  if (s.created > 0 && s.updated > 0) return `${s.created} nuovi, ${s.updated} aggiornati`
-  if (s.created > 0) return `${s.created} sessioni sincronizzate`
-  if (s.updated > 0) return `${s.updated} sessioni aggiornate`
-  if (s.skipped > 0) return `${s.skipped} file saltati (già sincronizzati o di altri utenti)`
-  return 'Sincronizzazione completata'
+  if (s.total === 0) return t('game.sync.nothing')
+  if (s.errors > 0) return t('game.sync.errors', { count: s.errors })
+  if (s.created > 0 && s.updated > 0) return t('game.sync.createdUpdated', { created: s.created, updated: s.updated })
+  if (s.created > 0) return t('game.sync.created', { count: s.created })
+  if (s.updated > 0) return t('game.sync.updated', { count: s.updated })
+  if (s.skipped > 0) return t('game.sync.skipped', { count: s.skipped })
+  return t('game.sync.done')
 })
 
 const close = () => {

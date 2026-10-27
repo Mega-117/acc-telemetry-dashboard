@@ -4,16 +4,19 @@
 // Sta in un posto solo perche' lo usano tutti e quattro gli elenchi, e perche'
 // il conteggio nel testo e' la parte che conta: un bottone che dice solo
 // "Mostra altre" non fa capire se dietro ce ne sono due o quarantadue.
-withDefaults(
-  defineProps<{
-    hidden: number
-    expanded: boolean
-    /** Plurale e singolare: "gare"/"gara", "persone"/"persona". */
-    noun?: string
-    nounOne?: string
-  }>(),
-  { noun: "righe", nounOne: "riga" },
-);
+import { computed } from "vue";
+import { useI18n } from "~/i18n";
+
+const props = defineProps<{
+  hidden: number
+  expanded: boolean
+  /** Plurale e singolare, gia' tradotti: "gare"/"gara", "persone"/"persona". */
+  noun?: string
+  nounOne?: string
+}>();
+const { t } = useI18n();
+const nounMany = computed(() => props.noun ?? t("pitwallConcept.more.rows"));
+const nounSingle = computed(() => props.nounOne ?? t("pitwallConcept.more.row"));
 
 defineEmits<{ toggle: [] }>();
 </script>
@@ -25,9 +28,9 @@ defineEmits<{ toggle: [] }>();
     class="pwc-more"
     @click="$emit('toggle')"
   >
-    <template v-if="expanded">Mostra meno</template>
-    <template v-else-if="hidden === 1">Mostra ancora 1 {{ nounOne }}</template>
-    <template v-else>Mostra le altre {{ hidden }} {{ noun }}</template>
+    <template v-if="expanded">{{ t('pitwallConcept.more.less') }}</template>
+    <template v-else-if="hidden === 1">{{ t('pitwallConcept.more.one', { noun: nounSingle }) }}</template>
+    <template v-else>{{ t('pitwallConcept.more.many', { count: hidden, noun: nounMany }) }}</template>
   </button>
 </template>
 

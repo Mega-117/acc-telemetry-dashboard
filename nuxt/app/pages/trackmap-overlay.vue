@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from '~/i18n'
 import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
 import { useHudPresentationMemory } from '~/services/overlay/hudPresentationMemory'
 import { hudTrackMapScene, hudSourcePolicy } from '~/services/sim/hudSourceAdapter'
@@ -105,12 +106,13 @@ onUnmounted(() => {
   standings.stop()
   overlay.stop()
 })
+const { t } = useI18n()
 </script>
 
 <template>
   <main class="overlay-root">
     <OverlayPlacementLock overlay-id="trackmap" />
-    <TelemetryFeatureNotice :live="telemetry.fastState.value.commonLive" :feature="overlay.settings.value?.circleView ? 'trackReferences' : 'trackMap'" unsupported-text="Sagoma pista non disponibile: vista circolare" />
+    <TelemetryFeatureNotice :live="telemetry.fastState.value.commonLive" :feature="overlay.settings.value?.circleView ? 'trackReferences' : 'trackMap'" :unsupported-text="t('overlays.trackmapCircleUnsupported')" />
     <OverlaySoftwareCursor :state="overlay.pointerState" />
     <TrackMapHud :view="view" :outline="displayOutline" :rotation-deg="displayRotation" :show-start="hudSourcePolicy(telemetry.fastState.value).mapStartMarker" :interpolate-positions="hudSourcePolicy(telemetry.fastState.value).interpolateMap" class="overlay-canvas" :style="canvasStyle" />
   </main>

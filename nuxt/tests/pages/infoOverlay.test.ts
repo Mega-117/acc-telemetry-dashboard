@@ -25,7 +25,7 @@ describe('Info overlay window contract', () => {
     expect(hud).toContain('background: transparent')
     expect(layer).toContain('background: rgba(0, 0, 0, var(--hud-overlay-background-opacity, .8))')
     expect(hud).not.toMatch(/\.info-hud\s*\{[^}]*\bopacity\s*:/s)
-    expect(settingsPage).toContain('Trasparenza sfondo')
+    expect(settingsPage).toContain("t('hud.backgroundTransparency')")
     expect(settingsPage).toContain('class="hud-slider"')
     expect(settingsPage).toContain('backgroundOpacity: backgroundTransparencyToOpacity(percentage)')
   })

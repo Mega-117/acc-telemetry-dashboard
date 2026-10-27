@@ -4,6 +4,9 @@ import { createApp, nextTick, ref } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useOverlayActionSelection } from '~/composables/useOverlayActionSelection'
 import SetupFuelPanel from '~/components/overlay/SetupFuelPanel.vue'
+import { setLocale } from '~/i18n'
+// Messages are asserted in Italian; jsdom starts in English.
+setLocale('it')
 let app: ReturnType<typeof createApp> | null = null
 const flush = async () => { await new Promise<void>(resolve => setImmediate(resolve)); await nextTick() }
 afterEach(() => { app?.unmount(); app=null; document.body.innerHTML=''; vi.restoreAllMocks(); vi.useRealTimers() })

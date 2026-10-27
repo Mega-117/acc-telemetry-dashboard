@@ -9,6 +9,7 @@ import {
 } from "~/utils/pitwallConcept";
 import type { PitwallConceptMyRoom, PitwallConceptPerson } from "~/utils/pitwallConcept";
 import type { PitwallIntentStatus } from "~/composables/usePitwallIntent";
+import { useI18n } from "~/i18n";
 
 const props = defineProps<{
   room: PitwallConceptMyRoom | null;
@@ -25,6 +26,7 @@ defineEmits<{
   open: [];
 }>();
 
+const { t } = useI18n();
 const nick = (id: string) => pitwallConceptNicknameById(id, props.people);
 const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
 
@@ -43,12 +45,12 @@ const where = computed(() => {
 /** Solo presenze effettive, mai gli amici invitati. */
 const connected = computed(() => (room.value?.members ?? [])
   .filter(member => member.role !== "invited")
-  .map(member => member.personId === props.meId ? "Tu" : nick(member.personId)));
+  .map(member => member.personId === props.meId ? t("pitwallConcept.myRoom.you") : nick(member.personId)));
 
 const driving = computed(() => {
   const id = room.value?.drivingId;
   if (!id) return null;
-  return id === props.meId ? "Sei tu al volante" : `Al volante: ${nick(id)}`;
+  return id === props.meId ? t("pitwallConcept.myRoom.youDriving") : t("pitwallConcept.myRoom.driving", { name: nick(id) });
 });
 </script>
 
@@ -64,8 +66,8 @@ const driving = computed(() => {
       <div class="pwc-race__who">
         <span class="pwc-avatar">{{ initials(meId ?? "") }}</span>
         <span class="pwc-race__copy">
-          <strong>{{ where || "Il tuo Pitwall" }}</strong>
-          <small>Aprilo dall’app desktop, anche senza ACC.</small>
+          <strong>{{ where || t('pitwallConcept.myRoom.yours') }}</strong>
+          <small>{{ t('pitwallConcept.myRoom.desktopOnly') }}</small>
         </span>
       </div>
     </article>
@@ -78,8 +80,8 @@ const driving = computed(() => {
       <div class="pwc-race__who">
         <span class="pwc-avatar">{{ initials(meId ?? "") }}</span>
         <span class="pwc-race__copy">
-          <strong>Chiuso</strong>
-          <small>Aprilo per far entrare i tuoi amici.</small>
+          <strong>{{ t('pitwallConcept.myRoom.closed') }}</strong>
+          <small>{{ t('pitwallConcept.myRoom.openForFriends') }}</small>
         </span>
       </div>
       <button
@@ -87,7 +89,7 @@ const driving = computed(() => {
         class="rc-btn rc-btn--compact rc-btn--primary"
         @click="$emit('start')"
       >
-        Apri il Pitwall
+        {{ t('pitwallConcept.myRoom.open') }}
       </button>
     </article>
 
@@ -99,36 +101,36 @@ const driving = computed(() => {
       <div class="pwc-race__who">
         <span class="pwc-avatar">{{ initials(meId ?? "") }}</span>
         <span class="pwc-race__copy">
-          <strong>{{ pitwall.reason ? 'Apertura del Pitwall non riuscita' : 'Apertura del Pitwall' }}</strong>
-          <small>{{ pitwall.reason ?? "Apertura della stanza in corso." }}</small>
+          <strong>{{ pitwall.reason ? t('pitwallConcept.myRoom.openingFailed') : t('pitwallConcept.myRoom.opening') }}</strong>
+          <small>{{ pitwall.reason ?? t('pitwallConcept.myRoom.openingRoom') }}</small>
         </span>
       </div>
-      <span class="pwc-chip is-waiting">{{ pitwall.reason ? 'Apertura non riuscita' : 'Connessione in corso' }}</span>
+      <span class="pwc-chip is-waiting">{{ pitwall.reason ? t('pitwallConcept.myRoom.chipFailed') : t('pitwallConcept.myRoom.chipConnecting') }}</span>
       <button
         type="button"
         class="pwc-link-btn"
         @click="$emit('close')"
       >
-        Chiudi
+        {{ t('pitwallConcept.myRoom.close') }}
       </button>
     </article>
 
     <article v-else class="pwc-panel pwc-mine is-open">
       <div class="pwc-race__copy">
         <div class="pwc-mine__title">
-          <strong>{{ room?.label || where || "Il tuo Pitwall" }}</strong>
+          <strong>{{ room?.label || where || t('pitwallConcept.myRoom.yours') }}</strong>
           <span class="pwc-mine__status" :class="{ 'is-reconnecting': reconnecting }">
-            <span aria-hidden="true">●</span> {{ reconnecting ? "Riconnessione in corso" : "Aperto" }}
+            <span aria-hidden="true">●</span> {{ reconnecting ? t('pitwallConcept.myRoom.reconnecting') : t('pitwallConcept.myRoom.isOpen') }}
           </span>
         </div>
         <small v-if="connected.length || (room?.drivingKnown !== false && driving)" class="pwc-mine__people">
-          <span v-if="connected.length">Presenti: {{ connected.join(", ") }}</span>
+          <span v-if="connected.length">{{ t('pitwallConcept.myRoom.present', { names: connected.join(", ") }) }}</span>
           <span v-if="room?.drivingKnown !== false && driving">{{ driving }}</span>
         </small>
       </div>
       <div class="pwc-mine__actions">
-        <button v-if="room" type="button" class="rc-btn rc-btn--compact" @click="$emit('open')">Apri pannello</button>
-        <PitwallConceptActionMenu label="Opzioni Pitwall" action-label="Abbandona Pitwall" @select="$emit('close')" />
+        <button v-if="room" type="button" class="rc-btn rc-btn--compact" @click="$emit('open')">{{ t('pitwallConcept.myRoom.openPanel') }}</button>
+        <PitwallConceptActionMenu :label="t('pitwallConcept.myRoom.options')" :action-label="t('pitwallConcept.myRoom.leave')" @select="$emit('close')" />
       </div>
     </article>
   </div>

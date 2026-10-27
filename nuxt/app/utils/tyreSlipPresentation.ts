@@ -1,15 +1,17 @@
 import type { FastOverlayState, FastStateSlipState } from '~/composables/useFastStatePoller'
+import { useI18n, type TranslationKey } from '~/i18n'
 
-export const TYRE_SLIP_STATE_LABELS: Record<FastStateSlipState, string> = {
-  ok: 'OK',
-  limit: 'LIMITE',
-  sliding: 'SCIVOLA',
-  wheelspin: 'PATTINA',
-  lockup: 'BLOCCAGGIO',
+// PIP-665: dictionary keys, resolved at display time in the interface language ('OK' is the same in both).
+export const TYRE_SLIP_STATE_LABEL_KEYS: Record<Exclude<FastStateSlipState, 'ok'>, TranslationKey> = {
+  limit: 'overlays.slip.limit',
+  sliding: 'overlays.slip.sliding',
+  wheelspin: 'overlays.slip.wheelspin',
+  lockup: 'overlays.slip.lockup',
 }
 
 export function tyreSlipStateLabel(state: FastStateSlipState, hasData: boolean): string {
-  return hasData ? TYRE_SLIP_STATE_LABELS[state] : 'WAIT'
+  if (!hasData) return 'WAIT'
+  return state === 'ok' ? 'OK' : useI18n().t(TYRE_SLIP_STATE_LABEL_KEYS[state])
 }
 
 export type TyreSlipBarAxis = 'horizontal' | 'vertical'

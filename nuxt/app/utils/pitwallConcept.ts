@@ -12,6 +12,7 @@
 // Il modello si ri-esporta da qui, cosi' chi consuma il prototipo ha un import
 // solo. La direzione resta una: la logica conosce il modello, mai il contrario.
 import { PITWALL_SOCIAL_CAPACITY } from '~/services/pitwall/pitwallSocialRoom'
+import { useI18n } from '~/i18n'
 import {
   PITWALL_CONCEPT_CURRENT_USER_ID,
   PITWALL_CONCEPT_FRIENDS,
@@ -109,14 +110,15 @@ export function filterPitwallConceptPeople(
  */
 export type PitwallConceptSource = 'live' | 'stale' | 'order' | 'screen' | 'unavailable'
 
-export const PITWALL_CONCEPT_SOURCE_LABELS: Record<PitwallConceptSource, string> = {
-  live: 'LIVE',
-  stale: 'DATI VECCHI',
-  order: 'ULTIMO ORDINE',
-  // Il PC del pilota ha riletto il Pit MFD a schermo dopo l'ultimo ordine:
-  // e' cio' che c'e' davvero, non cio' che abbiamo chiesto.
-  screen: 'A SCHERMO',
-  unavailable: 'N/D',
+// Getters: the word follows the interface language at render time.
+// `screen`: il PC del pilota ha riletto il Pit MFD a schermo dopo l'ultimo
+// ordine, e' cio' che c'e' davvero, non cio' che abbiamo chiesto.
+export const PITWALL_CONCEPT_SOURCE_LABELS: Readonly<Record<PitwallConceptSource, string>> = {
+  get live() { return useI18n().t('pitwallConcept.sources.live') },
+  get stale() { return useI18n().t('pitwallConcept.sources.stale') },
+  get order() { return useI18n().t('pitwallConcept.sources.order') },
+  get screen() { return useI18n().t('pitwallConcept.sources.screen') },
+  get unavailable() { return useI18n().t('pitwallConcept.sources.unavailable') },
 }
 
 /** Oltre questi secondi il dato non si chiama piu' "adesso". */
@@ -145,36 +147,38 @@ export function describePitwallConceptOrderStatus(
   reason: string | null = null,
   outcomes: ReadonlyArray<{ outcome: string | null, reason?: string | null, dragged?: boolean }> = [],
 ): { label: string, detail: string, tone: 'neutral' | 'good' | 'warn' | 'bad' } {
+  // The reason written by the driver PC is shown as received; only our own words are translated.
+  const { t } = useI18n()
   switch (status) {
     case 'unknown':
-      return { label: 'Conferma non disponibile', detail: reason ?? 'Verifica il MFD prima di un nuovo invio.', tone: 'warn' }
+      return { label: t('pitwallConcept.orderStatus.unknown'), detail: reason ?? t('pitwallConcept.orderStatus.unknownDetail'), tone: 'warn' }
     case 'not_sent':
-      return { label: 'Non inviata', detail: reason ?? 'Invio non disponibile. Verifica il collegamento.', tone: 'bad' }
+      return { label: t('pitwallConcept.orderStatus.notSent'), detail: reason ?? t('pitwallConcept.orderStatus.notSentDetail'), tone: 'bad' }
     case 'pending':
-      return { label: 'Inviata, in attesa del pilota', detail: 'Il suo PC la prende in carico appena la vede.', tone: 'neutral' }
+      return { label: t('pitwallConcept.orderStatus.pending'), detail: t('pitwallConcept.orderStatus.pendingDetail'), tone: 'neutral' }
     case 'applying':
-      return { label: 'In corso…', detail: 'Il PC del pilota la sta applicando al Pit MFD.', tone: 'neutral' }
+      return { label: t('pitwallConcept.orderStatus.applying'), detail: t('pitwallConcept.orderStatus.applyingDetail'), tone: 'neutral' }
     case 'applied':
-      return { label: 'Applicata', detail: 'Ogni campo chiesto è arrivato in macchina.', tone: 'good' }
+      return { label: t('pitwallConcept.orderStatus.applied'), detail: t('pitwallConcept.orderStatus.appliedDetail'), tone: 'good' }
     case 'partial': {
       const requested = outcomes.filter(field => !field.dragged)
       if (requested.length && requested.every(field => field.outcome !== 'verified')) {
-        return { label: 'Nessun campo confermato',
-          detail: requested.length === 1 && requested[0]?.reason ? requested[0].reason : reason ?? 'Verifica gli esiti dei singoli campi prima di inviare un nuovo ordine.',
+        return { label: t('pitwallConcept.orderStatus.noneConfirmed'),
+          detail: requested.length === 1 && requested[0]?.reason ? requested[0].reason : reason ?? t('pitwallConcept.orderStatus.noneConfirmedDetail'),
           tone: 'warn' }
       }
       return {
-        label: 'Applicata in parte',
-        detail: reason ?? 'Qualche campo non è arrivato: sotto c’è quale, uno per uno.',
+        label: t('pitwallConcept.orderStatus.partial'),
+        detail: reason ?? t('pitwallConcept.orderStatus.partialDetail'),
         tone: 'warn',
       }
     }
     case 'failed':
-      return { label: 'Non riuscita', detail: reason ?? 'Il PC del pilota si è fermato prima di finire.', tone: 'bad' }
+      return { label: t('pitwallConcept.orderStatus.failed'), detail: reason ?? t('pitwallConcept.orderStatus.failedDetail'), tone: 'bad' }
     case 'rejected':
       return {
-        label: 'Rifiutata',
-        detail: reason ?? 'Il pilota ha rifiutato la strategia. Motivo non disponibile.',
+        label: t('pitwallConcept.orderStatus.rejected'),
+        detail: reason ?? t('pitwallConcept.orderStatus.rejectedDetail'),
         tone: 'bad',
       }
     default:
@@ -334,7 +338,7 @@ export function describePitwallConceptWall(
   const summary = pitwallConceptWallSummary(personIds, max)
   const names = pitwallConceptNicknames(summary.shown, people).join(', ')
   if (!summary.extra) return names
-  return `${names} e altri ${summary.extra}`
+  return useI18n().t('pitwallConcept.races.andOthers', { names, count: summary.extra })
 }
 
 // ============================================
@@ -456,12 +460,13 @@ export function isPitwallConceptPinnedMember(member: PitwallConceptMember): bool
 
 /** Le stesse parole della vista classica, cosi' il porting non le reinventa. */
 export function describePitwallConceptMember(member: PitwallConceptMember): string {
-  if (member.reconnecting) return 'Riconnessione in corso'
-  if (member.connecting) return 'collegamento in corso'
-  if (member.driving) return 'AL VOLANTE'
-  if (member.role === 'invited') return 'invitato · non ancora entrato'
-  if (member.role === 'manager') return member.online ? 'gestisce la gara' : 'gestisce la gara · offline'
-  return member.online ? 'presente' : 'offline'
+  const { t } = useI18n()
+  if (member.reconnecting) return t('pitwallConcept.member.reconnecting')
+  if (member.connecting) return t('pitwallConcept.member.connecting')
+  if (member.driving) return t('pitwallConcept.member.driving')
+  if (member.role === 'invited') return t('pitwallConcept.member.invited')
+  if (member.role === 'manager') return member.online ? t('pitwallConcept.member.manager') : t('pitwallConcept.member.managerOffline')
+  return member.online ? t('pitwallConcept.member.present') : t('pitwallConcept.member.offline')
 }
 
 /** Perche' questa gara ti compare, detto senza nominare i permessi. */
@@ -498,18 +503,19 @@ export function describePitwallConceptNotice(
   races: PitwallConceptRace[] = PITWALL_CONCEPT_RACES,
   people = PITWALL_CONCEPT_PEOPLE,
 ): { title: string, body: string } {
+  const { t } = useI18n()
   const who = pitwallConceptNicknameById(notice.personId, people)
   if (notice.kind === 'request') {
-    return { title: `${who} vuole essere tuo amico`, body: 'Accetta e vi vedrete i Pitwall a vicenda.' }
+    return { title: t('pitwallConcept.notice.requestTitle', { who }), body: t('pitwallConcept.notice.requestBody') }
   }
   if (notice.kind === 'invite') {
     const race = races.find(entry => entry.id === notice.raceId)
     return {
-      title: `${who} ti invita a una gara`,
-      body: race ? `#${race.carNumber} · ${race.track} · ${race.session}` : 'Gara non più disponibile.',
+      title: t('pitwallConcept.notice.inviteTitle', { who }),
+      body: race ? `#${race.carNumber} · ${race.track} · ${race.session}` : t('pitwallConcept.notice.raceGone'),
     }
   }
-  return { title: `${who} ha accettato`, body: 'Adesso siete amici: il suo Pitwall ti compare quando lo apre.' }
+  return { title: t('pitwallConcept.notice.grantedTitle', { who }), body: t('pitwallConcept.notice.grantedBody') }
 }
 
 export const PITWALL_CONCEPT_DEFAULT_PRESSURES = Object.freeze({ FL: 25, FR: 25, RL: 25, RR: 25 })

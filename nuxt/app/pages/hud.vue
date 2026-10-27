@@ -14,6 +14,7 @@ import { usePresentationInterval } from '~/composables/usePresentationVisibility
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useGameContext } from '~/composables/useGameContext'
 import { gameUiSupport, hudSettingSupported, gameLabel } from '~/services/telemetry/gameCatalog'
+import { useI18n, type TranslationKey } from '~/i18n'
 import SectorReferenceSetup from '~/components/overlay/SectorReferenceSetup.vue'
 import { normalizeSectorDeltaReference, type SectorDeltaReference } from '~/utils/sectorDeltaPresentation'
 import type { HudOverlaySettings } from '~/composables/useHudOverlay'
@@ -65,14 +66,16 @@ interface HudReplayStatus {
 
 
 const { consultedGame } = useGameContext()
+const { t } = useI18n()
 const support = computed(() => gameUiSupport(consultedGame.value))
-const hudOverlays: Array<{ id: HudOverlayId; title: string; description: string }> = [
-  { id: 'tyres', title: 'Gomme', description: 'Temperature e pressioni per ogni pneumatico.' },
-  { id: 'sectors', title: 'Settori', description: 'Tempi e delta dei settori disponibili.' },
-  { id: 'dashboard', title: 'Dashboard', description: 'Marcia, carburante ed elettronica.' },
-  { id: 'info', title: 'Info', description: 'Delta, stint, carburante, grip, tempi e danni.' },
-  { id: 'standings', title: 'Standings', description: 'Classifica di classe con top e auto intorno al pilota.' },
-  { id: 'trackmap', title: 'Minimappa', description: 'Tracciato con la tua auto, le altre in pista e il punto di uscita dai box.' },
+// Titles and descriptions are dictionary keys: the visible text follows the interface language.
+const hudOverlays: Array<{ id: HudOverlayId; titleKey: TranslationKey; descriptionKey: TranslationKey }> = [
+  { id: 'tyres', titleKey: 'hud.overlays.tyresTitle', descriptionKey: 'hud.overlays.tyresDescription' },
+  { id: 'sectors', titleKey: 'hud.overlays.sectorsTitle', descriptionKey: 'hud.overlays.sectorsDescription' },
+  { id: 'dashboard', titleKey: 'hud.overlays.dashboardTitle', descriptionKey: 'hud.overlays.dashboardDescription' },
+  { id: 'info', titleKey: 'hud.overlays.infoTitle', descriptionKey: 'hud.overlays.infoDescription' },
+  { id: 'standings', titleKey: 'hud.overlays.standingsTitle', descriptionKey: 'hud.overlays.standingsDescription' },
+  { id: 'trackmap', titleKey: 'hud.overlays.trackmapTitle', descriptionKey: 'hud.overlays.trackmapDescription' },
 ]
 
 const hudOverlayIcons = {
@@ -159,40 +162,40 @@ const backgroundTransparency = reactive<Record<HudOverlayBackgroundId, number>>(
   standings: 50,
 })
 type InfoSettingKey = keyof typeof infoSettings
-const infoOptionDefinitions: Array<{ key: InfoSettingKey, label: string }> = [
-  { key: 'showYellowFlag', label: 'Bandiera gialla' },
-  { key: 'showStint', label: 'Tempo stint' },
-  { key: 'showQFuel', label: 'Carburante qualifica / stint' },
-  { key: 'showFuelLeft', label: 'Carburante residuo' },
-  { key: 'showIncidents', label: 'Incidenti' },
-  { key: 'showDelta', label: 'Delta' },
-  { key: 'showGrip', label: 'Grip' },
-  { key: 'showPitExitTraffic', label: 'Traffico uscita box' },
-  { key: 'showOptimal', label: 'Tempo ideale' },
-  { key: 'showBest', label: 'Miglior tempo' },
-  { key: 'showDamage', label: 'Danni' },
-  { key: 'showTime', label: 'Ora locale' },
+const infoOptionDefinitions: Array<{ key: InfoSettingKey, labelKey: TranslationKey }> = [
+  { key: 'showYellowFlag', labelKey: 'hud.info.yellowFlag' },
+  { key: 'showStint', labelKey: 'hud.info.stintTime' },
+  { key: 'showQFuel', labelKey: 'hud.info.qualifyFuel' },
+  { key: 'showFuelLeft', labelKey: 'hud.info.fuelLeft' },
+  { key: 'showIncidents', labelKey: 'hud.info.incidents' },
+  { key: 'showDelta', labelKey: 'hud.info.delta' },
+  { key: 'showGrip', labelKey: 'hud.info.grip' },
+  { key: 'showPitExitTraffic', labelKey: 'hud.info.pitExitTraffic' },
+  { key: 'showOptimal', labelKey: 'hud.info.optimal' },
+  { key: 'showBest', labelKey: 'hud.info.best' },
+  { key: 'showDamage', labelKey: 'hud.info.damage' },
+  { key: 'showTime', labelKey: 'hud.info.localTime' },
 ]
-const infoSettingGroups: Array<{ id: string, label: string, icon: typeof Trophy, keys: InfoSettingKey[] }> = [
-  { id: 'race', label: 'Gara', icon: Trophy, keys: ['showYellowFlag', 'showIncidents', 'showPitExitTraffic'] },
-  { id: 'performance', label: 'Prestazioni', icon: ChartNoAxesCombined, keys: ['showGrip', 'showOptimal', 'showDelta', 'showBest', 'showDamage'] },
-  { id: 'strategy', label: 'Strategia e tempo', icon: Clock3, keys: ['showQFuel', 'showStint', 'showFuelLeft', 'showTime'] },
+const infoSettingGroups: Array<{ id: string, labelKey: TranslationKey, icon: typeof Trophy, keys: InfoSettingKey[] }> = [
+  { id: 'race', labelKey: 'hud.info.groupRace', icon: Trophy, keys: ['showYellowFlag', 'showIncidents', 'showPitExitTraffic'] },
+  { id: 'performance', labelKey: 'hud.info.groupPerformance', icon: ChartNoAxesCombined, keys: ['showGrip', 'showOptimal', 'showDelta', 'showBest', 'showDamage'] },
+  { id: 'strategy', labelKey: 'hud.info.groupStrategy', icon: Clock3, keys: ['showQFuel', 'showStint', 'showFuelLeft', 'showTime'] },
 ]
 
 type StandingsBooleanSettingKey = Exclude<keyof typeof standingsSettings, 'topCars' | 'carsAhead' | 'carsBehind'>
 const standingsBooleanOptions: Array<{
   key: StandingsBooleanSettingKey
-  label: string
+  labelKey: TranslationKey
   supported: boolean
-  dependency?: string
+  dependencyKey?: TranslationKey
 }> = [
-  { key: 'showCarNumber', label: 'Numero auto', supported: true },
-  { key: 'showFastestLap', label: 'Giro migliore', supported: true },
-  { key: 'showLastLap', label: 'Ultimo giro', supported: true },
-  { key: 'showStintTimer', label: 'Tempo stint', supported: true },
-  { key: 'showLapProgressBar', label: 'Avanzamento giro', supported: true },
-  { key: 'showIncidents', label: 'Incidenti', supported: false, dependency: 'Richiede provider incidenti.' },
-  { key: 'showTurnNumber', label: 'Numero curva', supported: false, dependency: 'Richiede mappa curve autorevole.' },
+  { key: 'showCarNumber', labelKey: 'hud.standings.carNumber', supported: true },
+  { key: 'showFastestLap', labelKey: 'hud.standings.fastestLap', supported: true },
+  { key: 'showLastLap', labelKey: 'hud.standings.lastLap', supported: true },
+  { key: 'showStintTimer', labelKey: 'hud.standings.stintTime', supported: true },
+  { key: 'showLapProgressBar', labelKey: 'hud.standings.lapProgress', supported: true },
+  { key: 'showIncidents', labelKey: 'hud.standings.incidents', supported: false, dependencyKey: 'hud.standings.needsIncidents' },
+  { key: 'showTurnNumber', labelKey: 'hud.standings.turnNumber', supported: false, dependencyKey: 'hud.standings.needsTurnMap' },
 ]
 
 function getInfoOptions(keys: InfoSettingKey[]) {
@@ -201,11 +204,11 @@ function getInfoOptions(keys: InfoSettingKey[]) {
 const visibleInfoGroups = computed(() => infoSettingGroups.filter(group => getInfoOptions(group.keys).length))
 const visibleStandingsOptions = computed(() => standingsBooleanOptions.filter(option => hudSettingSupported(consultedGame.value, 'standings', option.key)))
 const selectedDescription = computed(() => {
-  if (support.value.fullStandings) return selectedOverlay.value.description
-  if (selectedOverlayId.value === 'standings') return 'Riepilogo personale: pilota, vettura, best e ultimo giro. Classifica avversari non disponibile.'
-  if (selectedOverlayId.value === 'trackmap') return 'Mappa circolare con la tua posizione sul giro.'
-  if (selectedOverlayId.value === 'info') return 'Stint, carburante, grip, delta e tempi personali disponibili.'
-  return selectedOverlay.value.description
+  if (support.value.fullStandings) return t(selectedOverlay.value.descriptionKey)
+  if (selectedOverlayId.value === 'standings') return t('hud.overlays.standingsBasic')
+  if (selectedOverlayId.value === 'trackmap') return t('hud.overlays.trackmapBasic')
+  if (selectedOverlayId.value === 'info') return t('hud.overlays.infoBasic')
+  return t(selectedOverlay.value.descriptionKey)
 })
 const positioning = ref(false)
 const placementBusy = ref(false)
@@ -254,6 +257,7 @@ const selectedReplayScenario = computed(() =>
 const selectedOverlay = computed(() =>
   hudOverlays.find(overlay => overlay.id === selectedOverlayId.value)!
 )
+const selectedTitle = computed(() => t(selectedOverlay.value.titleKey))
 const selectedHasSpecificControls = computed(() => selectedOverlayId.value !== 'tyres')
 const selectedSettingsDisabled = computed(() => !apiReady.value || !enabled[selectedOverlayId.value])
 
@@ -391,8 +395,8 @@ async function startHudReplay() {
     const result = await api.hudReplayStart({ scenarioId: replayScenarioId.value, intervalMs: 50 })
     applyReplayStatus(result)
     replayMessage.value = result?.running
-      ? 'Replay attivo: gli overlay ricevono gli stessi aggiornamenti del logger reale.'
-      : (result?.error || 'Impossibile avviare il replay.')
+      ? t('hud.replay.started')
+      : (result?.error || t('hud.replay.startFailed'))
   } finally {
     replayBusy.value = false
   }
@@ -406,8 +410,8 @@ async function stopHudReplay() {
     const result = await api.hudReplayStop()
     applyReplayStatus(result)
     replayMessage.value = result?.restored
-      ? 'Replay arrestato: fast_state originale ripristinato.'
-      : 'Replay arrestato senza sovrascrivere lo stato corrente.'
+      ? t('hud.replay.restored')
+      : t('hud.replay.notRestored')
   } finally {
     replayBusy.value = false
   }
@@ -462,7 +466,7 @@ async function changePlacement(active: boolean) {
   positionSaved.value = false
   const api = getApi()
   if (!apiReady.value || typeof api?.hudOverlaySetAllPlacement !== 'function') {
-    placementError.value = 'Comando non disponibile. Riapri la pagina HUD e riprova.'
+    placementError.value = t('hud.placementUnavailable')
     return
   }
   placementBusy.value = true
@@ -479,8 +483,8 @@ async function changePlacement(active: boolean) {
     // Read back the actual state so the next action is still available.
     await refreshPlacementStatus()
     placementError.value = active
-      ? 'Impossibile confermare la modifica delle posizioni. Riprova.'
-      : 'Impossibile confermare il salvataggio e il blocco. Riprova.'
+      ? t('hud.placementEditFailed')
+      : t('hud.placementLockFailed')
   } finally {
     placementBusy.value = false
   }
@@ -668,7 +672,7 @@ async function toggleTraining() {
       <header class="test-hud__hero">
         <div>
           <h1>HUD</h1>
-          <p>Impostazioni overlay</p>
+          <p>{{ t('hud.subtitle') }}</p>
         </div>
         <p
           v-if="apiReady"
@@ -680,28 +684,28 @@ async function toggleTraining() {
             aria-hidden="true"
           ></span>
           <span>
-            <strong>{{ driving ? 'In guida' : 'Nei menu' }}</strong>
-            <em>{{ driving ? 'Gli overlay abilitati possono apparire' : 'Gli overlay abilitati appariranno quando inizi a guidare' }}</em>
+            <strong>{{ driving ? t('hud.driving') : t('hud.inMenus') }}</strong>
+            <em>{{ driving ? t('hud.drivingHint') : t('hud.menusHint') }}</em>
           </span>
         </p>
         <p
           v-if="!isElectron"
           class="test-hud__warning"
         >
-          Sei nel browser: i comandi overlay funzionano solo nell'app desktop (Electron).
+          {{ t('hud.browserWarning') }}
         </p>
         <p
           v-else-if="!apiReady"
           class="test-hud__warning"
         >
-          App desktop avviata con una versione precedente: <strong>riavvia l'app</strong> per caricare gli overlay aggiornati.
+          {{ t('hud.oldAppWarning') }} <strong>{{ t('hud.oldAppRestart') }}</strong> {{ t('hud.oldAppWarningEnd') }}
         </p>
       </header>
 
       <div class="test-hud__global">
         <p class="hud-placement-hint">
           <LockKeyhole :size="18" aria-hidden="true" />
-          Per spostare un overlay apri il suo lucchetto: resta visibile finché lo sposti e si blocca da solo dopo {{ Math.round(placementAutoSaveMs / 1000) }} s senza trascinarlo.
+          {{ t('hud.placementHint', { seconds: Math.round(placementAutoSaveMs / 1000) }) }}
         </p>
         <div
           v-if="positioning"
@@ -712,7 +716,7 @@ async function toggleTraining() {
             class="hud-placement-status"
             role="status"
           >
-            Posizionamento attivo · blocco automatico tra {{ placementRemainingSeconds ?? Math.round(placementAutoSaveMs / 1000) }} s
+            {{ t('hud.placementActive', { seconds: placementRemainingSeconds ?? Math.round(placementAutoSaveMs / 1000) }) }}
           </p>
           <button
             type="button"
@@ -720,7 +724,7 @@ async function toggleTraining() {
             :disabled="!apiReady || placementBusy"
             @click="saveAndLock()"
           >
-            Blocca ora
+            {{ t('hud.lockNow') }}
           </button>
         </div>
         <p
@@ -740,19 +744,18 @@ async function toggleTraining() {
       >
         <summary>
           <span>
-            <strong>Replay HUD</strong>
-            <em>Solo sviluppo</em>
+            <strong>{{ t('hud.replay.title') }}</strong>
+            <em>{{ t('hud.replay.devOnly') }}</em>
           </span>
-          <b>{{ replayStatus.running ? 'ATTIVO' : 'FERMO' }}</b>
+          <b>{{ replayStatus.running ? t('hud.replay.running') : t('hud.replay.stopped') }}</b>
         </summary>
         <div class="test-hud__replay-body">
           <p>
-            Alimenta il vero <code>fast_state.json</code>. L'avvio viene rifiutato se il logger ACC
-            sta scrivendo; allo stop il file precedente viene ripristinato.
+            {{ t('hud.replay.introBefore') }} <code>fast_state.json</code>. {{ t('hud.replay.introAfter') }}
           </p>
           <div class="test-hud__replay-controls">
             <label>
-              <span>Scenario</span>
+              <span>{{ t('hud.replay.scenario') }}</span>
               <select
                 v-model="replayScenarioId"
                 class="hud-select"
@@ -777,7 +780,7 @@ async function toggleTraining() {
                 :disabled="replayBusy || replayStatus.running"
                 @click="startHudReplay"
               >
-                Avvia replay
+                {{ t('hud.replay.start') }}
               </button>
               <button
                 type="button"
@@ -785,7 +788,7 @@ async function toggleTraining() {
                 :disabled="replayBusy || !replayStatus.running"
                 @click="stopHudReplay"
               >
-                Arresta e ripristina
+                {{ t('hud.replay.stop') }}
               </button>
             </div>
             <em
@@ -802,12 +805,12 @@ async function toggleTraining() {
         <aside class="hud-overlay-list">
           <div class="hud-overlay-list__head">
             <div>
-              <span class="test-hud__kicker">Overlay HUD</span>
+              <span class="test-hud__kicker">{{ t('hud.listKicker') }}</span>
             </div>
-            <span>{{ hudOverlays.filter(overlay => enabled[overlay.id]).length }}/{{ hudOverlays.length }} abilitati</span>
+            <span>{{ t('hud.enabledCount', { count: hudOverlays.filter(overlay => enabled[overlay.id]).length, total: hudOverlays.length }) }}</span>
           </div>
 
-          <nav aria-label="Overlay HUD configurabili">
+          <nav :aria-label="t('hud.listAria')">
             <button
               v-for="overlay in hudOverlays"
               :key="overlay.id"
@@ -826,8 +829,8 @@ async function toggleTraining() {
                   aria-hidden="true"
                 />
                 <span class="hud-overlay-list__title">
-                  <strong>{{ overlay.title }}</strong>
-                  <em :class="{ 'is-on': enabled[overlay.id] }">{{ enabled[overlay.id] ? 'Abilitato' : 'Disabilitato' }}</em>
+                  <strong>{{ t(overlay.titleKey) }}</strong>
+                  <em :class="{ 'is-on': enabled[overlay.id] }">{{ enabled[overlay.id] ? t('hud.enabled') : t('hud.disabled') }}</em>
                 </span>
               </span>
               <span
@@ -835,7 +838,7 @@ async function toggleTraining() {
                 :class="{ 'is-visible': open[overlay.id] }"
               >
                 <i aria-hidden="true"></i>
-                {{ open[overlay.id] ? 'Visibile ora' : (enabled[overlay.id] ? 'In attesa della guida' : 'Non visibile') }}
+                {{ open[overlay.id] ? t('hud.visibleNow') : (enabled[overlay.id] ? t('hud.waitingDriving') : t('hud.notVisible')) }}
               </span>
             </button>
           </nav>
@@ -845,8 +848,8 @@ async function toggleTraining() {
             aria-labelledby="hud-training-title"
           >
             <div>
-              <strong id="hud-training-title">Pannello rapido · Ctrl+K</strong>
-              <span>{{ trainingOpen ? 'Visibile' : 'Nascosto' }}</span>
+              <strong id="hud-training-title">{{ t('hud.quickPanel') }}</strong>
+              <span>{{ trainingOpen ? t('hud.visible') : t('hud.hidden') }}</span>
             </div>
             <button
               type="button"
@@ -854,7 +857,7 @@ async function toggleTraining() {
               :disabled="!isElectron || positioning || placementBusy"
               @click="toggleTraining"
             >
-              {{ trainingOpen ? 'Nascondi' : 'Mostra' }}
+              {{ trainingOpen ? t('hud.hide') : t('hud.show') }}
             </button>
           </section>
         </aside>
@@ -870,10 +873,10 @@ async function toggleTraining() {
                 :id="'hud-settings-' + selectedOverlay.id"
                 class="hud-sr-only"
               >
-                {{ selectedOverlay.title }}
+                {{ selectedTitle }}
               </h2>
               <p>{{ selectedDescription }}</p>
-              <small>Impostazioni per {{ gameLabel(consultedGame) }}</small>
+              <small>{{ t('hud.settingsFor', { game: gameLabel(consultedGame) }) }}</small>
             </div>
           </header>
 
@@ -883,15 +886,15 @@ async function toggleTraining() {
           >
             <div class="hud-settings__section-head hud-sr-only">
               <h3 id="hud-common-title">
-                Impostazioni comuni
+                {{ t('hud.commonSettings') }}
               </h3>
             </div>
 
             <div class="hud-settings__common-panel hud-settings__control-grid">
               <div class="hud-control hud-control--state">
-                <span class="hud-control__state-label">Attivo</span>
+                <span class="hud-control__state-label">{{ t('hud.active') }}</span>
                 <UiRacingSwitch
-                  :label="`Abilita ${selectedOverlay.title}`"
+                  :label="t('hud.enableOverlay', { title: selectedTitle })"
                   :model-value="enabled[selectedOverlayId]"
                   :disabled="!apiReady"
                   @update:model-value="toggleHud(selectedOverlayId)"
@@ -899,7 +902,7 @@ async function toggleTraining() {
               </div>
               <label class="hud-control hud-control--slider">
                 <span>
-                  <strong>Dimensione</strong>
+                  <strong>{{ t('hud.size') }}</strong>
                 </span>
                 <span class="hud-control__range">
                   <b>{{ Math.round(scale[selectedOverlayId] * 100) }}%</b>
@@ -911,7 +914,7 @@ async function toggleTraining() {
                     :step="selectedOverlayId === 'standings' ? 0.1 : 0.05"
                     :value="scale[selectedOverlayId]"
                     :disabled="selectedSettingsDisabled"
-                    :aria-label="'Dimensione HUD ' + selectedOverlay.title"
+                    :aria-label="t('hud.sizeAria', { title: selectedTitle })"
                     @input="onScaleInput(selectedOverlayId, ($event.target as HTMLInputElement).value)"
                   />
                 </span>
@@ -922,7 +925,7 @@ async function toggleTraining() {
                 class="hud-control"
               >
                 <span>
-                  <strong>Layout</strong>
+                  <strong>{{ t('hud.layout') }}</strong>
                 </span>
                 <select
                   class="hud-select"
@@ -930,8 +933,8 @@ async function toggleTraining() {
                   :disabled="selectedSettingsDisabled"
                   @change="setTyreVariant(($event.target as HTMLSelectElement).value)"
                 >
-                  <option value="classic">Classico</option>
-                  <option value="race">Race</option>
+                  <option value="classic">{{ t('hud.layoutClassic') }}</option>
+                  <option value="race">{{ t('hud.layoutRace') }}</option>
                 </select>
               </label>
 
@@ -940,7 +943,7 @@ async function toggleTraining() {
                 class="hud-control"
               >
                 <span>
-                  <strong>Layout</strong>
+                  <strong>{{ t('hud.layout') }}</strong>
                 </span>
                 <select
                   class="hud-select"
@@ -948,8 +951,8 @@ async function toggleTraining() {
                   :disabled="selectedSettingsDisabled"
                   @change="setSectorVariant(($event.target as HTMLSelectElement).value)"
                 >
-                  <option value="classic">Classico</option>
-                  <option value="compact">Compatto</option>
+                  <option value="classic">{{ t('hud.layoutClassic') }}</option>
+                  <option value="compact">{{ t('hud.layoutCompact') }}</option>
                 </select>
               </label>
 
@@ -958,7 +961,7 @@ async function toggleTraining() {
                 class="hud-control hud-control--slider"
               >
                 <span>
-                  <strong>Trasparenza sfondo</strong>
+                  <strong>{{ t('hud.backgroundTransparency') }}</strong>
                 </span>
                 <span class="hud-control__range">
                   <b>{{ backgroundTransparency[selectedOverlayId as HudOverlayBackgroundId] }}%</b>
@@ -970,7 +973,7 @@ async function toggleTraining() {
                     step="5"
                     :value="backgroundTransparency[selectedOverlayId as HudOverlayBackgroundId]"
                     :disabled="selectedSettingsDisabled"
-                    :aria-label="'Trasparenza sfondo HUD ' + selectedOverlay.title"
+                    :aria-label="t('hud.backgroundTransparencyAria', { title: selectedTitle })"
                     @input="onBackgroundTransparencyInput(selectedOverlayId as HudOverlayBackgroundId, ($event.target as HTMLInputElement).value)"
                   />
                 </span>
@@ -985,13 +988,13 @@ async function toggleTraining() {
             />
             <section
               class="hud-settings__specific"
-              :aria-label="'Opzioni ' + selectedOverlay.title"
+              :aria-label="t('hud.optionsAria', { title: selectedTitle })"
             >
               <div class="hud-settings__specific-panel hud-settings__control-grid">
                 <template v-if="selectedOverlayId === 'sectors'">
                   <label class="hud-control">
                     <span>
-                      <strong>Confronta con</strong>
+                      <strong>{{ t('hud.sectorsCompare') }}</strong>
                     </span>
                     <select
                       class="hud-select"
@@ -999,8 +1002,8 @@ async function toggleTraining() {
                       :disabled="selectedSettingsDisabled"
                       @change="onSectorReferenceChange"
                     >
-                      <option value="bestSector">Miglior settore</option>
-                      <option value="custom">Personalizzati</option>
+                      <option value="bestSector">{{ t('hud.sectorsBest') }}</option>
+                      <option value="custom">{{ t('hud.sectorsCustom') }}</option>
                     </select>
                   </label>
                   <button
@@ -1010,13 +1013,13 @@ async function toggleTraining() {
                     :disabled="selectedSettingsDisabled"
                     @click="sectorReferenceEditorOpen = true"
                   >
-                    Modifica tempi personalizzati
+                    {{ t('hud.sectorsEditCustom') }}
                   </button>
                   <label
                     v-if="sectorSupports('sectorCurrentLap')"
                     class="hud-control"
                   >
-                    <span><strong>Mostra tempo giro</strong></span>
+                    <span><strong>{{ t('hud.sectorsShowLap') }}</strong></span>
                     <input
                       type="checkbox"
                       :checked="showSectorCurrentLap"
@@ -1028,7 +1031,7 @@ async function toggleTraining() {
                     v-if="sectorSupports('sectorPrevious')"
                     class="hud-control"
                   >
-                    <span><strong>Tempo settore precedente</strong></span>
+                    <span><strong>{{ t('hud.sectorsPrevious') }}</strong></span>
                     <input
                       type="checkbox"
                       :checked="showSectorReference"
@@ -1040,7 +1043,7 @@ async function toggleTraining() {
                     v-if="sectorSupports('sectorBest')"
                     class="hud-control"
                   >
-                    <span><strong>Best settore</strong></span>
+                    <span><strong>{{ t('hud.sectorsBestToggle') }}</strong></span>
                     <input
                       type="checkbox"
                       :checked="showSectorBest"
@@ -1053,7 +1056,7 @@ async function toggleTraining() {
                 <template v-else-if="selectedOverlayId === 'dashboard'">
                   <div class="hud-checkbox-grid hud-checkbox-grid--dashboard">
                   <label class="hud-control">
-                    <span><strong>Riferimento elettronica</strong></span>
+                    <span><strong>{{ t('hud.dashboard.electronics') }}</strong></span>
                     <input
                       type="checkbox"
                       :checked="dashboardSettings.electronicsReference"
@@ -1062,7 +1065,7 @@ async function toggleTraining() {
                     />
                   </label>
                   <label class="hud-control">
-                    <span><strong>Riferimento RPM</strong></span>
+                    <span><strong>{{ t('hud.dashboard.rpm') }}</strong></span>
                     <input
                       type="checkbox"
                       :checked="dashboardSettings.rpmReference"
@@ -1071,7 +1074,7 @@ async function toggleTraining() {
                     />
                   </label>
                   <label class="hud-control">
-                    <span><strong>Riferimento marcia</strong></span>
+                    <span><strong>{{ t('hud.dashboard.gear') }}</strong></span>
                     <input
                       type="checkbox"
                       :checked="dashboardSettings.gearReference"
@@ -1080,7 +1083,7 @@ async function toggleTraining() {
                     />
                   </label>
                   <label class="hud-control">
-                    <span><strong>Delta velocità</strong></span>
+                    <span><strong>{{ t('hud.dashboard.speedDelta') }}</strong></span>
                     <input
                       type="checkbox"
                       :checked="dashboardSettings.speedDelta"
@@ -1089,7 +1092,7 @@ async function toggleTraining() {
                     />
                   </label>
                   <label class="hud-control">
-                    <span><strong>Lampeggio carburante critico</strong></span>
+                    <span><strong>{{ t('hud.dashboard.fuelFlash') }}</strong></span>
                     <input
                       type="checkbox"
                       :checked="dashboardSettings.fuelCriticalFlashEnabled"
@@ -1099,7 +1102,7 @@ async function toggleTraining() {
                   </label>
                   </div>
                   <label class="hud-control">
-                    <span><strong>Soglia carburante critica</strong></span>
+                    <span><strong>{{ t('hud.dashboard.fuelThreshold') }}</strong></span>
                     <span class="hud-number">
                       <input
                         type="number"
@@ -1108,17 +1111,17 @@ async function toggleTraining() {
                         step="0.1"
                         :value="dashboardSettings.fuelCriticalLapsThreshold"
                         :disabled="selectedSettingsDisabled || !dashboardSettings.fuelCriticalFlashEnabled"
-                        aria-label="Soglia carburante critica in giri"
+                        :aria-label="t('hud.dashboard.fuelThresholdAria')"
                         @change="saveDashboardSetting('fuelCriticalLapsThreshold', Number(($event.target as HTMLInputElement).value))"
                       />
-                      <b>giri</b>
+                      <b>{{ t('hud.dashboard.laps') }}</b>
                     </span>
                   </label>
                 </template>
 
                 <template v-else-if="selectedOverlayId === 'trackmap' && support.mapOptions">
                   <label class="hud-control">
-                    <span><strong>Pit prediction</strong></span>
+                    <span><strong>{{ t('hud.trackmap.pitPrediction') }}</strong></span>
                     <input
                       type="checkbox"
                       :checked="trackmapSettings.showPitPrediction"
@@ -1127,7 +1130,7 @@ async function toggleTraining() {
                     />
                   </label>
                   <label class="hud-control">
-                    <span><strong>Numeri auto (spento: posizione in gara)</strong></span>
+                    <span><strong>{{ t('hud.trackmap.carNumbers') }}</strong></span>
                     <input
                       type="checkbox"
                       :checked="trackmapSettings.showCarNumbers"
@@ -1136,7 +1139,7 @@ async function toggleTraining() {
                     />
                   </label>
                   <label class="hud-control">
-                    <span><strong>Vista a cerchio</strong></span>
+                    <span><strong>{{ t('hud.trackmap.circleView') }}</strong></span>
                     <input
                       type="checkbox"
                       :checked="trackmapSettings.circleView"
@@ -1150,7 +1153,7 @@ async function toggleTraining() {
                 <template v-else-if="selectedOverlayId === 'standings'">
                   <div v-if="support.fullStandings" class="hud-slider-grid">
                   <label class="hud-control hud-control--slider">
-                    <span><strong>Auto in testa</strong></span>
+                    <span><strong>{{ t('hud.standings.topCars') }}</strong></span>
                     <span class="hud-control__range">
                       <b>{{ standingsSettings.topCars }}</b>
                       <input
@@ -1161,13 +1164,13 @@ async function toggleTraining() {
                         step="1"
                         :value="standingsSettings.topCars"
                         :disabled="selectedSettingsDisabled"
-                        aria-label="Auto in testa"
+                        :aria-label="t('hud.standings.topCars')"
                         @input="saveStandingsSetting('topCars', Number(($event.target as HTMLInputElement).value))"
                       />
                     </span>
                   </label>
                   <label class="hud-control hud-control--slider">
-                    <span><strong>Auto davanti</strong></span>
+                    <span><strong>{{ t('hud.standings.carsAhead') }}</strong></span>
                     <span class="hud-control__range">
                       <b>{{ standingsSettings.carsAhead }}</b>
                       <input
@@ -1178,13 +1181,13 @@ async function toggleTraining() {
                         step="1"
                         :value="standingsSettings.carsAhead"
                         :disabled="selectedSettingsDisabled"
-                        aria-label="Auto davanti"
+                        :aria-label="t('hud.standings.carsAhead')"
                         @input="saveStandingsSetting('carsAhead', Number(($event.target as HTMLInputElement).value))"
                       />
                     </span>
                   </label>
                   <label class="hud-control hud-control--slider">
-                    <span><strong>Auto dietro</strong></span>
+                    <span><strong>{{ t('hud.standings.carsBehind') }}</strong></span>
                     <span class="hud-control__range">
                       <b>{{ standingsSettings.carsBehind }}</b>
                       <input
@@ -1195,7 +1198,7 @@ async function toggleTraining() {
                         step="1"
                         :value="standingsSettings.carsBehind"
                         :disabled="selectedSettingsDisabled"
-                        aria-label="Auto dietro"
+                        :aria-label="t('hud.standings.carsBehind')"
                         @input="saveStandingsSetting('carsBehind', Number(($event.target as HTMLInputElement).value))"
                       />
                     </span>
@@ -1207,11 +1210,11 @@ async function toggleTraining() {
                     :key="option.key"
                     class="hud-control hud-control--standings"
                     :class="{ 'is-unavailable': !option.supported }"
-                    :title="option.dependency"
+                    :title="option.dependencyKey ? t(option.dependencyKey) : undefined"
                   >
                     <span>
-                      <strong>{{ option.label }}</strong>
-                      <small v-if="!option.supported">{{ option.dependency }}</small>
+                      <strong>{{ t(option.labelKey) }}</strong>
+                      <small v-if="!option.supported && option.dependencyKey">{{ t(option.dependencyKey) }}</small>
                     </span>
                     <input
                       type="checkbox"
@@ -1238,7 +1241,7 @@ async function toggleTraining() {
                         stroke-width="1.9"
                         aria-hidden="true"
                       />
-                      <strong>{{ group.label }}</strong>
+                      <strong>{{ t(group.labelKey) }}</strong>
                     </div>
                     <div class="hud-info-group__options">
                       <label
@@ -1246,7 +1249,7 @@ async function toggleTraining() {
                         :key="option.key"
                         class="hud-control"
                       >
-                        <span><strong>{{ option.label }}</strong></span>
+                        <span><strong>{{ t(option.labelKey) }}</strong></span>
                         <input
                           type="checkbox"
                           :checked="infoSettings[option.key]"
@@ -1270,7 +1273,7 @@ async function toggleTraining() {
       class="sector-reference-dialog"
       role="dialog"
       aria-modal="true"
-      aria-label="Riferimenti settori"
+      :aria-label="t('hud.sectorReferencesAria')"
     >
       <SectorReferenceSetup
         @saved="sectorReferencesSaved"

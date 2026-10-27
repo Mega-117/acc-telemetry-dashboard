@@ -3,10 +3,14 @@ import { resolve } from 'node:path'
 import { createSSRApp, h } from 'vue'
 import { renderToString } from '@vue/server-renderer'
 import { describe, expect, it } from 'vitest'
+import { setLocale } from '~/i18n'
 import SectorDeltaHud from '~/components/overlay/SectorDeltaHud.vue'
 import { commonSectorHud } from '~/services/telemetry/commonSectorHud'
 import type { CommonLive } from '~/services/telemetry/commonLive'
 import type { SectorHudEntry, SectorHudState } from '~/composables/useLiveStatePoller'
+
+// The HUD texts below are asserted in Italian (jsdom defaults to English).
+setLocale('it')
 
 it.each(['compact', 'classic'])('renders the three EVO game-log splits through the shared %s HUD', async variant => {
   const source: CommonLive = { gameId: 'evo', sessionId: 'monza', connected: true, fresh: true,

@@ -12,6 +12,7 @@ import {
   splitPitwallConceptList,
 } from "~/utils/pitwallConcept";
 import type { PitwallConceptPerson, PitwallConceptRace } from "~/utils/pitwallConcept";
+import { useI18n } from "~/i18n";
 
 const props = defineProps<{
   races: PitwallConceptRace[];
@@ -20,6 +21,7 @@ const props = defineProps<{
 }>();
 defineEmits<{ enter: [race: PitwallConceptRace] }>();
 
+const { t } = useI18n();
 const expanded = ref(false);
 const me = computed(() => props.meId ?? "");
 
@@ -76,7 +78,7 @@ function wallLabel(race: PitwallConceptRace): string {
         <span class="pwc-race__copy">
           <strong>{{ race.label || nick(race.hostId) }}</strong>
           <small v-if="whereLabel(race)">{{ whereLabel(race) }}</small>
-          <small v-if="invited(race) && !race.closed" class="pwc-invitation">Invito</small>
+          <small v-if="invited(race) && !race.closed" class="pwc-invitation">{{ t('pitwallConcept.races.invite') }}</small>
         </span>
       </div>
 
@@ -84,14 +86,14 @@ function wallLabel(race: PitwallConceptRace): string {
         v-if="wallLabel(race)"
         class="pwc-role pwc-race__wall"
       >
-        <small>Partecipanti</small>
+        <small>{{ t('pitwallConcept.races.participants') }}</small>
         <b>{{ wallLabel(race) }}</b>
       </span>
 
       <span
         v-if="race.closed"
         class="pwc-chip is-waiting"
-      >Chiusa</span>
+      >{{ t('pitwallConcept.races.closed') }}</span>
 
 
       <button
@@ -100,7 +102,7 @@ function wallLabel(race: PitwallConceptRace): string {
         class="rc-btn rc-btn--compact rc-btn--primary"
         @click="$emit('enter', race)"
       >
-        Entra
+        {{ t('pitwallConcept.races.enter') }}
       </button>
 
     </article>
@@ -109,7 +111,7 @@ function wallLabel(race: PitwallConceptRace): string {
       v-if="!races.length"
       class="pwc-empty"
     >
-      Nessun Pitwall disponibile al momento.
+      {{ t('pitwallConcept.races.empty') }}
     </p>
 
     <PitwallConceptMore

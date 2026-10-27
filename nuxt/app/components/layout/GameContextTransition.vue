@@ -2,6 +2,8 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import GameLogo from './GameLogo.vue'
 import { gameLabel } from '~/services/telemetry/gameCatalog'
+import { useI18n } from '~/i18n'
+const { t } = useI18n()
 const props = defineProps<{ gameId: string; busy: boolean }>()
 const minimumElapsed = ref(true)
 const switching = ref(false)
@@ -31,7 +33,7 @@ onBeforeUnmount(() => { clearTimeout(minimumTimer); clearTimeout(revealTimer) })
     <div class="game-context__content" :class="{ 'is-covered': covered, 'is-revealing': revealing }" :inert="covered" :aria-hidden="covered || undefined">
       <slot />
     </div>
-    <div v-if="covered" class="game-context__cover" role="status" aria-live="polite" :aria-label="`${busy ? 'Caricamento' : 'Gioco selezionato'} · ${gameLabel(gameId)}`">
+    <div v-if="covered" class="game-context__cover" role="status" aria-live="polite" :aria-label="`${busy ? t('game.loading') : t('game.selected')} · ${gameLabel(gameId)}`">
       <GameLogo :key="gameId" :game-id="gameId" />
     </div>
   </div>

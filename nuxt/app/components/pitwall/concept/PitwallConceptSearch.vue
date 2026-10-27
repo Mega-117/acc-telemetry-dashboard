@@ -12,21 +12,20 @@
 import ScrollArea from "~/components/ui/ScrollArea.vue";
 import { pitwallConceptInitials, pitwallConceptNickname } from "~/utils/pitwallConcept";
 import type { PitwallConceptSearchResult } from "~/utils/pitwallConcept";
+import { computed } from "vue";
+import { useI18n } from "~/i18n";
 
-withDefaults(
-  defineProps<{
-    found: PitwallConceptSearchResult;
-    placeholder?: string;
-    /** Come si chiama qui chi e' gia' in un elenco. */
-    linkedLabel?: string;
-    emptyLabel?: string;
-  }>(),
-  {
-    placeholder: "Cerca nickname",
-    linkedLabel: "Ce l'hai già",
-    emptyLabel: "Nessuno con questo nickname.",
-  },
-);
+const props = defineProps<{
+  found: PitwallConceptSearchResult;
+  placeholder?: string;
+  /** Come si chiama qui chi e' gia' in un elenco. */
+  linkedLabel?: string;
+  emptyLabel?: string;
+}>();
+const { t } = useI18n();
+const placeholderText = computed(() => props.placeholder ?? t("pitwallConcept.search.placeholder"));
+const linkedText = computed(() => props.linkedLabel ?? t("pitwallConcept.search.linked"));
+const emptyText = computed(() => props.emptyLabel ?? t("pitwallConcept.search.empty"));
 
 const query = defineModel<string>({ required: true });
 </script>
@@ -47,25 +46,25 @@ const query = defineModel<string>({ required: true });
       </svg>
       <input
         v-model="query"
-        :placeholder="placeholder"
-        :aria-label="placeholder"
+        :placeholder="placeholderText"
+        :aria-label="placeholderText"
       >
       <button
         v-if="query"
         type="button"
-        aria-label="Cancella ricerca"
+        :aria-label="t('pitwallConcept.search.clear')"
         @click="query = ''"
       >
         ×
       </button>
     </label>
 
-    <ScrollArea class="pwc-find__results" label="Risultati ricerca persone">
+    <ScrollArea class="pwc-find__results" :label="t('pitwallConcept.search.resultsAria')">
     <p
       v-if="found.state === 'too-short'"
       class="pwc-empty"
     >
-      Scrivi almeno due lettere.
+      {{ t('pitwallConcept.search.tooShort') }}
     </p>
 
     <ul
@@ -98,14 +97,14 @@ const query = defineModel<string>({ required: true });
       v-if="found.state === 'capped'"
       class="pwc-empty"
     >
-      Altre {{ found.hidden }} persone corrispondono: scrivi qualche lettera in più.
+      {{ t('pitwallConcept.search.capped', { count: found.hidden }) }}
     </p>
 
     <p
       v-if="found.state === 'none' && !found.linked.length"
       class="pwc-empty"
     >
-      {{ emptyLabel }}
+      {{ emptyText }}
     </p>
 
     <!-- Chi e' gia' in un elenco si mostra spento, non si nasconde: sparire
@@ -121,14 +120,14 @@ const query = defineModel<string>({ required: true });
       >
         <span class="pwc-avatar">{{ pitwallConceptInitials(person) }}</span>
         <strong class="pwc-person__name">{{ pitwallConceptNickname(person) }}</strong>
-        <span class="pwc-chip is-waiting">{{ linkedLabel }}</span>
+        <span class="pwc-chip is-waiting">{{ linkedText }}</span>
       </li>
     </ul>
     <p
       v-if="found.linkedHidden"
       class="pwc-empty"
     >
-      E altre {{ found.linkedHidden }} che hai già.
+      {{ t('pitwallConcept.search.linkedHidden', { count: found.linkedHidden }) }}
     </p>
     </ScrollArea>
   </div>

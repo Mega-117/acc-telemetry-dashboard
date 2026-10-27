@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, onScopeDispose, ref } from 'vue'
+import { useI18n } from '~/i18n'
 import type { FriendRequestBridge, FriendRequestSnapshot } from '~/services/pitwall/friendRequestQueue'
 
 const props = defineProps<{ api?: FriendRequestBridge | null }>()
+const { t } = useI18n()
 const state = ref<FriendRequestSnapshot>({ session: null, requests: [], busy: false, error: null })
 const current = computed(() => state.value.requests[0])
 const sending = ref(false)
@@ -30,26 +32,26 @@ async function respond(accept: boolean) {
   try {
     const result = await props.api?.friendRequestsRespond?.({ session, id, accept })
     if (!result?.accepted && session === state.value.session && id === current.value?.id) {
-      localError.value = result?.reason || 'Finestra principale non raggiungibile. Riprova.'
+      localError.value = result?.reason || t('controlK.friends.unreachable')
     }
   } catch {
-    if (session === state.value.session && id === current.value?.id) localError.value = 'Invio non riuscito. Riprova.'
+    if (session === state.value.session && id === current.value?.id) localError.value = t('controlK.friends.failed')
   } finally { sending.value = false }
 }
 </script>
 
 <template>
-  <section v-if="current" class="control-k-request" aria-label="Richieste di amicizia" :aria-busy="state.busy || sending">
+  <section v-if="current" class="control-k-request" :aria-label="t('controlK.friends.aria')" :aria-busy="state.busy || sending">
     <div class="control-k-request__heading">
-      <span>Richiesta di amicizia</span>
-      <span v-if="state.requests.length > 1" class="control-k-request__count">+{{ state.requests.length - 1 }} in attesa</span>
+      <span>{{ t('controlK.friends.title') }}</span>
+      <span v-if="state.requests.length > 1" class="control-k-request__count">{{ t('controlK.friends.waiting', { count: state.requests.length - 1 }) }}</span>
     </div>
     <p class="control-k-request__sender" aria-live="polite">{{ current.nickname }}</p>
     <div class="control-k-request__actions">
-      <button type="button" class="launcher-tool-button" :data-overlay-wheel-action="`friend-accept:${current.id}`" :disabled="state.busy || sending" @click="respond(true)">Accetta</button>
-      <button type="button" class="launcher-tool-button" :data-overlay-wheel-action="`friend-reject:${current.id}`" :disabled="state.busy || sending" @click="respond(false)">Rifiuta</button>
+      <button type="button" class="launcher-tool-button" :data-overlay-wheel-action="`friend-accept:${current.id}`" :disabled="state.busy || sending" @click="respond(true)">{{ t('controlK.friends.accept') }}</button>
+      <button type="button" class="launcher-tool-button" :data-overlay-wheel-action="`friend-reject:${current.id}`" :disabled="state.busy || sending" @click="respond(false)">{{ t('controlK.friends.reject') }}</button>
     </div>
-    <p v-if="state.busy || sending" class="control-k-request__status" role="status">Invio risposta…</p>
+    <p v-if="state.busy || sending" class="control-k-request__status" role="status">{{ t('controlK.friends.sending') }}</p>
     <p v-else-if="localError || state.error" class="control-k-request__status control-k-request__error" role="alert">{{ localError || state.error }}</p>
   </section>
 </template>

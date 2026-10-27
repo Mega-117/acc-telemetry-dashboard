@@ -12,9 +12,11 @@ import { usePitwallConceptMode } from '~/composables/usePitwallConceptMode'
 import { usePitwallStore } from '~/composables/usePitwallStore'
 import { describePitwallConceptNotice } from '~/utils/pitwallConcept'
 import type { PitwallConceptNotice } from '~/utils/pitwallConcept'
+import { useI18n } from '~/i18n'
 
 const { notificationsOpen, toggleNotifications, closeNotifications } = usePitwallConceptMode()
 const state = usePitwallStore()
+const { t } = useI18n()
 
 const notices = computed(() => state.notices.value)
 const pendingCount = computed(() => state.pendingNoticeCount.value)
@@ -25,8 +27,8 @@ function describe(notice: PitwallConceptNotice) {
 
 /** L'etichetta dice cosa succede, non come si chiama il meccanismo. */
 function acceptLabel(notice: PitwallConceptNotice): string {
-  if (notice.kind === 'request') return 'Accetta'
-  return notice.kind === 'invite' ? 'Entra' : 'Ok'
+  if (notice.kind === 'request') return t('pitwallConcept.bell.accept')
+  return notice.kind === 'invite' ? t('pitwallConcept.bell.enter') : t('pitwallConcept.bell.ok')
 }
 
 function accept(notice: PitwallConceptNotice) {
@@ -49,7 +51,7 @@ onBeforeUnmount(() => document.removeEventListener('click', closeNotifications))
 
 <template>
   <div class="pwc-bell-wrap">
-    <button class="pwc-bell" :class="{ 'is-open': notificationsOpen }" aria-label="Notifiche Pit Wall" @click.stop="toggleNotifications">
+    <button class="pwc-bell" :class="{ 'is-open': notificationsOpen }" :aria-label="t('pitwallConcept.bell.aria')" @click.stop="toggleNotifications">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
         <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" />
       </svg>
@@ -57,7 +59,7 @@ onBeforeUnmount(() => document.removeEventListener('click', closeNotifications))
     </button>
 
     <div v-if="notificationsOpen" class="pwc-notices" @click.stop>
-      <header><strong>Notifiche</strong></header>
+      <header><strong>{{ t('pitwallConcept.bell.title') }}</strong></header>
       <div v-if="notices.length" class="pwc-notices__list">
         <article v-for="notice in notices" :key="notice.id" class="pwc-notice">
           <div class="pwc-notice__copy">
@@ -67,7 +69,7 @@ onBeforeUnmount(() => document.removeEventListener('click', closeNotifications))
           <div class="pwc-notice__actions">
             <button
               class="is-accept"
-              :aria-label="`Accetta ${describe(notice).title.toLowerCase()}`"
+              :aria-label="t('pitwallConcept.bell.acceptAria', { what: describe(notice).title.toLowerCase() })"
               :title="acceptLabel(notice)"
               @click="accept(notice)"
             >
@@ -76,8 +78,8 @@ onBeforeUnmount(() => document.removeEventListener('click', closeNotifications))
             <button
               v-if="notice.kind !== 'granted'"
               class="is-reject"
-              :aria-label="`Rifiuta ${describe(notice).title.toLowerCase()}`"
-              title="Rifiuta"
+              :aria-label="t('pitwallConcept.bell.rejectAria', { what: describe(notice).title.toLowerCase() })"
+              :title="t('pitwallConcept.bell.reject')"
               @click="state.rejectNotice(notice.id)"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" /></svg>
@@ -85,7 +87,7 @@ onBeforeUnmount(() => document.removeEventListener('click', closeNotifications))
           </div>
         </article>
       </div>
-      <p v-else class="pwc-notices__empty">Niente da decidere.</p>
+      <p v-else class="pwc-notices__empty">{{ t('pitwallConcept.bell.empty') }}</p>
     </div>
   </div>
 </template>

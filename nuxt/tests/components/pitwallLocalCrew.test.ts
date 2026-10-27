@@ -3,6 +3,10 @@ import { mount } from '@vue/test-utils'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { ref, nextTick } from 'vue'
 import PitwallLocalCrew from '~/components/pitwall/PitwallLocalCrew.vue'
+import { setLocale } from '~/i18n'
+
+// These tests read the Italian texts (jsdom defaults to English).
+setLocale('it')
 
 const fake = vi.hoisted(() => ({ standings: null as any, fast: null as any }))
 vi.mock('~/composables/useOverlayRegionApi', () => ({ useOverlayRegionApi: () => () => ({}) }))

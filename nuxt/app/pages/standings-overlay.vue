@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from '~/i18n'
 import { useHudPresentationMemory } from '~/services/overlay/hudPresentationMemory'
 import { usesLegacyHudInput } from '~/services/sim/hudSourceAdapter'
 
@@ -107,6 +108,7 @@ onUnmounted(() => {
   fastState.stopFastStatePolling()
   overlay.stop()
 })
+const { t } = useI18n()
 </script>
 
 <template>
@@ -119,7 +121,7 @@ onUnmounted(() => {
       :style="canvasStyle"
     >
       <div v-if="!model.visible" class="standings-empty" role="status">
-        In attesa dei dati della sessione
+        {{ t('overlays.standingsWaiting') }}
       </div>
       <StandingsHud
         :model="model"

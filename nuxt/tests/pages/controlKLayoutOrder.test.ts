@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { translate } from '~/i18n'
 
 // PIP-509: Ctrl+K layout contract (order, driving compaction, waiting state).
 const source = readFileSync(fileURLToPath(new URL('../../app/pages/training-overlay.vue', import.meta.url)), 'utf8')
@@ -9,15 +10,15 @@ const styles = readFileSync(fileURLToPath(new URL('../../app/assets/scss/_traini
 describe('Ctrl+K layout order (PIP-509)', () => {
   it('renders the audio alerts after every other button group', () => {
     const voice = source.indexOf('<QuickPanelVoiceControls')
-    for (const marker of ['aria-label="Riferimenti numerici"', 'class="quick-panel-section quick-panel-automations"', 'data-overlay-wheel-action="pitwall"', 'launcher-tool-button--pressure', '<ControlKFriendRequests']) {
+    for (const marker of ['data-quick-panel-section="references"', 'class="quick-panel-section quick-panel-automations"', 'data-overlay-wheel-action="pitwall"', 'launcher-tool-button--pressure', '<ControlKFriendRequests']) {
       expect(source.indexOf(marker), marker).toBeGreaterThan(0)
       expect(voice, marker).toBeGreaterThan(source.indexOf(marker))
     }
     expect(source.match(/<QuickPanelVoiceControls/g)).toHaveLength(1)
   })
   it('keeps the vertical grid groups in the first row and the audio row last', () => {
-    expect(styles).toMatch(/\.quick-panel-section\[aria-label='Avvisi vocali'\] \{\s*order: 98;/)
-    expect(styles).toMatch(/\.quick-panel-section\[aria-label='Riferimenti numerici'\] \{\s*display: grid;\s*grid-row: 1;/)
+    expect(styles).toMatch(/\.quick-panel-section\[data-quick-panel-section='voice'\] \{\s*order: 98;/)
+    expect(styles).toMatch(/\.quick-panel-section\[data-quick-panel-section='references'\] \{\s*display: grid;\s*grid-row: 1;/)
     expect(styles).not.toContain("border-bottom: 1px solid #ffffff1a; }\n    .quick-panel-automations")
   })
   // PIP-556: ACC has its own single layout (Guida/Pausa), never the old vertical
@@ -34,7 +35,8 @@ describe('Ctrl+K layout order (PIP-509)', () => {
   it('pairs the initial estimate before measured correction', () => {
     const pair = source.slice(source.indexOf('class="quick-panel-pressure-pair"'), source.indexOf('id="control-k-fuel-preview"'))
     expect(pair.indexOf('<PressureTestPanel')).toBeLessThan(pair.indexOf('data-overlay-wheel-action="pressure"'))
-    expect(pair).toContain('<span>Correggi<br>pressioni</span>')
+    expect(pair).toContain("<span>{{ t('controlK.fixPressuresLine1') }}<br>{{ t('controlK.fixPressuresLine2') }}</span>")
+    expect(`${translate('it', 'controlK.fixPressuresLine1')} ${translate('it', 'controlK.fixPressuresLine2')}`).toBe('Correggi pressioni')
     expect(source.match(/<PressureTestPanel/g)).toHaveLength(1)
     expect(source).toContain('id="quick-panel-pressure-test-feedback"')
   })
@@ -42,7 +44,7 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     expect(source).not.toContain('showPressureButton')
     expect(source).toContain(':disabled="isDryPressureApplying || (!usesAccLayout && quickPanelPressureState.state !== \'ready\')"')
     // PIP-556: in ACC it stays pressable and explains why it cannot run, without applying anything.
-    expect(source).toMatch(/if \(quickPanelPressureState\.value\.state !== 'ready'\) \{\s*showVoicePointNotice\(`Correggi pressioni: \$\{dryPressurePresentation\.value\.guidance\}`, 'error'\)\s*return\s*\}/)
+    expect(source).toMatch(/if \(quickPanelPressureState\.value\.state !== 'ready'\) \{\s*showVoicePointNotice\(t\('controlK\.notices\.fixPressures', \{ guidance: dryPressurePresentation\.value\.guidance \}\), 'error'\)\s*return\s*\}/)
   })
   it('PIP-509: the horizontal Tools group reserves no column for a hidden button', () => {
     const horizontal = styles.slice(styles.indexOf('.overlay-content--horizontal'))
@@ -54,7 +56,7 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     const block = styles.slice(styles.indexOf('// PIP-518'), styles.indexOf('// Vertical quick panel'))
     const order = (selector: string) => Number(block.match(new RegExp(`${selector.replace(/[[\]().>]/g, m => `\\${m}`)} \\{[^}]*?order: (\\d+)`))?.[1])
     expect([order('.quick-panel-secondary'), order('.quick-panel-automations > .fuel-panel'),
-      order(".quick-panel-section[aria-label='Riferimenti numerici']"), order(".quick-panel-section[aria-label='Avvisi vocali']"),
+      order(".quick-panel-section[data-quick-panel-section='references']"), order(".quick-panel-section[data-quick-panel-section='voice']"),
       order('.quick-panel-horizontal-side')]).toEqual([1, 2, 3, 4, 5])
     expect(block).toContain('.training-overlay--launcher .overlay-content--horizontal:has(.quick-panel-automations) {')
     expect(block).toMatch(/\.quick-panel-automations > \.fuel-panel \{ order: 2; width: auto; \}/)       // never the whole row
@@ -66,13 +68,14 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     expect(source).toContain("() => !!overlayRoot.value?.querySelector('.overlay-content--launcher .launcher-tools'),")
   })
   it('PIP-522: Pit title, lap badge, one context line and outcomes only as messages', () => {
-    expect(source).toContain('<h2 class="quick-panel-heading">Pit</h2>')
+    expect(source).toContain(`<h2 class="quick-panel-heading">{{ t('controlK.pit') }}</h2>`)
+    expect(translate('it', 'controlK.pit')).toBe('Pit')
     expect(source).not.toContain('<h2 class="quick-panel-heading">Tools</h2>')
     expect(source).toContain('<small v-if="pressureBadge" class="quick-action-badge" aria-hidden="true">{{ pressureBadge }}</small>')
     // The permanent pressure line is gone from view; screen readers keep it.
     expect(source).toContain('<p id="pressure-action-status" class="quick-panel-visually-hidden">')
     expect(source).toMatch(/<p v-if="pressureOutcome" class="launcher-hint quick-panel-pressure-status"/)
-    expect(source).toContain("if (actionId === 'pressure' && quickPanelPressureState.value.state !== 'ready') return `Pressioni: ${dryPressurePresentation.value.guidance}`")
+    expect(source).toContain("if (actionId === 'pressure' && quickPanelPressureState.value.state !== 'ready') return t('controlK.pressureHint', { guidance: dryPressurePresentation.value.guidance })")
     expect(source).toContain('const PRESSURE_SUCCESS_VISIBLE_MS = 5000')
     // The watcher reads the pressure state at setup: it must come after its declaration.
     expect(source.indexOf('watch(() => pressureOutcomeMessage(quickPanelPressureState.value)'))
@@ -115,8 +118,8 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     expect(source).toMatch(/function runBackAction\(\) \{\s*if \(isNotificationsOpen\.value\) \{ closeNotifications\(\); return \}\s*if \(isVoiceViewOpen\.value\) \{ closeVoiceView\(\); return \}\s*if \(isQuickTimerOpen\.value\) \{ leaveQuickTimer\(\); return \}/)
     expect(source).toContain("function openFuelSetup() { isFuelSetupOpen.value = true; void nextTick(() => actionSelection.select(usesAccLayout.value ? 'fuel-minutes' : 'fuel-plus')) }")
     expect(source).toContain("selectedWheelActionId.value = 'target-time'")
-    expect(source).toContain('<span>Giro obiettivo</span>')
-    expect(source).toContain('<span>Settori obiettivo</span>')
+    expect(source).toContain("<span>{{ t('controlK.targetLap') }}</span>")
+    expect(source).toContain("<span>{{ t('controlK.sectorTargets') }}</span>")
   })
   it('PIP-532: notifications view next to the timer replaces the buttons; pressure badge seen while driving', () => {
     // Everything worth reading is teleported into the Notifiche view, in both layouts.
@@ -153,7 +156,7 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     expect(source).toContain(':coach="isFullQuickPanelPreview || coachVoiceOn"')
     expect(source).toContain(':references="isFullQuickPanelPreview || referencesVoiceOn"')
     expect(source).toContain(':pressure="isFullQuickPanelPreview || pressureVoiceOn"')
-    expect(source).toContain(":session-label=\"isFullQuickPanelPreview ? 'Gara' : voiceSessionLabel\"")
+    expect(source).toContain(":session-label=\"isFullQuickPanelPreview ? t('controlK.session.race') : voiceSessionLabel\"")
     // Unknown session (menus): nothing to toggle.
     expect(source).toContain(':disabled="!isFullQuickPanelPreview && (!canUseSpotterControls || !voiceSessionMode)"')
     expect(source).toContain('const next = toggleCurrentSessionMode(modes, voiceSessionType(fastState.value), on)')
@@ -164,7 +167,9 @@ describe('Ctrl+K layout order (PIP-509)', () => {
   })
   it('shows a waiting placeholder instead of partial tools when no simulator is detected', () => {
     // PIP-657: the note sits in the header right of the logo, where the layout switch was; no timer while waiting.
-    expect(source).toContain(`<p v-if="waitingForSimulator" class="quick-panel-waiting quick-panel-waiting--header" role="status">{{ simulatorPresence.choiceRequired.value ? 'Scegli il gioco nella webapp' : 'In attesa del simulatore' }}</p>`)
+    expect(source).toContain(`<p v-if="waitingForSimulator" class="quick-panel-waiting quick-panel-waiting--header" role="status">{{ simulatorPresence.choiceRequired.value ? t('controlK.chooseGame') : t('controlK.waiting') }}</p>`)
+    expect([translate('it', 'controlK.waiting'), translate('it', 'controlK.chooseGame')]).toEqual(['In attesa del simulatore', 'Scegli il gioco nella webapp'])
+    expect(translate('en', 'controlK.waiting')).toBe('Waiting for the simulator')
     expect(source).toContain('<QuickPanelLayoutToggle v-else-if="!usesAccLayout"')
     expect(source).toContain('<button v-if="!waitingForSimulator" type="button" class="launcher-tool-button quick-panel-timer"')
     expect(source).toContain('<div v-if="!waitingForSimulator" class="quick-panel-main"')

@@ -1,4 +1,10 @@
-import { resolveSpotterSessionMode, SPOTTER_SESSION_LABELS } from '../spotter/spotterSessionPolicy'
+import { resolveSpotterSessionMode, type SpotterSessionMode } from '../spotter/spotterSessionPolicy'
+import { translate, useI18n, type TranslationKey } from '~/i18n'
+
+const t = (key: TranslationKey, params?: Record<string, string | number>) => translate(useI18n().locale.value, key, params)
+const SESSION_NAME: Record<SpotterSessionMode, TranslationKey> = {
+  practice: 'controlK.session.practice', qualify: 'controlK.session.qualify', race: 'controlK.session.race',
+}
 
 /** PIP-552: where a retained correction was computed (logger `origin`). */
 export interface PressureOrigin {
@@ -60,21 +66,21 @@ function unavailableGuidance(input: PressureActionInput): string {
   const recommendation = input.recommendation
   const reason = recommendationReason(input)
 
-  if (input.consumed === true) return 'Questa correzione è già stata applicata.'
-  if (reason === 'within_tolerance') return 'Pressioni già nella fascia ottimale.'
-  if (reason === 'ready' && input.testReady !== true) return 'Ferma l’auto (ai box o in griglia) e apri il menu Pausa.'
-  if (reason === 'waiting_for_valid_lap') return 'Completa almeno un giro valido.'
-  if (reason === 'compound_unavailable') return 'Mescola non ancora rilevata.'
-  if (reason === 'source_unavailable') return 'Dati delle pressioni non ancora disponibili.'
-  if (reason === 'click_limit_exceeded') return 'Correzione oltre il limite di sicurezza.'
-  if (reason === 'telemetry_not_fresh') return 'Telemetria ACC non disponibile.'
+  if (input.consumed === true) return t('quickPanel.pressure.consumed')
+  if (reason === 'within_tolerance') return t('quickPanel.pressure.withinTolerance')
+  if (reason === 'ready' && input.testReady !== true) return t('quickPanel.pressure.stopAndPause')
+  if (reason === 'waiting_for_valid_lap') return t('quickPanel.pressure.waitingValidLap')
+  if (reason === 'compound_unavailable') return t('quickPanel.pressure.compoundUnavailable')
+  if (reason === 'source_unavailable') return t('quickPanel.pressure.sourceUnavailable')
+  if (reason === 'click_limit_exceeded') return t('quickPanel.pressure.clickLimit')
+  if (reason === 'telemetry_not_fresh') return t('quickPanel.pressure.telemetryStale')
 
   const completed = finiteCount(recommendation?.completed_laps, 0)
   const required = finiteCount(recommendation?.required_completed_laps, 3)
   const valid = finiteCount(recommendation?.valid_laps, 0)
   const requiredValid = finiteCount(recommendation?.required_valid_laps, 1)
-  if (requiredValid === 0) return `Completa ${required} giri (${completed}/${required}).`
-  return `Completa ${required} giri, di cui almeno ${requiredValid} valido (${completed}/${required}, validi ${valid}/${requiredValid}).`
+  if (requiredValid === 0) return t('quickPanel.pressure.completeLaps', { required, completed })
+  return t('quickPanel.pressure.completeLapsValid', { required, requiredValid, completed, valid })
 }
 
 /**
@@ -97,13 +103,13 @@ export function pressureProgressBadge(input: PressureActionInput | null | undefi
 export function pressureOriginLine(origin: PressureOrigin | null | undefined): string | null {
   if (!origin) return null
   const mode = resolveSpotterSessionMode(origin.session_type)
-  const parts = [mode ? `Calcolata in ${SPOTTER_SESSION_LABELS[mode]}` : 'Calcolata']
+  const parts = [mode ? t('quickPanel.pressure.originIn', { session: t(SESSION_NAME[mode]) }) : t('quickPanel.pressure.origin')]
   const stint = Number(origin.stint_number)
-  if (Number.isInteger(stint) && stint > 0) parts.push(`stint ${stint}`)
+  if (Number.isInteger(stint) && stint > 0) parts.push(t('quickPanel.pressure.originStint', { value: stint }))
   const lap = Number(origin.source_lap)
-  if (Number.isInteger(lap) && lap > 0) parts.push(`giro ${lap}`)
+  if (Number.isInteger(lap) && lap > 0) parts.push(t('quickPanel.pressure.originLap', { value: lap }))
   const air = origin.air_temp_c === null || origin.air_temp_c === undefined ? Number.NaN : Number(origin.air_temp_c)
-  if (Number.isFinite(air)) parts.push(`aria ${Math.round(air)} °C`)
+  if (Number.isFinite(air)) parts.push(t('quickPanel.pressure.originAir', { value: Math.round(air) }))
   return parts.length > 1 || mode ? parts.join(' · ') : null
 }
 
@@ -122,92 +128,92 @@ export function pressureActionPresentation(input: PressureActionInput | null | u
   if (state === 'ready') {
     if (input?.actionReasonCode === 'pressure_precondition_failed') {
       return {
-        stateLabel: 'Da riprovare',
-        guidance: input.reason || 'Controlla lo stato di ACC e riprova. Nessuna pressione modificata.',
-        ariaLabel: 'Regola pressioni: avvio non riuscito, correzione non consumata',
+        stateLabel: t('quickPanel.pressure.retry'),
+        guidance: input.reason || t('quickPanel.pressure.checkAcc'),
+        ariaLabel: t('quickPanel.pressure.retryAria'),
       }
     }
     if (input?.actionReasonCode === 'pit_pause_required') {
       return {
-        stateLabel: 'Pronto',
-        guidance: 'Ferma l’auto (ai box o in griglia) e apri il menu Pausa.',
-        ariaLabel: 'Regola pressioni pronta: ferma l’auto e apri il menu Pausa',
+        stateLabel: t('quickPanel.pressure.ready'),
+        guidance: t('quickPanel.pressure.stopAndPause'),
+        ariaLabel: t('quickPanel.pressure.stopAndPauseAria'),
       }
     }
     if (input?.actionReasonCode === 'pause_menu_required') {
       return {
-        stateLabel: 'Pronto',
-        guidance: 'Vai al menu Pausa e riprova.',
-        ariaLabel: 'Regola pressioni pronta: vai al menu Pausa e riprova',
+        stateLabel: t('quickPanel.pressure.ready'),
+        guidance: t('quickPanel.pressure.goToPause'),
+        ariaLabel: t('quickPanel.pressure.goToPauseAria'),
       }
     }
     return {
-      stateLabel: 'Pronto',
-      guidance: 'Correzione pronta: premi Regola pressioni.',
-      ariaLabel: 'Regola pressioni nel Setup ACC: correzione pronta',
+      stateLabel: t('quickPanel.pressure.ready'),
+      guidance: t('quickPanel.pressure.readyGuidance'),
+      ariaLabel: t('quickPanel.pressure.readyAria'),
     }
   }
   if (state === 'running') {
     return {
-      stateLabel: 'In corso',
-      guidance: 'Regolazione delle pressioni in corso.',
-      ariaLabel: 'Regola pressioni nel Setup ACC: regolazione in corso',
+      stateLabel: t('quickPanel.pressure.running'),
+      guidance: t('quickPanel.pressure.runningGuidance'),
+      ariaLabel: t('quickPanel.pressure.runningAria'),
     }
   }
   if (state === 'completed') {
     return {
-      stateLabel: 'Completato',
-      guidance: 'Pressioni regolate.',
-      ariaLabel: 'Regola pressioni nel Setup ACC: regolazione completata',
+      stateLabel: t('quickPanel.pressure.completed'),
+      guidance: t('quickPanel.pressure.completedGuidance'),
+      ariaLabel: t('quickPanel.pressure.completedAria'),
     }
   }
   if (state === 'blocked') {
     return {
-      stateLabel: 'Bloccato',
-      guidance: input?.reason || 'Regolazione non disponibile: controlla lo stato di ACC.',
-      ariaLabel: 'Regola pressioni nel Setup ACC: regolazione bloccata',
+      stateLabel: t('quickPanel.pressure.blocked'),
+      guidance: input?.reason || t('quickPanel.pressure.blockedGuidance'),
+      ariaLabel: t('quickPanel.pressure.blockedAria'),
     }
   }
 
   if (input?.reason === 'setup_menu_open') {
     return {
-      stateLabel: 'Sospesa',
-      guidance: 'Esci dal Setup e torna al menu Pausa: la correzione resta pronta.',
-      ariaLabel: 'Regola pressioni sospesa: esci dal Setup e torna al menu Pausa',
-      buttonLabel: 'Esci dal Setup',
+      stateLabel: t('quickPanel.pressure.suspended'),
+      guidance: t('quickPanel.pressure.setupOpen'),
+      ariaLabel: t('quickPanel.pressure.setupOpenAria'),
+      buttonLabel: t('quickPanel.pressure.setupOpenButton'),
     }
   }
 
   if (input?.reason === 'pit_pause_required') {
     // PIP-552: the correction also applies from the race grid, stopped.
-    const guidance = 'Ferma l’auto (ai box o in griglia) e apri il menu Pausa per regolare le pressioni.'
+    const guidance = t('quickPanel.pressure.pitPause')
     return {
-      stateLabel: 'Ferma l’auto',
+      stateLabel: t('quickPanel.pressure.stopCar'),
       guidance,
       ariaLabel: guidance,
-      buttonLabel: 'Regola pressioni · da fermo',
-      alert: { title: 'FERMA L’AUTO', guidance },
+      buttonLabel: t('quickPanel.pressure.pitPauseButton'),
+      alert: { title: t('quickPanel.pressure.pitPauseAlert'), guidance },
     }
   }
 
   if (input?.reason === 'tyre_set_changed') {
     return {
-      stateLabel: 'Non disponibile',
-      guidance: 'Il set gomme montato è cambiato. Completa un nuovo stint per ricalcolare le pressioni.',
-      ariaLabel: 'Regola pressioni non disponibile: set gomme montato cambiato',
-      buttonLabel: 'Serve un nuovo stint',
+      stateLabel: t('quickPanel.pressure.unavailable'),
+      guidance: t('quickPanel.pressure.tyreSetChanged'),
+      ariaLabel: t('quickPanel.pressure.tyreSetChangedAria'),
+      buttonLabel: t('quickPanel.pressure.tyreSetChangedButton'),
     }
   }
 
   if (isLatestLapInvalid(input || {})) {
-    const guidance = 'Completa un nuovo giro valido per sbloccare la regolazione.'
+    const guidance = t('quickPanel.pressure.newValidLap')
     return {
-      stateLabel: 'Non disponibile',
-      guidance: 'L’ultimo giro è invalido. Completa un nuovo giro valido.',
-      ariaLabel: `Regola pressioni non disponibile: ${guidance}`,
-      buttonLabel: 'Serve un giro valido',
+      stateLabel: t('quickPanel.pressure.unavailable'),
+      guidance: t('quickPanel.pressure.lastLapInvalid'),
+      ariaLabel: t('quickPanel.pressure.unavailableAria', { guidance }),
+      buttonLabel: t('quickPanel.pressure.validLapButton'),
       alert: {
-        title: 'ULTIMO GIRO NON VALIDO',
+        title: t('quickPanel.pressure.lastLapInvalidAlert'),
         guidance,
       },
     }
@@ -215,18 +221,18 @@ export function pressureActionPresentation(input: PressureActionInput | null | u
 
   // Not a fault: the tyres are still warming, so say so instead of "Non disponibile".
   if (recommendationReason(input || {}) === 'waiting_for_stable_pressure' && input?.consumed !== true) {
-    const guidance = 'Pressioni ancora in assestamento: completa un altro giro.'
+    const guidance = t('quickPanel.pressure.settlingGuidance')
     return {
-      stateLabel: 'In assestamento',
+      stateLabel: t('quickPanel.pressure.settling'),
       guidance,
-      ariaLabel: `Regola pressioni nel Setup ACC: ${guidance}`,
+      ariaLabel: t('quickPanel.pressure.setupAria', { guidance }),
     }
   }
 
   const guidance = unavailableGuidance(input || {})
   return {
-    stateLabel: 'Non disponibile',
+    stateLabel: t('quickPanel.pressure.unavailable'),
     guidance,
-    ariaLabel: `Regola pressioni nel Setup ACC: ${guidance}`,
+    ariaLabel: t('quickPanel.pressure.setupAria', { guidance }),
   }
 }

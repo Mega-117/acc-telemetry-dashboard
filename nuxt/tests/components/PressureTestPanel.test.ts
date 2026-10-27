@@ -2,6 +2,10 @@
 import { createApp, h, nextTick } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import PressureTestPanel from '~/components/overlay/PressureTestPanel.vue'
+import { setLocale } from '~/i18n'
+
+// Assertions below read the Italian texts (jsdom starts in English).
+setLocale('it')
 
 vi.mock('~/composables/usePresentationVisibility', () => ({ usePresentationInterval: () => ({ start: vi.fn() }) }))
 let app: ReturnType<typeof createApp>

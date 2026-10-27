@@ -2,6 +2,8 @@
 import { createApp, nextTick, ref } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import SectorReferenceSetup from '~/components/overlay/SectorReferenceSetup.vue'
+import { setLocale } from '~/i18n'
+setLocale('it')
 const fixture=vi.hoisted(()=>({state:null as any, stop:vi.fn()}))
 vi.mock('~/composables/useFastStatePoller',()=>({useFastStatePoller:()=>({fastState:fixture.state,startFastStatePolling:async()=>{},stopFastStatePolling:fixture.stop})}))
 let app:ReturnType<typeof createApp>|null=null

@@ -12,6 +12,7 @@ import {
 } from '~/utils/infoTargetPicker'
 import { fieldStartPart, fieldWheelCommand, singleField, type NumberFieldSpec } from '~/utils/controlKNumberField'
 import ControlKNumberField from '~/components/overlay/ControlKNumberField.vue'
+import { useI18n } from '~/i18n'
 import ControlKViewHeader from '~/components/overlay/ControlKViewHeader.vue'
 
 const props = withDefaults(defineProps<{
@@ -37,6 +38,7 @@ const emit = defineEmits<{
   confirm: []
   cancel: []
 }>()
+const { t } = useI18n()
 
 type PickerControl = {
   id: InfoTargetTimeUnit | 'tolerance'
@@ -47,15 +49,15 @@ type PickerControl = {
 
 const timeParts = computed(() => splitInfoTargetTime(props.targetTimeMs))
 const timeControls = computed<PickerControl[]>(() => [
-  { id: 'minutes', label: 'MIN', value: String(timeParts.value.minutes).padStart(2, '0'), ariaLabel: 'Minuti target' },
-  { id: 'seconds', label: 'SEC', value: String(timeParts.value.seconds).padStart(2, '0'), ariaLabel: 'Secondi target' },
-  { id: 'tenths', label: 'DEC', value: `.${timeParts.value.tenths}`, ariaLabel: 'Decimi target' },
+  { id: 'minutes', label: 'MIN', value: String(timeParts.value.minutes).padStart(2, '0'), ariaLabel: t('hudSetup.target.minutesAria') },
+  { id: 'seconds', label: 'SEC', value: String(timeParts.value.seconds).padStart(2, '0'), ariaLabel: t('hudSetup.target.secondsAria') },
+  { id: 'tenths', label: 'DEC', value: `.${timeParts.value.tenths}`, ariaLabel: t('hudSetup.target.tenthsAria') },
 ])
 const toleranceControl = computed<PickerControl>(() => ({
   id: 'tolerance',
-  label: 'Tolleranza',
+  label: t('hudSetup.target.tolerance'),
   value: `${(props.toleranceMs / 1000).toFixed(1).replace('.', ',')} s`,
-  ariaLabel: 'Tolleranza massima',
+  ariaLabel: t('hudSetup.target.toleranceMax'),
 }))
 
 const editingControl = ref<PickerControl['id'] | null>(null)
@@ -82,8 +84,8 @@ const LAP_SPEC: NumberFieldSpec = {
 }
 const TOLERANCE_SPEC = singleField(1, 10, 2, tenths => (tenths / 10).toFixed(1).replace('.', ','))
 const quickFields = computed(() => [
-  { id: 'time' as const, label: 'TEMPO', ariaLabel: 'Tempo obiettivo', value: Math.round(props.targetTimeMs / 100), spec: LAP_SPEC, suffix: '' },
-  { id: 'tolerance' as const, label: 'TOLLERANZA', ariaLabel: 'Tolleranza massima', value: Math.round(props.toleranceMs / 100), spec: TOLERANCE_SPEC, suffix: ' s' },
+  { id: 'time' as const, label: t('hudSetup.target.timeField'), ariaLabel: t('hudSetup.target.targetTime'), value: Math.round(props.targetTimeMs / 100), spec: LAP_SPEC, suffix: '' },
+  { id: 'tolerance' as const, label: t('hudSetup.target.toleranceField'), ariaLabel: t('hudSetup.target.toleranceMax'), value: Math.round(props.toleranceMs / 100), spec: TOLERANCE_SPEC, suffix: ' s' },
 ])
 const editingPart = ref<{ id: QuickFieldId, part: number } | null>(null)
 function toggleQuickField(id: QuickFieldId, spec: NumberFieldSpec) {
@@ -107,8 +109,8 @@ const editingHint = computed(() => {
   if (!editingPart.value) return ''
   const field = quickFields.value.find(value => value.id === editingPart.value!.id)!
   return field.spec.parts.length > 1
-    ? `Su/Giù cambiano ${field.spec.parts[editingPart.value.part]!.label} · OK passa al successivo · Indietro fatto`
-    : 'Su/Giù cambiano il valore · OK fatto'
+    ? t('hudSetup.target.editingMulti', { part: field.spec.parts[editingPart.value.part]!.label })
+    : t('hudSetup.target.editingSingle')
 })
 defineExpose({ handleWheelCommand })
 
@@ -131,47 +133,47 @@ function onWheel(control: PickerControl, event: WheelEvent) {
     class="info-target-setup"
     :class="{ 'info-target-setup--sectors': appearance === 'sectors', 'info-target-setup--quick': appearance === 'quick-panel' }"
     data-overlay-interactive
-    aria-label="Configura Target giro"
+    :aria-label="t('hudSetup.target.aria')"
   >
     <!-- PIP-556: Control K editors share one structure: ← header, fields, shortcuts, hint, one primary action. -->
-    <ControlKViewHeader v-if="appearance === 'quick-panel'" title="Giro obiettivo" action="target-cancel" @back="emit('cancel')" />
+    <ControlKViewHeader v-if="appearance === 'quick-panel'" :title="t('hudSetup.target.quickTitle')" action="target-cancel" @back="emit('cancel')" />
     <header v-else>
       <span>{{ contextLabel }}</span>
-      <strong>Target giro</strong>
-      <p>Imposta il riferimento del giro completo.</p>
+      <strong>{{ t('hudSetup.target.title') }}</strong>
+      <p>{{ t('hudSetup.target.intro') }}</p>
     </header>
 
     <template v-if="appearance === 'quick-panel'">
-      <div class="ck-editor__fields" role="group" aria-label="Tempo obiettivo">
+      <div class="ck-editor__fields" role="group" :aria-label="t('hudSetup.target.targetTime')">
         <ControlKNumberField v-for="field in quickFields" :key="field.id" :value="field.value" :spec="field.spec" :label="field.label"
           :action="`target-${field.id}`" :name="field.ariaLabel" :suffix="field.suffix"
           :part="editingPart?.id === field.id ? editingPart.part : null" :class="`ck-field--${field.id}`"
           @toggle="toggleQuickField(field.id, field.spec)" @release="editingPart = null" @update:value="setQuickField(field.id, $event)" />
       </div>
       <div v-if="usableLap(bestLapMs) || usableLap(lastLapMs)" class="ck-editor__shortcuts">
-        <button v-if="usableLap(bestLapMs)" type="button" data-overlay-wheel-action="target-use-best" @click="useLap(bestLapMs!)">Usa best {{ formatInfoLapTime(Math.round(bestLapMs! / 100) * 100) }}</button>
-        <button v-if="usableLap(lastLapMs)" type="button" data-overlay-wheel-action="target-use-last" @click="useLap(lastLapMs!)">Usa ultimo {{ formatInfoLapTime(Math.round(lastLapMs! / 100) * 100) }}</button>
+        <button v-if="usableLap(bestLapMs)" type="button" data-overlay-wheel-action="target-use-best" @click="useLap(bestLapMs!)">{{ t('hudSetup.target.useBest', { time: formatInfoLapTime(Math.round(bestLapMs! / 100) * 100) }) }}</button>
+        <button v-if="usableLap(lastLapMs)" type="button" data-overlay-wheel-action="target-use-last" @click="useLap(lastLapMs!)">{{ t('hudSetup.target.useLast', { time: formatInfoLapTime(Math.round(lastLapMs! / 100) * 100) }) }}</button>
       </div>
       <!-- Only while the wheel adjusts a field: how to move on. -->
       <p v-if="editingHint" class="ck-editor__hint" role="status">{{ editingHint }}</p>
       <div class="ck-editor__actions">
-        <button type="button" class="ck-editor__primary" data-overlay-wheel-action="target-confirm" @click="emit('confirm')">Conferma</button>
+        <button type="button" class="ck-editor__primary" data-overlay-wheel-action="target-confirm" @click="emit('confirm')">{{ t('hudSetup.target.confirm') }}</button>
       </div>
     </template>
 
     <div v-if="appearance !== 'quick-panel'" class="target-preview" aria-live="polite">
-      <span>Tempo target</span>
+      <span>{{ t('hudSetup.target.preview') }}</span>
       <strong>{{ formatInfoLapTime(targetTimeMs) }}</strong>
     </div>
 
-    <div v-if="appearance !== 'quick-panel'" class="target-picker" role="group" aria-label="Tempo target">
+    <div v-if="appearance !== 'quick-panel'" class="target-picker" role="group" :aria-label="t('hudSetup.target.preview')">
       <article
         v-for="control in timeControls"
         :key="control.id"
         class="target-drum"
         :class="{ 'is-editing': editingControl === control.id }"
         tabindex="0"
-        :aria-label="`${control.ariaLabel}: ${control.value}. Usa la rotella o le frecce.`"
+        :aria-label="t('hudSetup.target.controlAria', { label: control.ariaLabel, value: control.value })"
         @wheel.prevent="onWheel(control, $event)"
       >
         <span>{{ control.label }}</span>
@@ -179,7 +181,7 @@ function onWheel(control: PickerControl, event: WheelEvent) {
           type="button"
           class="target-drum__arrow"
           :data-overlay-wheel-action="`target-${control.id}-increase`"
-          :aria-label="`Aumenta ${control.ariaLabel}`"
+          :aria-label="t('hudSetup.target.increase', { label: control.ariaLabel })"
           @click="adjustControl(control, 1)"
         >
           ▲
@@ -189,7 +191,7 @@ function onWheel(control: PickerControl, event: WheelEvent) {
         <button
           type="button"
           class="target-drum__arrow"
-          :aria-label="`Diminuisci ${control.ariaLabel}`"
+          :aria-label="t('hudSetup.target.decrease', { label: control.ariaLabel })"
           :data-overlay-wheel-action="`target-${control.id}-decrease`"
           @click="adjustControl(control, -1)"
         >
@@ -200,19 +202,19 @@ function onWheel(control: PickerControl, event: WheelEvent) {
 
     <section v-if="appearance !== 'quick-panel'" class="target-tolerance" aria-labelledby="target-tolerance-title">
       <div class="target-tolerance__copy">
-        <strong id="target-tolerance-title" title="Margine concesso oltre il target. I giri più veloci restano validi.">Tolleranza</strong>
-        <p>Margine concesso oltre il target. I giri più veloci restano validi.</p>
+        <strong id="target-tolerance-title" :title="t('hudSetup.target.toleranceHelp')">{{ t('hudSetup.target.tolerance') }}</strong>
+        <p>{{ t('hudSetup.target.toleranceHelp') }}</p>
       </div>
       <div
         class="target-tolerance__control"
         :class="{ 'is-editing': editingControl === 'tolerance' }"
         tabindex="0"
-        :aria-label="`${toleranceControl.ariaLabel}: ${toleranceControl.value}. Usa la rotella o i pulsanti meno e più.`"
+        :aria-label="t('hudSetup.target.toleranceControlAria', { label: toleranceControl.ariaLabel, value: toleranceControl.value })"
         @wheel.prevent="onWheel(toleranceControl, $event)"
       >
         <button
           type="button"
-          aria-label="Diminuisci Tolleranza massima"
+          :aria-label="t('hudSetup.target.decrease', { label: toleranceControl.ariaLabel })"
           data-overlay-wheel-action="target-tolerance-decrease"
           @click="adjustControl(toleranceControl, -1)"
         >
@@ -221,7 +223,7 @@ function onWheel(control: PickerControl, event: WheelEvent) {
         <strong>{{ toleranceControl.value }}</strong>
         <button
           type="button"
-          aria-label="Aumenta Tolleranza massima"
+          :aria-label="t('hudSetup.target.increase', { label: toleranceControl.ariaLabel })"
           data-overlay-wheel-action="target-tolerance-increase"
           @click="adjustControl(toleranceControl, 1)"
         >
@@ -235,19 +237,19 @@ function onWheel(control: PickerControl, event: WheelEvent) {
       type="button"
       class="target-keep"
       v-if="appearance !== 'quick-panel'"
-      title="Mantieni tra sessioni dello stesso server"
+      :title="t('hudSetup.target.keep')"
       data-overlay-wheel-action="target-keep"
       :class="{ 'is-active': keepBetweenSessions }"
       :aria-pressed="keepBetweenSessions"
       @click="emit('toggle-keep')"
     >
       <i aria-hidden="true">{{ keepBetweenSessions ? '✓' : '' }}</i>
-      <span>Mantieni tra sessioni dello stesso server</span>
+      <span>{{ t('hudSetup.target.keep') }}</span>
     </button>
 
     <div v-if="appearance !== 'quick-panel'" class="target-actions">
-      <button type="button" class="target-confirm" data-overlay-wheel-action="target-confirm" @click="emit('confirm')">Conferma</button>
-      <button type="button" class="target-cancel" data-overlay-wheel-action="target-cancel" @click="emit('cancel')">Annulla</button>
+      <button type="button" class="target-confirm" data-overlay-wheel-action="target-confirm" @click="emit('confirm')">{{ t('hudSetup.target.confirm') }}</button>
+      <button type="button" class="target-cancel" data-overlay-wheel-action="target-cancel" @click="emit('cancel')">{{ t('common.cancel') }}</button>
     </div>
   </section>
 </template>

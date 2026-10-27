@@ -4,6 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import RacingSwitch from '../../app/components/ui/RacingSwitch.vue'
 import HudPage from '../../app/pages/hud.vue'
+import { setLocale } from '~/i18n'
+
+// The settings page texts are asserted in Italian; jsdom starts in English.
+setLocale('it')
 
 vi.mock('~/composables/useHudOverlay', () => ({ getHudOverlayScaleMin: () => 0.5, getHudOverlayScaleMax: () => 3 }))
 vi.mock('~/utils/hudRoutePerformance', () => ({
@@ -116,4 +120,18 @@ it('filters EVO settings and restores ACC controls without writing preferences',
   expect(wrapper!.text()).toContain('Tempo stint')
   useGameContext().selectGame('acc'); await flushPromises()
   expect(wrapper!.text()).toContain('Traffico uscita box')
+})
+
+it('shows the settings page in English when the interface is English, keeping overlay ids', async () => {
+  setLocale('en')
+  try {
+    await render()
+    expect(wrapper!.text()).toContain('Overlay settings')
+    expect(wrapper!.text()).toContain('To move an overlay, open its padlock')
+    const items = wrapper!.findAll('.hud-overlay-list__item')
+    expect(items[0]!.text()).toContain('Tyres')
+    await items[5]!.trigger('click'); await flushPromises()
+    expect(wrapper!.text()).toContain('Circle view')
+    expect(wrapper!.find('[aria-labelledby="hud-settings-trackmap"]').exists()).toBe(true)
+  } finally { setLocale('it') }
 })

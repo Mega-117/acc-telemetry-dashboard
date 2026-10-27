@@ -2,6 +2,8 @@
 import { computed, defineAsyncComponent } from 'vue'
 import { useGameContext } from '~/composables/useGameContext'
 import { gameUiSupport, gameLabel } from '~/services/telemetry/gameCatalog'
+import { useI18n } from '~/i18n'
+const { t } = useI18n()
 const { consultedGame } = useGameContext()
 const available = computed(() => gameUiSupport(consultedGame.value).pitwall)
 const PitwallAvailablePage = defineAsyncComponent(() => import('~/components/pitwall/PitwallAvailablePage.vue').then(module => module.default))
@@ -13,9 +15,9 @@ definePageMeta({ layout: 'dashboard' })
   <PitwallAvailablePage v-if="available" />
   <section v-else class="pitwall-unavailable" data-testid="pitwall-unavailable">
     <h1>Pitwall</h1>
-    <h2>Attualmente non disponibile</h2>
-    <p>Pitwall non è ancora disponibile per {{ gameLabel(consultedGame) }}.</p>
-    <p>Puoi utilizzarlo selezionando Assetto Corsa Competizione.</p>
+    <h2>{{ t('pitwall.unavailable.title') }}</h2>
+    <p>{{ t('pitwall.unavailable.body', { game: gameLabel(consultedGame) }) }}</p>
+    <p>{{ t('pitwall.unavailable.hint') }}</p>
   </section>
   </div>
 </template>
