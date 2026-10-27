@@ -15,6 +15,8 @@
 }
 // PIP-639: on short screens (landscape tablets, phones on their side) the page starts closer to the tabs.
 @media (max-height: 780px) { :root { --app-content-top-space: 16px; } }
+// PIP-666: on 2K, 4K and ultrawide at 100% the 1400px column left most of the screen empty.
+@media (min-width: 2200px) { :root { --app-content-max-width: 1840px; } }
 
 @font-face {
   font-family: 'Racer Display'; src: url('../fonts/ChakraPetch-MediumItalic.woff2') format('woff2');

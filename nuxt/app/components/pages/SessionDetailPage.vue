@@ -3272,7 +3272,8 @@ const gripZones = computed(() => {
 .session-header--compact { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin: 4px 0 16px;
   .header-id { display: grid; gap: 8px; min-width: 0; }
   .header-row { margin-bottom: 0; } .track-name { font-size: 24px; letter-spacing: 1px; } .header-meta { margin-bottom: 0; align-items: center; gap: 14px; font-size: 14px; }
-  .header-actions { display: flex; align-items: center; gap: 12px; }
+  // PIP-666: on a phone the actions wrap under each other instead of pushing the switch off screen.
+  .header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-width: 0; }
   .detail-tabs { margin: 0; } }
 .header-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
 // PIP-635: lo stesso titolo sportivo del dettaglio pista.
