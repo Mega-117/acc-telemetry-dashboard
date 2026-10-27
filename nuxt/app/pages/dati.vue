@@ -8,9 +8,9 @@ import { mergeSessionsDeterministic } from '~/services/telemetry/telemetryMergeS
 import { sessionGame } from '~/services/telemetry/gameIdentity'
 import { sessionDataReferences, stintDataFacts, lapStatus } from '~/services/session-detail/sessionDataPresentation'
 import { formatLapTime, formatTrackName, formatCarName, getSessionTypeLabel } from '~/utils/telemetryFormat'
-import { deltaSeconds, recordedWheels } from '~/utils/datiWheels'
+import { brakeColor, pressureColor, tyreColor, type BrakePad } from '~/utils/temperatureColor'
 import type { FullSession, SectorTelemetry, SessionDocument } from '~/types/telemetry'
-import { useI18n } from '~/i18n'
+import { useI18n, type TranslationKey } from '~/i18n'
 
 definePageMeta({ layout: 'dashboard' })
 const { t, intlLocale } = useI18n()
@@ -25,7 +25,7 @@ let revision = 0, timer: ReturnType<typeof setInterval> | undefined
 let refreshing = false
 type Selection = { sessionId?: string; latestId?: string; stint?: number; lap?: number }
 const storageKey = () => `rc:dati:${profileUser.value?.uid ?? ''}`
-// PIP-616/663: two views, the recorded laps ('giro') and the car live while driving ('box'; stored keys unchanged).
+// PIP-616: two tabs, Giro (the recorded lap, ACC Drive TELEMETRY) and Box (live, ACC Drive ENGINEER).
 type DataTab = 'giro' | 'box'
 const TAB_KEY = 'rc:dati:tab'
 function rememberedTab(): DataTab {
@@ -57,20 +57,26 @@ const stintBest = computed(() => {
 function isBestLap(l?: LapLike) { return clean(l) && !!bestLap.value && l.lap_time_ms === bestLap.value }
 function isStintBest(l?: LapLike) { return clean(l) && !isBestLap(l) && l.lap_time_ms === stintBest.value }
 const isLatest = computed(() => sessionId.value === latest.value?.sessionId)
-// PIP-613/663: laps recorded before the per-lap summary (`lap.telemetry`) show "--" where the values would be.
+// PIP-613: the ACC Drive telemetry panel, compact. Laps recorded before the per-lap summary
+// (`lap.telemetry`) show "--" in the same places the values will fill.
 const tel = computed(() => lap.value?.telemetry)
-const wheels = computed(() => recordedWheels(tel.value))
-// The lap and its sectors, each with its gap to the best of the session.
+type WheelKind = 'pressure' | 'tyre' | 'brake'
+type WheelKey = 'high' | 'avg' | 'low' | 'loss'
+// Label, key and the one-line explanation shown on hover (translation keys).
+const wheelColumns: { title: TranslationKey, unit: string, kind: WheelKind, hint: TranslationKey, rows: [TranslationKey, WheelKey, TranslationKey][] }[] = [
+  { title: 'data.col.pressures', unit: 'psi', kind: 'pressure', hint: 'data.col.pressuresHint',
+    rows: [['data.cell.max', 'high', 'data.cell.pressureMax'], ['data.cell.avg', 'avg', 'data.cell.pressureAvg'], ['data.cell.loss', 'loss', 'data.cell.pressureLoss']] },
+  { title: 'data.col.tyreTemp', unit: '°C', kind: 'tyre', hint: 'data.col.tyreTempHint',
+    rows: [['data.cell.max', 'high', 'data.cell.tyreMax'], ['data.cell.avg', 'avg', 'data.cell.tempAvg'], ['data.cell.min', 'low', 'data.cell.tyreMin']] },
+  { title: 'data.col.brakeTemp', unit: '°C', kind: 'brake', hint: 'data.col.brakeTempHint',
+    rows: [['data.cell.max', 'high', 'data.cell.brakeMax'], ['data.cell.avg', 'avg', 'data.cell.tempAvg'], ['data.cell.min', 'low', 'data.cell.brakeMin']] },
+]
+// The lap and its sectors as one small table: read across to compare the sectors.
 const lapColumns = computed(() => [
-  { title: t('data.lap'), short: t('data.lap'), time: lap.value?.lap_time_ms ?? null, data: tel.value?.lap, lap: true, best: isBestLap(lap.value), stintBest: isStintBest(lap.value), unreliable: false,
-    delta: isBestLap(lap.value) ? '' : deltaSeconds(lap.value?.lap_time_ms, bestLap.value) },
+  { title: t('sessionDetail.chart.lap', { lap: lap.value?.lap_number ?? '' }), time: lap.value?.lap_time_ms ?? null, data: tel.value?.lap, lap: true, best: isBestLap(lap.value), stintBest: isStintBest(lap.value), unreliable: false },
   // A sector counts as best only on a valid lap with reliable sectors (not the pit-out lap).
-  ...sectors.value.map((time, i) => {
-    const reliable = time !== null && sectorsReliable.value
-    const best = reliable && !!lap.value?.is_valid && time === bestSectors.value[i]
-    return { title: t('telemetry.sector', { n: i + 1 }), short: `S${i + 1}`, time, data: tel.value?.sectors?.[i], lap: false, best, stintBest: false, unreliable: time !== null && !sectorsReliable.value,
-      delta: reliable && !best ? deltaSeconds(time, bestSectors.value[i]) : '' }
-  }),
+  ...sectors.value.map((time, i) => ({ title: t('telemetry.sector', { n: i + 1 }), time, data: tel.value?.sectors?.[i], lap: false,
+    best: time !== null && !!lap.value?.is_valid && sectorsReliable.value && time === bestSectors.value[i], stintBest: false, unreliable: time !== null && !sectorsReliable.value })),
 ])
 const sectorsReliable = computed(() => lap.value?.sectors_reliable !== false)
 const lapRows = computed<{ label: string, hint: string, value: (data?: SectorTelemetry) => string }[]>(() => [
@@ -83,6 +89,29 @@ const assists = computed(() => {
   const a = tel.value?.assists
   return a ? `TC ${count(a.tc)} · TC2 ${count(a.tc2)} · ABS ${count(a.abs)}` : '--'
 })
+const PAD: Record<string, BrakePad> = { standard: 'standard', endurance: 'endurance', wet: 'wet', qualy: 'qualy' }
+const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
+/** The four values of a cell (FL FR / RL RR), with the ACC Drive colour where it has one. */
+function wheelCells(kind: WheelKind, key: WheelKey) {
+  const reading = tel.value
+  const source = kind === 'pressure' ? reading?.pressure : kind === 'tyre' ? reading?.tyre_temp : reading?.brake_temp
+  const values = (source as Record<string, (number | null)[]> | undefined)?.[key]
+  // Always four cells: a missing reading shows "--" on its own and never hides the other wheels.
+  return [0, 1, 2, 3].map((wheel) => {
+    const value = values?.[wheel] ?? null
+    if (kind === 'pressure') {
+      // The pressure drop in orange (as ACC Drive); max and average against the target window.
+      const color = key === 'loss' ? (finite(value) ? '#ffa94d' : null) : pressureColor(value, !!reading?.tyre?.wet)
+      return { text: number(value, key === 'loss' ? 2 : 1), color }
+    }
+    const axle = wheel < 2 ? 'front' : 'rear'
+    const color = kind === 'tyre'
+      ? tyreColor(value, !!reading?.tyre?.wet)
+      : brakeColor(value, axle, PAD[String((axle === 'front' ? reading?.brakes?.front_pad : reading?.brakes?.rear_pad) ?? '').toLowerCase()])
+    return { text: finite(value) ? `${Math.round(value)}°` : '--', color }
+  })
+}
+const percent = (values?: (number | null)[]) => [0, 1, 2, 3].map(i => values?.[i]).map(v => finite(v) ? `${v.toFixed(1)}%` : '--')
 // ACC's compound string is "dry_compound"/"wet_compound": the wet flag says the same, readably.
 const tyreType = computed(() => tel.value?.tyre ? (tel.value.tyre.wet ? t('data.wet') : t('data.dry')) : '--')
 const brakeType = computed(() => {
@@ -91,15 +120,14 @@ const brakeType = computed(() => {
   return b.rear_pad && b.rear_pad !== b.front_pad ? `${b.front_pad} / ${b.rear_pad}` : b.front_pad
 })
 const sectors = computed(() => [0, 1, 2].map(i => lap.value?.sector_times_ms?.[i] ?? null))
-// Best sectors of the session (valid laps with reliable sectors), in the best-of-session purple.
+// Best sectors of the session (valid laps with reliable sectors): shown in purple, as in ACC Drive.
 const bestSectors = computed(() => [0, 1, 2].map(i => {
   const values = stints.value.flatMap(s => s.laps).filter(l => l.is_valid && l.sectors_reliable).map(l => l.sector_times_ms?.[i]).filter((v): v is number => typeof v === 'number' && v > 0)
   return values.length ? Math.min(...values) : null
 }))
-// km/h in the row hint: the narrow columns keep only the number.
-const kmh = (value?: number | null) => typeof value === 'number' ? value.toFixed(1) : '--'
+const kmh = (value?: number | null) => typeof value === 'number' ? `${value.toFixed(1)} km/h` : '--'
 const count = (value?: number | null) => typeof value === 'number' ? String(value) : '--'
-// ↑ ↓ (buttons or keys) move to the previous or next lap of the stint.
+// ↑ ↓ (buttons or keys) move to the previous or next lap of the stint, as in ACC Drive.
 function stepLap(direction: -1 | 1) {
   const index = laps.value.findIndex(l => l.lap_number === lapNumber.value)
   const next = laps.value[index + direction]
@@ -174,7 +202,7 @@ async function refreshLocal() {
     if (latest.value && previousLatest !== latest.value.sessionId) { await selectSession(latest.value.sessionId); return }
     // Poll only the selected local file; historical cloud data is immutable here.
     if (local.some(s => s.sessionId === sessionId.value)) {
-      // Watching the last lap: a new lap takes over, so the page follows the drive.
+      // Watching the last lap: a new lap takes over, like the live ACC Drive panel.
       const onLast = lapNumber.value === laps.value.at(-1)?.lap_number && stintNumber.value === stints.value.at(-1)?.stint_number
       const watched = { stint: stintNumber.value, lap: lapNumber.value }
       const result = await gateway.getSessionDetail(sessionId.value, uid, { warmupSessions: false })
@@ -208,8 +236,8 @@ const repairTotal = computed(() => {
 <template>
   <LayoutPageContainer class="data-page">
     <div v-rc-switch class="data-tabs rc-switch" role="tablist" :aria-label="t('data.viewAria')">
-      <button type="button" role="tab" :aria-selected="tab === 'giro'" :class="{ active: tab === 'giro' }" :title="t('data.tabLapsTitle')" @click="selectTab('giro')">{{ t('data.tabLaps') }}</button>
-      <button type="button" role="tab" :aria-selected="tab === 'box'" :class="{ active: tab === 'box' }" :title="t('data.tabLiveTitle')" @click="selectTab('box')">{{ t('data.tabLive') }}</button>
+      <button type="button" role="tab" :aria-selected="tab === 'giro'" :class="{ active: tab === 'giro' }" :title="t('data.tabLapTitle')" @click="selectTab('giro')">{{ t('data.lap') }}</button>
+      <button type="button" role="tab" :aria-selected="tab === 'box'" :class="{ active: tab === 'box' }" :title="t('data.tabBoxTitle')" @click="selectTab('box')">{{ t('data.tabBox') }}</button>
     </div>
     <DatiBoxPanel v-if="tab === 'box'" />
     <template v-else>
@@ -251,58 +279,96 @@ const repairTotal = computed(() => {
       </aside>
 
       <div class="tele-main">
-        <!-- The lap and its sectors, each with the gap to the best of the session. -->
-        <section class="lap-head" :aria-label="t('data.lapAria')">
-          <div v-for="col in lapColumns" :key="col.title" class="lap-split" :class="{ 'lap-split--lap': col.lap, best: col.best, 'stint-best': col.stintBest, invalid: col.lap && lap?.is_valid === false, unreliable: col.unreliable }"
-            :title="col.unreliable ? t('data.unreliable') : col.lap && lap ? lapStatus(lap) : undefined">
-            <span class="lap-split-title">{{ col.lap ? t('sessionDetail.chart.lap', { lap: lap?.lap_number ?? '' }) : col.title }}</span>
-            <strong>{{ time(col.time) }}<small v-if="col.unreliable"> *</small></strong>
-            <em v-if="col.best">{{ t('data.sessionBest') }}</em><em v-else-if="col.delta">{{ col.delta }}</em>
-          </div>
-        </section>
-
-        <div class="tele-body">
-          <section class="tele-block">
-            <h2 class="tele-section">{{ t('data.wheels') }} <small>{{ t('data.wheelsHint') }}</small></h2>
-            <DatiWheelBoard :wheels="wheels" />
+        <!-- Per wheel (FL FR / RL RR) and car -->
+        <p class="tele-section">{{ t('data.tyresBrakes') }} <small>· {{ t('data.perWheel') }}</small>
+          <span class="tele-legend" :aria-label="t('data.legend.aria')"><i style="background: rgb(0, 0, 200)" />{{ t('data.legend.cold') }}<i style="background: rgb(0, 200, 0)" />{{ t('data.legend.ok') }}<i style="background: rgb(230, 230, 0)" />{{ t('data.legend.warm') }}<i style="background: rgb(255, 0, 0)" />{{ t('data.legend.hot') }}</span></p>
+        <div class="tele-grid">
+          <section v-for="column in wheelColumns" :key="column.title" class="tele-col">
+            <h3 :title="t(column.hint)">{{ t(column.title) }} <small>{{ column.unit }}</small></h3>
+            <div v-for="[label, key, hint] in column.rows" :key="key" class="tele-cell" :title="t(hint)">
+              <span class="tele-label">{{ t(label) }}</span>
+              <div class="tele-wheels"><b v-for="(cell, i) in wheelCells(column.kind, key)" :key="i" :style="cell.color ? { color: cell.color } : undefined">{{ cell.text }}</b></div>
+            </div>
           </section>
-          <div class="tele-side">
-            <section class="tele-block">
-              <h2 class="tele-section">{{ t('data.speedAids') }} <small>{{ t('data.speedAidsHint') }}</small></h2>
-              <div class="tele-table" role="table" :aria-label="t('data.speedAidsAria')">
-                <!-- Rows are display: contents (the grid keeps its columns); they give readers the table's rows. -->
-                <div class="tele-tr" role="row">
-                  <span class="tele-th" role="columnheader" />
-                  <span v-for="col in lapColumns" :key="col.title" class="tele-th" role="columnheader">{{ col.short }}</span>
-                </div>
-                <div v-for="row in lapRows" :key="row.label" class="tele-tr" role="row">
-                  <span class="tele-rh" role="rowheader" :title="row.hint">{{ row.label }}</span>
-                  <span v-for="col in lapColumns" :key="`${row.label}-${col.title}`" class="tele-td" role="cell">{{ row.value(col.data) }}</span>
-                </div>
-              </div>
-            </section>
-            <section class="tele-block">
-              <h2 class="tele-section">{{ t('data.setup') }}</h2>
-              <dl class="tele-facts">
-                <div><dt>{{ t('data.tyres') }}</dt><dd>{{ tyreType }} · set {{ count(tel?.tyre?.set) }}</dd></div>
-                <div><dt>{{ t('data.pads') }}</dt><dd>{{ brakeType }}</dd></div>
-                <div :title="t('data.aidsHint')"><dt>{{ t('data.aids') }}</dt><dd>{{ assists }}</dd></div>
-                <div :title="t('data.damageHint')"><dt>{{ t('data.damage') }}</dt><dd>{{ repair(repairTotal) }}<small v-if="(tel?.damage?.body ?? 0) > 0 || (tel?.damage?.suspension ?? 0) > 0"> ({{ t('data.body') }} {{ repair(tel?.damage?.body) }} · {{ t('data.suspension') }} {{ repair(tel?.damage?.suspension) }})</small></dd></div>
-              </dl>
-            </section>
+          <section class="tele-col">
+            <h3>{{ t('data.tyres') }}</h3>
+            <div class="tele-cell"><span class="tele-label">{{ t('data.type') }}</span><strong class="tele-value">{{ tyreType }}</strong></div>
+            <div class="tele-cell"><span class="tele-label">{{ t('data.set') }}</span><strong class="tele-value">{{ count(tel?.tyre?.set) }}</strong></div>
+            <!-- Car settings next to compound and pads (ACC gives no tyre wear). -->
+            <div class="tele-cell" :title="t('data.aidsHint')"><span class="tele-label">{{ t('data.aids') }}</span><strong class="tele-value">{{ assists }}</strong></div>
+          </section>
+          <section class="tele-col">
+            <h3>{{ t('data.brakes') }}</h3>
+            <div class="tele-cell"><span class="tele-label">{{ t('data.type') }}</span><strong class="tele-value">{{ brakeType }}</strong></div>
+            <div class="tele-cell"><span class="tele-label">{{ t('data.pads') }}</span><div class="tele-wheels"><b v-for="(v, i) in percent(tel?.brakes?.pad_life)" :key="i">{{ v }}</b></div></div>
+            <div class="tele-cell"><span class="tele-label">{{ t('data.discs') }}</span><div class="tele-wheels"><b v-for="(v, i) in percent(tel?.brakes?.disc_life)" :key="i">{{ v }}</b></div></div>
+          </section>
+        </div>
+
+        <!-- Lap and sectors -->
+        <p class="tele-section">{{ t('data.lapAria') }}</p>
+        <!-- One table on the same five columns: labels, then lap and sectors to read across. -->
+        <div class="tele-table" role="table" :aria-label="t('data.lapAria')">
+          <!-- Rows are display: contents (the grid keeps its five columns); they give readers the table's rows. -->
+          <div class="tele-tr" role="row">
+          <span class="tele-th" role="columnheader" />
+          <span v-for="col in lapColumns" :key="col.title" class="tele-th" role="columnheader">{{ col.title }}</span>
+          </div>
+          <div class="tele-tr" role="row">
+          <span class="tele-rh" role="rowheader" :title="t('data.timeHint')">{{ t('data.time') }}</span>
+          <span v-for="col in lapColumns" :key="`t-${col.title}`" class="tele-td tele-td--time" role="cell"
+            :class="{ 'lap-time': col.lap, invalid: col.lap && lap?.is_valid === false, best: col.best, 'stint-best': col.stintBest, unreliable: col.unreliable }"
+            :title="col.unreliable ? t('data.unreliable') : undefined">{{ time(col.time) }}<small v-if="col.unreliable"> *</small></span>
+          </div>
+          <div v-for="row in lapRows" :key="row.label" class="tele-tr" role="row">
+            <span class="tele-rh" role="rowheader" :title="row.hint">{{ row.label }}</span>
+            <span v-for="col in lapColumns" :key="`${row.label}-${col.title}`" class="tele-td" role="cell">{{ row.value(col.data) }}</span>
           </div>
         </div>
 
-        <!-- Session, stint and conditions in one strip. -->
-        <section class="tele-strip" :aria-label="t('data.stripAria')">
-          <div><span>{{ t('sessions.common.best') }}</span><strong class="best-lap">{{ time(references.best) }}</strong></div>
-          <div :title="t('data.optimalHint')"><span>{{ t('data.optimal') }}</span><strong>{{ time(references.optimal) }}</strong></div>
-          <div><span>{{ t('sessions.common.average') }}</span><strong>{{ time(references.average) }}</strong></div>
-          <div :title="t('data.stintHint')"><span>Stint</span><strong>{{ time(facts.duration) }}</strong></div>
-          <div :title="t('data.fuelHint')"><span>{{ t('data.fuel') }}</span><strong>{{ number(facts.consumed, 2) }} L <small>· {{ number(facts.perLap, 2) }} {{ t('data.perLap') }}</small></strong></div>
-          <div :title="t('data.airHint')"><span>{{ t('sessionDetail.conditions.air') }}</span><strong>{{ number(startAir, 1) }}° <small :class="{ warm: (delta(startAir, lap?.air_temp) ?? 0) > 0 }">{{ signed(delta(startAir, lap?.air_temp)) }}</small></strong></div>
-          <div :title="t('data.trackHint')"><span>{{ t('sessionDetail.conditions.track') }}</span><strong>{{ number(startTrack, 1) }}° <small :class="{ warm: (delta(startTrack, lap?.road_temp) ?? 0) > 0 }">{{ signed(delta(startTrack, lap?.road_temp)) }}</small></strong></div>
-        </section>
+        <!-- Session, stint, damage, conditions -->
+        <p class="tele-section">{{ t('data.conditions') }}</p>
+        <div class="tele-row tele-row--facts">
+          <!-- Same five columns as the rows above, each card with its title. -->
+          <section class="tele-card">
+            <h3>{{ t('data.session') }}</h3>
+            <dl>
+              <div><dt>{{ t('sessions.common.best') }}</dt><dd class="best-lap">{{ time(references.best) }}</dd></div>
+              <div><dt>{{ t('data.optimal') }}</dt><dd>{{ time(references.optimal) }}</dd></div>
+              <div><dt>{{ t('sessions.common.average') }}</dt><dd>{{ time(references.average) }}</dd></div>
+            </dl>
+          </section>
+          <section class="tele-card">
+            <h3>Stint</h3>
+            <dl>
+              <div><dt>{{ t('data.time') }}</dt><dd>{{ time(facts.duration) }}</dd></div>
+              <div><dt>{{ t('data.fuel') }}</dt><dd>{{ number(facts.consumed, 2) }} L</dd></div>
+              <div><dt>{{ t('data.box.perLap') }}</dt><dd>{{ number(facts.perLap, 2) }} L</dd></div>
+            </dl>
+          </section>
+          <section class="tele-card">
+            <h3>{{ t('data.damage') }}</h3>
+            <dl :title="t('data.damageHint')">
+              <div><dt>{{ t('data.bodyCap') }}</dt><dd>{{ repair(tel?.damage?.body) }}</dd></div>
+              <div><dt>{{ t('data.suspensionCap') }}</dt><dd>{{ repair(tel?.damage?.suspension) }}</dd></div>
+              <div><dt>{{ t('data.box.total') }}</dt><dd>{{ repair(repairTotal) }}</dd></div>
+            </dl>
+          </section>
+          <section class="tele-card">
+            <h3>{{ t('sessionDetail.conditions.air') }}</h3>
+            <dl>
+              <div><dt>{{ t('data.start') }}</dt><dd>{{ number(startAir, 1) }}°</dd></div>
+              <div><dt>{{ t('data.delta') }}</dt><dd :class="{ warm: (delta(startAir, lap?.air_temp) ?? 0) > 0 }">{{ signed(delta(startAir, lap?.air_temp)) }}</dd></div>
+            </dl>
+          </section>
+          <section class="tele-card">
+            <h3>{{ t('sessions.list.track') }}</h3>
+            <dl>
+              <div><dt>{{ t('data.start') }}</dt><dd>{{ number(startTrack, 1) }}°</dd></div>
+              <div><dt>{{ t('data.delta') }}</dt><dd :class="{ warm: (delta(startTrack, lap?.road_temp) ?? 0) > 0 }">{{ signed(delta(startTrack, lap?.road_temp)) }}</dd></div>
+            </dl>
+          </section>
+        </div>
         <p v-if="lapColumns.some(c => c.unreliable)" class="tele-note">* {{ t('data.unreliableNote') }}</p>
         <p v-if="lap && !tel" class="tele-note">-- = {{ t('data.oldLapNote') }}</p>
       </div>
@@ -312,14 +378,11 @@ const repairTotal = computed(() => {
 </template>
 
 <style scoped lang="scss">
-// PIP-663: Racer Core reading order: the lap first (time and gaps), then the car wheel by wheel,
-// then speed/aids and the session strip. Dark cells, thin borders, tabular numbers.
+// PIP-613: the ACC Drive telemetry panel in the Racer Core language: dark cells, thin borders,
+// small titles, tabular numbers; everything visible without scrolling on a desktop window.
 @use '@/assets/scss/racing-settings' as controls;
 $line: #ffffff24;
 $cell: #ffffff08;
-$best: #e14bff;
-$stint-best: #3ddc5a;
-$invalid: #ff5a6e;
 .data-page { @include controls.tokens; }
 h2, h3 { margin: 0; font-family: 'Racer Display', 'Arial Narrow', sans-serif; font-style: italic; font-weight: 700; text-transform: uppercase; }
 // I bottoni d'azione usano il comune .rc-btn: il vecchio stile resta solo ai controlli a icona.
@@ -327,6 +390,7 @@ h2, h3 { margin: 0; font-family: 'Racer Display', 'Arial Narrow', sans-serif; fo
 button:not(.rc-btn):where(:not(.rc-switch button)) { @include controls.action; }
 select { @include controls.select; }
 
+// Giro / Box: selettore .rc-switch del tema (come Sessione / Telemetria), qui solo il margine.
 .data-tabs { margin-bottom: 12px; }
 .data-bar { display: flex; gap: 10px; align-items: center; }
 .data-session { flex: 1; min-width: 0; }
@@ -336,77 +400,85 @@ select { @include controls.select; }
 .data-error { color: #ff899a; font-size: 12px; }
 .data-empty { padding: 40px 0; color: #aaa; }
 
-.tele { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; > * { min-width: 0; } }
+.tele { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; }
 .tele-laps { display: flex; flex-direction: column; min-height: 0; border: 1px solid $line; background: $cell; padding: 10px 0;
-  h2 { font-size: 14px; } }
-.tele-lap-list { flex: 1; overflow: auto; max-height: 620px; }
+  h2 { padding: 0 12px 8px; font-size: 14px; } }
+.tele-lap-list { flex: 1; overflow: auto; max-height: 560px; }
 .tele-lap { display: flex; align-items: baseline; gap: 10px; width: 100%; padding: 5px 12px; border: 0; background: none; clip-path: none; color: #e6e6ea; text-align: left; font-variant-numeric: tabular-nums; cursor: pointer;
   &::after { display: none; }
   span { width: 18px; color: #8a8a90; font-size: 12px; text-align: right; }
   strong { font: 600 14px/1.3 'Inter', sans-serif; }
   &:hover { background: #ffffff0d; }
-  &.invalid strong { color: $invalid; }
-  &.best strong { color: $best; }
-  &.stint-best strong { color: $stint-best; }
-  &.selected { box-shadow: inset 3px 0 var(--racing-race); background: #ff002426; strong { color: #fff; } }
-  &.best.selected strong { color: $best; }
-  &.stint-best.selected strong { color: $stint-best; }
-  &.invalid.selected strong { color: $invalid; } }
-.tele-laps-head { display: flex; align-items: center; justify-content: space-between; padding: 0 8px 8px 12px; }
+  &.invalid strong { color: #ff5a6e; }
+  // The best lap of the session in fuchsia, as everywhere in sim racing; valid laps stay white.
+  &.best strong { color: #e14bff; }
+  &.stint-best strong { color: #3ddc5a; }
+  &.selected { box-shadow: inset 3px 0 #ff0024; background: #ff002426; strong { color: #fff; } }
+  &.best.selected strong { color: #e14bff; }
+  &.stint-best.selected strong { color: #3ddc5a; }
+  &.invalid.selected strong { color: #ff5a6e; } }
+.tele-laps-head { display: flex; align-items: center; justify-content: space-between; padding: 0 8px 8px 12px; h2 { padding: 0; } }
 .tele-steps { display: flex; gap: 4px;
   button { min-width: 26px; min-height: 26px; padding: 0; clip-path: none; font-size: 13px; } }
 .tele-note { margin: 8px 0 0; padding: 0 12px; color: #77777d; font-size: 11px; }
-.tele-main .tele-note { padding: 0; margin: 0; }
+.tele-main .tele-note { padding: 0; }
+
+.tele-main { display: grid; gap: 8px; min-width: 0; align-content: start; }
+// Small group label with a thin line: what to look at, without boxing the panel again.
+.tele-section { display: flex; align-items: center; gap: 10px; margin: 4px 0 -2px; color: #b3b3b8; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  small { color: #77777d; font-weight: 500; letter-spacing: 0; text-transform: none; }
+  &::after { content: ''; flex: 1; height: 1px; background: #ffffff1f; }
+  &:first-child { margin-top: 0; } }
+.tele-legend { display: inline-flex; align-items: center; gap: 5px; order: 2; color: #8a8a90; font-size: 10px; font-weight: 500; letter-spacing: 0; text-transform: none;
+  i { width: 8px; height: 8px; margin-left: 6px; } }
+.tele-section::after { order: 1; }
 [title] { cursor: help; }
-
-.tele-main { display: grid; gap: 12px; min-width: 0; align-content: start; }
-// Lap head: the lap wide on the left, the three sectors after it, each with its gap.
-.lap-head { display: grid; grid-template-columns: 1.4fr repeat(3, minmax(0, 1fr)); border: 1px solid $line; background: $cell; }
-.lap-split { display: grid; gap: 2px; align-content: center; padding: 10px 14px; border-left: 1px solid $line; font-variant-numeric: tabular-nums;
-  &:first-child { border-left: 0; }
-  strong { font: 600 20px/1.2 'Inter', sans-serif; color: #f2f2f5; }
-  em { color: #b3b3b8; font-size: 12px; font-style: normal; }
-  &.best strong, &.best em { color: $best; }
-  &.stint-best strong { color: $stint-best; }
-  &.invalid strong { color: $invalid; }
-  &.unreliable strong { color: #8a8a90; font-style: italic; } }
-.lap-split--lap { box-shadow: inset 0 3px var(--racing-race); strong { font: italic 700 28px/1.1 'Racer Display', sans-serif; } }
-.lap-split-title { color: #b3b3b8; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-
-.tele-body { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); gap: 12px; align-items: start; }
-.tele-side { display: grid; gap: 12px; }
-.tele-block { display: grid; gap: 8px; }
-.tele-section { display: flex; align-items: baseline; gap: 10px; color: #b3b3b8; font: 700 11px 'Inter', sans-serif; letter-spacing: .08em;
-  small { color: #77777d; font-weight: 500; letter-spacing: 0; text-transform: none; } }
+// Lap and sectors: label column + four value columns, aligned to the five-column grid.
 .tele-tr { display: contents; }
-.tele-table { display: grid; grid-template-columns: auto repeat(4, minmax(0, 1fr)); column-gap: 8px; row-gap: 2px; border: 1px solid $line; background: $cell; padding: 8px 4px; font-variant-numeric: tabular-nums;
-  .tele-tr > span { padding: 2px 6px; font-size: 13px; }
-  .tele-th { color: #8a8a90; font-size: 11px; font-weight: 700; text-align: right; text-transform: uppercase; }
-  .tele-rh { color: #b3b3b8; font-weight: 600; }
-  .tele-td { color: #e6e6ea; font-weight: 600; text-align: right; } }
-.tele-facts { display: grid; gap: 6px; margin: 0; padding: 10px 12px; border: 1px solid $line; background: $cell;
-  > div { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 8px; font-size: 13px; }
-  dt { color: #b3b3b8; font-weight: 700; }
-  dd { margin: 0; color: #e6e6ea; font-weight: 600; small { color: #8a8a90; font-weight: 500; } } }
-// Session strip: seven short facts in one line, wrapping on narrow windows.
-.tele-strip { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 1px solid $line; background: $cell;
-  > div { display: grid; gap: 3px; padding: 8px 12px; border-left: 1px solid $line; &:first-child { border-left: 0; } }
-  span { color: #b3b3b8; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-  strong { font: 600 14px/1.25 'Inter', sans-serif; color: #e6e6ea; font-variant-numeric: tabular-nums; small { color: #8a8a90; font-weight: 500; } }
-  .best-lap { color: $best; }
-  .warm { color: $invalid; } }
+.tele-table { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); column-gap: 10px; border: 1px solid $line; background: $cell; padding: 6px 0; font-variant-numeric: tabular-nums;
+  > span { padding: 2px 12px; font-size: 13px; }
+  .tele-th { color: #fff; font: italic 700 13px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; text-align: center; padding-bottom: 6px; border-bottom: 1px solid $line; margin-bottom: 3px; }
+  .tele-rh { color: #b3b3b8; font-weight: 700; text-align: right; }
+  .tele-td { color: #e6e6ea; font-weight: 600; text-align: center; }
+  .tele-td--time { font-size: 14px; }
+  .lap-time { color: #fff; }
+  .invalid { color: #ff5a6e; }
+  .best { color: #e14bff; }
+  .stint-best { color: #3ddc5a; }
+  .unreliable { color: #8a8a90; font-style: italic; } }
+.tele-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+// Same rows in every column (title + three cells), so all cell edges line up.
+.tele-col { display: grid; grid-template-rows: auto repeat(3, 1fr); gap: 6px;
+  h3 { font-size: 13px; text-align: center; small { color: #8a8a90; font: 500 10px 'Inter', sans-serif; text-transform: none; } } }
+.tele-cell { display: grid; justify-items: center; gap: 4px; min-height: 56px; padding: 5px 6px; border: 1px solid $line; background: $cell; align-content: center; }
+.tele-label { color: #b3b3b8; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.tele-wheels { display: grid; grid-template-columns: repeat(2, minmax(0, auto)); gap: 2px 14px; font: 600 14px/1.25 'Inter', sans-serif; font-variant-numeric: tabular-nums; color: #e6e6ea; b { font-weight: 600; } }
+.tele-value { font: 600 14px/1.25 'Inter', sans-serif; color: #e6e6ea; &.muted { color: #8a8a90; font-size: 11px; font-weight: 500; text-align: center; } }
 
-@media (max-width: 1250px) {
-  .tele-body { grid-template-columns: 1fr; }
-  .tele-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); > div:nth-child(5) { border-left: 0; } > div:nth-child(n+5) { border-top: 1px solid $line; } }
+.tele-row { display: grid; gap: 10px; }
+.tele-row--lap { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.tele-row--facts { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.tele-card { padding: 8px 12px; border: 1px solid $line; background: $cell;
+  h3 { margin-bottom: 6px; font-size: 13px; text-align: center; }
+  dl { display: grid; gap: 3px; margin: 0; }
+  // Label right, value left: the colons line up in every card.
+  dl > div { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 13px; }
+  dt { text-align: right; }
+  dt { color: #b3b3b8; font-weight: 700; &::after { content: ':'; } }
+  dd { margin: 0; color: #e6e6ea; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .lap-time { color: #fff; &.invalid { color: #ff5a6e; } }
+  .sector-time { color: #e6e6ea; }
+  .best, .best-lap { color: #e14bff; }
+  .warm { color: #ff5a6e; } }
+
+@media (max-width: 1100px) {
+  .tele-grid, .tele-row--lap, .tele-row--facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 720px) {
   .tele { grid-template-columns: 1fr; }
   .tele-lap-list { display: flex; max-height: none; overflow-x: auto; }
   .tele-lap { flex: 0 0 auto; }
-  .lap-head { grid-template-columns: repeat(3, minmax(0, 1fr)); .lap-split--lap { grid-column: 1 / -1; border-bottom: 1px solid $line; } .lap-split:nth-child(2) { border-left: 0; } }
-  .lap-split { padding: 8px 10px; strong { font-size: 15px; } }
-  .tele-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); > div { border-left: 0; border-top: 1px solid $line; } > div:nth-child(even) { border-left: 1px solid $line; } > div:nth-child(-n+2) { border-top: 0; } }
+  .tele-grid, .tele-row--lap, .tele-row--facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .data-bar { flex-wrap: wrap; .data-session { flex-basis: 100%; } }
 }
 </style>
