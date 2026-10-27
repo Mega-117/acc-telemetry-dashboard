@@ -7,6 +7,8 @@ import { ref } from 'vue'
 
 vi.mock('~/repositories/publicProfileRepository', () => ({ loadPublicNickname: vi.fn(async () => 'Marco') }))
 vi.mock('~/composables/useFirebaseAuth', () => ({ useFirebaseAuth: () => ({ currentUser: ref({ getIdToken: async () => 'token' }) }) }))
+// Track edges (PIP-636) are not what these tests check, and they read the Nuxt runtime config.
+vi.mock('~/composables/useTrackEdges', () => ({ useTrackEdges: () => ref(null) }))
 
 import SharedLapPanel from '~/components/session-detail/analysis/SharedLapPanel.vue'
 import SessionAnalysisPanel from '~/components/session-detail/analysis/SessionAnalysisPanel.vue'
@@ -89,7 +91,9 @@ describe('SessionAnalysisPanel sharing and coach view', () => {
     }
     const view = mount(SessionAnalysisPanel, { props: { sessionToken: '20261025_175240', laps }, global: { stubs: { AnalysisMap: true, AnalysisCharts: true, AnalysisCar: true } } })
     await flushPromises()
-    const button = view.findAll('button.bar-btn').find(b => b.text() === 'Condividi giro')!
+    // PIP-635: "Condividi giro" is an action under the "Tu" lap menu.
+    await view.find('.lap-picker__button').trigger('click')
+    const button = view.findAll('.lap-picker__actions button').find(b => b.text().startsWith('Condividi questo giro'))!
     await button.trigger('click')
     await flushPromises()
     expect((window as any).electronAPI.shareLapTrace).toHaveBeenCalledWith('h__c/lap_20261025_175240_L006_104900ms.json.gz')
