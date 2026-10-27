@@ -1576,7 +1576,9 @@ onBeforeUnmount(() => {
                   <header class="launcher-tools__header">
                     <img class="quick-panel-logo" src="/branding/auth/racercore-rc.svg" alt="Racer Core" width="56" height="28">
                     <!-- PIP-532: the Notifiche view owns the corner (its X); the switch steps aside. -->
-                    <QuickPanelLayoutToggle v-if="!usesAccLayout" v-show="!isNotificationsOpen" :model-value="quickPanelLayout" @update:model-value="setQuickPanelLayout" />
+                    <!-- PIP-657: no game yet -> the waiting note takes the switch's place, right of the logo. -->
+                    <p v-if="waitingForSimulator" class="quick-panel-waiting quick-panel-waiting--header" role="status">{{ simulatorPresence.choiceRequired.value ? 'Scegli il gioco nella webapp' : 'In attesa del simulatore' }}</p>
+                    <QuickPanelLayoutToggle v-else-if="!usesAccLayout" v-show="!isNotificationsOpen" :model-value="quickPanelLayout" @update:model-value="setQuickPanelLayout" />
                     <div class="quick-panel-header-actions" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
                     <!-- PIP-556: ACC Pausa keeps the four voice alerts behind one button (own view). -->
                     <button v-if="usesAccLayout && !isVoiceViewOpen" type="button" class="launcher-tool-button ck-voice-alerts" title="Avvisi vocali"
@@ -1590,7 +1592,7 @@ onBeforeUnmount(() => {
                       <ArrowLeft :size="16" aria-hidden="true" />
                     </button>
                     <!-- PIP-526: reachable from the wheel, last in the cycle (data-overlay-wheel-last). -->
-                    <button type="button" class="launcher-tool-button quick-panel-timer" title="Timer" aria-label="Timer" data-overlay-wheel-action="timer" :data-overlay-wheel-last="usesAccLayout ? undefined : ''" @click="openQuickTimer">
+                    <button v-if="!waitingForSimulator" type="button" class="launcher-tool-button quick-panel-timer" title="Timer" aria-label="Timer" data-overlay-wheel-action="timer" :data-overlay-wheel-last="usesAccLayout ? undefined : ''" @click="openQuickTimer">
                       <Timer :size="18" aria-hidden="true" /><span v-if="usesAccLayout">Timer</span>
                     </button>
                     <!-- PIP-532: next to the timer only while something is waiting to be read.
@@ -1616,9 +1618,8 @@ onBeforeUnmount(() => {
                     </div>
                   </header>
                   <div class="launcher-tools__actions">
-                    <!-- PIP-509: no simulator yet -> a small waiting placeholder instead of partial tools. -->
-                    <p v-if="waitingForSimulator" class="quick-panel-waiting" role="status">{{ simulatorPresence.choiceRequired.value ? 'Scegli il gioco nella webapp' : 'In attesa del simulatore' }}</p>
-                    <div v-else class="quick-panel-main" :class="{ 'quick-panel-main--behind-notifications': isNotificationsOpen }" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
+                    <!-- PIP-509: no simulator yet -> no partial tools (the waiting note is in the header, PIP-657). -->
+                    <div v-if="!waitingForSimulator" class="quick-panel-main" :class="{ 'quick-panel-main--behind-notifications': isNotificationsOpen }" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
                     <div class="quick-panel-categories">
                     <section v-if="usesAccLayout || !quickPanelSupport.quickAutomations || showAllQuickPanelButtons || !fastState.isEngineRunning" class="quick-panel-section" aria-label="Riferimenti numerici">
                       <h2 class="quick-panel-heading">Riferimenti</h2>

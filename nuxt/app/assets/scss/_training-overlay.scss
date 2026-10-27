@@ -2820,6 +2820,15 @@ button.is-active {
   min-width: 220px; min-height: 56px; margin: 0; padding: 12px 18px;
   border: 1px dashed #ffffff35; color: #d8dde5; font-size: 13px; letter-spacing: .02em;
 }
+// PIP-657: while waiting, the placeholder sits in the header to the right of the logo (no layout switch, no
+// timer: neither means anything without a game), so the panel stays a single compact row.
+.training-overlay--launcher .launcher-tools__header .quick-panel-waiting--header {
+  min-width: 0; min-height: 34px; padding: 6px 12px; font-size: 12px; white-space: nowrap;
+}
+// In either layout (the horizontal one stacks the header in a narrow column) the waiting header is one row.
+.training-overlay--launcher .launcher-tools__header:has(.quick-panel-waiting--header) {
+  display: flex; flex-direction: row; align-items: center; width: auto; height: auto; gap: 12px;
+}
 
 
 // The initial estimate and measured correction are adjacent, separate actions.

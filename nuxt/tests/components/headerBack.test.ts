@@ -5,7 +5,27 @@ import { defineComponent, h, nextTick, ref } from 'vue'
 import { provideHeaderBack, useHeaderBack } from '~/composables/useHeaderBack'
 
 describe('header return action', () => {
+  it('PIP-657: without an in-app previous page it goes to the page parent, never out of the app', async () => {
+    window.history.replaceState({ back: null }, '')
+    const historyBack = vi.fn()
+    const pageBack = vi.fn()
+    const Page = defineComponent({ setup() {
+      useHeaderBack(pageBack, () => 'Torna alle sessioni')
+      return () => null
+    } })
+    const wrapper = mount(defineComponent({ setup() {
+      const back = provideHeaderBack(historyBack)
+      return () => h('div', [back.value && h('button', { onClick: back.value.run }, back.value.label()), h(Page)])
+    } }))
+    await nextTick()
+    await wrapper.get('button').trigger('click')
+    expect(pageBack).toHaveBeenCalledOnce()
+    expect(historyBack).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('returns through shell history instead of the page hardcoded destination', async () => {
+    window.history.replaceState({ back: '/sessioni' }, '')
     const historyBack = vi.fn()
     const pageBack = vi.fn()
     const Page = defineComponent({ setup() {

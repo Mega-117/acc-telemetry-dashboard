@@ -26,7 +26,7 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     expect(source).toContain("const isAccQuickPanel = computed(() => simulatorPresence.gameId.value === 'acc')")
     expect(source).toContain('const usesAccLayout = computed(() => isAccQuickPanel.value || isFullQuickPanelPreview.value)')
     expect(source).toMatch(/const isHorizontalQuickPanel = computed\(\(\) => phase\.value === 'launcher' && !usesAccLayout\.value[\s\S]{0,200}?quickPanelLayout\.value === 'horizontal'\)/)
-    expect(source).toContain('<QuickPanelLayoutToggle v-if="!usesAccLayout"')
+    expect(source).toContain('<QuickPanelLayoutToggle v-else-if="!usesAccLayout"')
     expect(source).toContain("'overlay-content--acc': usesAccLayout && phase === 'launcher'")
     // The old vertical rules never reach the ACC grid.
     expect(styles).toContain('.overlay-content--launcher:has(.quick-panel-automations):not(.overlay-content--horizontal, .overlay-content--acc) {')
@@ -85,7 +85,7 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     // PIP-532: inside the panel (at -12 px the icons were clipped and not clickable).
     expect(block).toContain('.quick-panel-layout { position: absolute; top: 0; right: 0;')
     expect(block).toContain('.quick-panel-layout button { width: 22px; height: 14px; min-height: 0; }')
-    expect(source).toContain('<QuickPanelLayoutToggle v-if="!usesAccLayout" v-show="!isNotificationsOpen"')
+    expect(source).toContain('<QuickPanelLayoutToggle v-else-if="!usesAccLayout" v-show="!isNotificationsOpen"')
     expect(block).not.toMatch(/quick-panel-layout \{ position: absolute; top: -/)
     // The logo stays: the switch no longer covers it (PIP-527).
     expect(styles).not.toContain('.quick-panel-logo { opacity: 0; }')
@@ -163,8 +163,12 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     expect(source.indexOf('const coachVoiceOn = computed')).toBeLessThan(source.indexOf('() => coachVoiceOn.value,'))
   })
   it('shows a waiting placeholder instead of partial tools when no simulator is detected', () => {
-    expect(source).toContain(`<p v-if="waitingForSimulator" class="quick-panel-waiting" role="status">{{ simulatorPresence.choiceRequired.value ? 'Scegli il gioco nella webapp' : 'In attesa del simulatore' }}</p>`)
-    expect(source).toContain('<div v-else class="quick-panel-main"')
+    // PIP-657: the note sits in the header right of the logo, where the layout switch was; no timer while waiting.
+    expect(source).toContain(`<p v-if="waitingForSimulator" class="quick-panel-waiting quick-panel-waiting--header" role="status">{{ simulatorPresence.choiceRequired.value ? 'Scegli il gioco nella webapp' : 'In attesa del simulatore' }}</p>`)
+    expect(source).toContain('<QuickPanelLayoutToggle v-else-if="!usesAccLayout"')
+    expect(source).toContain('<button v-if="!waitingForSimulator" type="button" class="launcher-tool-button quick-panel-timer"')
+    expect(source).toContain('<div v-if="!waitingForSimulator" class="quick-panel-main"')
+    expect(styles).toContain('.launcher-tools__header:has(.quick-panel-waiting--header)')
     expect(source).toMatch(/const waitingForSimulator = computed\(\(\) => !isFullQuickPanelPreview\.value\s*&& simulatorPresence\.gameId\.value !== 'synthetic'\s*&& !quickPanelSupport\.value\.quickVoiceControls && !quickPanelSupport\.value\.quickAutomations\)/)
     // PIP-510: the layout follows the game from the menus on, through useSimulatorPresence.
     expect(source).toContain('const support = computed(() => gameUiSupport(simulatorPresence.gameId.value))')
