@@ -252,7 +252,11 @@ function updateCachedUserProfile(uid: string, patch: CachedUserProfile) {
     userProfileCache.set(uid, nextProfile)
     // PIP-442: la copia condivisa di `users/{uid}` viene svuotata da chi salva il profilo
     // (`invalidateTelemetryCaches({ scope: 'profile' })`), senza importare Firestore qui.
-    if (currentUser.value?.uid === uid) currentUserProfile.value = nextProfile
+    if (currentUser.value?.uid === uid) {
+        currentUserProfile.value = nextProfile
+        // PIP-659: the name shown in the header follows a nickname saved from the Profile at once.
+        if (typeof patch.nickname === 'string' && patch.nickname) firestoreNickname.value = patch.nickname
+    }
 }
 
 function clearCachedUserProfile(uid?: string) {

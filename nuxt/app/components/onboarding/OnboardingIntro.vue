@@ -83,9 +83,13 @@ watch(intro.visible, (open) => {
   confirmLater.value = false
   requestAnimationFrame(() => root.value?.focus())
 }, { immediate: true })
+// PIP-657 (user decision 27/10): it opens by itself only in the desktop program, where Ctrl+K and the
+// automations live; in a browser it stays available from Impostazioni → Introduzione.
+const inDesktopApp = typeof window !== 'undefined' && !!(window as Window & { electronAPI?: unknown }).electronAPI
+const showFirstTime = () => { if (inDesktopApp) void intro.showIfFirstTime() }
 // The owner can still be loading when the layout mounts: retry once the uid arrives.
-watch(() => currentUser.value?.uid, (uid) => { if (uid) void intro.showIfFirstTime() })
-onMounted(() => { void intro.showIfFirstTime() })
+watch(() => currentUser.value?.uid, (uid) => { if (uid) showFirstTime() })
+onMounted(showFirstTime)
 </script>
 
 <template>

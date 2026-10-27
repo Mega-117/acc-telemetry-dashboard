@@ -8,6 +8,11 @@ import { trackedGetDoc } from '~/composables/useFirebaseTracker'
 const CALLER = 'PublicProfileRepository'
 const cache = new Map<string, string | null>()
 
+/** PIP-659: after a nickname change the next read must not serve the old one from memory. */
+export function rememberPublicNickname(uid: string, nickname: string) {
+  cache.set(uid, nickname.slice(0, 40))
+}
+
 export async function loadPublicNickname(uid: string | null | undefined): Promise<string | null> {
   if (!uid || !/^[A-Za-z0-9_-]{1,128}$/.test(uid)) return null
   if (cache.has(uid)) return cache.get(uid) ?? null

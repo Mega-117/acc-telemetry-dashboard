@@ -366,35 +366,8 @@ watch(
         </nav>
 
         <section class="tab-panel account-grid">
-          <section class="profile-card account-preview" aria-labelledby="account-preview-title" aria-describedby="account-preview-note">
-            <div class="card-head">
-              <h3 id="account-preview-title" class="card-title">Account e sicurezza</h3>
-              <span class="account-preview__badge">In arrivo</span>
-            </div>
-            <p id="account-preview-note" class="account-preview__note">Anteprima delle prossime opzioni di gestione account. I controlli non sono ancora disponibili.</p>
-            <fieldset disabled class="account-preview__fields" aria-label="Gestione account non ancora disponibile">
-              <div class="account-preview__item">
-                <label for="profile-preview-name">Nome e cognome</label>
-                <input id="profile-preview-name" type="text" placeholder="Il tuo nome e cognome" disabled />
-                <button class="rc-btn rc-btn--compact" type="button" disabled>Modifica nome</button>
-              </div>
-              <div class="account-preview__item">
-                <label for="profile-preview-nickname">Nickname</label>
-                <input id="profile-preview-nickname" type="text" :value="displayName" disabled />
-                <button class="rc-btn rc-btn--compact" type="button" disabled>Modifica nickname</button>
-              </div>
-              <div class="account-preview__item">
-                <label for="profile-preview-email">Indirizzo email</label>
-                <input id="profile-preview-email" type="email" :value="userEmail" placeholder="La tua email" disabled />
-                <button class="rc-btn rc-btn--compact" type="button" disabled>Cambia email</button>
-              </div>
-              <div class="account-preview__item">
-                <label for="profile-preview-password">Password</label>
-                <input id="profile-preview-password" type="text" placeholder="Gestione della password" disabled />
-                <button class="rc-btn rc-btn--compact" type="button" disabled>Reimposta password</button>
-              </div>
-            </fieldset>
-          </section>
+          <!-- PIP-659: working account management (was a disabled preview). -->
+          <AccountIdentityCard />
           <div class="profile-card equipment-card account-equipment-card" :class="{ 'equipment-card--coach': isCoachProfile }">
             <div class="card-head">
               <h3 class="card-title">Attrezzatura</h3>
@@ -1349,17 +1322,8 @@ $color-card: #121218;
 .hero-copy h1 { @include controls.title; }.profile-page .slider-row input[type='range'] { @include controls.slider; }.profile-page .card-title { font-weight: 550; }.profile-page .summary-section h4 { font-weight: 500; }.profile-page .form-group span { font-weight: 500; }
 .profile-page--embedded { min-height: 0; }.profile-page--embedded .profile-main { padding-top: var(--app-content-top-space); }
 .profile-page .account-grid { width: 100%; gap: 20px; }
-.account-preview { grid-column: 1 / -1; border-color: #ffffff25; }
-.account-preview .card-title { color: #a4a4ad; border-left-color: #666670; }
-.account-preview__badge { padding: 5px 9px; border: 1px solid #ffffff25; color: #a4a4ad; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
-.account-preview__note { margin: 0 0 24px; color: #96969f; font-size: 13px; line-height: 1.5; }
-.account-preview__fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; min-width: 0; margin: 0; padding: 0; border: 0; }
-.account-preview__item { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; min-width: 0; }
-.account-preview__item label { color: #9898a1; font-size: 13px; }
-.account-preview__item input { @include controls.field; box-sizing: border-box; width: 100%; padding: 8px 12px; color: #85858f; border-color: #ffffff20; background: #ffffff03; cursor: not-allowed; text-overflow: ellipsis; }
-.account-preview__item input::placeholder { color: #787882; opacity: 1; }
-@media (max-width: 1100px) { .account-preview__fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 600px) { .account-preview__fields { grid-template-columns: 1fr; } }
+// PIP-659: the account card spans the grid like the old preview did (its own styles live in AccountIdentityCard).
+.identity-card { grid-column: 1 / -1; }
 .profile-page .profile-card--secondary { min-height: 0; }
 .profile-page .card-head { margin-bottom: 16px; }
 </style>

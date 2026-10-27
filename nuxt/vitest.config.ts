@@ -54,6 +54,8 @@ export default defineConfig({
         // PIP-658: privacy, consenso e cancellazione account.
         'app/utils/legalVersions.ts',
         'app/services/auth/accountDeletion.ts',
+        // PIP-659: identità del profilo.
+        'app/services/auth/profileIdentityService.ts',
         // PIP-633: presentazione delle Statistiche.
         'app/utils/statsPresentation.ts',
         'app/utils/statsJourney.ts',

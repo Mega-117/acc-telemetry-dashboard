@@ -50,10 +50,18 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); delete (window as any).electronAPI; document.body.innerHTML = '' })
 
 describe('OnboardingIntro (PIP-571)', () => {
-  it('asks to open itself on mount and renders nothing while hidden', async () => {
+  it('asks to open itself on mount in the desktop program and renders nothing while hidden', async () => {
+    Object.assign(window, { electronAPI: {} })
     const wrapper = mountIntro(); await flushPromises()
     expect(mock.showIfFirstTime).toHaveBeenCalledTimes(1)
     expect(q('[data-onboarding-intro]')).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('PIP-657: in a browser it never opens by itself', async () => {
+    const wrapper = mountIntro(); await flushPromises()
+    mock.currentUser.value = { uid: 'other' }; await flushPromises()
+    expect(mock.showIfFirstTime).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
@@ -158,6 +166,7 @@ describe('OnboardingIntro (PIP-571)', () => {
   })
 
   it('retries the first-time check when the user arrives after mount', async () => {
+    Object.assign(window, { electronAPI: {} })
     mock.currentUser.value = null
     const wrapper = mountIntro(); await flushPromises()
     mock.currentUser.value = { uid: 'late' }; await flushPromises()
