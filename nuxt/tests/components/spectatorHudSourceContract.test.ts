@@ -38,8 +38,10 @@ describe('spectator HUD source contract', () => {
 
     expect(dashboard).toContain("'inputs--unavailable': !model.inputsAvailable")
     expect(dashboard).toContain('.inputs--unavailable::after')
-    expect(classicTyres).toContain('props.fastState.speedKmh !== null')
-    expect(classicTyres).not.toContain('hasLiveTyres.value && props.fastState.speedKmh')
+    // HUD v2 (27/10): the speed left Classic tyres; a missing slip still reads WAIT, never zero.
+    expect(classicTyres).not.toContain('speedKmh')
+    expect(classicTyres).toContain('hasLiveTyres && hasSlipPolicy && tyre.wheelSlip !== null')
+    expect(classicTyres).toContain("typeof tyre.wheelSlip === 'number' ? tyre.wheelSlip.toFixed(1) : '--'")
     expect(advancedTyres).toContain('resolveTyreHudStatus(props.fastState)')
     expect(advancedTyres).toContain("'data-unavailable': 'DATA N/A'")
     expect(dashboardPage).toContain('telemetry.focusedCar.value')

@@ -9,6 +9,12 @@ export default {
     staleData: 'Dati non aggiornati',
     standingsWaiting: 'In attesa dei dati della sessione',
     trackmapCircleUnsupported: 'Sagoma pista non disponibile: vista circolare',
+    tyreRace: {
+      set: 'SET',
+      body: 'Carrozzeria',
+      suspension: 'Sospensioni',
+      total: 'Totale',
+    },
     weather: {
       unavailable: 'Previsioni meteo non disponibili',
       noData: 'Dati meteo non disponibili',
@@ -34,6 +40,9 @@ export default {
       title: 'SETTORI',
       titleLastLap: 'SETTORI · ULTIMO GIRO',
       previous: 'prec',
+      best: 'best',
+      currentLap: 'GIRO IN CORSO',
+      lastLap: 'ULTIMO GIRO',
     },
     trainingHud: {
       muted: 'MUTO',

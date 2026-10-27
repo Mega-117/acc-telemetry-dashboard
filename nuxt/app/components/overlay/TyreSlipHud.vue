@@ -33,12 +33,14 @@ const hasLiveTyres = computed(() => props.fastState.isLive && props.fastState.is
 const visibleTyres = computed(() => idleTyres.map(idle => hasLiveTyres.value
   ? props.fastState.tyres.find(tyre => tyre.id === idle.id) ?? idle : idle))
 const hasSlipPolicy = computed(() => hudSourcePolicy(props.fastState).slipBands)
-const speedLabel = computed(() => props.fastState.speedKmh !== null
-  ? `${Math.round(props.fastState.speedKmh)} km/h`
-  : t('overlays.waiting'))
 
 function tyreFillStyle(tyre: FastStateTyre) {
   return tyreSlipBarStyle(tyre.wheelSlipScaled)
+}
+
+// Without a measured slip the card shows WAIT and never an alarm tint.
+function hasSlipData(tyre: FastStateTyre) {
+  return hasLiveTyres.value && hasSlipPolicy.value && tyre.wheelSlip !== null
 }
 
 function formatSlip(tyre: FastStateTyre) {
@@ -53,16 +55,16 @@ const { t } = useI18n()
     :class="{ 'tyre-slip-hud--compact': compact, 'tyre-slip-hud--idle': !hasLiveTyres }"
     aria-label="Scivolamento pneumatici live"
   >
+    <!-- HUD style v2 (27/10): a title bar only; the speed left this HUD by product decision. -->
     <header class="tyre-slip-hud__header">
       <span>{{ t('overlays.tyres') }}</span>
-      <strong>{{ speedLabel }}</strong>
     </header>
     <div class="tyre-slip-grid">
       <div
         v-for="tyre in visibleTyres"
         :key="tyre.id"
         class="tyre-slip"
-        :class="[`tyre-slip--${tyre.slipBand}`, `tyre-slip--state-${tyre.slipState}`]"
+        :class="[`tyre-slip--${tyre.slipBand}`, `tyre-slip--state-${tyre.slipState}`, { 'tyre-slip--waiting': !hasSlipData(tyre) }]"
       >
         <div class="tyre-slip__topline">
           <strong>{{ tyre.id }}</strong>

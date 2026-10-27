@@ -60,11 +60,12 @@ async function renderHud(props: Record<string, unknown>): Promise<string> {
 describe('SectorDeltaHud', () => {
   it.each(['classic', 'compact'])('identifies previous lap during hold and clears the label afterwards (%s)', async variant => {
     const held = await renderHud({ variant, sectorHud: { ...sectorHud, mode: 'last_lap' }, compactDisplayLap: { timeMs: 91000, valid: true } })
-    const label = variant === 'compact' ? 'LAST LAP' : 'ULTIMO GIRO'
+    // HUD v2: both layouts name the held lap in the interface language.
+    const label = 'ULTIMO GIRO'
     expect(held).toContain(label)
     expect(await renderHud({ variant })).not.toContain(label)
     if (variant === 'compact') {
-      expect(await renderHud({ variant, sectorHud: { ...sectorHud, mode: 'last_lap' }, compactDisplayLap: { timeMs: 91000, valid: true }, targetOutcome: 'inside' })).toContain('LAST LAP · NEL TARGET')
+      expect(await renderHud({ variant, sectorHud: { ...sectorHud, mode: 'last_lap' }, compactDisplayLap: { timeMs: 91000, valid: true }, targetOutcome: 'inside' })).toContain('ULTIMO GIRO · NEL TARGET')
     }
   })
   it.each(['classic', 'compact'])('does not invent ACC sectors when a common source has no cardinality (%s)', async variant => {
@@ -183,9 +184,9 @@ describe('SectorDeltaHud', () => {
       }),
     }))
 
-    expect(html).toContain('SECTORS · VS · BEST')
+    expect(html).toMatch(/SETTORI<\/b> VS BEST/)
     expect(html).toContain('01:23.456')
-    expect(html).toContain('CURRENT LAP')
+    expect(html).toContain('GIRO IN CORSO')
     expect((html.match(/sector-compact__label/g) || []).length).toBe(3)
     expect(html).not.toContain('sector-delta__ref')
     expect(html).not.toContain('sector-delta__best')
@@ -200,9 +201,9 @@ describe('SectorDeltaHud', () => {
       compactDisplayLap: { timeMs: 83_456, valid: true },
     })
 
-    expect(html).toContain('SECTORS · VS · BEST')
+    expect(html).toMatch(/SETTORI<\/b> VS BEST/)
     expect(html).not.toContain('01:23.456')
-    expect(html).not.toContain('CURRENT LAP')
+    expect(html).not.toContain('GIRO IN CORSO')
     expect(html).not.toContain('sector-compact__lap--invalid')
     expect((html.match(/sector-compact__label/g) || []).length).toBe(3)
 
@@ -324,8 +325,8 @@ describe('SectorDeltaHud', () => {
     const best = await renderHud({ variant: 'compact', deltaReference: 'bestSector' })
 
     // PIP-524: there is no LAST comparison any more.
-    expect(previous).toContain('SECTORS · VS · BEST')
-    expect(best).toContain('SECTORS · VS · BEST')
+    expect(previous).toMatch(/SETTORI<\/b> VS BEST/)
+    expect(best).toMatch(/SETTORI<\/b> VS BEST/)
     expect(previous).not.toContain('LAST')
   })
 
@@ -410,7 +411,7 @@ describe('SectorDeltaHud', () => {
     expect(outsideInvalid).not.toContain('FUORI TARGET')
     expect(outsideInvalid).toContain('sector-compact__lap--invalid')
     expect(hidden).not.toContain('sector-compact__lap--target-inside')
-    expect(hidden).not.toContain('CURRENT LAP')
+    expect(hidden).not.toContain('GIRO IN CORSO')
   })
 
 })
@@ -444,5 +445,46 @@ describe.each(['custom', 'previousLap', 'bestSector'])('compact %s millisecond p
     const html = await renderHud({ sectorHud: hud, variant: 'compact', deltaReference, customSectorTimes: [30000, 30000, 30000] })
     const values = [...html.matchAll(/class="sector-compact__delta[^"]*"[^>]*>([^<]*)</g)].map(match => match[1])
     expect(values).toEqual(expected)
+  })
+})
+
+describe('HUD style v2 (27/10) sectors', () => {
+  it('classic: title bar, lap tile with the shown lap, PREV/BEST minis per sector', async () => {
+    const html = await renderHud({ variant: 'classic', showReference: true, showBest: true, compactDisplayLap: { timeMs: 103_607, valid: true } })
+    expect(html).toContain('sector-delta-hud__lap')
+    expect(html).toMatch(/class="sector-delta-hud__lap-label"[^>]*>GIRO IN CORSO</)
+    expect(html).toMatch(/class="sector-delta-hud__lap-time"[^>]*>01:43.607</)
+    expect(html.match(/class="sector-delta__minis"/g)).toHaveLength(3)
+    // Previous lap first, then best, each a boxed label + value.
+    expect(html).toMatch(/sector-delta__ref[^>]*>[\s\S]*?<b[^>]*>prec<\/b><em[^>]*>31.001<\/em>[\s\S]*?sector-delta__best[^>]*>[\s\S]*?<b[^>]*>best<\/b><em[^>]*>30.501<\/em>/)
+    const page = readFileSync(resolve(process.cwd(), 'app/pages/sectors-overlay.vue'), 'utf8')
+    expect(page).toMatch(/\.sector-delta__ref,\s*\.hud-overlay \.sector-delta__best\s*\{[\s\S]*?text-transform:\s*uppercase/)
+    expect(page).toMatch(/\.sector-delta-hud__lap-time\s*\{[^}]*color:\s*#facc15/)
+  })
+
+  it('classic: the lap tile keeps the invalid and unknown colours and hides with the setting', async () => {
+    expect(await renderHud({ variant: 'classic', compactDisplayLap: { timeMs: 90_000, valid: false } })).toMatch(/sector-delta-hud__lap-time[^"]*sector-compact__lap--invalid|sector-compact__lap--invalid[^"]*sector-delta-hud__lap-time/)
+    expect(await renderHud({ variant: 'classic', compactDisplayLap: { timeMs: 90_000, valid: null } })).toContain('sector-compact__lap--unknown')
+    const hidden = await renderHud({ variant: 'classic', showCurrentLap: false })
+    expect(hidden).not.toContain('sector-delta-hud__lap')
+    expect(hidden).toContain('sector-delta-hud__grid')
+  })
+
+  it('both layouts follow the interface language for the lap label', async () => {
+    setLocale('en')
+    try {
+      for (const variant of ['classic', 'compact']) {
+        const html = await renderHud({ variant, compactDisplayLap: { timeMs: 90_000, valid: true } })
+        expect(html).toContain('CURRENT LAP')
+        expect(html).toContain('SECTORS')
+      }
+    } finally {
+      setLocale('it')
+    }
+  })
+
+  it('the page feeds the classic lap tile with the same lap as Compact', () => {
+    const page = readFileSync(resolve(process.cwd(), 'app/pages/sectors-overlay.vue'), 'utf8')
+    expect(page).toMatch(/variant="classic"\s*:live-current-lap-time-ms="liveCurrentLapTimeMs"\s*:compact-display-lap="compactDisplayLap"/)
   })
 })

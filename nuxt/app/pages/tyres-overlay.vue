@@ -126,6 +126,7 @@ const { t } = useI18n()
 // Fuori da Electron (browser/Playwright): sfondo scuro per poter testare.
 .hud-overlay--web { background: #0d0d12; }
 
+// HUD style v2 (27/10): one opaque panel colour and a light border for both variants.
 .hud-overlay__panel {
   position: relative;
   box-sizing: border-box;
@@ -135,18 +136,16 @@ const { t } = useI18n()
   flex-direction: column;
   -webkit-app-region: drag;
   padding: calc(12px * var(--hud-scale));
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 12px;
   // Sfondo completamente OPACO (nessuna trasparenza) e nessuna ombra.
-  background: #0b0e15;
+  background: #0d0e12;
 }
 
 .hud-overlay__panel--race {
   padding: 0;
   overflow: hidden;
-  border-color: #555;
   border-radius: calc(12px * var(--hud-scale));
-  background: #050608;
 }
 
 .race-hud {
@@ -166,82 +165,128 @@ const { t } = useI18n()
 .race-hud__switcher button+button { border-left:1px solid #555; }.race-hud__switcher button.active { background:#f28a20;color:#050608; }
 @media (prefers-reduced-motion: reduce) { .race-hud__switcher { transition:none; } }
 
-// ── L'HUD riempie il pannello (niente spazio vuoto sopra/sotto) ──────────────
+// ── Classico v2: title bar, 2×2 cards up to 256px wide, tinted as the slip worsens ──
 .hud-overlay .tyre-slip-hud {
   flex: 1;
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: calc(9px * var(--hud-scale));
+  gap: calc(8px * var(--hud-scale));
   background: transparent;
   border: none;
   padding: 0;
+  font-family: var(--hud-font-label);
+}
+
+.hud-overlay .tyre-slip-hud__header {
+  justify-content: center;
+  gap: calc(10px * var(--hud-scale));
+
+  &::before,
+  &::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  span {
+    color: #f4f4f6;
+    font: 700 max(11px, calc(12px * var(--hud-scale)))/1 var(--hud-font-label);
+    letter-spacing: .14em;
+    text-transform: uppercase;
+  }
 }
 
 .hud-overlay .tyre-slip-grid {
   flex: 1;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, calc(256px * var(--hud-scale))));
   grid-template-rows: 1fr 1fr;
-  // Riga (front/rear) più distanziata della colonna: raggruppa anteriore/posteriore.
-  gap: calc(18px * var(--hud-scale)) calc(9px * var(--hud-scale));
+  justify-content: center;
+  gap: calc(10px * var(--hud-scale)) calc(14px * var(--hud-scale));
 }
 
+// The background takes more of the slip colour as the state worsens: limit < slide < spin/lock.
 .hud-overlay .tyre-slip {
-  // Il contenuto riempie la larghezza della card (barra a tutta larghezza),
-  // niente spazio laterale; verticalmente centrato nella card.
   grid-template-columns: 1fr;
-  align-content: center;
-  gap: calc(7px * var(--hud-scale));
-  padding: calc(10px * var(--hud-scale));
+  align-content: space-between;
+  gap: calc(6px * var(--hud-scale));
+  padding: calc(10px * var(--hud-scale)) calc(8px * var(--hud-scale));
+  border: 0;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--tyre-slip-color) var(--tyre-slip-alarm, 0%), rgba(255, 255, 255, 0.045));
 }
 
-// ── Testi tutti BIANCHI per massima leggibilità ──────────────────────────────
-.hud-overlay .tyre-slip-hud__header span,
-.hud-overlay .tyre-slip-hud__header strong {
-  font-size: max(11px, calc(14px * var(--hud-scale)));
-  color: #ffffff;
-}
+.hud-overlay .tyre-slip--state-limit { --tyre-slip-alarm: 12%; }
+.hud-overlay .tyre-slip--state-sliding { --tyre-slip-alarm: 24%; }
+.hud-overlay .tyre-slip--state-wheelspin,
+.hud-overlay .tyre-slip--state-lockup { --tyre-slip-alarm: 38%; }
+.hud-overlay .tyre-slip--waiting { --tyre-slip-alarm: 0%; }
 
 .hud-overlay .tyre-slip__topline strong {
+  font-family: var(--hud-font-label);
   font-size: max(16px, calc(18px * var(--hud-scale)));
-  color: #ffffff;
+  letter-spacing: .08em;
+  color: #a3a5ae;
+}
+
+// The state sits in a pill filled with the slip colour.
+.hud-overlay .tyre-slip__state,
+.hud-overlay .tyre-slip--state-limit .tyre-slip__state,
+.hud-overlay .tyre-slip--state-sliding .tyre-slip__state,
+.hud-overlay .tyre-slip--state-wheelspin .tyre-slip__state,
+.hud-overlay .tyre-slip--state-lockup .tyre-slip__state {
+  max-width: none;
+  padding: calc(2px * var(--hud-scale)) calc(6px * var(--hud-scale));
+  border-radius: 999px;
+  background: var(--tyre-slip-color, #fff);
+  color: #000;
+  font: 700 max(11px, calc(13px * var(--hud-scale)))/1 var(--hud-font-label);
+  letter-spacing: .1em;
+}
+
+.hud-overlay .tyre-slip--waiting .tyre-slip__state {
+  background: rgba(255, 255, 255, 0.12);
+  color: #a3a5ae;
+}
+
+// Slip bottom-left and pressure bottom-right on the same row.
+.hud-overlay .tyre-slip__meta {
+  align-items: baseline;
 }
 
 .hud-overlay .tyre-slip__meta span {
-  font-size: max(11px, calc(13px * var(--hud-scale)));
-  color: #ffffff;
+  color: #f4f4f6;
+  font-family: var(--hud-font-num);
+  font-style: italic;
 }
 
-.hud-overlay .tyre-slip__state {
-  font-size: max(11px, calc(13px * var(--hud-scale)));
-}
-
-// Gerarchia gomma: lo SLIP è primario (numero più grande + micro-label),
-// la PRESSIONE è secondaria (più piccola e attenuata).
 .hud-overlay .tyre-slip__meta span:first-child {
   font-size: max(14px, calc(15px * var(--hud-scale)));
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .hud-overlay .tyre-slip__meta span:first-child::after {
   content: ' slip';
-  font-size: 0.62em;
-  font-weight: 700;
-  opacity: 0.55;
+  font-family: var(--hud-font-label);
+  font-size: 0.72em;
+  font-style: normal;
+  color: #a3a5ae;
 }
 
-.hud-overlay .tyre-slip__meta span:last-child {
-  font-size: max(10px, calc(11px * var(--hud-scale)));
-  opacity: 0.6;
-}
-
-
-.hud-overlay .tyre-slip__state {
-  max-width: none;
+.hud-overlay .tyre-slip__meta span + span {
+  font-size: max(12px, calc(14px * var(--hud-scale)));
+  color: #a3a5ae;
 }
 
 .hud-overlay .tyre-slip__bar {
   height: calc(7px * var(--hud-scale));
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.hud-overlay .tyre-slip__bar span {
+  border-radius: 0;
 }
 }
 </style>

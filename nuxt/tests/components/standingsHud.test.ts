@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { renderToString } from '@vue/server-renderer'
 import { createSSRApp } from 'vue'
 import { describe, expect, it } from 'vitest'
@@ -194,4 +196,40 @@ it('renders unknown stint as a dash and removes the whole column when disabled',
   expect(await render()).toMatch(/class="standings-row__stint"[^>]*>\u2014<\/strong>/)
   value.columns.stint = false
   expect(await render()).not.toContain('standings-row__stint')
+})
+
+describe('HUD style v2 (27/10) standings', () => {
+  it('drops the car model line but keeps the logo, and marks the local row with the white veil', async () => {
+    const value = model()
+    value.rows[0]!.carModel = 'Ferrari 296 GT3'
+    const html = await renderToString(createSSRApp(StandingsHud, { model: value, backgroundOpacity: 0.5 }))
+    expect(html).not.toContain('standings-row__car-model')
+    expect(html).not.toMatch(/<small[^>]*>Ferrari 296 GT3</)
+    expect(html).toContain('class="standings-row__manufacturer-logo"')
+    expect(html).toMatch(/class="[^"]*standings-row[^_"][^"]*is-local|class="[^"]*is-local[^"]*standings-row[\s"]/)
+    const source = readFileSync(resolve(process.cwd(), 'app/components/overlay/StandingsHud.vue'), 'utf8')
+    const local = source.match(/\.standings-row\.is-local \{([^}]*)\}/)?.[1] ?? ''
+    expect(local).toContain('linear-gradient(90deg,rgba(255,255,255,0.22)')
+    expect(local).toContain('box-shadow:inset 4px 0 #fff')
+    expect(local).not.toMatch(/red|#f00|255,0,0|0,170,255/)
+    expect(source).toMatch(/\.standings-row\.is-local \.standings-row__position \{[^}]*color:#0b0c0f;background:#fff;/)
+  })
+
+  it('alternates row backgrounds by index so rows stay distinguishable beyond five', async () => {
+    const value = model()
+    value.rows = Array.from({ length: 7 }, (_, index) => ({ ...value.rows[0]!, carIndex: index, local: index === 2 }))
+    const html = await renderToString(createSSRApp(StandingsHud, { model: value, backgroundOpacity: 0.5 }))
+    const classes = [...html.matchAll(/class="([^"]*standings-row(?:\s[^"]*)?)" style/g)].map(match => match[1]!)
+    expect(classes).toHaveLength(7)
+    expect(classes.map(name => name.includes('is-alt'))).toEqual([false, true, false, true, false, true, false])
+    const source = readFileSync(resolve(process.cwd(), 'app/components/overlay/StandingsHud.vue'), 'utf8')
+    expect(source).toMatch(/\.standings-row \{[^}]*background:rgba\(255,255,255,0\.04\)/)
+    expect(source).toMatch(/\.standings-row\.is-alt \{ background:rgba\(0,0,0,0\.2\); \}/)
+  })
+
+  it('puts session type then time on the left and the temperatures on the right', async () => {
+    const html = await renderToString(createSSRApp(StandingsHud, { model: model(), backgroundOpacity: 0.5 }))
+    expect(html).toMatch(/standings-header__left[^>]*>[\s\S]*?standings-header__session[^>]*>Practice<[\s\S]*?standings-header__time[^>]*>01:02:03</)
+    expect(html.indexOf('standings-header__temperature')).toBeGreaterThan(html.indexOf('standings-header__time'))
+  })
 })

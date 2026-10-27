@@ -1,3 +1,5 @@
+import type { FastStateDamage } from '~/types/liveTelemetry'
+
 // ACC Drive damage converters use raw body points (150) and suspension % (100).
 export function raceDamageColor(value: number | null | undefined, max = 150, total = false, stroke = false): string {
   const v = Number.isFinite(value) ? Math.max(0, Math.min(value!, max)) : 0
@@ -19,4 +21,26 @@ export function raceDamageZoneTime(value: number | null | undefined, digits = 2)
   if (value == null || !Number.isFinite(value)) return `--:--.${'-'.repeat(digits)}`
   const ms = Math.max(0, Math.trunc(value))
   return `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}.${String(ms % 1000).padStart(3, '0').slice(0, digits)}`
+}
+
+export interface RaceDamageSummary {
+  bodyMs: number | null
+  suspensionMs: number | null
+  totalMs: number | null
+}
+
+const positive = (value: number | null | undefined) => typeof value === 'number' && Number.isFinite(value) && value > 0
+
+/**
+ * HUD style v2 (27/10): the Race tyres page lists body, suspension and total repair
+ * times under the four tyres, only when the car is actually damaged.
+ */
+export function raceDamageSummary(damage: FastStateDamage | null | undefined): RaceDamageSummary | null {
+  if (!damage) return null
+  const damaged = [damage.body.repairTimeMs, damage.suspension.repairTimeMs, damage.totalRepairTimeMs].some(positive)
+    || (['front', 'rear', 'left', 'right'] as const).some(zone => positive(damage.body[zone].percentage))
+    || (['FL', 'FR', 'RL', 'RR'] as const).some(corner => positive(damage.suspension[corner].percentage))
+  return damaged
+    ? { bodyMs: damage.body.repairTimeMs, suspensionMs: damage.suspension.repairTimeMs, totalMs: damage.totalRepairTimeMs }
+    : null
 }

@@ -12,6 +12,10 @@
   --racing-practice: #0076ff;
   --racing-qualify: #ffc400;
   --racing-race: #ff0024;
+  // HUD style v2 (27/10): numbers and names in the bundled Chakra Petch face ('Racer Display',
+  // italic only), labels in a condensed stack. Overlays never load remote fonts.
+  --hud-font-num: 'Racer Display', 'Arial Narrow', sans-serif;
+  --hud-font-label: 'Barlow Condensed', 'Arial Narrow', 'Roboto Condensed', sans-serif;
 }
 // PIP-639: on short screens (landscape tablets, phones on their side) the page starts closer to the tabs.
 @media (max-height: 780px) { :root { --app-content-top-space: 16px; } }

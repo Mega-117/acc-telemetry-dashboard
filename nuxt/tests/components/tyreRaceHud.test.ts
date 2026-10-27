@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import { describe, expect, it } from 'vitest'
@@ -74,7 +76,7 @@ describe('Race HUD components', () => {
     expect(html).toContain('tyre-race__brake--rear')
     expect(html).toContain('tyre-race__compound')
     expect(html).toContain('DRY')
-    expect(html).toContain('DRY 2')
+    expect(html).toContain('DRY · SET 2')
     expect(html.match(/tyre-race__corner--rear/g)).toHaveLength(2)
     expect(html).toContain('viewBox="0 0 166 241"')
   })
@@ -113,15 +115,48 @@ describe('Race HUD components', () => {
     expect(html).not.toContain('AVG 28.5')
   })
 
-  it('motore spento e limiter coesistono; i numeri freni appartengono alla ruota sinistra', async () => {
+  it('motore spento e limiter coesistono; ogni ruota mostra la propria temperatura freno e pastiglia', async () => {
     const state = { ...fastState(), isEngineRunning: false, pitLimiterOn: true }
     const html = await renderToString(createSSRApp(TyreRaceHud, { fastState: state }))
     expect(html).toContain('tyre-race__engine-off')
     expect(html).toContain('tyre-race__limiter')
-    expect(html).toContain('568\u00b0')
-    expect(html).toContain('548\u00b0')
+    // HUD v2 (27/10): brake temperature and pad wear per corner, no longer one per axle.
+    for (const [id, temp, pad] of [['fl', 568, 92], ['fr', 558, 91], ['rl', 548, 90], ['rr', 538, 89]] as const) {
+      const corner = html.slice(html.indexOf(`tyre-race__corner--${id}`))
+      expect(corner).toMatch(new RegExp(`tyre-race__brake-temp[^>]*>${temp}\u00b0<[\\s\\S]*?tyre-race__pad[^>]*>${pad}%<`))
+    }
     expect(html).not.toContain('563\u00b0')
     expect(html).toContain('0:37.980')
+  })
+
+  it('HUD v2: front values read pressure, AVG, loss; rear values loss, AVG, pressure', async () => {
+    const html = await renderToString(createSSRApp(TyreRaceHud, { fastState: fastState() }))
+    const kinds = (id: string) => {
+      const start = html.indexOf(`tyre-race__corner--${id}`)
+      const values = html.slice(start, html.indexOf('</g>', start))
+      return [...values.matchAll(/class="tyre-race__(primary|average|loss)" x="[\d.]+" y="([\d.]+)"/g)]
+        .sort((a, b) => Number(a[2]) - Number(b[2])).map(match => match[1])
+    }
+    for (const id of ['fl', 'fr']) expect(kinds(id)).toEqual(['primary', 'average', 'loss'])
+    for (const id of ['rl', 'rr']) expect(kinds(id)).toEqual(['loss', 'average', 'primary'])
+  })
+
+  it('HUD v2: the damage section sits under the tyres only when the car is damaged', async () => {
+    const damaged = await renderToString(createSSRApp(TyreRaceHud, { fastState: fastState() }))
+    expect(damaged).toContain('tyre-race__damage')
+    for (const value of ['DANNI', 'Carrozzeria', '0:16.980', 'Sospensioni', '0:21.000', 'Totale', '0:37.980']) expect(damaged).toContain(value)
+    expect(damaged.indexOf('tyre-race__damage')).toBeGreaterThan(damaged.lastIndexOf('tyre-race__corner--rr'))
+    const healthy = fastState()
+    healthy.damage = {
+      body: { front: { percentage: 0, repairTimeMs: 0 }, rear: { percentage: 0, repairTimeMs: 0 }, left: { percentage: 0, repairTimeMs: 0 }, right: { percentage: 0, repairTimeMs: 0 }, repairTimeMs: 0 },
+      suspension: { FL: { percentage: 0 }, FR: { percentage: 0 }, RL: { percentage: 0 }, RR: { percentage: 0 }, repairTimeMs: 0 },
+      totalRepairTimeMs: 0,
+    }
+    const clean = await renderToString(createSSRApp(TyreRaceHud, { fastState: healthy }))
+    expect(clean).not.toContain('tyre-race__damage')
+    expect(clean).not.toContain('DANNI')
+    const observed = await renderToString(createSSRApp(TyreRaceHud, { fastState: { ...fastState(), dataSource: 'focused' } }))
+    expect(observed).not.toContain('tyre-race__damage')
   })
 
   it('mantiene quattro posizioni e usa placeholder quando la telemetria locale e parziale', async () => {
@@ -135,5 +170,32 @@ describe('Race HUD components', () => {
     expect(html.match(/AVG --/g)).toHaveLength(4)
     expect(html).toContain('--')
     expect(html).not.toContain('LOSS 0.00')
+  })
+})
+
+describe('HUD style v2 (27/10) classic tyres', () => {
+  it('drops the speed from the header and keeps id, state, bar, slip and psi per card', async () => {
+    const state = { ...fastState(), speedKmh: 187 }
+    state.tyres[0]!.slipState = 'lockup'
+    const html = await renderToString(createSSRApp(TyreSlipHud, { fastState: state }))
+    expect(html).not.toContain('km/h')
+    expect(html).not.toContain('187')
+    expect(html.match(/class="tyre-slip__bar"/g)).toHaveLength(4)
+    expect(html).toContain('23.2 psi')
+    expect(html).toMatch(/tyre-slip__meta[^>]*><span[^>]*>1\.0<\/span><span[^>]*>23\.2 psi</)
+    expect(html).toContain('tyre-slip--state-lockup')
+    expect(html).not.toContain('tyre-slip--waiting')
+  })
+
+  it('tints the card more as the state worsens and never while waiting for data', async () => {
+    const page = readFileSync(resolve(process.cwd(), 'app/pages/tyres-overlay.vue'), 'utf8')
+    const alarm = (state: string) => Number(page.match(new RegExp(String.raw`tyre-slip--state-${state}[^{]*\{ --tyre-slip-alarm: (\d+)%`))?.[1])
+    expect(alarm('limit')).toBeLessThan(alarm('sliding'))
+    expect(alarm('sliding')).toBeLessThan(alarm('wheelspin'))
+    expect(alarm('wheelspin')).toBe(alarm('lockup'))
+    expect(page).toContain('.hud-overlay .tyre-slip--waiting { --tyre-slip-alarm: 0%; }')
+    expect(page).toMatch(/\.tyre-slip__state,[\s\S]*?\{[^}]*border-radius:\s*999px;[^}]*background:\s*var\(--tyre-slip-color/)
+    const waiting = await renderToString(createSSRApp(TyreSlipHud, { fastState: { ...fastState(), isFresh: false } }))
+    expect(waiting.match(/tyre-slip--waiting/g)).toHaveLength(4)
   })
 })

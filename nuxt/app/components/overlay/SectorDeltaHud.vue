@@ -84,9 +84,19 @@ const compactLapTime = computed(() => {
     ? '--:--.---'
     : formatLapTime(compactDisplayLapTimeMs.value)
 })
-const compactTitle = computed(() => (
-  `SECTORS · VS · ${comparisonToken.value}`
+// HUD style v2 (27/10): both layouts share the "SETTORI vs BEST" title bar.
+const titleText = computed(() => (
+  props.sectorHud?.mode === 'last_lap' && props.variant !== 'compact'
+    ? t('overlays.sectors.titleLastLap')
+    : t('overlays.sectors.title')
 ))
+// The lap label names the lap shown; only Compact appends the frozen target outcome.
+const lapLabel = computed(() => {
+  const lap = props.sectorHud?.mode === 'last_lap' ? t('overlays.sectors.lastLap') : t('overlays.sectors.currentLap')
+  if (props.variant !== 'compact' || compactCurrentLapValid.value !== true || props.targetOutcome === 'neutral') return lap
+  const target = props.targetOutcome === 'inside' ? t('overlays.sectors.inTarget') : t('overlays.sectors.outTarget')
+  return props.sectorHud?.mode === 'last_lap' ? `${lap} · ${target}` : target
+})
 
 function formatTime(ms: number | null): string {
   if (ms === null) return '--'
@@ -167,24 +177,28 @@ const { t } = useI18n()
     <template v-if="variant === 'compact'">
       <div class="sector-compact__header">
         <div class="sector-compact__title">
-          <span>{{ compactTitle }}</span>
+          <span><b>{{ titleText }}</b> VS {{ comparisonToken }}</span>
         </div>
-        <strong
+        <div
           v-if="showCurrentLap !== false"
-          class="sector-compact__lap"
+          class="sector-compact__lap-block"
           :class="{
-            'sector-compact__lap--invalid': compactCurrentLapValid === false,
-            'sector-compact__lap--unknown': compactCurrentLapValid === null,
             'sector-compact__lap--target-inside': targetOutcome === 'inside' && compactCurrentLapValid === true,
             'sector-compact__lap--target-outside': targetOutcome === 'outside' && compactCurrentLapValid === true,
           }"
-        >{{ compactLapTime }}</strong>
-        <small
-          v-if="showCurrentLap !== false"
-          class="sector-compact__lap-label"
-          :class="{ 'sector-compact__lap-label--target': targetOutcome !== 'neutral' && compactCurrentLapValid === true }"
-        >{{ compactCurrentLapValid === true && targetOutcome !== 'neutral'
-          ? `${sectorHud?.mode === 'last_lap' ? 'LAST LAP · ' : ''}${targetOutcome === 'inside' ? t('overlays.sectors.inTarget') : t('overlays.sectors.outTarget')}` : (sectorHud?.mode === 'last_lap' ? 'LAST LAP' : 'CURRENT LAP') }}</small>
+        >
+          <small
+            class="sector-compact__lap-label"
+            :class="{ 'sector-compact__lap-label--target': targetOutcome !== 'neutral' && compactCurrentLapValid === true }"
+          >{{ lapLabel }}</small>
+          <strong
+            class="sector-compact__lap"
+            :class="{
+              'sector-compact__lap--invalid': compactCurrentLapValid === false,
+              'sector-compact__lap--unknown': compactCurrentLapValid === null,
+            }"
+          >{{ compactLapTime }}</strong>
+        </div>
       </div>
       <div class="sector-compact__rows">
         <div
@@ -212,37 +226,52 @@ const { t } = useI18n()
     </template>
     <template v-else>
       <div class="sector-delta-hud__header sector-delta-hud__header--classic">
-        <span class="sector-delta-hud__title">{{ sectorHud?.mode === 'last_lap' ? t('overlays.sectors.titleLastLap') : t('overlays.sectors.title') }}</span>
+        <span class="sector-delta-hud__title">{{ titleText }}</span>
         <em class="sector-delta-hud__comparison">VS {{ comparisonToken }}</em>
       </div>
-      <div class="sector-delta-hud__grid" :style="{ gridTemplateColumns: `repeat(${visibleSectors.length}, minmax(0, 1fr))` }">
-        <div
-          v-for="sector in visibleSectors"
-          :key="sector.index"
-          class="sector-delta"
-          :class="[
-            `sector-delta--${sector.color}`,
-            `sector-delta--${sector.state}`,
-          ]"
-          :aria-label="ariaLabel(sector)"
-        >
-          <span class="sector-delta__label">S{{ sector.index }}</span>
+      <div
+        class="sector-delta-hud__body"
+        :style="showCurrentLap !== false ? { gridTemplateColumns: `minmax(0, 1.35fr) minmax(0, ${visibleSectors.length}fr)` } : undefined"
+      >
+        <div v-if="showCurrentLap !== false" class="sector-delta-hud__lap">
+          <span class="sector-delta-hud__lap-label">{{ lapLabel }}</span>
           <strong
-            class="sector-delta__value"
-            :class="{ 'sector-delta__value--placeholder': valueText(sector) === '--' }"
-          >{{ valueText(sector) }}</strong>
-          <small
-            v-if="showReference"
-            class="sector-delta__ref"
-          >{{ t('overlays.sectors.previous') }} {{ sector.referenceMs !== null ? formatTime(sector.referenceMs) : '--' }}</small>
-          <small
-            v-if="showBest"
-            class="sector-delta__best"
-          >best {{ sector.bestMs !== null ? formatTime(sector.bestMs) : '--' }}</small>
-          <small
-            class="sector-delta__delta"
-            :class="{ 'sector-delta__delta--placeholder': sector.state !== 'complete' || sector.deltaMs === null }"
-          >{{ deltaText(sector) }}</small>
+            class="sector-delta-hud__lap-time"
+            :class="{
+              'sector-compact__lap--invalid': compactCurrentLapValid === false,
+              'sector-compact__lap--unknown': compactCurrentLapValid === null,
+            }"
+          >{{ compactLapTime }}</strong>
+        </div>
+        <div class="sector-delta-hud__grid" :style="{ gridTemplateColumns: `repeat(${visibleSectors.length}, minmax(0, 1fr))` }">
+          <div
+            v-for="sector in visibleSectors"
+            :key="sector.index"
+            class="sector-delta"
+            :class="[
+              `sector-delta--${sector.color}`,
+              `sector-delta--${sector.state}`,
+            ]"
+            :aria-label="ariaLabel(sector)"
+          >
+            <span class="sector-delta__label">S{{ sector.index }}</span>
+            <strong
+              class="sector-delta__value"
+              :class="{ 'sector-delta__value--placeholder': valueText(sector) === '--' }"
+            >{{ valueText(sector) }}</strong>
+            <small
+              class="sector-delta__delta"
+              :class="{ 'sector-delta__delta--placeholder': sector.state !== 'complete' || sector.deltaMs === null }"
+            >{{ deltaText(sector) }}</small>
+            <div v-if="showReference || showBest" class="sector-delta__minis">
+              <span v-if="showReference" class="sector-delta__ref">
+                <b>{{ t('overlays.sectors.previous') }}</b><em>{{ sector.referenceMs !== null ? formatTime(sector.referenceMs) : '--' }}</em>
+              </span>
+              <span v-if="showBest" class="sector-delta__best">
+                <b>{{ t('overlays.sectors.best') }}</b><em>{{ sector.bestMs !== null ? formatTime(sector.bestMs) : '--' }}</em>
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </template>
@@ -250,6 +279,7 @@ const { t } = useI18n()
 </template>
 
 <style scoped>
+/* HUD style v2 (27/10): compact layout. The classic rules live in pages/sectors-overlay.vue. */
 .sector-delta-hud--compact {
   display: flex;
   flex-direction: column;
@@ -260,23 +290,21 @@ const { t } = useI18n()
   box-sizing: border-box;
   min-height: 0;
   overflow: hidden;
+  font-family: var(--hud-font-label);
 }
 
 .sector-compact__header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto auto auto;
-  column-gap: calc(6px * var(--hud-scale, 1));
+  gap: calc(6px * var(--hud-scale, 1));
   flex: 0 0 auto;
   min-height: 0;
 }
 
 .sector-compact__title {
-  grid-column: 1 / -1;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: calc(5px * var(--hud-scale, 1));
+  gap: calc(8px * var(--hud-scale, 1));
 }
 
 .sector-compact__title::before,
@@ -284,134 +312,113 @@ const { t } = useI18n()
   content: '';
   width: 100%;
   height: 1px;
-  background: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .sector-compact__title > span {
-  color: #c7c9cc;
-  font-size: calc(9px * var(--hud-scale, 1));
-  font-weight: 950;
-  letter-spacing: 0.02em;
-  line-height: 1;
+  color: #a3a5ae;
+  font: 700 calc(12px * var(--hud-scale, 1))/1 var(--hud-font-label);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
+
+.sector-compact__title b { color: #f4f4f6; }
+
+/* The lap block keeps the in/out target backgrounds; neutral is a plain cell. */
+.sector-compact__lap-block {
+  display: grid;
+  justify-items: center;
+  gap: calc(4px * var(--hud-scale, 1));
+  padding: calc(7px * var(--hud-scale, 1)) calc(6px * var(--hud-scale, 1));
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.sector-compact__lap-block.sector-compact__lap--target-inside { background: #0b315a; }
+.sector-compact__lap-block.sector-compact__lap--target-outside { background: #542600; }
 
 .sector-compact__lap {
-  grid-column: 1 / -1;
-  justify-self: stretch;
-  text-align: center;
   color: #facc15;
-  margin-top: calc(16px * var(--hud-scale, 1));
-  font-size: calc(48px * var(--hud-scale, 1));
+  font: italic 700 calc(42px * var(--hud-scale, 1))/0.92 var(--hud-font-num);
   font-variant-numeric: tabular-nums;
-  font-weight: 950;
-  letter-spacing: -0.035em;
-  line-height: 0.88;
+  white-space: nowrap;
 }
 
-.sector-compact__lap--invalid {
-  color: #dc1010;
-}
-
-.sector-compact__lap--unknown {
-  color: #6f7277;
-}
-
-.sector-compact__lap--target-inside,
-.sector-compact__lap--target-outside {
-  border-radius: calc(8px * var(--hud-scale, 1));
-  /* The grid item spans the complete time row; preserve its height. */
-  outline: none;
-}
-
-.sector-compact__lap--target-inside {
-  background: #0b315a;
-
-}
-
-.sector-compact__lap--target-outside {
-  background: #542600;
-
-}
+.sector-compact__lap.sector-compact__lap--invalid { color: #dc1010; }
+.sector-compact__lap.sector-compact__lap--unknown { color: #6f7277; }
 
 .sector-compact__lap-label {
-  grid-column: 2;
-  justify-self: end;
-  margin-top: calc(2px * var(--hud-scale, 1));
-  color: #6f7277;
-  font-size: calc(10px * var(--hud-scale, 1));
-  font-weight: 900;
-  line-height: 1;
+  color: #a3a5ae;
+  font: 700 calc(12px * var(--hud-scale, 1))/1 var(--hud-font-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
-.sector-compact__lap-label--target {
-  color: #fff;
-}
+.sector-compact__lap-label--target { color: #cfe3ff; }
 
 .sector-compact__rows {
   display: grid;
   flex: 1;
-  margin-top: calc(5px * var(--hud-scale, 1));
+  margin-top: calc(6px * var(--hud-scale, 1));
   grid-template-rows: repeat(3, minmax(0, 1fr));
+  gap: calc(5px * var(--hud-scale, 1));
   min-height: 0;
   overflow: hidden;
 }
 
 .sector-compact__row {
   display: grid;
-  grid-template-columns: calc(39px * var(--hud-scale, 1)) minmax(0, 1fr) max-content;
+  grid-template-columns: calc(32px * var(--hud-scale, 1)) minmax(0, 1fr) max-content;
   align-items: center;
   gap: calc(8px * var(--hud-scale, 1));
   box-sizing: border-box;
   min-height: 0;
-  padding: 0;
+  padding: 0 calc(8px * var(--hud-scale, 1));
   overflow: hidden;
   border: 0;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.045);
 }
 
 .sector-compact__label {
-  color: #292c31;
-  font-size: calc(20px * var(--hud-scale, 1));
-  font-weight: 950;
-  letter-spacing: 0.02em;
+  color: #a3a5ae;
+  font: 700 calc(15px * var(--hud-scale, 1))/1 var(--hud-font-label);
+  letter-spacing: 0.08em;
 }
 
 .sector-compact__row .sector-compact__time,
 .sector-compact__row .sector-compact__time > span {
   overflow: hidden;
-  color: #292c31;
-  font-size: calc(38px * var(--hud-scale, 1));
+  color: #f4f4f6;
+  font: italic 700 calc(28px * var(--hud-scale, 1))/1 var(--hud-font-num);
   font-variant-numeric: tabular-nums;
-  font-weight: 950;
-  letter-spacing: -0.04em;
-  line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .sector-compact__row .sector-compact__time > .sector-compact__time-value--long {
-  font-size: calc(30px * var(--hud-scale, 1));
-  letter-spacing: -0.05em;
+  font-size: calc(23px * var(--hud-scale, 1));
 }
 
 .sector-compact__delta {
   justify-self: end;
   overflow: visible;
-  font-size: calc(22px * var(--hud-scale, 1));
+  font: italic 700 calc(19px * var(--hud-scale, 1))/1 var(--hud-font-num);
   font-variant-numeric: tabular-nums;
-  font-weight: 950;
-  line-height: 1;
   text-transform: uppercase;
 }
 
+/* Sectors not reached yet stay dimmer; the running one is lifted. */
+.sector-compact__row--pending .sector-compact__time,
+.sector-compact__row--pending .sector-compact__time > span {
+  color: #6f7277;
+}
+
 .sector-compact__row--running {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.09);
 }
 
-.sector-compact__row--running .sector-compact__label,
-.sector-compact__row--running .sector-compact__time,
-.sector-compact__row--running .sector-compact__time > span {
-  color: #e8e4df;
+.sector-compact__row--running .sector-compact__label {
+  color: #f4f4f6;
 }
-
 </style>

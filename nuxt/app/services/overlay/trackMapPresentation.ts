@@ -14,7 +14,8 @@ import type { TrackMapCar, TrackMapScene } from '~/services/sim/trackMapScene'
 export const TRACK_MAP_CANVAS = 720
 export const TRACK_MAP_MARKER_DIAMETER = 40
 export const TRACK_MAP_PULSE_DIAMETER = 40
-export const TRACK_MAP_PIT_COLOR = '#8A2BE2'
+// HUD style v2 (27/10): the pit marker is white (was purple); its letter turns dark.
+export const TRACK_MAP_PIT_COLOR = '#FFFFFF'
 export const TRACK_MAP_DAMAGE_COLOR = '#0000FF'
 // Asked to the map provider instead of a track name: the lap drawn as a circle.
 export const TRACK_MAP_CIRCLE_KEY = 'circle'

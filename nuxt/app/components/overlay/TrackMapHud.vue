@@ -158,7 +158,7 @@ const captionX = computed(() => center - captionWidth.value / 2)
           :stroke="marker.fill"
           :stroke-width="marker.hollow ? 6 : 0"
         />
-        <text :transform="upright" y="9" class="track-map__letter">{{ marker.label }}</text>
+        <text :transform="upright" y="9" class="track-map__letter" :class="{ 'track-map__letter--on-light': marker.kind === 'pit' && !marker.hollow }">{{ marker.label }}</text>
       </g>
     </g>
     <!-- Fuori dalla rotazione: su che tempo di sosta si basa il pallino. -->
@@ -178,6 +178,7 @@ const captionX = computed(() => center - captionWidth.value / 2)
 @keyframes track-map-pulse{from{opacity:.2}to{opacity:1}}
 .track-map__number{fill:#ffffff;font:800 26px/1 system-ui,sans-serif}
 .track-map__letter{fill:#ffffff;font:700 26px/1 system-ui,sans-serif;text-anchor:middle}
+.track-map__letter--on-light{fill:#0b0c0f}
 .track-map__caption rect{fill:#000000;opacity:.7}
 .track-map__caption text{fill:#ffffff;font:700 34px/1 system-ui,sans-serif;text-anchor:middle;font-variant-numeric:tabular-nums}
 </style>

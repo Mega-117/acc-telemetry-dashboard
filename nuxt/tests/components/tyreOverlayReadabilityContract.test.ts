@@ -12,7 +12,8 @@ describe('tyre overlay minimum readability contract', () => {
 
     expect(page).toContain('max(16px, calc(18px * var(--hud-scale)))')
     expect(page).toContain('max(14px, calc(15px * var(--hud-scale)))')
-    expect(page).toContain('max(10px, calc(11px * var(--hud-scale)))')
+    // HUD v2: pressure shares the slip row, so its floor rose from 10px to 12px.
+    expect(page).toContain('max(12px, calc(14px * var(--hud-scale)))')
   })
 
   it('does not reintroduce sub-10px text at the compact tyres breakpoint', () => {
@@ -31,8 +32,11 @@ describe('tyre overlay minimum readability contract', () => {
     const page = source('app/pages/tyres-overlay.vue')
 
     expect(race).toContain('viewBox="0 0 166 241"')
-    expect(race).toContain('font-size:18px')
-    expect(race).toContain('font-size:14px')
+    // HUD v2 (27/10): four corners side by side in the same viewBox; pressure stays the
+    // largest value and the tyre temperature the next, status text keeps 18 units.
+    expect(race).toContain('.tyre-race__primary { font-size:10px; }')
+    expect(race).toMatch(/\.tyre-race__temperature \{ font-size:9px;/)
+    expect(race).toContain('.tyre-race__unavailable text { font-size:18px; }')
     expect(damage).toContain('viewBox="0 0 166 241"')
     expect(damage).toContain('font-size:12px')
     expect(damage).toContain('font-size:10px')

@@ -9,6 +9,12 @@ export default {
     staleData: 'Data not updated',
     standingsWaiting: 'Waiting for session data',
     trackmapCircleUnsupported: 'Track outline not available: circle view',
+    tyreRace: {
+      set: 'SET',
+      body: 'Body',
+      suspension: 'Suspension',
+      total: 'Total',
+    },
     weather: {
       unavailable: 'Weather forecast not available',
       noData: 'Weather data not available',
@@ -34,6 +40,9 @@ export default {
       title: 'SECTORS',
       titleLastLap: 'SECTORS · LAST LAP',
       previous: 'prev',
+      best: 'best',
+      currentLap: 'CURRENT LAP',
+      lastLap: 'LAST LAP',
     },
     trainingHud: {
       muted: 'MUTED',

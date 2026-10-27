@@ -320,6 +320,8 @@ onBeforeUnmount(() => {
         :delta-reference="deltaReference"
         :custom-sector-times="customSectorTimes"
         variant="classic"
+        :live-current-lap-time-ms="liveCurrentLapTimeMs"
+        :compact-display-lap="compactDisplayLap"
       />
     </div>
   </div>
@@ -357,20 +359,20 @@ onBeforeUnmount(() => {
   flex-direction: column;
   -webkit-app-region: drag;
   padding: calc(12px * var(--hud-scale));
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 12px;
-  // Sfondo completamente OPACO (nessuna trasparenza) e nessuna ombra.
-  background: #0b0e15;
+  // Sfondo OPACO e nessuna ombra (pannello stile v2).
+  background: #0d0e12;
 }
 
 // ── L'HUD riempie il pannello ────────────────────────────────────────────────
 .hud-overlay__panel--compact {
   padding: calc(8px * var(--hud-scale)) calc(14px * var(--hud-scale)) calc(10px * var(--hud-scale));
-  border-color: rgba(255, 255, 255, 0.62);
   border-radius: calc(12px * var(--hud-scale));
-  background: #000;
 }
 
+// HUD style v2 (27/10): title bar "SETTORI vs BEST", lap tile in yellow, then one tile per
+// sector with time, delta and the boxed PREV/BEST minis. The tile tint keeps the sector colour.
 .hud-overlay .sector-delta-hud {
   flex: 1;
   width: 100%;
@@ -382,12 +384,21 @@ onBeforeUnmount(() => {
   background: transparent;
   border: none;
   padding: 0;
+  font-family: var(--hud-font-label);
+}
+
+.hud-overlay .sector-delta-hud__body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: calc(8px * var(--hud-scale));
+  min-height: 0;
 }
 
 .hud-overlay .sector-delta-hud__grid {
-  flex: 1;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: calc(8px * var(--hud-scale));
+  min-height: 0;
 }
 
 .hud-overlay .sector-delta-hud__header--classic {
@@ -395,77 +406,119 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: calc(8px * var(--hud-scale));
+
+  &::before,
+  &::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.15);
+  }
+}
+
+.hud-overlay .sector-delta-hud__header span,
+.hud-overlay .sector-delta-hud__header em {
+  overflow: visible;
+  font: 700 calc(12px * var(--hud-scale))/1 var(--hud-font-label);
+  letter-spacing: .14em;
+  text-transform: uppercase;
 }
 
 .hud-overlay .sector-delta-hud__title {
-  font-weight: 950;
-  letter-spacing: .08em;
+  color: #f4f4f6;
 }
 
 .hud-overlay .sector-delta-hud__comparison {
+  color: #a3a5ae;
   font-style: normal;
-  font-weight: 900;
-  letter-spacing: .04em;
 }
 
+.hud-overlay .sector-delta-hud__lap,
 .hud-overlay .sector-delta {
   min-height: 0;
-  // Colonna: etichetta, tempo attuale, delta, tempo giro precedente.
   display: flex;
   flex-direction: column;
   justify-content: center;
-  // Più spazio verticale tra le linee.
-  gap: calc(8px * var(--hud-scale));
-  padding: calc(8px * var(--hud-scale));
+  gap: calc(3px * var(--hud-scale));
+  padding: calc(6px * var(--hud-scale)) calc(8px * var(--hud-scale));
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
 }
 
-// ── Testi tutti BIANCHI per massima leggibilità ──────────────────────────────
-.hud-overlay .sector-delta-hud__header span,
-.hud-overlay .sector-delta-hud__header em {
-  font-size: calc(13px * var(--hud-scale));
-  color: #ffffff;
+.hud-overlay .sector-delta-hud__lap {
+  background: rgba(255, 255, 255, 0.045);
 }
 
-.hud-overlay .sector-delta__label,
-.hud-overlay .sector-delta small {
-  font-size: calc(13px * var(--hud-scale));
-  color: #ffffff;
+.hud-overlay .sector-delta-hud__lap-label,
+.hud-overlay .sector-delta__label {
+  overflow: hidden;
+  color: #a3a5ae;
+  font: 700 calc(12px * var(--hud-scale))/1 var(--hud-font-label);
+  letter-spacing: .08em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
-// Gerarchia: etichetta, tempo attuale (hero), delta EVIDENTE, "prec" piccolo/attenuato.
-.hud-overlay .sector-delta__label { order: 0; }
+.hud-overlay .sector-delta-hud__lap-time {
+  overflow: hidden;
+  color: #facc15;
+  font: italic 700 calc(21px * var(--hud-scale))/1 var(--hud-font-num);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-overlay .sector-delta-hud__lap-time.sector-compact__lap--invalid { color: #dc1010; }
+.hud-overlay .sector-delta-hud__lap-time.sector-compact__lap--unknown { color: #6f7277; }
 
 .hud-overlay .sector-delta strong {
-  order: 1;
-  font-size: calc(22px * var(--hud-scale));
-  color: #ffffff;
+  color: #f4f4f6;
+  font: italic 700 calc(20px * var(--hud-scale))/1 var(--hud-font-num);
 }
 
-.hud-overlay .sector-delta__delta {
-  order: 2;
-  font-size: calc(17px * var(--hud-scale));
-  font-weight: 900;
-  color: #ffffff;
-}
-
-// Tempo del giro precedente per settore: secondario, attenuato.
-.hud-overlay .sector-delta__ref {
-  order: 3;
-  font-size: calc(11px * var(--hud-scale));
-  color: #ffffff;
-  opacity: 0.6;
-}
-
-.hud-overlay .sector-delta__best {
-  order: 4;
-  font-size: calc(11px * var(--hud-scale));
-  color: #ffffff;
-  opacity: 0.72;
-}
-
-// Allinea a sinistra i testi piccoli sotto l'etichetta.
-.hud-overlay .sector-delta small {
+.hud-overlay .sector-delta .sector-delta__delta {
   align-self: flex-start;
+  color: #f4f4f6;
+  font: italic 700 calc(15px * var(--hud-scale))/1 var(--hud-font-num);
+}
+
+.hud-overlay .sector-delta--purple .sector-delta__delta { color: rgb(217, 70, 239); }
+.hud-overlay .sector-delta--green .sector-delta__delta { color: rgb(34, 197, 94); }
+.hud-overlay .sector-delta--yellow .sector-delta__delta { color: rgb(250, 204, 21); }
+.hud-overlay .sector-delta--red .sector-delta__delta { color: rgb(239, 68, 68); }
+.hud-overlay .sector-delta .sector-delta__delta--placeholder { color: #a3a5ae; text-transform: uppercase; }
+
+.hud-overlay .sector-delta__minis {
+  display: grid;
+  gap: calc(2px * var(--hud-scale));
+  margin-top: calc(1px * var(--hud-scale));
+}
+
+.hud-overlay .sector-delta__ref,
+.hud-overlay .sector-delta__best {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: calc(4px * var(--hud-scale));
+  min-width: 0;
+  padding: calc(2px * var(--hud-scale)) calc(5px * var(--hud-scale));
+  background: rgba(255, 255, 255, 0.06);
+
+  b {
+    color: #a3a5ae;
+    font: 700 calc(10px * var(--hud-scale))/1 var(--hud-font-label);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+
+  em {
+    overflow: hidden;
+    color: #f4f4f6;
+    font: italic 600 calc(12px * var(--hud-scale))/1 var(--hud-font-num);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 .hud-overlay--target {
   padding: 6px;

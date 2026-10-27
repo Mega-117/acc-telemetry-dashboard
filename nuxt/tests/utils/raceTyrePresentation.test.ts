@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { raceSlip, racePressureHeight, raceNumber, raceDamageTime, racePressureFlash } from '~/utils/raceTyrePresentation'
+import { raceSlip, raceNumber, raceDamageTime, racePressureFlash, raceTyreCorner, RACE_TYRE_GEOMETRY } from '~/utils/raceTyrePresentation'
 
 describe('Race reference presentation', () => {
   it.each([[0, 0, '#ffffff'], [.099, 0, '#ffffff'], [.1, 2.8, '#ffffff'],
@@ -11,12 +11,33 @@ describe('Race reference presentation', () => {
   it('uses raw slip without minimum fill, negative or missing is empty', () => {
     for (const raw of [null, undefined, NaN, -2]) expect(raceSlip(raw).height).toBe(0)
   })
-  it('pressure shape grows and shrinks around compound target without clamping to tyre', () => {
-    expect(racePressureHeight(26.9, 'DRY')).toBe(56)
-    expect(racePressureHeight(30, 'WET')).toBe(56)
-    expect(racePressureHeight(25, 'DRY')).toBeLessThan(56)
-    expect(racePressureHeight(28, 'DRY')).toBeGreaterThan(56)
-    for (const bad of [null, NaN, 0, -1]) expect(racePressureHeight(bad, null)).toBe(56)
+  it('HUD v2: front corners read pressure, AVG, loss top to bottom; rear corners the reverse', () => {
+    const order = (index: number) => [...raceTyreCorner(index).valueLines].sort((a, b) => a.y - b.y).map(line => line.kind)
+    expect(order(0)).toEqual(['primary', 'average', 'loss'])
+    expect(order(1)).toEqual(['primary', 'average', 'loss'])
+    expect(order(2)).toEqual(['loss', 'average', 'primary'])
+    expect(order(3)).toEqual(['loss', 'average', 'primary'])
+  })
+  it('HUD v2: mirrors left and right, values outside, brakes toward the centre, rear below front', () => {
+    const G = RACE_TYRE_GEOMETRY
+    const [fl, fr, rl, rr] = [0, 1, 2, 3].map(raceTyreCorner)
+    // Outside → in on the left: values, slip bar, tyre, brake, brake info.
+    expect(fl!.valuesX).toBeLessThan(fl!.slipX)
+    expect(fl!.slipX + G.slipWidth).toBeLessThan(fl!.tyreX)
+    expect(fl!.tyreX + G.tyreWidth).toBeLessThan(fl!.brakeX)
+    expect(fl!.brakeX + G.brakeWidth).toBeLessThan(fl!.brakeInfoX)
+    expect(fl!.brakeInfoX).toBeLessThan(83)
+    // The right side is the exact mirror around the centre line (x = 83).
+    expect(fr!.tyreX + G.tyreWidth).toBeCloseTo(166 - fl!.tyreX)
+    expect(fr!.slipX + G.slipWidth).toBeCloseTo(166 - fl!.slipX)
+    expect(fr!.brakeX + G.brakeWidth).toBeCloseTo(166 - fl!.brakeX)
+    expect(fr!.brakeInfoX).toBeGreaterThan(83)
+    // Front and rear axles do not overlap and leave room for the compound line.
+    expect(fl!.top + G.tyreHeight).toBeLessThan(G.midTop)
+    expect(G.midBottom).toBeLessThan(rl!.top)
+    expect(rr!.top + G.tyreHeight).toBeLessThan(G.damageTop)
+    expect(G.brakeHeight).toBeLessThan(G.tyreHeight)
+    expect(G.brakeWidth).toBeGreaterThan(G.slipWidth)
   })
   it('formats missing values and repair time instead of inventing a lap time', () => {
     expect(raceNumber(70.5)).toBe('70')
