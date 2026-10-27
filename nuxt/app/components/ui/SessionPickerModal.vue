@@ -9,11 +9,12 @@ import {
 } from '~/utils/telemetryFormat'
 import type { SessionDocument } from '~/types/telemetry'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
-import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useSessionPickerPages } from '~/composables/useSessionPickerPages'
 import { onHistoryTrack } from '~/services/projections/vehicleHistory'
 import { sessionGame, sessionFilterType } from '~/services/telemetry/gameIdentity'
 import { sessionTiming } from '~/services/telemetry/fuelHistorySummary'
+import { parseLapShareLink } from '~/services/telemetry/lapShareLink'
+import { loadPublicNickname } from '~/repositories/publicProfileRepository'
 
 const props = defineProps<{
   isOpen: boolean
@@ -26,10 +27,11 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'select', sessionId: string, userId?: string, nickname?: string): void
+  /** PIP-652: one field for every link: a lap link goes to the Telemetria as a reference. */
+  (e: 'lap', link: string): void
 }>()
 
 const telemetryGateway = useTelemetryGateway()
-const { getUserProfile } = useFirebaseAuth()
 const pages = useSessionPickerPages(
   (page, pageSize, reset) => telemetryGateway.getSessionsPage(undefined, {}, page, pageSize, reset),
   () => props.isOpen,
@@ -49,12 +51,28 @@ function parseSharedLink(url: string): { sessionId: string, userId: string } | n
   return null
 }
 
+// PIP-652: a session link can also be opened (the desktop app has no address bar).
+const sessionLink = computed(() => parseSharedLink(sharedLink.value))
+function openSharedSession() {
+  const parsed = sessionLink.value
+  if (!parsed) return
+  emit('close')
+  void navigateTo(`/sessioni/${encodeURIComponent(parsed.sessionId)}?userId=${encodeURIComponent(parsed.userId)}`)
+}
+
 async function loadSharedLink() {
   linkError.value = ''
-  
+  // A lap link: the Telemetria loads it as the reference (it checks track and validity there).
+  if (parseLapShareLink(sharedLink.value)) {
+    emit('lap', sharedLink.value.trim())
+    sharedLink.value = ''
+    emit('close')
+    return
+  }
+
   const parsed = parseSharedLink(sharedLink.value)
   if (!parsed) {
-    linkError.value = 'Link non valido. Formato atteso: .../sessioni/ID?userId=...'
+    linkError.value = 'Link non riconosciuto: incolla il link di una sessione o di un giro.'
     return
   }
   
@@ -81,13 +99,8 @@ async function loadSharedLink() {
     }
     
     // 3. Fetch nickname
-    let nickname = 'Utente Esterno'
-    try {
-      const profile = await getUserProfile(parsed.userId)
-      nickname = profile?.nickname || profile?.displayName || 'Utente Esterno'
-    } catch (e) {
-      // Ignore - use default
-    }
+    // PIP-652: the public nickname (readable by everyone signed in): another driver's profile is private.
+    const nickname = (await loadPublicNickname(parsed.userId)) || 'Pilota'
     
     // 4. Emit with userId and nickname
     emit('select', parsed.sessionId, parsed.userId, nickname)
@@ -175,7 +188,7 @@ watch(
       <div class="session-picker-modal">
         <!-- Header -->
         <div class="spm-header">
-          <h2 class="spm-title">Aggiungi Sorgente Dati</h2>
+          <h2 class="spm-title">Confronta con…</h2>
           <p class="spm-subtitle">
             {{ formatTrackName(currentTrack) }} · {{ isLoadingSessions ? 'caricamento sessioni...' : `${filteredSessions.length} sessioni disponibili` }}
           </p>
@@ -184,22 +197,11 @@ watch(
         
         <!-- Link Input Section -->
         <div class="spm-link-section">
-          <label class="link-label">📋 Incolla link sessione condivisa</label>
+          <label class="link-label">Incolla un link ricevuto: di una sessione o di un giro</label>
           <div class="link-input-row">
-            <input 
-              v-model="sharedLink"
-              type="text"
-              class="link-input"
-              placeholder="https://...?userId=..."
-              @keyup.enter="loadSharedLink"
-            />
-            <button 
-              class="link-load-btn" 
-              :disabled="isLoadingLink || !sharedLink"
-              @click="loadSharedLink"
-            >
-              {{ isLoadingLink ? '...' : 'Carica' }}
-            </button>
+            <input v-model="sharedLink" type="text" class="link-input" placeholder="https://…/sessioni/… oppure https://…/giro#…" @keyup.enter="loadSharedLink" />
+            <button class="link-load-btn" :disabled="isLoadingLink || !sharedLink" @click="loadSharedLink">{{ isLoadingLink ? '...' : 'Confronta' }}</button>
+            <button v-if="sessionLink" type="button" class="link-load-btn" @click="openSharedSession">Apri la sessione</button>
           </div>
           <p v-if="linkError" class="link-error">{{ linkError }}</p>
         </div>

@@ -64,6 +64,7 @@ export default defineConfig({
         'app/composables/useSessionZones.ts',
         'app/composables/useSectorCompare.ts',
         'app/composables/useReferenceLibrary.ts',
+        'app/composables/useCompareTargets.ts',
         // PIP-636: bordi della pista dal sito.
         'app/services/telemetry/trackEdges.ts',
         // PIP-637: percorso della vista pilota.
@@ -336,6 +337,7 @@ export default defineConfig({
         'app/services/telemetry/sessionZones.ts',
         'app/services/telemetry/idealLap.ts',
         'app/services/telemetry/referencePick.ts',
+        'app/services/telemetry/sharedLapLoad.ts',
         'app/services/telemetry/sessionMergeLogic.ts',
         'app/services/telemetry/theoreticalTimesCalculator.ts',
         'app/services/overlay/tyreSetupViewModel.ts',

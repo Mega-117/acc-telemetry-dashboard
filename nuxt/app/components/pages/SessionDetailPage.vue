@@ -83,6 +83,7 @@ import type { SessionDetailLap, SessionDetailStint } from '~/types/sessionDetail
 import SessionDetailPanel from '~/components/session-detail/SessionDetailPanel.vue'
 import SessionAnalysisPanel from '~/components/session-detail/analysis/SessionAnalysisPanel.vue'
 import { analysisSessionToken } from '~/services/telemetry/lapAnalysis'
+import type { CompareTarget } from '~/composables/useCompareTargets'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler, zoomPlugin)
 
@@ -426,12 +427,25 @@ async function handleSessionBSelect(sessionId: string, userId?: string, nickname
     crossSessionData.value = sharedInput
     activeTableTab.value = 'COMPARE'
     autoSelectBestStints(sharedInput)
+    // PIP-652: the same session is compared in the Telemetria too: its laps become references there.
+    const token = analysisSessionToken((data as { session_id?: unknown }).session_id, sessionId, data.session_info?.date_start)
+    const mine = ownerId === comparisonCurrentUser.value?.uid
+    const when = String(data.session_info?.date_start ?? '')
+    compareTarget.value = token ? { ownerUid: ownerId, sessionToken: token, sharedSessionId: mine ? null : sessionId,
+      label: mine ? `Sessione del ${when.slice(8, 10)}/${when.slice(5, 7)}` : (nickname || 'Pilota') } : null
   } catch {
     if (version === comparisonLoadVersion) comparisonLoadError.value = 'Impossibile caricare la sessione da confrontare.'
   }
 }
 
+// PIP-652: one "Confronta" for the whole page. The picked session drives the stint comparison (Sessione)
+// and brings its laps to the Telemetria; a lap link goes to the Telemetria as the reference.
+const compareTarget = ref<CompareTarget | null>(null)
+const pendingLapLink = ref<string | null>(null)
+function onLapLink(link: string) { pendingLapLink.value = link; chooseTab('avanzata') }
+
 function clearCrossSession() {
+  compareTarget.value = null
   comparisonLoadVersion++
   crossSessionId.value = null
   crossSessionData.value = null
@@ -2471,6 +2485,7 @@ const gripZones = computed(() => {
         </div>
       </div>
       <div class="header-actions">
+        <button v-if="!isEvoSession" type="button" class="rc-btn rc-btn--compact" title="Le tue sessioni, oppure il link di una sessione o di un giro ricevuto" @click="openSessionPicker">Confronta</button>
         <SessionFileActions :can-share="canShare" :sharing="isSharing" :success="shareSuccess" :error="fileActionError" @share="shareSession" />
         <div v-if="!isEvoSession" v-rc-switch class="detail-tabs rc-switch" role="tablist" aria-label="Vista della sessione">
           <button type="button" role="tab" :aria-selected="detailTab === 'sessione'" :class="{ active: detailTab === 'sessione' }" @click="chooseTab('sessione')">Sessione</button>
@@ -2479,7 +2494,7 @@ const gripZones = computed(() => {
       </div>
     </header>
 
-    <SessionAnalysisPanel v-if="detailTab === 'avanzata' && !isEvoSession" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" @unavailable="onTelemetryUnavailable" />
+    <SessionAnalysisPanel v-if="detailTab === 'avanzata' && !isEvoSession" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" :compare-with="compareTarget" :pending-lap-link="pendingLapLink" @unavailable="onTelemetryUnavailable" @compare="openSessionPicker" @lap-link-handled="pendingLapLink = null" />
 
     <!-- ========================================== -->
     <!-- MASTER / DETAIL LAYOUT -->
@@ -3198,6 +3213,7 @@ const gripZones = computed(() => {
     :exclude-session-id="props.sessionId"
     @close="showSessionPicker = false"
     @select="handleSessionBSelect"
+    @lap="onLapLink"
   />
   </div>
 </template>

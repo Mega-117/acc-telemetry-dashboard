@@ -3,14 +3,11 @@
 // online e diventa il Riferimento. Un giro di un'altra pista non si confronta; un'altra auto si
 // confronta ma con l'avviso.
 import { ref, watch } from 'vue'
-import { parseLapShareLink } from '~/services/telemetry/lapShareLink'
-import { fetchSharedLap, LapsArchiveError, type LapsArchiveDeps } from '~/services/telemetry/lapsArchiveClient'
-import { normalizeLapTrace, type LapTraceView } from '~/services/telemetry/lapTraceChart'
-import { loadPublicNickname } from '~/repositories/publicProfileRepository'
-import { formatLapTime } from '~/utils/telemetryFormat'
-import { noteFeatureUse } from '~/services/usage/featureUseNote'
+import type { LapsArchiveDeps } from '~/services/telemetry/lapsArchiveClient'
+import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
+import { loadSharedLapLink, type SharedLapLoaded } from '~/services/telemetry/sharedLapLoad'
 
-export interface SharedLapLoaded { id: string, trace: LapTraceView, label: string, lapNumber: number, lapTimeMs: number, carMismatch: boolean }
+export type { SharedLapLoaded }
 
 const props = defineProps<{ current: LapTraceView | null, deps: LapsArchiveDeps, nickname?: (uid: string) => Promise<string | null> }>()
 const emit = defineEmits<{ loaded: [lap: SharedLapLoaded], close: [] }>()
@@ -22,45 +19,17 @@ let attempt = 0
 // A change of session or pilot invalidates a request still in flight.
 watch(() => props.current, () => { attempt++; busy.value = false })
 
-function sameContext(trace: LapTraceView, current: LapTraceView | null) {
-  return !current || (trace.gameId === current.gameId && trace.track === current.track && (trace.variant ?? null) === (current.variant ?? null))
-}
-
 async function load() {
   if (busy.value) return
-  const link = parseLapShareLink(text.value)
   error.value = ''
-  if (!link) { error.value = 'Link non riconosciuto: incolla il link ricevuto con "Condividi giro".'; return }
   const mine = ++attempt
   busy.value = true
-  try {
-    const { trace: raw, meta } = await fetchSharedLap(link, props.deps)
-    if (mine !== attempt) return
-    const trace = normalizeLapTrace(raw)
-    if (!trace) { error.value = 'Giro non valido: formato non riconosciuto.'; return }
-    // Only whole, valid laps are references: a partial lap would compare different places.
-    if (!trace.complete || trace.valid !== true) { error.value = 'Questo giro non è completo o valido: chiedi un altro giro.'; return }
-    if (!sameContext(trace, props.current)) {
-      error.value = `Questo giro è su ${trace.track}: si confronta solo con giri della stessa pista.`
-      return
-    }
-    const nickname = (await (props.nickname ?? loadPublicNickname)(meta.ownerUid)) || 'Pilota'
-    if (mine !== attempt || !sameContext(trace, props.current)) return
-    const current = props.current
-    const lapNumber = meta.lapNumber ?? 0
-    const lapTimeMs = meta.lapTimeMs ?? Math.round(trace.lapTimeS * 1000)
-    emit('loaded', {
-      id: `shared:${link.shareId}`, trace, lapNumber, lapTimeMs,
-      label: `${nickname} · Giro ${lapNumber} · ${formatLapTime(lapTimeMs)}`,
-      carMismatch: !!current && trace.car !== current.car,
-    })
-    noteFeatureUse({ event: 'laps.share_pasted', laps: 1 })
-    text.value = ''
-  } catch (e) {
-    if (mine === attempt) error.value = e instanceof LapsArchiveError ? e.message : 'Impossibile caricare il giro.'
-  } finally {
-    if (mine === attempt) busy.value = false
-  }
+  const result = await loadSharedLapLink(text.value, props.current, props.deps, { nickname: props.nickname, isCurrent: () => mine === attempt })
+  if (mine !== attempt || !result) return
+  busy.value = false
+  if (result.error) { error.value = result.error; return }
+  emit('loaded', result.lap!)
+  text.value = ''
 }
 </script>
 

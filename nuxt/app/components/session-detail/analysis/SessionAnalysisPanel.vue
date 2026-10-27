@@ -8,14 +8,14 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AnalysisMap from './AnalysisMap.vue'
 import AnalysisCar from './AnalysisCar.vue'
 import AnalysisCharts, { type ChartRow } from './AnalysisCharts.vue'
-import SharedLapPanel, { type SharedLapLoaded } from './SharedLapPanel.vue'
+import { useCompareTargets } from '~/composables/useCompareTargets'
 import SessionZonesCard from './SessionZonesCard.vue'
 import { ZONE_COLORS } from '~/services/telemetry/sessionZones'
 import { useSessionZones } from '~/composables/useSessionZones'
 import { useSectorCompare } from '~/composables/useSectorCompare'
 import LapPicker, { type LapAction, type LapGroup, type LapOption } from './LapPicker.vue'
 import { electronLapSource, pilotLapSource, type LapSource, type LocalLapBridge } from '~/services/telemetry/lapSources'
-import { CAR_MISMATCH_NOTE, useReferenceLibrary, type Entry } from '~/composables/useReferenceLibrary'
+import { useReferenceLibrary, type Entry } from '~/composables/useReferenceLibrary'
 import { LapsArchiveError } from '~/services/telemetry/lapsArchiveClient'
 import { lapShareErrorMessage } from '~/services/telemetry/lapShareLink'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
@@ -36,6 +36,9 @@ const props = defineProps<{
   foreign?: boolean
   /** PIP-651: someone else's session opened by its link: its laps come from the owner's archive (pilotUid = owner). */
   sharedSessionId?: string | null
+  /** PIP-652: the page's "Confronta": a session to compare with (its laps become references), a lap link to load. */
+  compareWith?: { ownerUid: string, sessionToken: string, sharedSessionId: string | null, label: string } | null
+  pendingLapLink?: string | null
 }>()
 
 type Layout = 'pilota' | 'tracce'
@@ -63,7 +66,7 @@ const lapId = ref(''), refId = ref('')
 const library = useReferenceLibrary({ entries, traces, refId, sessionToken: () => props.sessionToken, sectorTimesOf: e => sectorTimes(e) })
 const loading = ref(false), error = ref(''), fromArchive = ref(false)
 // PIP-635: nessun giro da analizzare: la pagina torna su Sessione se l'aveva aperta da sola.
-const emit = defineEmits<{ unavailable: [] }>(); watch(error, message => { if (message) emit('unavailable') })
+const emit = defineEmits<{ unavailable: [], compare: [], lapLinkHandled: [] }>(); watch(error, message => { if (message) emit('unavailable') })
 const cursor = ref<number | null>(null)
 const selectedCorner = ref<number | null>(null)
 const skipped = ref(0)
@@ -168,17 +171,10 @@ async function load() {
   }
 }
 
-// PIP-623: a lap shared with a link becomes the reference (one at a time).
-const showShared = ref(false)
-function onSharedLoaded(shared: SharedLapLoaded) {
-  traces.value = { ...traces.value, [shared.id]: shared.trace }
-  entries.value = [...entries.value.filter(e => e.origin !== 'shared'), {
-    id: shared.id, lapNumber: shared.lapNumber, lapTimeMs: shared.lapTimeMs, valid: true, complete: shared.trace.complete,
-    origin: 'shared', sessionToken: '', label: shared.label, note: shared.carMismatch ? CAR_MISMATCH_NOTE : undefined,
-  }]
-  refId.value = shared.id
-  showShared.value = false
-}
+// PIP-652: the page's one "Confronta" (a session to compare with, a lap link that becomes the reference).
+const { linkError } = useCompareTargets({ pendingLapLink: () => props.pendingLapLink, compareWith: () => props.compareWith, currentLap: () => traces.value[lapId.value] ?? null,
+  entries, traces, refId, library, deps: archiveDeps, bridge: api, viewerUid: () => currentUser.value?.uid ?? null, ownView: () => !props.pilotUid,
+  isCurrent: () => { const g = loadGeneration; return () => g === loadGeneration }, handled: () => emit('lapLinkHandled') })
 
 // PIP-623: "Condividi giro": the selected lap goes online (if not yet) and its link is copied.
 const shareState = ref<'idle' | 'busy' | 'copied' | 'error'>('idle')
@@ -190,8 +186,8 @@ const shareHint = computed(() => props.pilotUid ? '' : lapEntry.value && !lapEnt
 // PIP-635: the two lap actions sit at the bottom of their menu (your lap: share it; reference: a lap by link).
 const lapActions = computed<LapAction[]>(() => !props.pilotUid && typeof api()?.shareLapTrace === 'function'
   ? [{ id: 'share', label: shareState.value === 'busy' ? 'Condivido…' : 'Copia il link di questo giro (per usarlo come riferimento)', disabled: !canShare.value || shareState.value === 'busy', hint: shareHint.value }] : [])
-const refActions = computed<LapAction[]>(() => entries.value.length ? [{ id: 'shared', label: '+ Giro di un altro pilota (incolla il link)', hint: 'Incolla il link di un giro ricevuto: diventa il riferimento' }] : [])
-function onLapAction(id: string) { if (id === 'share') void shareLap(); else if (id === 'shared') showShared.value = true }
+const refActions = computed<LapAction[]>(() => entries.value.length ? [{ id: 'compare', label: '+ Confronta con un’altra sessione o un link', hint: 'Le tue sessioni, oppure il link di una sessione o di un giro ricevuto' }] : [])
+function onLapAction(id: string) { if (id === 'share') void shareLap(); else if (id === 'compare') emit('compare') }
 async function shareLap() {
   const id = lapId.value
   if (!canShare.value || shareState.value === 'busy') return
@@ -393,7 +389,7 @@ const sessionEntries = computed(() => entries.value.filter(e => e.origin === 'lo
 const ownEntries = computed(() => entries.value.filter(e => e.origin === 'own'))
 const sharedEntries = computed(() => entries.value.filter(e => e.origin === 'shared'))
 const bestEntries = computed(() => entries.value.filter(e => e.origin === 'best')), idealEntries = computed(() => entries.value.filter(e => e.origin === 'ideal'))
-const libraryEntries = computed(() => entries.value.filter(e => e.origin === 'library'))
+const libraryEntries = computed(() => entries.value.filter(e => e.origin === 'library')), compareEntries = computed(() => entries.value.filter(e => e.origin === 'compare'))
 const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Semplice on the whole session
 // PIP-635: il best (valido e completo) della sessione, segnato nei giri come nei tempi del gioco.
 const bestId = computed(() => sessionBest.value?.id ?? '')
@@ -404,7 +400,8 @@ const refGroups = computed<LapGroup[]>(() => [{ label: props.pilotUid ? 'Giri de
   ...(ownEntries.value.length ? [{ label: 'I miei giri', options: ownEntries.value.map(lapOption) }] : []), ...(sharedEntries.value.length ? [{ label: 'Condiviso', options: sharedEntries.value.map(lapOption) }] : []),
   ...(idealEntries.value.length ? [{ label: 'Giro ideale (i tuoi settori migliori)', options: idealEntries.value.map(lapOption) }] : []),
   ...(bestEntries.value.length ? [{ label: 'I tuoi migliori su questa pista', options: bestEntries.value.map(lapOption) }] : []),
-  ...(libraryEntries.value.length ? [{ label: 'Altri piloti (stessa auto)', options: libraryEntries.value.map(lapOption) }] : [])])
+  ...(libraryEntries.value.length ? [{ label: 'Altri piloti (stessa auto)', options: libraryEntries.value.map(lapOption) }] : []),
+  ...(compareEntries.value.length ? [{ label: 'Sessione a confronto', options: compareEntries.value.map(lapOption) }] : [])])
 const short = (e: Entry | null) => e ? `Giro ${e.lapNumber} · ${formatLapTime(e.lapTimeMs)}` : '--'
 const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTime(s * 1000) : '--'
 </script>
@@ -426,7 +423,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
         <button v-for="l in LAYOUTS" :key="l.id" type="button" role="tab" :aria-selected="layout === l.id" :class="{ active: layout === l.id }" :title="l.hint" @click="layout = l.id">{{ l.label }}</button>
       </div>
     </div>
-    <SharedLapPanel v-if="showShared" :current="lap" :deps="archiveDeps" @loaded="onSharedLoaded" @close="showShared = false" />
+    <p v-if="linkError" class="analysis-note analysis-note--warn" role="alert">{{ linkError }}</p>
     <p v-if="refEntry?.note" class="analysis-note analysis-note--warn">{{ refEntry.note }}</p>
 
     <p v-if="skipped" class="analysis-note">{{ skipped }} giri non leggibili esclusi.</p>

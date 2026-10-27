@@ -1,5 +1,5 @@
 import type { Ref } from 'vue'
-import { listFastestLaps, listOwnLaps, type LapDescriptor, type LapOrigin, type LocalLapBridge } from '~/services/telemetry/lapSources'
+import { listFastestLaps, listOwnLaps, type LapDescriptor, type LapOrigin, type LapSource, type LocalLapBridge } from '~/services/telemetry/lapSources'
 import { normalizeLapTrace, type LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { channelAt, sectorBounds } from '~/services/telemetry/lapAnalysis'
 import { stitchIdealLap } from '~/services/telemetry/idealLap'
@@ -135,5 +135,35 @@ export function useReferenceLibrary(o: {
     } catch { return null /* other drivers' laps are an extra */ }
   }
 
-  return { loadOwnLaps, loadBestLaps, refreshIdeal, loadOtherDrivers }
+  /**
+   * PIP-652: the session picked in "Confronta" (yours or by link): its whole valid laps become references,
+   * labelled with the driver; returns the id of its best lap, to propose it as the reference.
+   */
+  async function loadCompareSession(isCurrent: () => boolean, source: LapSource, target: { sessionToken: string, label: string }): Promise<string | null> {
+    try {
+      const list = await source.list(target.sessionToken)
+      // One lap at a time, as the archive is read for a coach, and one retry: a lap that does not arrive
+      // once (a busy network) is not silently missing from the comparison.
+      const readOne = async (d: LapDescriptor): Promise<Loaded | null> => {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const trace = normalizeLapTrace(await source.read(d))
+            return trace?.complete && (d.valid ?? trace.valid) === true ? { trace, entry: { id: `compare:${d.id}`, lapNumber: d.lapNumber, lapTimeMs: d.lapTimeMs, valid: true, complete: true,
+              origin: 'compare', sessionToken: d.sessionToken, label: `${target.label} · Giro ${d.lapNumber} · ${formatLapTime(d.lapTimeMs)}` } } : null
+          } catch { if (!isCurrent()) return null }
+        }
+        return null
+      }
+      const read: (Loaded | null)[] = []
+      for (const d of list) { if (!isCurrent()) return null; read.push(await readOne(d)) }
+      if (!isCurrent()) return null
+      o.entries.value = o.entries.value.filter(e => e.origin !== 'compare')
+      const ok = read.filter((r): r is Loaded => r !== null).sort((a, b) => a.entry.lapTimeMs - b.entry.lapTimeMs)
+      add(ok)
+      return ok[0]?.entry.id ?? null
+    } catch { return null }
+  }
+  function clearCompareSession() { o.entries.value = o.entries.value.filter(e => e.origin !== 'compare') }
+
+  return { loadOwnLaps, loadBestLaps, refreshIdeal, loadOtherDrivers, loadCompareSession, clearCompareSession }
 }
