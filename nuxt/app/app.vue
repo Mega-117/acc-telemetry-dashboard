@@ -40,7 +40,7 @@ import { getOverviewCarImage } from '~/utils/overviewCarImage'
 import { createDashboardEntryRecovery, EMPTY_ENTRY_STATE } from '~/services/auth/dashboardEntryRecovery'
 import { createAuthRevisionLeaseCoordinator } from '~/services/auth/authRevisionLease'
 import { loadRaceCalendarEvents } from '~/repositories/raceCalendarRepository'
-import { dismissBootScreen, handBootBackdropToApp } from '~/utils/bootScreen'
+import { dismissBootScreen, handBootBackdropToApp, logoGlideStart, LOGIN_LOADER_MIN_MS, LOGO_GLIDE_MS } from '~/utils/bootScreen'
 import { BOOT_LOADER_CSS, bootLogoSrc } from '../shared/spaLoading'
 
 // === NUXT ROUTER ===
@@ -324,6 +324,32 @@ onMounted(() => {
   handBootBackdropToApp()
   watch(firstScreenReady, ready => { if (ready) dismissBootScreen() }, { immediate: true })
 })
+// PIP-640: after "Accedi" the login logo itself glides to the loader's place while the form fades away and the
+// laser lights up under it (FLIP: the loader logo starts where the login logo was, then moves home). The loader
+// then leaves like the start one: logo out, dashboard in.
+let authLogoRect: DOMRect | null = null
+function onShellBeforeLeave(el: Element) {
+  el.setAttribute('inert', '')
+  authLogoRect = el.classList.contains('racer-auth') && appState.value === 'loading'
+    ? el.querySelector('.racer-auth__logo-viewport img')?.getBoundingClientRect() ?? null
+    : null
+}
+function onShellBeforeEnter(el: Element) {
+  if (authLogoRect && el.classList.contains('loading-screen')) el.classList.add('is-carried')
+}
+function onShellEnter(el: Element) {
+  const from = authLogoRect
+  authLogoRect = null
+  const logo = el.classList.contains('is-carried') ? el.querySelector<HTMLElement>('.rc-boot__inner img') : null
+  if (!from || !logo || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+  document.querySelector<HTMLElement>('.racer-auth__logo-viewport img')?.style.setProperty('visibility', 'hidden')
+  logo.style.transform = logoGlideStart(from, logo.getBoundingClientRect())
+  logo.getBoundingClientRect()
+  requestAnimationFrame(() => {
+    logo.style.transition = `transform ${LOGO_GLIDE_MS}ms cubic-bezier(.65,0,.25,1)`
+    logo.style.transform = ''
+  })
+}
 // The app's own loading screens show the same logo and laser, never a spinner (also in the desktop app).
 useHead({ style: [{ key: 'rc-boot-loader', textContent: BOOT_LOADER_CSS }] })
 const bootLogo = bootLogoSrc(appBaseURL)
@@ -445,6 +471,8 @@ const enterDashboard = async () => {
   const destination = pendingSpaRedirectPath.value || (isDashboardRoute(normalizedRoutePath.value) ? route.fullPath : '/panoramica')
   const isCurrent = () => entryLeases.isLeaseCurrent(lease, profileUser.value?.uid) && canEnterApp.value
   preparingDashboard.value = true
+  // From the login the logo glides to the loader: give the glide and the laser time before the dashboard.
+  const loaderFromLoginAt = appState.value === 'auth' ? performance.now() : null
   appState.value = 'loading'
   try {
     await dashboardEntryRecovery.run(async attempt => {
@@ -464,6 +492,8 @@ const enterDashboard = async () => {
         // Duplicated navigation is already at the destination; aborted/redirected is not.
         if (failure && router.currentRoute.value.fullPath !== destination) throw new Error('navigation-failed')
       })
+      const loaderLeft = loaderFromLoginAt === null ? 0 : LOGIN_LOADER_MIN_MS - (performance.now() - loaderFromLoginAt)
+      if (loaderLeft > 0) await new Promise(resolve => setTimeout(resolve, loaderLeft))
       if (!attempt.isCurrent()) return
       pendingSpaRedirectPath.value = ''
       appState.value = 'dashboard'
@@ -653,7 +683,7 @@ provide('goToSettings', handleGoToSettings)
       <NuxtRouteAnnouncer />
 
       <!-- Main Content with Transitions -->
-      <Transition :name="transitionName" :mode="leftStart && appState === 'auth' ? 'out-in' : undefined" @before-leave="el => el.setAttribute('inert', '')">
+      <Transition :name="transitionName" :mode="leftStart && appState === 'auth' ? 'out-in' : undefined" @before-leave="onShellBeforeLeave" @before-enter="onShellBeforeEnter" @enter="onShellEnter">
         <!-- Initializing - waiting for Firebase auth check -->
         <div v-if="appState === 'initializing'" key="initializing" class="initializing-screen" role="status" aria-label="Caricamento">
           <div class="rc-boot__inner"><img :src="bootLogo" alt="Racer Core" width="410" height="205"><div class="rc-boot__laser" /></div>
@@ -980,6 +1010,20 @@ body:has(.sessions-page),
 </style>
 
 <style lang="scss">
+// PIP-640: login -> loader. The loader does not fade in: its logo is the login logo carried over (onShellEnter);
+// the laser lights up once the logo is home. Loader -> dashboard: as at the start, the logo fades, grows and
+// blurs out, then the dashboard fades in.
+.loading-screen.is-carried.shell-motion-enter-from { opacity: 1; }
+.loading-screen.is-carried .rc-boot__inner { animation: none; }
+.loading-screen.is-carried .rc-boot__laser { animation: rc-laser-in 500ms 550ms cubic-bezier(.4, 0, .2, 1) both; }
+@keyframes rc-laser-in { from { opacity: 0; transform: scaleX(.4); } }
+.loading-screen.is-carried .loading-text { animation: rc-text-in 500ms 650ms ease-out both; }
+@keyframes rc-text-in { from { opacity: 0; } }
+.loading-screen.shell-motion-leave-active { transition-duration: 700ms; }
+.loading-screen.shell-motion-leave-to { opacity: 1; }
+.loading-screen.shell-motion-leave-active .rc-boot__inner { opacity: 0; transform: scale(1.05); filter: blur(4px); }
+#app:has(> .loading-screen.shell-motion-leave-active) .dashboard-wrapper.shell-motion-enter-active { transition-duration: 700ms; transition-delay: 450ms; }
+@media (prefers-reduced-motion: reduce) { .loading-screen.is-carried .rc-boot__laser { animation: none; } }
 // PIP-640: while the browser loading screen is up it is the only logo on screen (no double logo under it), and
 // the first interface waits for its logo to fade before fading in, slowly: logo out, then the content.
 body:has(#rc-boot) #app :is(.rc-boot__inner, .loading-text) { visibility: hidden; }

@@ -16,3 +16,17 @@ export function dismissBootScreen(doc: Document = document): void {
   const reduced = doc.defaultView?.matchMedia?.('(prefers-reduced-motion: reduce)').matches
   setTimeout(() => boot.remove(), reduced ? 0 : BOOT_LEAVE_MS + 50)
 }
+
+// After "Accedi" the loader logo starts where the login logo was and glides to its own place.
+export const LOGO_GLIDE_MS = 700
+// Minimum time the loader stays after a login, so the glide ends and the laser shows before the dashboard.
+export const LOGIN_LOADER_MIN_MS = LOGO_GLIDE_MS + 500
+
+type Box = Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>
+// Transform that puts the loader logo (to) exactly over the login logo (from): same centre, same size.
+export function logoGlideStart(from: Box, to: Box): string {
+  if (!to.width || !to.height) return ''
+  const dx = from.left + from.width / 2 - (to.left + to.width / 2)
+  const dy = from.top + from.height / 2 - (to.top + to.height / 2)
+  return `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(${(from.width / to.width).toFixed(4)})`
+}

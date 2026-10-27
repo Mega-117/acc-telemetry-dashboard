@@ -5,7 +5,7 @@ import { resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BOOT_LEAVE_MS, BOOT_SCREEN_ID, spaLoadingHtml } from '../../shared/spaLoading'
 import { RACING_BACKDROP_BACKGROUND, RACING_SPARK_FROM, RACING_SPARK_TO, RACING_SPARKS, sparkDelay } from '../../shared/racingBackdrop'
-import { dismissBootScreen, handBootBackdropToApp } from '../../app/utils/bootScreen'
+import { dismissBootScreen, handBootBackdropToApp, logoGlideStart } from '../../app/utils/bootScreen'
 
 describe('spaLoadingHtml', () => {
   it('shows the login logo under the site base path, with a high fetch priority', () => {
@@ -94,5 +94,18 @@ describe('handBootBackdropToApp', () => {
     expect(boot.classList.contains('has-app')).toBe(true)
     expect(boot.classList.contains('is-leaving')).toBe(false)
     document.body.innerHTML = ''
+  })
+})
+
+describe('logoGlideStart', () => {
+  it('puts the loader logo over the login logo: same centre, same size', () => {
+    const login = { left: 450, top: 60, width: 527, height: 263 }
+    const loader = { left: 508, top: 315, width: 410, height: 205 }
+    // Centres: login (713.5, 191.5), loader (713, 417.5); scale 527 / 410.
+    expect(logoGlideStart(login, loader)).toBe('translate(0.5px, -226.0px) scale(1.2854)')
+  })
+
+  it('does nothing while the loader logo has no size yet', () => {
+    expect(logoGlideStart({ left: 0, top: 0, width: 100, height: 50 }, { left: 0, top: 0, width: 0, height: 0 })).toBe('')
   })
 })
