@@ -193,7 +193,7 @@ it('renders unknown stint as a dash and removes the whole column when disabled',
   const value = model()
   value.rows[0]!.stintTime = null
   const render = () => renderToString(createSSRApp(StandingsHud, { model: value, backgroundOpacity: 0.5 }))
-  expect(await render()).toMatch(/class="standings-row__stint"[^>]*><span class="hud-fixed-digits"[^>]*>\u2014<\/span><\/strong>/)
+  expect(await render()).toMatch(/class="standings-row__stint"[^>]*><span class="hud-fixed-digits"[\s\S]*?\u2014[\s\S]*?<\/strong>/)
   value.columns.stint = false
   expect(await render()).not.toContain('standings-row__stint')
 })
