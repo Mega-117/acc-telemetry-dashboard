@@ -34,8 +34,8 @@ describe('tyre overlay minimum readability contract', () => {
     expect(race).toContain('viewBox="0 0 166 241"')
     // HUD v2 (27/10): four corners side by side in the same viewBox; pressure stays the
     // largest value and the tyre temperature the next, status text keeps 18 units.
-    expect(race).toContain('.tyre-race__primary { font-size:11px; }')
-    expect(race).toMatch(/\.tyre-race__temperature \{ font-size:11px;/)
+    expect(race).toContain('.tyre-race__primary { font-size:12px; }')
+    expect(race).toMatch(/\.tyre-race__temperature \{ font-size:12px;/)
     expect(race).toContain('.tyre-race__unavailable text { font-size:18px; }')
     expect(damage).toContain('viewBox="0 0 166 241"')
     expect(damage).toContain('font-size:12px')

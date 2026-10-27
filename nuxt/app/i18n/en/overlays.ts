@@ -12,7 +12,7 @@ export default {
     tyreRace: {
       set: 'SET',
       body: 'Body',
-      suspension: 'Suspension',
+      suspension: 'Susp.',
       total: 'Total',
     },
     weather: {
@@ -40,6 +40,8 @@ export default {
       previous: 'prev',
       best: 'best',
       lastLap: 'LAST LAP',
+      // Lowercase link word between the title and the bold reference word.
+      versus: 'vs',
     },
     trainingHud: {
       muted: 'MUTED',

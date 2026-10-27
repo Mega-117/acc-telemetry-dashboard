@@ -11,8 +11,8 @@ export default {
     trackmapCircleUnsupported: 'Sagoma pista non disponibile: vista circolare',
     tyreRace: {
       set: 'SET',
-      body: 'Carrozzeria',
-      suspension: 'Sospensioni',
+      body: 'Carrozz.',
+      suspension: 'Sospens.',
       total: 'Totale',
     },
     weather: {
@@ -40,6 +40,8 @@ export default {
       previous: 'prec',
       best: 'best',
       lastLap: 'ULTIMO GIRO',
+      // Parola di collegamento minuscola tra titolo e riferimento in grassetto.
+      versus: 'vs',
     },
     trainingHud: {
       muted: 'MUTO',

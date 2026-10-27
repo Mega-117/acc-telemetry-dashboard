@@ -16,14 +16,14 @@ export function raceSlip(wheelSlip: number | null | undefined) {
  * brakes taller and thicker, larger type so it stays readable in the small format.
  */
 export const RACE_TYRE_GEOMETRY = Object.freeze({
-  tyreWidth: 32, tyreHeight: 46, tyreRadius: 2.5,
+  tyreWidth: 32, tyreHeight: 44, tyreRadius: 2.5,
   slipWidth: 7,
   brakeWidth: 10, brakeHeight: 30, brakeRadius: 1.5,
-  frontTop: 38, rearTop: 110,
-  midTop: 88, midBottom: 106, midText: 100,
-  damageTop: 196,
+  frontTop: 40, rearTop: 106,
+  midTop: 87, midBottom: 103, midText: 99,
+  damageTop: 193,
   // Vertical shift that centres the content with and without the damage section.
-  offsetWithDamage: 4, offsetWithoutDamage: 24,
+  offsetWithDamage: 4, offsetWithoutDamage: 26,
 })
 
 export type RaceTyreValueKind = 'primary' | 'average' | 'loss'
@@ -37,8 +37,8 @@ export function raceTyreCorner(index: number) {
   const bottom = top + RACE_TYRE_GEOMETRY.tyreHeight
   // Front: above the tyre, top→bottom pressure, AVG, loss. Rear: below the tyre, loss, AVG, pressure.
   const valueLines: Array<{ kind: RaceTyreValueKind, y: number }> = rear
-    ? [{ kind: 'loss', y: bottom + 12 }, { kind: 'average', y: bottom + 24 }, { kind: 'primary', y: bottom + 36 }]
-    : [{ kind: 'primary', y: top - 27 }, { kind: 'average', y: top - 15 }, { kind: 'loss', y: top - 3 }]
+    ? [{ kind: 'loss', y: bottom + 12.5 }, { kind: 'average', y: bottom + 25 }, { kind: 'primary', y: bottom + 37.5 }]
+    : [{ kind: 'primary', y: top - 28 }, { kind: 'average', y: top - 15.5 }, { kind: 'loss', y: top - 3 }]
   const tyreX = right ? 123 : 11
   return right
     ? { rear, right, top, centerY, valueLines, valuesX: tyreX + RACE_TYRE_GEOMETRY.tyreWidth / 2, slipX: 156, tyreX, brakeX: 112, brakeInfoX: 109.5 }

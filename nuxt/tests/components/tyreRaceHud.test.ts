@@ -144,7 +144,7 @@ describe('Race HUD components', () => {
   it('HUD v2: the damage section sits under the tyres only when the car is damaged', async () => {
     const damaged = await renderToString(createSSRApp(TyreRaceHud, { fastState: fastState() }))
     expect(damaged).toContain('tyre-race__damage')
-    for (const value of ['DANNI', 'Carrozzeria', '0:16.980', 'Sospensioni', '0:21.000', 'Totale', '0:37.980']) expect(damaged).toContain(value)
+    for (const value of ['DANNI', 'Carrozz.', '0:16.980', 'Sospens.', '0:21.000', 'Totale', '0:37.980']) expect(damaged).toContain(value)
     expect(damaged.indexOf('tyre-race__damage')).toBeGreaterThan(damaged.lastIndexOf('tyre-race__corner--rr'))
     const healthy = fastState()
     healthy.damage = {
