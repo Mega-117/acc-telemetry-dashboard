@@ -10,19 +10,20 @@ export function raceSlip(wheelSlip: number | null | undefined) {
 }
 
 /**
- * HUD style v2 (27/10): Race tyres laid out like a car inside the 166x241 viewBox
+ * HUD style v2 (27/10, revised 28/10): Race tyres laid out like a car inside the 166x241 viewBox
  * (the native window and its scale contract are unchanged). Right corners mirror left.
+ * Pressure values sit above the front tyres and below the rear ones; tyres wide and low,
+ * brakes taller and thicker, larger type so it stays readable in the small format.
  */
 export const RACE_TYRE_GEOMETRY = Object.freeze({
-  tyreWidth: 23, tyreHeight: 66, tyreRadius: 2.2,
+  tyreWidth: 36, tyreHeight: 46, tyreRadius: 2.5,
   slipWidth: 4.5,
-  // Lower than the tyre and a bit wider than the slip bar, centred on the tyre.
-  brakeWidth: 7, brakeHeight: 26, brakeRadius: 1.3,
-  frontTop: 8, rearTop: 104,
-  midTop: 80, midBottom: 98, midText: 91.8,
-  damageTop: 178,
+  brakeWidth: 10, brakeHeight: 34, brakeRadius: 1.5,
+  frontTop: 33, rearTop: 105,
+  midTop: 83, midBottom: 101, midText: 95,
+  damageTop: 189,
   // Vertical shift that centres the content with and without the damage section.
-  offsetWithDamage: 10, offsetWithoutDamage: 31,
+  offsetWithDamage: 6, offsetWithoutDamage: 28,
 })
 
 export type RaceTyreValueKind = 'primary' | 'average' | 'loss'
@@ -33,12 +34,15 @@ export function raceTyreCorner(index: number) {
   const right = index % 2 === 1
   const top = rear ? RACE_TYRE_GEOMETRY.rearTop : RACE_TYRE_GEOMETRY.frontTop
   const centerY = top + RACE_TYRE_GEOMETRY.tyreHeight / 2
+  const bottom = top + RACE_TYRE_GEOMETRY.tyreHeight
+  // Front: above the tyre, top→bottom pressure, AVG, loss. Rear: below the tyre, loss, AVG, pressure.
   const valueLines: Array<{ kind: RaceTyreValueKind, y: number }> = rear
-    ? [{ kind: 'loss', y: centerY - 6 }, { kind: 'average', y: centerY + 2.5 }, { kind: 'primary', y: centerY + 12 }]
-    : [{ kind: 'primary', y: centerY - 4 }, { kind: 'average', y: centerY + 4.5 }, { kind: 'loss', y: centerY + 13 }]
+    ? [{ kind: 'loss', y: bottom + 10 }, { kind: 'average', y: bottom + 19 }, { kind: 'primary', y: bottom + 30 }]
+    : [{ kind: 'primary', y: top - 21 }, { kind: 'average', y: top - 11.5 }, { kind: 'loss', y: top - 3 }]
+  const tyreX = right ? 119 : 11
   return right
-    ? { rear, right, top, centerY, valueLines, valuesX: 163, slipX: 137, tyreX: 112.5, brakeX: 104, brakeInfoX: 102 }
-    : { rear, right, top, centerY, valueLines, valuesX: 3, slipX: 24.5, tyreX: 30.5, brakeX: 55, brakeInfoX: 64 }
+    ? { rear, right, top, centerY, valueLines, valuesX: tyreX + RACE_TYRE_GEOMETRY.tyreWidth / 2, slipX: 157.5, tyreX, brakeX: 106, brakeInfoX: 103.5 }
+    : { rear, right, top, centerY, valueLines, valuesX: tyreX + RACE_TYRE_GEOMETRY.tyreWidth / 2, slipX: 4, tyreX, brakeX: 50, brakeInfoX: 62.5 }
 }
 
 export function raceNumber(value: number | null | undefined, digits = 0) {

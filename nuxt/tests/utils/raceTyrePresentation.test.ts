@@ -18,11 +18,19 @@ describe('Race reference presentation', () => {
     expect(order(2)).toEqual(['loss', 'average', 'primary'])
     expect(order(3)).toEqual(['loss', 'average', 'primary'])
   })
-  it('HUD v2: mirrors left and right, values outside, brakes toward the centre, rear below front', () => {
+  it('HUD v2: mirrors left and right, values above front / below rear tyres, brakes toward the centre', () => {
     const G = RACE_TYRE_GEOMETRY
     const [fl, fr, rl, rr] = [0, 1, 2, 3].map(raceTyreCorner)
-    // Outside → in on the left: values, slip bar, tyre, brake, brake info.
-    expect(fl!.valuesX).toBeLessThan(fl!.slipX)
+    // Values are centred on the tyre: above the front ones, below the rear ones (28/10).
+    expect(fl!.valuesX).toBeCloseTo(fl!.tyreX + G.tyreWidth / 2)
+    expect(Math.max(...fl!.valueLines.map(line => line.y))).toBeLessThan(fl!.top)
+    expect(Math.min(...rl!.valueLines.map(line => line.y))).toBeGreaterThan(rl!.top + G.tyreHeight)
+    expect(fl!.valueLines.map(line => line.kind)).toEqual(['primary', 'average', 'loss'])
+    expect(rl!.valueLines.map(line => line.kind)).toEqual(['loss', 'average', 'primary'])
+    // Tyres wider than tall would be odd: still a tyre, but wide and low; brakes taller than half the tyre.
+    expect(G.tyreWidth).toBeGreaterThan(30)
+    expect(G.brakeHeight).toBeGreaterThan(G.tyreHeight / 2)
+    // Outside → in on the left: slip bar, tyre, brake, brake info.
     expect(fl!.slipX + G.slipWidth).toBeLessThan(fl!.tyreX)
     expect(fl!.tyreX + G.tyreWidth).toBeLessThan(fl!.brakeX)
     expect(fl!.brakeX + G.brakeWidth).toBeLessThan(fl!.brakeInfoX)
@@ -35,7 +43,7 @@ describe('Race reference presentation', () => {
     // Front and rear axles do not overlap and leave room for the compound line.
     expect(fl!.top + G.tyreHeight).toBeLessThan(G.midTop)
     expect(G.midBottom).toBeLessThan(rl!.top)
-    expect(rr!.top + G.tyreHeight).toBeLessThan(G.damageTop)
+    expect(Math.max(...rr!.valueLines.map(line => line.y))).toBeLessThan(G.damageTop)
     expect(G.brakeHeight).toBeLessThan(G.tyreHeight)
     expect(G.brakeWidth).toBeGreaterThan(G.slipWidth)
   })
