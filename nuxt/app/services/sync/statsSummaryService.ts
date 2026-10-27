@@ -23,8 +23,12 @@ import type { SessionDocument } from '~/types/telemetry'
 
 export const STATS_SUMMARY_DOC = 'statsV1'
 export const statsSummaryPath = (uid: string) => `users/${uid}/sessionListMeta/${STATS_SUMMARY_DOC}`
-/** Letture online al giorno per utente, solo per lo storico: ben sotto le 50.000 gratuite del progetto. */
-export const STATS_DAILY_CLOUD_READS = 1000
+/**
+ * Letture online al giorno per utente, solo per lo storico. PIP-660: 200 (era 1000): con 40-60 piloti, 1000 a
+ * testa arrivavano al limite gratuito di 50.000 letture al giorno del progetto. Lo storico si completa in
+ * qualche giorno; nel programma desktop arriva dai file sul PC, senza letture.
+ */
+export const STATS_DAILY_CLOUD_READS = 200
 const CACHE_PREFIX = 'racercore.stats.v3.'
 
 interface CachedFile { sig: string, id: string | null, c: SessionStatsContribution | null }

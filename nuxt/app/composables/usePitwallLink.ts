@@ -11,6 +11,7 @@
 import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { db } from '~/config/firebase'
 import { createPitwallRealtimeEngineerService as createPitwallEngineerService } from '~/services/pitwall/pitwallRealtimeEngineerService'
+import { closePitwallRealtimeWhenIdle } from '~/config/pitwallRealtime'
 import { createPitwallPresenceWatch } from '~/composables/usePitwallPresenceWatch'
 import {
   type PitwallDirectoryEntry,
@@ -331,7 +332,7 @@ export function usePitwallLink(options: PitwallLinkOptions) {
         : 'Collegamento revocato.'
       // L'elenco si aggiorna da solo tramite l'ascolto; si rilegge solo se
       // quell'ascolto non e' attivo, per non pagare due volte la stessa cosa.
-      if (!stopIncomingWatch) await refreshIncoming()
+      if (pollInbox) await pollInbox(); else if (!stopIncomingWatch) await refreshIncoming()
       return { ok: true, code: null }
     } catch (error) {
       rawError.value = (error as Error)?.message || 'Decisione non riuscita.'
@@ -354,7 +355,7 @@ export function usePitwallLink(options: PitwallLinkOptions) {
         return failed(codeOf(result))
       }
       notice.value = null
-      if (!stopIncomingWatch) await refreshIncoming()
+      if (pollInbox) await pollInbox(); else if (!stopIncomingWatch) await refreshIncoming()
       return { ok: true, code: null }
     } catch (error) {
       rawError.value = (error as Error)?.message || 'Pre-autorizzazione non riuscita.'
@@ -377,7 +378,7 @@ export function usePitwallLink(options: PitwallLinkOptions) {
         return
       }
       notice.value = 'Scadenza aggiornata.'
-      if (!stopIncomingWatch) await refreshIncoming()
+      if (pollInbox) await pollInbox(); else if (!stopIncomingWatch) await refreshIncoming()
     } catch (error) {
       rawError.value = (error as Error)?.message || 'Scadenza non aggiornata.'
     }
@@ -418,15 +419,31 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     presence.start()
   }
 
-  /** Campanella fuori dal Pitwall: solo richieste in arrivo, senza profili. */
+  /**
+   * Campanella fuori dal Pitwall: solo richieste in arrivo, senza profili.
+   * PIP-660: una lettura ogni ~3 minuti (e quando la finestra torna in primo piano) invece di un ascolto
+   * continuo, poi la connessione si chiude se nient'altro la usa: il piano gratuito ne ammette 100 insieme.
+   */
+  let pollInbox: (() => Promise<void>) | null = null
   function watchInbox(): void {
     const engineer = service()
     if (!engineer || stopIncomingWatch) return
-    stopIncomingWatch = engineer.watchIncomingRequests(
-      requests => { if (serviceRef.value === engineer && options.engineerUid()) incoming.value = requests },
-      error => { rawError.value = error?.message || 'Richieste non disponibili.' },
-      true
-    )
+    let cancelled = false, timer: ReturnType<typeof setTimeout> | null = null
+    const poll = async () => {
+      if (timer) { clearTimeout(timer); timer = null }
+      try {
+        const requests = await engineer.listPendingRequests()
+        if (!cancelled && serviceRef.value === engineer && options.engineerUid()) incoming.value = requests
+      } catch (error) { if (!cancelled) rawError.value = (error as Error)?.message || 'Richieste non disponibili.' }
+      // A little jitter so many clients do not reconnect in the same second.
+      if (!cancelled) { closePitwallRealtimeWhenIdle(); timer = setTimeout(() => { void poll() }, 180_000 + Math.floor(Math.random() * 30_000)) }
+    }
+    const onFocus = () => { void poll() }
+    if (typeof window !== 'undefined') window.addEventListener('focus', onFocus)
+    void poll()
+    // Codex: a decision taken from the bell rereads at once (there is no listener to update it).
+    pollInbox = poll
+    stopIncomingWatch = () => { cancelled = true; pollInbox = null; if (timer) clearTimeout(timer); if (typeof window !== 'undefined') window.removeEventListener('focus', onFocus) }
   }
 
   function stop(): void {

@@ -174,6 +174,11 @@ function buildService(db: Firestore, uid: string, io: PitwallRealtimeTransport) 
     return stop
   }
   async function listIncomingRequests() { return incomingRows(Object.values(await io.read<Record<string, PitwallGrant>>(`grants/${uid}`) ?? {})) }
+  /** PIP-660: the bell outside the Pitwall reads once (names only for actionable requests), no listener. */
+  async function listPendingRequests() {
+    const grants = Object.values(await io.read<Record<string, PitwallGrant>>(`grants/${uid}`) ?? {})
+    return incomingRows(grants.filter(grant => grant.status === 'pending'))
+  }
   function watchGrantedPilots(callback: (driverUids: string[]) => void, error?: (error: Error) => void) {
     return watchOutgoingGrants(grants => callback(grants.filter(valid).map(value => value.driverUid)), error)
   }
@@ -221,6 +226,6 @@ function buildService(db: Firestore, uid: string, io: PitwallRealtimeTransport) 
   function watchOrder(_driverUid: string, _orderId: string, callback: (order: (PitwallOrderDocument & { result?: unknown, appliedAt?: string }) | null) => void) { callback(null); return () => {} }
   function dispose() { for (const stop of [...ownedStops]) stop(); profiles.stop() }
   return { requestLink, withdraw, decideRequest, preAuthorise, updateGrantExpiry, listOutgoingLinks, watchOutgoingLinks, readFriendView,
-    listIncomingRequests, watchIncomingRequests, watchGrantedPilots, listLinkedPilots, watchPilotPresence, readPilotPresence,
+    listIncomingRequests, listPendingRequests, watchIncomingRequests, watchGrantedPilots, listLinkedPilots, watchPilotPresence, readPilotPresence,
     searchUsers, sendOrder, watchOrder, watchTrustedUids, nicknameOf: profiles.read, dispose }
 }
