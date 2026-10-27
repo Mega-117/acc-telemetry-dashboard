@@ -26,7 +26,9 @@ const props = withDefaults(defineProps<{
   zoomControls?: boolean
   /** Track edges in world coordinates (ACC Drive _L/_R): drawn as the track surface when present. */
   edges?: { left: [number, number][], right: [number, number][] } | null
-}>(), { refCursor: null, selected: null, size: 320, zoom: false, colorMode: 'delta', focus: null, zoomControls: false, edges: null })
+  /** PIP-645: Semplice on the whole session: each stretch in its own colour (no reference needed), the rest grey. */
+  zoneColors?: { start: number, end: number, color: string }[] | null
+}>(), { refCursor: null, selected: null, size: 320, zoom: false, colorMode: 'delta', focus: null, zoomControls: false, edges: null, zoneColors: null })
 const emit = defineEmits<{ hover: [fraction: number | null], select: [corner: number] }>()
 
 const POINTS = 600
@@ -72,7 +74,9 @@ const segments = computed(() => {
   return points.slice(1).map((p, i) => {
     const change = trend.value?.[i] ?? 0
     // Your lap against the reference: gaining green, losing red, even grey.
-    const color = !trend.value ? '#38bdf8' : change < -0.002 ? '#3ddc5a' : change > 0.002 ? '#ff5a6e' : '#8a8a90'
+    const zone = props.zoneColors?.find(z => at[i]! >= z.start && at[i]! < z.end)
+    const color = props.zoneColors ? zone?.color ?? '#8a8a90'
+      : !trend.value ? '#38bdf8' : change < -0.002 ? '#3ddc5a' : change > 0.002 ? '#ff5a6e' : '#8a8a90'
     const inside = !corner || (at[i]! >= corner.start && at[i]! <= corner.end)
     return { x1: points[i]!.x, y1: points[i]!.y, x2: p.x, y2: p.y, color, opacity: inside ? 1 : 0.3 }
   })

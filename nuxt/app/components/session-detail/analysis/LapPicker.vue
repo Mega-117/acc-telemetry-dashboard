@@ -9,7 +9,8 @@ export interface LapGroup { label: string, options: LapOption[] }
 /** Extra actions under the list, about this lap choice (paste another pilot's lap, share yours). */
 export interface LapAction { id: string, label: string, disabled?: boolean, hint?: string }
 
-const props = defineProps<{ modelValue: string, groups: LapGroup[], name: string, color: string, disabled?: boolean, hint?: string, actions?: LapAction[] }>()
+// `align: 'right'`: the menu grows to the left (the picker on the right of the bar), so it never leaves the window.
+const props = defineProps<{ modelValue: string, groups: LapGroup[], name: string, color: string, disabled?: boolean, hint?: string, actions?: LapAction[], align?: 'left' | 'right' }>()
 const emit = defineEmits<{ 'update:modelValue': [id: string], 'action': [id: string] }>()
 
 const open = ref(false)
@@ -89,7 +90,7 @@ function onFocusOut(event: FocusEvent) {
       <span v-else class="lap-picker__title">--</span>
       <svg class="lap-picker__chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
     </button>
-    <div v-if="open" class="lap-picker__pop">
+    <div v-if="open" class="lap-picker__pop" :class="{ 'lap-picker__pop--right': align === 'right' }">
     <div :id="`${uid}-list`" ref="list" class="lap-picker__list" role="listbox" tabindex="0" :aria-label="name" :aria-activedescendant="active ? `${uid}-${active}` : undefined" @keydown="onListKey">
       <template v-for="group in groups" :key="group.label">
         <p v-if="groups.length > 1 || group.label" class="lap-picker__group" role="presentation">{{ group.label }}</p>
@@ -97,10 +98,10 @@ function onFocusOut(event: FocusEvent) {
           :class="{ 'is-active': active === o.id, 'is-selected': modelValue === o.id, 'is-partial': !o.complete }" :aria-selected="modelValue === o.id" :aria-disabled="!o.complete || undefined"
           @mouseenter="o.complete && (active = o.id)" @click="pick(o)">
           <span class="lap-row__title">{{ o.title }}</span>
-          <span class="lap-row__time" :class="{ 'is-invalid': !o.valid, 'is-best': o.best }" :title="o.best ? 'Il tuo giro migliore' : undefined">{{ o.time }}</span>
+          <span class="lap-row__time" :class="{ 'is-invalid': !o.valid, 'is-best': o.best }" :title="o.best ? 'Il tuo giro migliore' : undefined">{{ o.time }}<span v-if="o.complete && !o.valid" class="sr-only"> (non valido)</span></span>
           <span class="lap-row__tags">
+            <!-- PIP-645: an invalid lap is told by its red time only; partial laps keep their tag (they cannot be picked). -->
             <span v-if="!o.complete" class="lap-tag lap-tag--partial">Parziale</span>
-            <span v-else-if="!o.valid" class="lap-tag lap-tag--invalid">Non valido</span>
           </span>
           <span class="lap-row__cond" :title="o.conditions">{{ o.conditions }}</span>
         </div>
@@ -128,7 +129,11 @@ function onFocusOut(event: FocusEvent) {
 .lap-picker__time { font: italic 700 13px 'Racer Display', sans-serif; letter-spacing: .02em; }
 // Le condizioni (aria/asfalto, grip) si leggono sempre intere: niente puntini.
 .lap-picker__cond { flex-shrink: 0; color: #b3b3b8; font-weight: 500; font-size: 12px; }
-.lap-picker__pop { position: absolute; top: calc(100% + 4px); left: -1px; z-index: 30; width: calc(100% + 2px); box-sizing: border-box; border: 1px solid #ffffff40; background: #0b0b10f7; box-shadow: 0 14px 34px #000c; }
+// PIP-645: the menu grows to its widest row, so titles and conditions are always read whole.
+.lap-picker__pop { position: absolute; top: calc(100% + 4px); left: -1px; z-index: 30; min-width: calc(100% + 2px); width: max-content; max-width: min(640px, calc(100vw - 32px)); box-sizing: border-box; border: 1px solid #ffffff40; background: #0b0b10f7; box-shadow: 0 14px 34px #000c; }
+.lap-picker__pop--right { left: auto; right: -1px; }
+// Read by screen readers only: the red time says "invalid" to the eye.
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .lap-picker__list { max-height: 360px; overflow-y: auto; padding: 4px; outline: none;
   // The focus is on the list: the option you would choose wears the ring.
   &:focus-visible .lap-row.is-active { outline: 2px solid #fff; outline-offset: -2px; } }
@@ -136,7 +141,7 @@ function onFocusOut(event: FocusEvent) {
   button { height: 32px; padding: 0 10px; border: 0; background: transparent; color: #e6e6ea; font: 600 13px 'Inter', sans-serif; text-align: left; cursor: pointer;
     &:hover:not(:disabled) { background: #ffffff12; color: #fff; } &:disabled { opacity: .45; cursor: default; } &:focus-visible { outline: 2px solid #fff; outline-offset: -2px; } } }
 .lap-picker__group { margin: 6px 8px 4px; color: #8a8a90; font: 600 10px 'Inter', sans-serif; letter-spacing: .06em; text-transform: uppercase; }
-.lap-row { display: grid; grid-template-columns: 54px 72px 1fr auto; align-items: center; gap: 8px; min-height: 32px; padding: 0 10px; border-left: 2px solid transparent; color: #e6e6ea; font: 500 13px 'Inter', sans-serif; cursor: pointer; white-space: nowrap;
+.lap-row { display: grid; grid-template-columns: minmax(54px, auto) minmax(72px, auto) auto minmax(0, 1fr); align-items: center; gap: 8px; min-height: 32px; padding: 0 10px; border-left: 2px solid transparent; color: #e6e6ea; font: 500 13px 'Inter', sans-serif; cursor: pointer; white-space: nowrap;
   &.is-active { background: #ffffff12; }
   &.is-selected { border-left-color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
   &.is-partial { color: #6e6e74; cursor: default; }
@@ -147,6 +152,5 @@ function onFocusOut(event: FocusEvent) {
 .is-best { color: #c084fc; }
 .is-invalid { color: #ff5a6e; }
 .lap-tag { display: inline-grid; place-items: center; height: 18px; padding: 0 6px; border: 1px solid currentColor; font: 700 10px 'Inter', sans-serif; letter-spacing: .04em; text-transform: uppercase; }
-.lap-tag--invalid { color: #ff5a6e; background: #ff5a6e1a; }
 .lap-tag--partial { color: #8a8a90; }
 </style>

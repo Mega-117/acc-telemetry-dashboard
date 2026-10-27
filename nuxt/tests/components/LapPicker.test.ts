@@ -21,7 +21,9 @@ describe('LapPicker', () => {
     expect(rows).toHaveLength(3)
     expect(rows[0]!.text()).toContain('Parziale')
     expect(rows[0]!.attributes('aria-disabled')).toBe('true')
-    expect(rows[2]!.text()).toContain('Non valido')
+    // PIP-645: an invalid lap is told by its red time only, no tag.
+    expect(rows[2]!.text()).not.toContain('Non valido')
+    expect(rows[2]!.get('.sr-only').text()).toBe('(non valido)')
     expect(rows[2]!.find('.is-invalid').exists()).toBe(true)
     expect(rows[1]!.attributes('aria-selected')).toBe('true')
     w.unmount()

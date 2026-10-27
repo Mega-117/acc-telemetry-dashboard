@@ -9,6 +9,9 @@ import AnalysisMap from './AnalysisMap.vue'
 import AnalysisCar from './AnalysisCar.vue'
 import AnalysisCharts, { type ChartRow } from './AnalysisCharts.vue'
 import SharedLapPanel, { type SharedLapLoaded } from './SharedLapPanel.vue'
+import SessionZonesCard from './SessionZonesCard.vue'
+import { ZONE_COLORS } from '~/services/telemetry/sessionZones'
+import { useSessionZones } from '~/composables/useSessionZones'
 import LapPicker, { type LapAction, type LapGroup, type LapOption } from './LapPicker.vue'
 import { electronLapSource, listOwnLaps, pilotLapSource, type LapOrigin, type LapSource, type LocalLapBridge } from '~/services/telemetry/lapSources'
 import { LapsArchiveError } from '~/services/telemetry/lapsArchiveClient'
@@ -219,15 +222,17 @@ const reference = computed(() => refId.value && refId.value !== lapId.value ? tr
 const lapEntry = computed(() => entries.value.find(e => e.id === lapId.value) ?? null)
 // Also when Tu and Riferimento are the same lap (one lap only): the sector times still show, with zero gaps.
 const refEntry = computed(() => refId.value ? entries.value.find(e => e.id === refId.value) ?? null : null)
-const corners = computed(() => detectCorners(reference.value ?? lap.value ?? emptyTrace()))
+// PIP-645: corners from the session's best valid lap (else the reference, else yours): the same numbers and
+// boundaries whatever reference is picked, so the session statistics of Semplice never move with it.
+const sessionBest = computed(() => entries.value.filter(e => (e.origin === 'local' || e.origin === 'pilot') && e.valid && e.complete).sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0] ?? null)
+const corners = computed(() => detectCorners((sessionBest.value && traces.value[sessionBest.value.id]) ?? reference.value ?? lap.value ?? emptyTrace()))
 const comparison = computed(() => lap.value && reference.value ? compareCorners(lap.value, reference.value, corners.value) : [])
 const worst = computed(() => [...comparison.value].sort((a, b) => b.timeLostS - a.timeLostS).filter(c => c.timeLostS >= 0.03).slice(0, 3))
 const totalDelta = computed(() => lap.value && reference.value ? lap.value.lapTimeS - reference.value.lapTimeS : null)
 // Charts aligned by track position, as MoTeC and Garage 61: the reference dot sits at the same point.
 const refCursor = computed(() => cursor.value)
 // Tracce: the charts fill the window height, taller when there are fewer of them.
-const viewportHeight = ref(900)
-function measure() { viewportHeight.value = window.innerHeight }
+const viewportHeight = ref(900); function measure() { viewportHeight.value = window.innerHeight }
 onMounted(() => { measure(); window.addEventListener('resize', measure) })
 onBeforeUnmount(() => window.removeEventListener('resize', measure))
 // Tracce: under the sticky bar the charts fill one screen (about 150 px for bar and margins).
@@ -297,6 +302,8 @@ const stretchLoss = computed(() => viewLabel.value === 'Giro intero' || !lap.val
     : selectedSector.value !== null ? (sectorGaps.value[selectedSector.value] ? sectorGaps.value[selectedSector.value]!.gap / 1000 : stretchDelta(lap.value, reference.value, range.value))
       : comparison.value.find(c => c.corner.number === selectedCorner.value)?.timeLostS ?? null)
 function wholeLap() { selectedCorner.value = null; selectedSector.value = null; zoomRange.value = null }
+// PIP-645: the double click (and zooming all the way out) goes back to the whole lap, as the chart hint says.
+function onZoom(next: [number, number] | null) { if (next) zoomRange.value = next; else if (layout.value === 'tracce') wholeLap(); else zoomRange.value = null }
 // Garage 61 sectors: the official sector times of the reference, placed on its trace.
 // Sector times exist only for laps of the shown session (not for "own" or "shared" references).
 const sessionRow = (e: Entry) => (e.origin === 'local' || e.origin === 'pilot') && e.sessionToken === props.sessionToken ? props.laps.find(l => l.lap_number === e.lapNumber) : undefined
@@ -316,7 +323,8 @@ const selectedSector = ref<number | null>(null)
 const zoomRange = ref<[number, number] | null>(null)
 const { goCorner, cursorCorner } = useCornerStepper({ active: () => layout.value === 'tracce', corners, selectedCorner, selectedSector, zoomRange, cursor, wholeLap })
 const range = computed<[number, number]>(() => {
-  if (layout.value === 'tracce' && zoomRange.value) return zoomRange.value
+  // PIP-645: a dragged zoom applies in Semplice too.
+  if (zoomRange.value) return zoomRange.value
   const sector = layout.value === 'tracce' && selectedSector.value !== null ? sectorList.value[selectedSector.value] : null
   if (sector) return [sector.start, sector.end]
   const corner = selectedCorner.value !== null ? corners.value[selectedCorner.value - 1] : null
@@ -356,19 +364,17 @@ function heat(seconds: number) {
 }
 function selectFirst() {
   if (!corners.value.length) { selectedCorner.value = null; return }
-  if (selectedCorner.value === null || selectedCorner.value > corners.value.length) selectedCorner.value = worst.value[0]?.corner.number ?? 1
+  if (selectedCorner.value === null || selectedCorner.value > corners.value.length) selectedCorner.value = zones.firstCorner.value ?? worst.value[0]?.corner.number ?? 1
 }
 watch(corners, () => { if (layout.value !== 'tracce') selectFirst() })
 // Changing view starts clean: no sector or zoom carried over, so the Delta note matches what is shown.
 watch(layout, value => { selectedSector.value = null; zoomRange.value = null; if (value === 'tracce') selectedCorner.value = null; else selectFirst() })
 
-function emptyTrace(): LapTraceView {
-  return { gameId: 'acc', variant: null, sessionId: null, track: '', car: '', lapTimeS: 0, source: '', complete: false, valid: null, fuelL: null, conditions: null, gridStepM: 2, lengthM: 0, channels: {} }
-}
+function emptyTrace(): LapTraceView { return { gameId: 'acc', variant: null, sessionId: null, track: '', car: '', lapTimeS: 0, source: '', complete: false, valid: null, fuelL: null, conditions: null, gridStepM: 2, lengthM: 0, channels: {} } }
 const has = (name: string) => !!lap.value?.channels[name]
 // PIP-635: the time in the stretch you look at sits in the Delta header (Garage 61, Delta), fixed.
 const deltaRow = computed<ChartRow[]>(() => reference.value ? [{ key: 'delta', title: 'Delta', unit: 's', channels: [], delta: true, height: 70,
-  ...(stretchLoss.value !== null ? { note: `${viewLabel.value} · ${formatDelta(stretchLoss.value)} s`, noteTone: stretchLoss.value >= 0.01 ? 'loss' as const : stretchLoss.value <= -0.01 ? 'gain' as const : null } : {}) }] : [])
+  ...(stretchLoss.value !== null ? { note: `${viewLabel.value} · ${formatDelta(stretchLoss.value)}`, noteTone: stretchLoss.value >= 0.01 ? 'loss' as const : stretchLoss.value <= -0.01 ? 'gain' as const : null } : {}) }] : [])
 const speedRow: ChartRow = { key: 'speed', title: 'Velocità', unit: 'km/h', channels: [{ name: 'speed_kmh' }], height: 100 }
 // One channel per chart: every chart shows only your line and the reference's.
 const pedalRows: ChartRow[] = [
@@ -395,8 +401,9 @@ const traceRows = computed(() => [speedRow, ...pedalRows, steerRow, gearRow, ...
 const sessionEntries = computed(() => entries.value.filter(e => e.origin === 'local' || e.origin === 'pilot'))
 const ownEntries = computed(() => entries.value.filter(e => e.origin === 'own'))
 const sharedEntries = computed(() => entries.value.filter(e => e.origin === 'shared'))
+const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Semplice on the whole session
 // PIP-635: il best (valido e completo) della sessione, segnato nei giri come nei tempi del gioco.
-const bestId = computed(() => [...sessionEntries.value].filter(e => e.valid && e.complete).sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0]?.id ?? '')
+const bestId = computed(() => sessionBest.value?.id ?? '')
 const lapOption = (e: Entry): LapOption => ({ id: e.id, title: e.label ?? `Giro ${e.lapNumber}`, time: e.label ? '' : formatLapTime(e.lapTimeMs), valid: e.valid, complete: e.complete, best: e.id === bestId.value,
   conditions: formatLapConditions(mergeLapConditions(traces.value[e.id]?.conditions ?? null, sessionRow(e))) })
 const lapGroups = computed<LapGroup[]>(() => [{ label: '', options: sessionEntries.value.map(lapOption) }])
@@ -416,7 +423,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
         <p class="compare-gap" :class="{ gain: (totalDelta ?? 0) < 0, loss: (totalDelta ?? 0) > 0 }" title="Il tuo giro contro il riferimento">
           <template v-if="totalDelta !== null"><strong>{{ formatDelta(totalDelta) }} s</strong><em>{{ totalDelta < 0 ? "più veloce" : totalDelta > 0 ? "più lento" : "pari" }}</em></template><em v-else>contro</em>
         </p>
-        <LapPicker v-model="refId" name="Riferimento" color="#fbbf24" :groups="refGroups" :actions="refActions" :disabled="!entries.length" hint="Il giro di riferimento: ambra in grafici e mappa" @action="onLapAction" />
+        <LapPicker v-model="refId" name="Riferimento" align="right" color="#fbbf24" :groups="refGroups" :actions="refActions" :disabled="!entries.length" hint="Il giro di riferimento: ambra in grafici e mappa" @action="onLapAction" />
       </div>
       <span v-if="shareMessage" class="bar-note" :class="{ failed: shareState === 'error' }" role="status">{{ shareMessage }}</span>
       <div v-rc-switch class="rc-switch views-switch" role="tablist" aria-label="Vista dell’analisi">
@@ -436,18 +443,20 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
     <div v-if="lap && layout === 'pilota'" ref="traceRoot" class="layout-pilota" :style="{ height: `${traceHeight}px` }">
       <div class="pilota-left">
         <div class="panel">
-          <span v-if="reference" class="map-legend"><i class="g" />guadagni <i class="r" />perdi <i class="n" />uguale</span>
-          <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" zoom-controls :size="440" @hover="cursor = $event" @select="selectedCorner = $event" />
+          <span v-if="zones.active.value" class="map-legend"><i :style="{ background: ZONE_COLORS.consistency }" />costanza <i :style="{ background: ZONE_COLORS.potential }" />potenziale <i :style="{ background: ZONE_COLORS.mistakes }" />errori</span>
+          <span v-else-if="reference" class="map-legend"><i class="g" />guadagni <i class="r" />perdi <i class="n" />uguale</span>
+          <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zone-colors="zones.colors.value" zoom-controls :size="440" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>
         <AnalysisCar :lap="lap" :reference="reference" :cursor="cursor" :ref-cursor="refCursor" />
       </div>
       <div class="pilota-right">
-        <section class="side-box">
+        <SessionZonesCard v-if="zones.active.value" :insight="zones.insight.value" :selected="selectedCorner" :total-laps="zones.totalLaps.value" @select="selectCorner($event)" />
+        <section v-else class="side-box">
           <h4>Dove migliorare</h4>
           <p v-if="!reference" class="analysis-note">Scegli un riferimento per vedere dove migliorare.</p>
           <p v-else-if="!worst.length" class="analysis-note">Nessuna curva sotto il riferimento di oltre 3 centesimi.</p>
           <div v-else class="tip-list">
-            <button v-for="(c, i) in worst" :key="c.corner.number" type="button" class="tip-row" :class="{ active: selectedCorner === c.corner.number }" @click="selectedCorner = c.corner.number">
+            <button v-for="(c, i) in worst" :key="c.corner.number" type="button" class="tip-row" :class="{ active: selectedCorner === c.corner.number }" @click="selectCorner(c.corner.number)">
               <span class="tip-rank">{{ i + 1 }}</span>
               <span class="tip-corner">Curva {{ c.corner.number }}</span>
               <span class="tip-gap" :style="{ background: heat(c.timeLostS) }">{{ formatDelta(c.timeLostS) }}</span>
@@ -455,7 +464,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
             </button>
           </div>
         </section>
-        <AnalysisCharts v-if="selectedCorner !== null" :lap="lap" :reference="reference" :rows="pilotRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="pilotRowHeight" zoomable @hover="cursor = $event" @zoom="zoomRange = $event" />
+        <AnalysisCharts v-if="selectedCorner !== null" :lap="lap" :reference="reference" :rows="pilotRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="pilotRowHeight" zoomable @hover="cursor = $event" @zoom="onZoom" />
       </div>
     </div>
 
@@ -495,7 +504,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
           <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null" :focus="selectedSector !== null ? range : null" color-mode="laps" zoom-controls :size="320" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>
         <div v-if="reference" ref="deltaWrap">
-          <AnalysisCharts :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaHeight" zoomable @hover="cursor = $event" @zoom="zoomRange = $event" />
+          <AnalysisCharts :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaHeight" zoomable @hover="cursor = $event" @zoom="onZoom" />
         </div>
       </div>
       <div class="tracce-right">
@@ -520,7 +529,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
             <button v-for="c in visibleCorners" :key="c.number" type="button" :class="{ active: selectedCorner === c.number, gain: c.lost <= -0.01, loss: c.lost >= 0.01 }" :style="{ left: `${c.left}%`, width: `${c.width}%` }" :title="`Curva ${c.number}: ${formatDelta(c.lost)} s`" @click="selectCorner(c.number)">{{ c.number }}</button>
           </div>
         </div>
-        <AnalysisCharts :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="traceRowHeight" :cursor-tag="cursorCorner" zoomable @hover="cursor = $event" @zoom="zoomRange = $event" />
+        <AnalysisCharts :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="traceRowHeight" :cursor-tag="cursorCorner" zoomable @hover="cursor = $event" @zoom="onZoom" />
       </div>
     </div>
   </section>
@@ -550,7 +559,6 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .gain { color: #3ddc5a; }
 .loss { color: #ff5a6e; }
 .panel { display: grid; gap: 8px; border: 1px solid #ffffff1f; background: #ffffff06; padding: 8px; align-content: start; }
-.panel-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
 .map-legend { display: flex; gap: 5px; align-items: center; color: #8a8a90; font-size: 11px;
   i { width: 14px; height: 3px; margin-left: 6px; &.g { background: #3ddc5a; } &.r { background: #ff5a6e; } &.n { background: #8a8a90; } } }
 
@@ -559,8 +567,7 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
 .tip-list { display: grid; gap: 3px; }
 // One tip per row as the corner list of Avanzata: rank, corner, time lost on the red/green scale, the advice.
 .tip-row { display: grid; grid-template-columns: 26px 74px 64px minmax(0, 1fr); gap: 3px; padding: 0; border: 0; background: none; color: #e6e6ea; text-align: left; cursor: pointer;
-  &.active .tip-corner { background: #ff0024; color: #fff; }
-  &.active .tip-text { box-shadow: inset 0 0 0 1px #ff0024; } }
+  &.active .tip-corner { background: #ff0024; color: #fff; } &.active .tip-text { box-shadow: inset 0 0 0 1px #ff0024; } }
 .tip-rank { display: grid; place-items: center; background: #ffffff0d; color: #b3b3b8; font: 700 12px 'Inter', sans-serif; }
 .tip-corner { display: grid; place-items: center; padding: 6px 0; background: #ffffff0d; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; }
 .tip-gap { display: grid; place-items: center; color: #fff; font: 700 12px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
@@ -616,8 +623,6 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
     &.active { background: #ffffff33; color: #fff; box-shadow: inset 0 -2px #ff0024; } }
   &--corners { height: 18px;
     button { background: #ffffff0a; color: #b3b3b8; font-size: 10px; &.gain { color: #3ddc5a; } &.loss { color: #ff5a6e; } } } }
-.sq { display: inline-block; width: 10px; height: 10px; flex: 0 0 10px; &--lap { background: #38bdf8; } &--ref { background: #fbbf24; } }
-.tracce-btn { height: 28px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font-size: 12px; cursor: pointer; &.active { border-color: #ff0024; } }
 
 // PIP-639: stacked (phone) or lists beside the map (tablet): the page scrolls, not each column (nested scroll areas
 // trap the thumb on a phone), so the fitted window height (inline style) and the sticky bar are for desktop only.

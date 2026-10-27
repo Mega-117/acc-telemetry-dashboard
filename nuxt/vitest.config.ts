@@ -61,6 +61,7 @@ export default defineConfig({
         'app/utils/raceCalendarForm.ts',
         'app/utils/floatingPlacement.ts',
         'app/composables/useCornerStepper.ts',
+        'app/composables/useSessionZones.ts',
         // PIP-636: bordi della pista dal sito.
         'app/services/telemetry/trackEdges.ts',
         // PIP-637: percorso della vista pilota.
@@ -330,6 +331,7 @@ export default defineConfig({
         'app/utils/localCanonicalSummary.ts',
         'app/services/telemetry/lapTraceChart.ts',
         'app/services/telemetry/raceFuelClassification.ts',
+        'app/services/telemetry/sessionZones.ts',
         'app/services/telemetry/sessionMergeLogic.ts',
         'app/services/telemetry/theoreticalTimesCalculator.ts',
         'app/services/overlay/tyreSetupViewModel.ts',
