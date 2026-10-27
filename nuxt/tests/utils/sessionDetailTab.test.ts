@@ -27,4 +27,11 @@ describe('initialDetailTab', () => {
     expect(lapTokenInArchive(null, now)).toBe(false)
     expect(lapTokenInArchive('bad', now)).toBe(false)
   })
+
+  it('PIP-651: a shared link opens on the tab it was shared from (never Telemetria for EVO or without laps)', () => {
+    expect(initialDetailTab({ ...base, desktop: false, foreign: true, requested: 'avanzata' })).toBe('avanzata')
+    expect(initialDetailTab({ ...base, foreign: true, requested: 'sessione' })).toBe('sessione')
+    expect(initialDetailTab({ ...base, foreign: true, evo: true, requested: 'avanzata' })).toBe('sessione')
+    expect(initialDetailTab({ ...base, foreign: true, hasLapToken: false, requested: 'avanzata' })).toBe('sessione')
+  })
 })

@@ -34,6 +34,8 @@ const props = defineProps<{
   pilotUid?: string | null
   /** PIP-623: someone else's session opened by link: never read this PC's laps for it. */
   foreign?: boolean
+  /** PIP-651: someone else's session opened by its link: its laps come from the owner's archive (pilotUid = owner). */
+  sharedSessionId?: string | null
 }>()
 
 type Layout = 'pilota' | 'tracce'
@@ -96,7 +98,7 @@ async function load() {
   const archiveUid = pilot ?? (desktop ? null : currentUser.value?.uid ?? null)
   fromArchive.value = !pilot && !!archiveUid
   let source: LapSource
-  if (archiveUid) source = pilotLapSource(archiveUid, archiveDeps)
+  if (archiveUid) source = pilotLapSource(archiveUid, archiveDeps, props.sharedSessionId ?? null)
   else if (desktop) source = electronLapSource(bridge!)
   else { error.value = 'L’analisi dei giri è disponibile nel programma Racer Core.'; return }
   loading.value = true
@@ -130,6 +132,7 @@ async function load() {
     const usable = entries.value.filter(e => e.complete)
     if (!usable.length) {
       error.value = fromArchive.value ? 'Nel browser ci sono solo i giri validi e completi degli ultimi 30 giorni, e questa sessione non ne ha: tutti i giri sono nel programma Racer Core.'
+        : props.sharedSessionId ? 'Nessun giro di questa sessione nell’archivio online: ci sono solo i giri validi e completi degli ultimi 30 giorni.'
         : pilot ? 'Nessun giro di questa sessione nell’archivio online: arrivano quando il pilota guida con Racer Core aggiornato.'
         : entries.value.length ? 'Ci sono solo giri parziali in questa sessione: servono giri completi, partiti dal traguardo.' : 'Nessun giro registrato per questa sessione: le analisi arrivano dai giri guidati con Racer Core attivo.'
       return
@@ -186,7 +189,7 @@ const canShare = computed(() => !props.pilotUid && typeof api()?.shareLapTrace =
 const shareHint = computed(() => props.pilotUid ? '' : lapEntry.value && !lapEntry.value.valid ? 'Si condividono solo giri validi' : 'Copia il link di questo giro: chi lo riceve lo usa come riferimento')
 // PIP-635: the two lap actions sit at the bottom of their menu (your lap: share it; reference: a lap by link).
 const lapActions = computed<LapAction[]>(() => !props.pilotUid && typeof api()?.shareLapTrace === 'function'
-  ? [{ id: 'share', label: shareState.value === 'busy' ? 'Condivido…' : 'Condividi questo giro (copia il link)', disabled: !canShare.value || shareState.value === 'busy', hint: shareHint.value }] : [])
+  ? [{ id: 'share', label: shareState.value === 'busy' ? 'Condivido…' : 'Copia il link di questo giro (per usarlo come riferimento)', disabled: !canShare.value || shareState.value === 'busy', hint: shareHint.value }] : [])
 const refActions = computed<LapAction[]>(() => entries.value.length ? [{ id: 'shared', label: '+ Giro di un altro pilota (incolla il link)', hint: 'Incolla il link di un giro ricevuto: diventa il riferimento' }] : [])
 function onLapAction(id: string) { if (id === 'share') void shareLap(); else if (id === 'shared') showShared.value = true }
 async function shareLap() {

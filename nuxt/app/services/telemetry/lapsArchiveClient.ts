@@ -176,11 +176,13 @@ export async function fetchSharedLap(link: LapShareRef, deps: LapsArchiveDeps): 
     { headers: { 'X-Share-Key': link.key } })
 }
 
-export async function listPilotLaps(pilotUid: string, sessionToken: string, deps: LapsArchiveDeps): Promise<RemoteLapDescriptor[]> {
+// PIP-651: `shared` = the id of a shared session: whoever has its link reads its laps (the Worker checks it is public).
+export async function listPilotLaps(pilotUid: string, sessionToken: string, deps: LapsArchiveDeps, shared: string | null = null): Promise<RemoteLapDescriptor[]> {
   const laps: RemoteLapDescriptor[] = []
   let cursor: string | null = null
   for (let page = 0; page < 5; page++) {
-    const query: string = cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''
+    const params = new URLSearchParams({ ...(cursor ? { cursor } : {}), ...(shared ? { shared } : {}) }).toString()
+    const query: string = params ? `?${params}` : ''
     const body = await request(`/v1/laps/of/${encodeURIComponent(pilotUid)}/${sessionToken}${query}`, deps,
       (response) => response.json() as Promise<{ laps?: RemoteLapDescriptor[], truncated?: boolean, cursor?: string | null }>)
     laps.push(...(body.laps ?? []))
@@ -190,8 +192,8 @@ export async function listPilotLaps(pilotUid: string, sessionToken: string, deps
   return laps
 }
 
-export async function fetchPilotLap(pilotUid: string, sessionToken: string, lapId: string, deps: LapsArchiveDeps): Promise<{ trace: unknown, meta: RemoteLapMeta }> {
-  return request(`/v1/laps/of/${encodeURIComponent(pilotUid)}/${sessionToken}/${lapId}`, deps, async (response) => ({ trace: await readLapBody(response), meta: metaFrom(response) }))
+export async function fetchPilotLap(pilotUid: string, sessionToken: string, lapId: string, deps: LapsArchiveDeps, shared: string | null = null): Promise<{ trace: unknown, meta: RemoteLapMeta }> {
+  return request(`/v1/laps/of/${encodeURIComponent(pilotUid)}/${sessionToken}/${lapId}${shared ? `?shared=${encodeURIComponent(shared)}` : ''}`, deps, async (response) => ({ trace: await readLapBody(response), meta: metaFrom(response) }))
 }
 
 /** PIP-650: one entry of the reference library (another driver's best lap here, with its conditions). */

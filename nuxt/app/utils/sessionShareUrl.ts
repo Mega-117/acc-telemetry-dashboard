@@ -12,6 +12,8 @@ export function buildSessionShareUrl(params: {
   userId: string
   location: Pick<Location, 'protocol' | 'hostname' | 'origin'> | null | undefined
   baseURL: string | null | undefined
+  /** PIP-651: the tab the link opens on (the one it was shared from); Sessione when absent. */
+  tab?: 'sessione' | 'telemetria'
 }): string {
   const { location } = params
   const reachableOrigin = location && (location.protocol === 'https:' || location.protocol === 'http:')
@@ -19,5 +21,5 @@ export function buildSessionShareUrl(params: {
   // baseURL '/' oppure '/acc-telemetry-dashboard/docs/': sempre con una sola barra ai due capi.
   const path = `/${String(params.baseURL || '').replace(/^\/+|\/+$/g, '')}/`.replace(/^\/\/$/, '/')
   const base = reachableOrigin ? `${reachableOrigin}${path}` : PUBLIC_SITE_URL
-  return `${base}sessioni/${encodeURIComponent(params.sessionId)}?userId=${encodeURIComponent(params.userId)}`
+  return `${base}sessioni/${encodeURIComponent(params.sessionId)}?userId=${encodeURIComponent(params.userId)}${params.tab === 'telemetria' ? '&tab=telemetria' : ''}`
 }

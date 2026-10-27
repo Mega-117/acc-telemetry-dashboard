@@ -68,16 +68,16 @@ export async function listFastestLaps(bridge: LocalLapBridge, o: { track: string
 }
 
 /** Giri di una sessione del pilota collegato, dall'archivio online (vista coach). */
-export function pilotLapSource(pilotUid: string, deps: LapsArchiveDeps): LapSource {
+export function pilotLapSource(pilotUid: string, deps: LapsArchiveDeps, shared: string | null = null): LapSource {
   return {
     async list(sessionToken) {
-      const laps = await listPilotLaps(pilotUid, sessionToken, deps)
+      const laps = await listPilotLaps(pilotUid, sessionToken, deps, shared)
       return laps.flatMap((lap) => lap.lapId && lap.lapNumber !== null && lap.lapTimeMs !== null
         ? [{ id: `pilot:${lap.lapId}`, lapNumber: lap.lapNumber, lapTimeMs: lap.lapTimeMs, valid: lap.valid, sessionToken, ownerUid: pilotUid, origin: 'pilot' as const }]
         : [])
     },
     async read(descriptor) {
-      return (await fetchPilotLap(pilotUid, descriptor.sessionToken, descriptor.id.replace(/^pilot:/, ''), deps)).trace
+      return (await fetchPilotLap(pilotUid, descriptor.sessionToken, descriptor.id.replace(/^pilot:/, ''), deps, shared)).trace
     },
   }
 }

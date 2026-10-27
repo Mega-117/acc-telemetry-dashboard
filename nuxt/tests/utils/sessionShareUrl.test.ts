@@ -22,6 +22,11 @@ describe('session share url (PIP-591)', () => {
     expect(buildSessionShareUrl({ sessionId: 's1', userId: 'u1', location: null, baseURL: '/' })).toBe(`${PUBLIC_SITE_URL}sessioni/s1?userId=u1`)
   })
 
+  it('PIP-651: one link for the whole session, opening on the tab it was shared from', () => {
+    expect(buildSessionShareUrl({ sessionId: 's1', userId: 'u1', location: null, baseURL: '/', tab: 'telemetria' })).toBe(`${PUBLIC_SITE_URL}sessioni/s1?userId=u1&tab=telemetria`)
+    expect(buildSessionShareUrl({ sessionId: 's1', userId: 'u1', location: null, baseURL: '/', tab: 'sessione' })).toBe(`${PUBLIC_SITE_URL}sessioni/s1?userId=u1`)
+  })
+
   it('escapes ids', () => {
     expect(buildSessionShareUrl({ sessionId: 'a b', userId: 'u&1', location: null, baseURL: '/' })).toBe(`${PUBLIC_SITE_URL}sessioni/a%20b?userId=u%261`)
   })

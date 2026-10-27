@@ -236,9 +236,10 @@ async function shareSession() {
   fileActionError.value = null
 
   try {
+    // PIP-651: one link for the whole session (Sessione and Telemetria); it opens on the tab you share from.
     const link = await shareSessionLink({
       sessionId: props.sessionId,
-      generateShareLink
+      generateShareLink: (id) => generateShareLink(id, { tab: detailTab.value === 'avanzata' ? 'telemetria' : 'sessione' })
     })
     shareSuccess.value = true
     console.log('[SHARE] Link copied:', link)
@@ -257,6 +258,8 @@ async function shareSession() {
 
 // Get pilot context (will be set when coach views a pilot)
 const targetUserId = usePilotContext()
+// PIP-651: a shared link carries the tab it was shared from (?tab=telemetria).
+const sharedTab = useRoute().query.tab
 // PIP-635: Telemetria appena si sa che la sessione e' di ACC e che i suoi giri possono esserci.
 watch(originalSession, (session) => {
   if (!session || tabChosen.value) return
@@ -264,6 +267,7 @@ watch(originalSession, (session) => {
     evo: isEvoSession.value, foreign: !!props.externalUserId, hasLapToken: !!analysisToken.value, viewingPilot: !!targetUserId.value,
     desktop: typeof window !== 'undefined' && typeof (window as Window & { electronAPI?: { listLapTraces?: unknown } }).electronAPI?.listLapTraces === 'function',
     inArchive: lapTokenInArchive(analysisToken.value),
+    requested: sharedTab === 'telemetria' ? 'avanzata' : sharedTab === 'sessione' ? 'sessione' : undefined,
   })
 }, { immediate: true })
 
@@ -2475,7 +2479,7 @@ const gripZones = computed(() => {
       </div>
     </header>
 
-    <SessionAnalysisPanel v-if="detailTab === 'avanzata' && !isEvoSession" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="targetUserId && !externalUserId ? targetUserId : null" :foreign="!!externalUserId" @unavailable="onTelemetryUnavailable" />
+    <SessionAnalysisPanel v-if="detailTab === 'avanzata' && !isEvoSession" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" @unavailable="onTelemetryUnavailable" />
 
     <!-- ========================================== -->
     <!-- MASTER / DETAIL LAYOUT -->

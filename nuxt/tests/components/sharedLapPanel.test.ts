@@ -93,7 +93,7 @@ describe('SessionAnalysisPanel sharing and coach view', () => {
     await flushPromises()
     // PIP-635: "Condividi giro" is an action under the "Tu" lap menu.
     await view.find('.lap-picker__button').trigger('click')
-    const button = view.findAll('.lap-picker__actions button').find(b => b.text().startsWith('Condividi questo giro'))!
+    const button = view.findAll('.lap-picker__actions button').find(b => b.text().startsWith('Copia il link di questo giro'))!
     await button.trigger('click')
     await flushPromises()
     expect((window as any).electronAPI.shareLapTrace).toHaveBeenCalledWith('h__c/lap_20261025_175240_L006_104900ms.json.gz')

@@ -109,7 +109,7 @@ export function useSessionSharing() {
      * Generate a shareable link for a session.
      * Also sets the session as public if not already.
      */
-    async function generateShareLink(sessionId: string): Promise<string> {
+    async function generateShareLink(sessionId: string, options: { tab?: 'sessione' | 'telemetria' } = {}): Promise<string> {
         const userId = currentUser.value?.uid
         if (!userId) throw new Error('Not authenticated')
 
@@ -118,6 +118,7 @@ export function useSessionSharing() {
         return buildSessionShareUrl({
             sessionId,
             userId,
+            tab: options.tab,
             location: typeof window !== 'undefined' ? window.location : null,
             baseURL: useRuntimeConfig().app.baseURL,
         })

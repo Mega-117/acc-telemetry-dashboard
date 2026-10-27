@@ -6,7 +6,7 @@ import { fetchSharedLap, gunzipBounded, listPilotLaps, LapsArchiveError, readLap
 import { electronLapSource, listOwnLaps, parseLocalLapId, pilotLapSource } from '~/services/telemetry/lapSources'
 import { lapsArchiveModel, reasonLabel, type LapsSummary } from '~/repositories/lapsArchiveRepository'
 
-const SHARE = 'a'.repeat(32), KEY = 'b'.repeat(32)
+const SHARE = 'a'.repeat(32), KEY = 'b'.repeat(32), LAP_ID_HEX = 'c'.repeat(24)
 const lap = (channels: Record<string, number[]> = { time_s: [0, 1, 2], speed_kmh: [100, 110, 120], brake_pct: [0, 0, 5], throttle_pct: [100, 90, 0] }) => ({
   schema: 'acc.laptrace.v1', grid_step_m: 2,
   meta: { track: 'Hungaroring', car: 'ferrari_296_gt3', lap_time_s: 104.31, complete: true, valid: true, extra: { lap_number: 5 } }, channels,
@@ -83,6 +83,19 @@ describe('archive client', () => {
     await expect(readLapBody(binary(gz({ ...base, encoding: 'qdelta1', channel_decimals: {}, channels: { time_s: [0, 1500] } })))).rejects.toThrow('mancano i canali')
     // Older plain laps keep working.
     expect(((await readLapBody(binary(gz(lap())))) as { channels: Record<string, number[]> }).channels.time_s).toEqual([0, 1, 2])
+  })
+
+  it('PIP-651: a shared session asks the Worker with its id, for the list and each lap', async () => {
+    const urls: string[] = []
+    const fetchImpl = (async (url: string) => { urls.push(url); return url.includes('/laps/of/') && !url.includes(LAP_ID_HEX)
+      ? new Response(JSON.stringify({ laps: [{ lapId: LAP_ID_HEX, lapNumber: 5, lapTimeMs: 104310, valid: true }] })) : binary(gz(lap())) }) as unknown as typeof fetch
+    const source = pilotLapSource('owner-1', deps(fetchImpl), '2026_10_25T17_23_28_Hungaroring')
+    const [first] = await source.list('20261025_172328')
+    await source.read(first!)
+    expect(urls).toEqual([
+      'https://w.example/v1/laps/of/owner-1/20261025_172328?shared=2026_10_25T17_23_28_Hungaroring',
+      `https://w.example/v1/laps/of/owner-1/20261025_172328/${LAP_ID_HEX}?shared=2026_10_25T17_23_28_Hungaroring`,
+    ])
   })
 
   it('stops reading a body that exceeds the compressed cap while it streams', async () => {

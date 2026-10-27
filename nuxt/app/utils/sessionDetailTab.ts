@@ -13,6 +13,8 @@ export interface DetailTabContext {
   viewingPilot: boolean
   /** PIP-647: nel browser i propri giri arrivano dall'archivio online, che li tiene 30 giorni. */
   inArchive?: boolean
+  /** PIP-651: the tab a shared link asks for (the one it was shared from). */
+  requested?: 'sessione' | 'avanzata'
 }
 
 /** Giorni per cui l'archivio online tiene i giri (regola di scadenza del bucket). */
@@ -26,6 +28,9 @@ export function lapTokenInArchive(token: string | null | undefined, now = Date.n
 }
 
 export function initialDetailTab(ctx: DetailTabContext): 'sessione' | 'avanzata' {
-  if (ctx.evo || ctx.foreign || !ctx.hasLapToken) return 'sessione'
+  if (ctx.evo || !ctx.hasLapToken) return 'sessione'
+  // A shared link opens where it was shared from; without laps the page goes back to Sessione by itself.
+  if (ctx.requested) return ctx.requested
+  if (ctx.foreign) return 'sessione'
   return ctx.desktop || ctx.viewingPilot || ctx.inArchive ? 'avanzata' : 'sessione'
 }
