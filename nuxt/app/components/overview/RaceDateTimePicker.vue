@@ -129,7 +129,7 @@ function onEscape(event: KeyboardEvent) {
   &.is-invalid { border-color: #ff0024; }
   .is-placeholder { color: #888; }
 }
-.dt-picker__panel { margin-top: 8px; padding: 12px; border: 1px solid #ffffff24; background: #0d0d0f; }
+.dt-picker__panel { margin-top: 8px; padding: 12px; border: 1px solid var(--rc-section-line); background: #ffffff05; }
 .dt-picker__head {
   display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
   strong { font: italic 700 15px 'Racer Display', sans-serif; text-transform: uppercase; letter-spacing: .02em; }

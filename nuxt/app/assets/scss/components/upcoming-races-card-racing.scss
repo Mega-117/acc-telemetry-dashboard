@@ -20,17 +20,19 @@
 .race-links { min-width: 0; margin: 0; padding: 14px 0 0; border: 0; border-top: 1px solid var(--rc-section-line); }
 .race-links legend { padding: 0 10px 0 0; color: #ddd; font-size: 12px; text-transform: uppercase; }
 .field-optional { margin-left: 8px; color: #888; font-size: 11px; font-weight: 400; text-transform: none; letter-spacing: 0; }
-.race-modal-backdrop--racing { background: #000b; backdrop-filter: blur(5px); }
+// Overview look: the page behind is dimmed and blurred, the modal itself is a see-through panel with the
+// sections' light edge (no solid black box).
+.race-modal-backdrop--racing { background: #000000a6; backdrop-filter: blur(10px); }
 :global(body:has(.electron-titlebar) .race-modal-backdrop--racing) { top: 36px; }
 .race-modal--racing {
   width: min(680px, 100%); max-height: calc(100dvh - 84px); padding: 28px; gap: 20px;
-  border-radius: 0; border-color: #ffffff65;
-  background: radial-gradient(ellipse at top right, #6b001b30, transparent 65%), #090909;
-  box-shadow: 0 24px 90px #000b;
-  header { align-items: flex-start; padding-bottom: 20px; border-bottom: 1px solid #ffffff24; }
+  border-radius: 0; border-color: var(--rc-section-line);
+  background: #0a0a0d73;
+  box-shadow: none;
+  header { align-items: flex-start; padding-bottom: 20px; border-bottom: 1px solid var(--rc-section-line); }
   .eyebrow { display: block; margin-bottom: 7px; color: #aaa; font-size: 11px; letter-spacing: 1.5px; font-weight: 500; }
   h2 { font: italic 700 28px/1.2 'Racer Display', sans-serif; text-transform: uppercase; }
-  .modal-close { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; border: 1px solid #ffffff65; border-radius: 0; background: transparent; }
+  .modal-close { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; border: 1px solid var(--rc-section-line); border-radius: 0; background: transparent; }
   .modal-close:hover { color: #ff0024; border-color: #ff0024; }
   // Fields stay at the top of their row when the date picker opens beside them.
   .form-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
@@ -42,7 +44,7 @@
   input:hover { border-color: #ffffff65; }
   input:focus { border-color: #ff0024; outline: 1px solid #ff0024; outline-offset: 1px; }
   button:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
-  footer { flex-direction: row; justify-content: flex-end; gap: 12px; padding-top: 20px; border-top: 1px solid #ffffff24; }
+  footer { flex-direction: row; justify-content: flex-end; gap: 12px; padding-top: 20px; border-top: 1px solid var(--rc-section-line); }
   footer .rc-btn { min-width: 156px; min-height: 46px; }
   .delete-confirm { border-radius: 0; border-color: #ff002450; background: #ff00240a; padding: 18px; gap: 12px; }
   .form-error { display: block; color: #ff9aaa; padding: 8px 12px; border-left: 2px solid #ff0024; background: #ff00240a; font-size: 13px; }
@@ -97,7 +99,8 @@
     position: absolute; right: 0; top: calc(100% + 6px); width: 216px;
     max-width: calc(100vw - 48px); display: grid; gap: 2px;
     border: 1px solid var(--rc-section-line); padding: 6px;
-    background: radial-gradient(ellipse at top right, #62001628, transparent 75%), #090909;
+    // Over the card content: opaque, or the rows and buttons behind read through it.
+    background: #0a0a0d;
     box-shadow: 0 12px 32px #000b;
   }
   .race-options__menu a, .race-options__menu button {

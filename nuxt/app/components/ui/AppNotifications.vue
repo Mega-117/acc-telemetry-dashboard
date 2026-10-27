@@ -20,7 +20,6 @@ const { notifications, dismiss } = useAppNotifications()
           :class="`app-notification--${notification.type}`"
           @click="dismiss(notification.id)"
         >
-          <span class="app-notification__dot" />
           <span class="app-notification__text">{{ notification.text }}</span>
         </button>
       </TransitionGroup>
@@ -50,14 +49,6 @@ const { notifications, dismiss } = useAppNotifications()
   @include toast.toast;
   @include toast.toast-tones;
   cursor: pointer;
-}
-
-.app-notification__dot {
-  width: 7px;
-  height: 7px;
-  flex: 0 0 auto;
-  background: var(--toast-tone);
-  box-shadow: 0 0 8px var(--toast-tone);
 }
 
 .app-notification__text {
