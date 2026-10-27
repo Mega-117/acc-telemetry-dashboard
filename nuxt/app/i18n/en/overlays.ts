@@ -11,9 +11,7 @@ export default {
     trackmapCircleUnsupported: 'Track outline not available: circle view',
     tyreRace: {
       set: 'SET',
-      body: 'Body',
-      suspension: 'Susp.',
-      total: 'Total',
+      damage: 'DMG',
     },
     weather: {
       unavailable: 'Weather forecast not available',

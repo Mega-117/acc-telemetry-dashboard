@@ -32,8 +32,8 @@ export interface RaceDamageSummary {
 const positive = (value: number | null | undefined) => typeof value === 'number' && Number.isFinite(value) && value > 0
 
 /**
- * HUD style v2 (27/10): the Race tyres page lists body, suspension and total repair
- * times under the four tyres, only when the car is actually damaged.
+ * HUD style v2 (27/10, third round 28/10): null when the car is undamaged. The Race tyres
+ * page shows the total repair time in its middle line only when this is not null.
  */
 export function raceDamageSummary(damage: FastStateDamage | null | undefined): RaceDamageSummary | null {
   if (!damage) return null

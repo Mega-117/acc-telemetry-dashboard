@@ -11,9 +11,8 @@ export default {
     trackmapCircleUnsupported: 'Sagoma pista non disponibile: vista circolare',
     tyreRace: {
       set: 'SET',
-      body: 'Carrozz.',
-      suspension: 'Sospens.',
-      total: 'Totale',
+      // Middle line, only while the car is damaged: total repair time.
+      damage: 'DANNI',
     },
     weather: {
       unavailable: 'Previsioni meteo non disponibili',

@@ -31,11 +31,18 @@ describe('tyre overlay minimum readability contract', () => {
     const damage = source('app/components/overlay/DamageRaceHud.vue')
     const page = source('app/pages/tyres-overlay.vue')
 
-    expect(race).toContain('viewBox="0 0 166 241"')
-    // HUD v2 (27/10): four corners side by side in the same viewBox; pressure stays the
-    // largest value and the tyre temperature the next, status text keeps 18 units.
-    expect(race).toContain('.tyre-race__primary { font-size:12px; }')
-    expect(race).toMatch(/\.tyre-race__temperature \{ font-size:12px;/)
+    // Third round (28/10): the viewBox comes from the geometry (166 x 195, see raceTyrePresentation).
+    expect(race).toContain(':viewBox="`0 0 ${G.width} ${G.height}`"')
+    // Fonts in SVG units: pressure 13, AVG word 11 with its number 12, loss 12, middle line 13,
+    // tyre temperature 13 (shadow and stroke kept), brake values 12; status text keeps 18 units.
+    expect(race).toContain('.tyre-race__primary { font-size:13px; }')
+    expect(race).toContain('.tyre-race__average { fill:#c3c5cc; font-size:12px; }')
+    expect(race).toContain('.tyre-race__average-label { font-size:11px; }')
+    expect(race).toContain('.tyre-race__loss { fill:#ffa500; font-size:12px; }')
+    expect(race).toContain('.tyre-race__compound text { font-size:13px;')
+    expect(race).toMatch(/\.tyre-race__temperature \{ font-size:13px; paint-order:stroke; stroke:#000; stroke-width:1\.8px;[^}]*filter:drop-shadow/)
+    expect(race).toContain('.tyre-race__brake-temp { font-size:12px; }')
+    expect(race).toContain('.tyre-race__pad { fill:#c3c5cc; font-size:12px; }')
     expect(race).toContain('.tyre-race__unavailable text { font-size:18px; }')
     expect(damage).toContain('viewBox="0 0 166 241"')
     expect(damage).toContain('font-size:12px')

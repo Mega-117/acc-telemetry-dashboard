@@ -84,6 +84,7 @@ const { t } = useI18n()
       class="hud-overlay__panel"
       :class="{
         'hud-overlay__panel--race': variant === 'race',
+        'hud-overlay__panel--yellow-flag': displayFastState.flag === 2,
       }"
     >
       <section
@@ -157,6 +158,19 @@ const { t } = useI18n()
   padding: calc(8px * var(--hud-scale));
   border: calc(2px * var(--hud-scale)) solid transparent;
   box-sizing: border-box;
+}
+
+// Yellow flag (third round 28/10): a 4px frame (at scale 1, scaling with the HUD) on the
+// whole outer panel, for Classic and Race (tyres and Damage pages, weather strip included).
+// Drawn by an overlay above the content, so nothing moves and nothing covers it.
+.hud-overlay__panel--yellow-flag::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  border: calc(4px * var(--hud-scale)) solid #ffd400;
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 .race-hud__switcher { position:absolute; top:calc(7px * var(--hud-scale)); right:calc(7px * var(--hud-scale)); z-index:20; display:flex; overflow:hidden; border:1px solid #666; border-radius:999px; background:#050608; opacity:0; transition:opacity 120ms ease; -webkit-app-region:no-drag; }

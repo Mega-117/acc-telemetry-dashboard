@@ -26,7 +26,7 @@ describe('reference damage presentation', () => {
   })
 })
 
-describe('HUD v2 damage summary under the Race tyres', () => {
+describe('HUD v2 damage summary in the Race tyres middle line', () => {
   const zone = (percentage: number, repairTimeMs: number) => ({ percentage, repairTimeMs })
   const healthy = () => ({
     version: 1, eventSeq: 0, eventTs: null,
@@ -53,5 +53,7 @@ describe('HUD v2 damage summary under the Race tyres', () => {
     const scratched = healthy()
     scratched.body.left.percentage = 3
     expect(raceDamageSummary(scratched)).not.toBeNull()
+    // The middle line reads the total with one decimal, e.g. "DANNI 0:12.4".
+    expect(raceDamageZoneTime(raceDamageSummary(damaged)!.totalMs, 1)).toBe('0:12.4')
   })
 })

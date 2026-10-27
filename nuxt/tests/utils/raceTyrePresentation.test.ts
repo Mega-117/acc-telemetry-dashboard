@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { raceSlip, raceNumber, raceDamageTime, racePressureFlash, raceTyreCorner, RACE_TYRE_GEOMETRY } from '~/utils/raceTyrePresentation'
+import { raceSlip, raceNumber, raceDamageTime, racePressureFlash, raceTyreCorner, raceAxleBrake, raceAxleCenterY, RACE_TYRE_GEOMETRY } from '~/utils/raceTyrePresentation'
 
 describe('Race reference presentation', () => {
   it.each([[0, 0, '#ffffff'], [.099, 0, '#ffffff'], [.1, 2.8, '#ffffff'],
@@ -27,25 +27,71 @@ describe('Race reference presentation', () => {
     expect(Math.min(...rl!.valueLines.map(line => line.y))).toBeGreaterThan(rl!.top + G.tyreHeight)
     expect(fl!.valueLines.map(line => line.kind)).toEqual(['primary', 'average', 'loss'])
     expect(rl!.valueLines.map(line => line.kind)).toEqual(['loss', 'average', 'primary'])
-    // Tyres wider than tall would be odd: still a tyre, but wide and low; brakes taller than half the tyre.
-    expect(G.tyreWidth).toBeGreaterThan(30)
+    // Third round (28/10): slip bar about 9 wide, tyre about 30, still wide and low; brakes taller than half the tyre.
+    expect(G.slipWidth).toBe(9)
+    expect(G.tyreWidth).toBe(30)
+    expect(G.tyreWidth).toBeLessThan(G.tyreHeight)
     expect(G.brakeHeight).toBeGreaterThan(G.tyreHeight / 2)
-    // Outside → in on the left: slip bar, tyre, brake, brake info.
+    // Outside → in on the left: slip bar, tyre, brake, then the axle reading in the middle.
+    expect(fl!.slipX).toBeGreaterThanOrEqual(0)
     expect(fl!.slipX + G.slipWidth).toBeLessThan(fl!.tyreX)
     expect(fl!.tyreX + G.tyreWidth).toBeLessThan(fl!.brakeX)
-    expect(fl!.brakeX + G.brakeWidth).toBeLessThan(fl!.brakeInfoX)
-    expect(fl!.brakeInfoX).toBeLessThan(83)
+    expect(fl!.brakeX + G.brakeWidth).toBeLessThan(G.centerX)
     // The right side is the exact mirror around the centre line (x = 83).
+    expect(G.centerX).toBe(G.width / 2)
     expect(fr!.tyreX + G.tyreWidth).toBeCloseTo(166 - fl!.tyreX)
     expect(fr!.slipX + G.slipWidth).toBeCloseTo(166 - fl!.slipX)
     expect(fr!.brakeX + G.brakeWidth).toBeCloseTo(166 - fl!.brakeX)
-    expect(fr!.brakeInfoX).toBeGreaterThan(83)
+    expect(rr!.tyreX).toBe(fr!.tyreX)
     // Front and rear axles do not overlap and leave room for the compound line.
     expect(fl!.top + G.tyreHeight).toBeLessThan(G.midTop)
+    expect(G.midTop).toBeLessThan(G.midText)
+    expect(G.midText).toBeLessThan(G.midBottom)
     expect(G.midBottom).toBeLessThan(rl!.top)
-    expect(Math.max(...rr!.valueLines.map(line => line.y))).toBeLessThan(G.damageTop)
     expect(G.brakeHeight).toBeLessThan(G.tyreHeight)
     expect(G.brakeWidth).toBeGreaterThan(G.slipWidth)
+  })
+  it('third round: the viewBox ends with the content, no space kept for hidden sections', () => {
+    const G = RACE_TYRE_GEOMETRY
+    const lines = [0, 1, 2, 3].flatMap(index => raceTyreCorner(index).valueLines.map(line => line.y))
+    // 13-unit pressure on top: its cap height (~10) still sits inside the box with a small margin.
+    expect(Math.min(...lines)).toBeGreaterThanOrEqual(13)
+    expect(Math.min(...lines) - 13).toBeLessThanOrEqual(6)
+    // The lowest baseline (rear pressure) leaves only a small bottom margin.
+    expect(G.height - Math.max(...lines)).toBeGreaterThanOrEqual(3)
+    expect(G.height - Math.max(...lines)).toBeLessThanOrEqual(6)
+    expect(G.width).toBe(166)
+    expect(G.height).toBe(195)
+    expect('damageTop' in G).toBe(false)
+  })
+  it('third round: status boxes and axle readings are centred on their axle', () => {
+    const G = RACE_TYRE_GEOMETRY
+    for (const [rear, index] of [[false, 0], [true, 2]] as const) {
+      const corner = raceTyreCorner(index)
+      expect(raceAxleCenterY(rear)).toBe(corner.centerY)
+      const boxTop = raceAxleCenterY(rear) - G.statusHeight / 2
+      expect(boxTop + G.statusHeight / 2).toBe(corner.top + G.tyreHeight / 2)
+      expect(boxTop).toBeGreaterThanOrEqual(0)
+      expect(boxTop + G.statusHeight).toBeLessThanOrEqual(G.height)
+    }
+    // Owner detail: the 12-unit temperature is vertically centred on the axle (baseline about
+    // half a cap height below it) and the pad wear sits directly underneath, small gap.
+    expect(G.axleTempDy).toBeGreaterThanOrEqual(3)
+    expect(G.axleTempDy).toBeLessThanOrEqual(5)
+    expect(G.axlePadDy - G.axleTempDy).toBeGreaterThanOrEqual(12)
+    expect(G.axlePadDy - G.axleTempDy).toBeLessThanOrEqual(15)
+    // The pad line stays clear of the middle band (front) and the rear tyre bottom.
+    expect(raceAxleCenterY(false) + G.axlePadDy).toBeLessThan(G.midTop)
+    expect(raceAxleCenterY(true) + G.axlePadDy).toBeLessThan(G.rearTop + G.tyreHeight)
+  })
+  it('averages brake temperature and pad wear per axle, counting only the sides that exist', () => {
+    expect(raceAxleBrake([{ brakeTempC: 568, padLifePct: 92 }, { brakeTempC: 558, padLifePct: 91 }]))
+      .toEqual({ brakeTempC: 563, padLifePct: 91.5 })
+    expect(raceAxleBrake([{ brakeTempC: null, padLifePct: 88 }, { brakeTempC: 540, padLifePct: undefined }]))
+      .toEqual({ brakeTempC: 540, padLifePct: 88 })
+    expect(raceAxleBrake([{ brakeTempC: NaN, padLifePct: null }, {}])).toEqual({ brakeTempC: null, padLifePct: null })
+    expect(raceAxleBrake([])).toEqual({ brakeTempC: null, padLifePct: null })
+    expect(raceNumber(raceAxleBrake([{ brakeTempC: null }, { brakeTempC: null }]).brakeTempC)).toBe('--')
   })
   it('formats missing values and repair time instead of inventing a lap time', () => {
     expect(raceNumber(70.5)).toBe('70')
