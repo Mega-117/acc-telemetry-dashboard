@@ -21,7 +21,7 @@ const normalizedProgress = computed(() => Math.max(0, Math.min(100, Math.round(p
 const bannerType = computed(() => {
   if (props.status === 'failed') return 'error'
   if (props.status === 'completed' || props.status === 'skipped') return 'success'
-  return 'running'
+  return 'info'
 })
 
 function close() {
@@ -30,126 +30,48 @@ function close() {
 </script>
 
 <template>
-  <Transition name="slide">
-    <div v-if="visible" :class="['maintenance-notification', bannerType]" @click="close">
-      <div class="notification-header">
-        <span class="notification-title">{{ status === 'failed' ? 'Controllo dati non completato' : 'Aggiornamento dati' }}</span>
-        <button v-if="canClose" class="notification-close" aria-label="Chiudi notifica" @click.stop="close">x</button>
+  <!-- In the top-right message column (AppNotifications' slot), in the site's style. -->
+  <Teleport defer to="#app-toast-slot">
+    <Transition name="maintenance">
+      <div v-if="visible" :class="['maintenance-notification', bannerType]" @click="close">
+        <div class="notification-header">
+          <span class="notification-title">{{ status === 'failed' ? 'Controllo dati non completato' : 'Aggiornamento dati' }}</span>
+          <button v-if="canClose" class="notification-close" aria-label="Chiudi notifica" @click.stop="close">×</button>
+        </div>
+        <p class="notification-message">{{ error || message || 'Operazione in corso...' }}</p>
+        <button v-if="status === 'failed' && canRetry" class="rc-btn notification-retry" @click.stop="emit('retry')">Riprova</button>
+        <div v-if="status !== 'failed'" class="notification-progress">
+          <div class="progress-bar"><div class="progress-fill" :style="{ width: `${normalizedProgress}%` }"></div></div>
+          <span class="progress-label">{{ normalizedProgress }}%</span>
+        </div>
       </div>
-      <p class="notification-message">{{ error || message || 'Operazione in corso...' }}</p>
-      <button v-if="status === 'failed' && canRetry" class="notification-retry" @click.stop="emit('retry')">Riprova</button>
-      <div v-if="status !== 'failed'" class="progress-bar">
-        <div class="progress-fill" :style="{ width: `${normalizedProgress}%` }"></div>
-      </div>
-      <span v-if="status !== 'failed'" class="progress-label">{{ normalizedProgress }}%</span>
-    </div>
-  </Transition>
+    </Transition>
+  </Teleport>
 </template>
 
 <style lang="scss" scoped>
+@use '~/assets/scss/racing-toast' as toast;
+
 .maintenance-notification {
-  position: fixed;
-  top: 86px;
-  right: 12px;
-  width: min(360px, calc(100vw - 24px));
-  padding: 14px;
-  border-radius: 10px;
-  color: #fff;
-  z-index: 10000;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(8px);
+  @include toast.toast;
+  @include toast.toast-tones;
+  display: grid;
+  gap: 6px;
+  width: 360px;
+  max-width: 100%;
   cursor: default;
-
-  &.running {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.92), rgba(37, 99, 235, 0.92));
-    border: 1px solid rgba(147, 197, 253, 0.45);
-  }
-
-  &.success {
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.92), rgba(22, 163, 74, 0.92));
-    border: 1px solid rgba(134, 239, 172, 0.45);
-    cursor: pointer;
-  }
-
-  &.error {
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.92), rgba(185, 28, 28, 0.92));
-    border: 1px solid rgba(252, 165, 165, 0.45);
-    cursor: pointer;
-  }
+  &.success, &.error { cursor: pointer; }
 }
 
-.notification-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 6px;
-}
+.notification-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.notification-title { font: italic 700 14px/1.2 'Racer Display', sans-serif; text-transform: uppercase; letter-spacing: .02em; }
+.notification-message { margin: 0; font-size: 12px; line-height: 1.35; color: #ffffffbf; }
+.notification-close { border: 0; background: none; color: #ffffffb3; font-size: 18px; line-height: 1; cursor: pointer; &:hover { color: #fff; } }
+.notification-retry { justify-self: start; min-height: 34px; padding-inline: 16px; }
+.notification-progress { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+.progress-bar { flex: 1; height: 3px; background: #ffffff1f; }
+.progress-fill { height: 100%; background: var(--toast-tone); box-shadow: 0 0 6px var(--toast-tone); transition: width .25s ease; }
+.progress-label { font: 600 11px 'Inter', sans-serif; font-variant-numeric: tabular-nums; color: #ffffffcc; }
 
-.notification-title {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.notification-message {
-  margin: 0 0 10px;
-  font-size: 13px;
-  line-height: 1.35;
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.notification-close {
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.notification-retry {
-  min-height: 44px;
-  padding: 8px 16px;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.progress-bar {
-  overflow: hidden;
-  height: 5px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.22);
-}
-
-.progress-fill {
-  height: 100%;
-  border-radius: inherit;
-  background: rgba(255, 255, 255, 0.92);
-  transition: width 0.25s ease;
-}
-
-.progress-label {
-  display: block;
-  margin-top: 6px;
-  font-size: 11px;
-  text-align: right;
-  color: rgba(255, 255, 255, 0.75);
-}
-
-.slide-enter-active,
-.slide-leave-active {
-  transition: all 0.3s ease;
-}
-
-.slide-enter-from,
-.slide-leave-to {
-  opacity: 0;
-  transform: translateX(20px);
-}
+@include toast.toast-motion(maintenance);
 </style>

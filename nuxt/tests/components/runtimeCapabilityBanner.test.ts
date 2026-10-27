@@ -4,6 +4,13 @@ import { describe, expect, it } from 'vitest'
 import RuntimeCapabilityBanner from '~/components/electron/RuntimeCapabilityBanner.vue'
 import { deriveRuntimeUiModel } from '~/services/runtime/rendererRuntimeBootstrapAdapter'
 
+// The card is teleported into the top-right message column (AppNotifications' slot): read what goes there.
+async function renderBanner(model: ReturnType<typeof deriveRuntimeUiModel>) {
+  const ctx: { teleports?: Record<string, string> } = {}
+  const page = await renderToString(createSSRApp(RuntimeCapabilityBanner, { model }), ctx)
+  return page + (ctx.teleports?.['#app-toast-slot'] ?? '')
+}
+
 describe('RuntimeCapabilityBanner', () => {
   it('non renderizza un falso aggiornamento durante la sola attesa auth', async () => {
     const model = deriveRuntimeUiModel({
@@ -17,7 +24,7 @@ describe('RuntimeCapabilityBanner', () => {
       }
     }, 'electron')
 
-    const html = await renderToString(createSSRApp(RuntimeCapabilityBanner, { model }))
+    const html = await renderBanner(model)
     expect(model.gates.sync.allowed).toBe(false)
     expect(html).not.toContain('Aggiornamento dati in corso')
     expect(html).not.toContain('role="progressbar"')
@@ -40,11 +47,12 @@ describe('RuntimeCapabilityBanner', () => {
       }
     }, 'electron')
 
-    const html = await renderToString(createSSRApp(RuntimeCapabilityBanner, { model }))
+    const html = await renderBanner(model)
     expect(html).toContain('role="status"')
     expect(html).toContain('Dati cloud parzialmente disponibili')
     expect(html).toContain('role="progressbar"')
     expect(html).toContain('aria-valuenow="52"')
     expect(html).not.toContain('role="dialog"')
+    expect(html).toContain('runtime-capability-banner--warning')
   })
 })

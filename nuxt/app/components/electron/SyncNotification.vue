@@ -70,6 +70,8 @@ const close = () => {
 </script>
 
 <template>
+  <!-- In the top-right message column (AppNotifications' slot), in the site's style. -->
+  <Teleport defer to="#app-toast-slot">
   <Transition name="slide">
     <div v-if="isVisible" :class="['sync-notification', bannerType]" @click="close">
       <div class="notification-icon">
@@ -87,46 +89,23 @@ const close = () => {
       <button class="notification-close" @click.stop="close">×</button>
     </div>
   </Transition>
+  </Teleport>
 </template>
 
 <style lang="scss" scoped>
+@use '~/assets/scss/racing-toast' as toast;
+
 .sync-notification {
-  position: fixed;
-  top: 44px; // Below titlebar
-  right: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: #fff;
+  @include toast.toast;
+  @include toast.toast-tones;
   cursor: pointer;
-  z-index: 10000;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(8px);
-  
-  &.success {
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.9), rgba(22, 163, 74, 0.9));
-    border: 1px solid rgba(34, 197, 94, 0.5);
-  }
-  
-  &.error {
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.9), rgba(220, 38, 38, 0.9));
-    border: 1px solid rgba(239, 68, 68, 0.5);
-  }
-  
-  &.info {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.9), rgba(37, 99, 235, 0.9));
-    border: 1px solid rgba(59, 130, 246, 0.5);
-  }
 }
 
 .notification-icon {
   display: flex;
   align-items: center;
   justify-content: center;
+  color: var(--toast-tone);
 }
 
 .notification-message {

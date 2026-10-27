@@ -5,7 +5,7 @@ import Notification from '~/components/electron/DataMaintenanceNotification.vue'
 
 describe('DataMaintenanceNotification', () => {
   it('mostra errore recuperabile senza percentuale o falsa riuscita', async () => {
-    const wrapper = mount(Notification, { props: { visible: true, status: 'failed', progress: 100, message: '', error: 'Limite temporaneo', canRetry: true } })
+    const wrapper = mount(Notification, { props: { visible: true, status: 'failed', progress: 100, message: '', error: 'Limite temporaneo', canRetry: true }, global: { stubs: { teleport: true } } })
     expect(wrapper.text()).toContain('Controllo dati non completato')
     expect(wrapper.text()).toContain('Limite temporaneo')
     expect(wrapper.find('.progress-label').exists()).toBe(false)
@@ -18,7 +18,7 @@ describe('DataMaintenanceNotification', () => {
   })
 
   it('non offre retry Electron di default e non chiude durante il controllo', async () => {
-    const wrapper = mount(Notification, { props: { visible: true, status: 'checking', progress: 5, message: 'Controllo' } })
+    const wrapper = mount(Notification, { props: { visible: true, status: 'checking', progress: 5, message: 'Controllo' }, global: { stubs: { teleport: true } } })
     expect(wrapper.text()).toContain('5%')
     await wrapper.get('.maintenance-notification').trigger('click')
     expect(wrapper.emitted('close')).toBeUndefined()
