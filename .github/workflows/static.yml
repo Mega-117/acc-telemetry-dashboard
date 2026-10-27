@@ -31,13 +31,30 @@ jobs:
           ref: ${{ github.sha }}
       - name: Setup Pages
         uses: actions/configure-pages@v5
-      - name: Install SPA fallback at the Pages root
-        run: cp docs/404.html 404.html
+      # PIP-656: only the generated site goes online. Before, the whole repository was published (sources,
+      # nuxt/docs notes with real emails, Firebase rules, old dashboards). The app lives under /docs/ (Nuxt
+      # baseURL); the root keeps only the SPA fallback and a page that sends visitors to the app, never indexed.
+      - name: Stage the generated site only
+        run: |
+          set -eu
+          test -f docs/index.html
+          mkdir -p _site
+          cp -R docs _site/docs
+          cp docs/404.html _site/404.html
+          cat > _site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="it"><head><meta charset="utf-8"><meta name="robots" content="noindex, nofollow">
+          <meta http-equiv="refresh" content="0; url=./docs/"><title>Racer Core</title></head>
+          <body><a href="./docs/">Racer Core</a></body></html>
+          HTML
+          # Nothing but the build: fail if a source folder slipped in.
+          for leak in nuxt beta dev scripts .github firestore.rules database.rules.json; do
+            if [ -e "_site/$leak" ]; then echo "unexpected $leak in the Pages artifact" >&2; exit 1; fi
+          done
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload entire repository
-          path: '.'
+          path: '_site'
       # Il backend Pages a volte risponde "Deployment failed, try again later":
       # un errore transitorio non deve lasciare il deploy rosso, quindi si
       # ritenta una volta dopo una pausa prima di fallire davvero.

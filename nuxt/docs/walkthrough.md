@@ -253,7 +253,7 @@ Gestisce l'identità degli utenti.
 ```javascript
 {
   uid: "9pRwnLZ3ciZwl4X5eQ5vjKUHy6z2",
-  email: "enricosaian@hotmail.it",
+  email: "utente-redatto@example.com",
   displayName: "Enrico Saiani"
 }
 ```

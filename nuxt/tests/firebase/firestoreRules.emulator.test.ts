@@ -51,8 +51,8 @@ const FRESH_PILOT_EMAIL = 'qa-fresh-pilot@accsuite.invalid'
 let testEnv: RulesTestEnvironment
 
 it.each(['acc', 'evo', 'synthetic'])('PIP-469 isolates uploaded %s raw chunks and index from foreign users', async (gameId) => {
-  const owner = testEnv.authenticatedContext(PILOT_UID).firestore()
-  const foreign = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+  const owner = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
+  const foreign = testEnv.authenticatedContext(SECOND_PILOT_UID, { email_verified: true }).firestore()
   const raw = { schema: 'racercore.session', version: 1, game_id: gameId,
     session_id: `rules-${gameId}`, ownerId: PILOT_UID, capabilities: {},
     session_info: { track: 'Spa', track_variant: 'long', car: 'Mercedes',
@@ -290,6 +290,22 @@ describe('fresh user provisioning contract', () => {
     expect((await getDoc(doc(db, `publicProfiles/${FRESH_PILOT_UID}`))).exists()).toBe(true)
   })
 
+  it('PIP-656: an unverified account provisions only its own profile, nothing else', async () => {
+    const db = testEnv.authenticatedContext(FRESH_PILOT_UID, { email: FRESH_PILOT_EMAIL, email_verified: false }).firestore()
+    const batch = writeBatch(db)
+    batch.set(doc(db, `users/${FRESH_PILOT_UID}`), initialPilotUserPayload(FRESH_PILOT_UID, { emailVerified: false }))
+    batch.set(doc(db, `pilotDirectory/${FRESH_PILOT_UID}`), pilotDirectoryPayload(FRESH_PILOT_UID))
+    batch.set(doc(db, `publicProfiles/${FRESH_PILOT_UID}`), publicProfilePayload(FRESH_PILOT_UID))
+    await assertSucceeds(batch.commit())
+    await assertSucceeds(getDoc(doc(db, `users/${FRESH_PILOT_UID}`)))
+    // Everything else waits for the verified email: own sessions, other profiles, shared data.
+    await assertFails(setDoc(doc(db, `users/${FRESH_PILOT_UID}/sessions/s1`), { meta: {} }))
+    await assertFails(getDoc(doc(db, `publicProfiles/${PILOT_UID}`)))
+    // No claim at all counts as unverified too.
+    const bare = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+    await assertFails(getDoc(doc(bare, `users/${SECOND_PILOT_UID}/sessions/s1`)))
+  })
+
   it('rifiuta tutta la batch se la directory non coincide con il ruolo autorevole', async () => {
     const db = testEnv.authenticatedContext(FRESH_PILOT_UID, {
       email: FRESH_PILOT_EMAIL,
@@ -366,7 +382,7 @@ describe('top-level profile authorization matrix', () => {
   })
 
   it('consente update owner legittimi ma blocca trusted fields e delete user', async () => {
-    const db = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const db = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
     const userRef = doc(db, `users/${PILOT_UID}`)
 
     await assertSucceeds(setDoc(userRef, {
@@ -399,7 +415,7 @@ describe('top-level profile authorization matrix', () => {
 
   it('consente all admin create, update e delete user', async () => {
     const uid = 'qa-admin-managed-user'
-    const db = testEnv.authenticatedContext(ADMIN_UID).firestore()
+    const db = testEnv.authenticatedContext(ADMIN_UID, { email_verified: true }).firestore()
     const userRef = doc(db, `users/${uid}`)
 
     await assertSucceeds(setDoc(userRef, {
@@ -422,8 +438,8 @@ describe('top-level profile authorization matrix', () => {
       })
     })
 
-    const coachDb = testEnv.authenticatedContext(COACH_UID).firestore()
-    const pilotSpoofDb = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+    const coachDb = testEnv.authenticatedContext(COACH_UID, { email_verified: true }).firestore()
+    const pilotSpoofDb = testEnv.authenticatedContext(SECOND_PILOT_UID, { email_verified: true }).firestore()
     await assertSucceeds(getDoc(doc(coachDb, `users/${PILOT_UID}`)))
     await assertFails(setDoc(doc(coachDb, 'users/qa-coach-created'), {
       uid: 'qa-coach-created',
@@ -442,7 +458,7 @@ describe('top-level profile authorization matrix', () => {
   })
 
   it('limita publicProfiles owner ai campi pubblici e riserva delete all admin', async () => {
-    const db = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const db = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
     const profileRef = doc(db, `publicProfiles/${PILOT_UID}`)
     const ensurePayload = publicProfilePayload(PILOT_UID) as Record<string, unknown>
     delete ensurePayload.createdAt
@@ -462,8 +478,8 @@ describe('top-level profile authorization matrix', () => {
   it('applica la matrice admin/coach a publicProfiles', async () => {
     const uid = 'qa-public-managed'
     const profilePath = `publicProfiles/${uid}`
-    const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore()
-    const coachDb = testEnv.authenticatedContext(COACH_UID).firestore()
+    const adminDb = testEnv.authenticatedContext(ADMIN_UID, { email_verified: true }).firestore()
+    const coachDb = testEnv.authenticatedContext(COACH_UID, { email_verified: true }).firestore()
 
     await assertFails(setDoc(doc(coachDb, profilePath), publicProfilePayload(uid)))
     await assertSucceeds(setDoc(doc(adminDb, profilePath), publicProfilePayload(uid)))
@@ -484,7 +500,7 @@ describe('top-level profile authorization matrix', () => {
         coachId: null
       })
     })
-    const db = testEnv.authenticatedContext(uid).firestore()
+    const db = testEnv.authenticatedContext(uid, { email_verified: true }).firestore()
     const directoryRef = doc(db, `pilotDirectory/${uid}`)
     const payload = pilotDirectoryPayload(uid)
 
@@ -517,7 +533,7 @@ describe('top-level profile authorization matrix', () => {
   })
 
   it('ripara una directory mancante e proietta solo coach autorevole', async () => {
-    const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore()
+    const adminDb = testEnv.authenticatedContext(ADMIN_UID, { email_verified: true }).firestore()
     await assertSucceeds(updateDoc(doc(adminDb, `users/${PILOT_UID}`), {
       coachId: COACH_UID
     }))
@@ -525,7 +541,7 @@ describe('top-level profile authorization matrix', () => {
       await deleteDoc(doc(context.firestore(), `pilotDirectory/${PILOT_UID}`))
     })
 
-    const ownerDb = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const ownerDb = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
     await expect(repairPilotDirectoryFromUser({
       db: ownerDb,
       uid: PILOT_UID,
@@ -539,10 +555,10 @@ describe('top-level profile authorization matrix', () => {
       role: 'pilot',
       coachId: COACH_UID
     })
-    const coachDb = testEnv.authenticatedContext(COACH_UID).firestore()
+    const coachDb = testEnv.authenticatedContext(COACH_UID, { email_verified: true }).firestore()
     await assertSucceeds(getDoc(doc(coachDb, `pilotDirectory/${PILOT_UID}`)))
     await assertFails(getDoc(doc(
-      testEnv.authenticatedContext(SECOND_PILOT_UID).firestore(),
+      testEnv.authenticatedContext(SECOND_PILOT_UID, { email_verified: true }).firestore(),
       `pilotDirectory/${PILOT_UID}`
     )))
   })
@@ -556,8 +572,8 @@ describe('top-level profile authorization matrix', () => {
         coachId: null
       })
     })
-    const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore()
-    const coachDb = testEnv.authenticatedContext(COACH_UID).firestore()
+    const adminDb = testEnv.authenticatedContext(ADMIN_UID, { email_verified: true }).firestore()
+    const coachDb = testEnv.authenticatedContext(COACH_UID, { email_verified: true }).firestore()
     const path = `pilotDirectory/${uid}`
 
     await assertFails(setDoc(doc(coachDb, path), pilotDirectoryPayload(uid)))
@@ -574,7 +590,7 @@ describe('top-level profile authorization matrix', () => {
 
 describe('canonical session synchronization', () => {
   it('round-trips the current Python summary without reinterpretation', async () => {
-    const db = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const db = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
     const canonicalSummary = {
       best_rules_version: BEST_RULES_VERSION,
       laps: 2,
@@ -642,7 +658,7 @@ describe('canonical session synchronization', () => {
 
 describe('diagnostics rules', () => {
   it('permette al proprietario create e get puntuale, ma non list', async () => {
-    const db = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const db = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
     const eventRef = doc(db, `users/${PILOT_UID}/diagnostics/event-1`)
 
     await assertSucceeds(setDoc(eventRef, diagnosticPayload(PILOT_UID, 'event-1')))
@@ -651,7 +667,7 @@ describe('diagnostics rules', () => {
   })
 
   it('vincola tipi, enum, timestamp server e limiti diagnostica', async () => {
-    const db = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const db = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
     const ref = doc(db, `users/${PILOT_UID}/diagnostics/event-1`)
     const payload = diagnosticPayload(PILOT_UID, 'event-1')
 
@@ -674,8 +690,8 @@ describe('diagnostics rules', () => {
       )
     })
 
-    const ownerDb = testEnv.authenticatedContext(PILOT_UID).firestore()
-    const secondPilotDb = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+    const ownerDb = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
+    const secondPilotDb = testEnv.authenticatedContext(SECOND_PILOT_UID, { email_verified: true }).firestore()
     await assertFails(updateDoc(
       doc(ownerDb, `users/${PILOT_UID}/diagnostics/event-1`),
       { message: 'Tentativo di modifica' }
@@ -693,7 +709,7 @@ describe('diagnostics rules', () => {
       )
     })
 
-    const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore()
+    const adminDb = testEnv.authenticatedContext(ADMIN_UID, { email_verified: true }).firestore()
     await assertSucceeds(getDocs(query(collectionGroup(adminDb, 'diagnostics'), limit(50))))
     await assertFails(getDocs(query(collectionGroup(adminDb, 'diagnostics'))))
     await assertFails(getDocs(query(collectionGroup(adminDb, 'diagnostics'), limit(1002))))
@@ -724,7 +740,7 @@ describe('diagnostics rules', () => {
       }))
     })
 
-    const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore()
+    const adminDb = testEnv.authenticatedContext(ADMIN_UID, { email_verified: true }).firestore()
     const constraints = [
       where('receivedAt', '>=', Timestamp.fromMillis(baseMs - 120_000)),
       where('receivedAt', '<', Timestamp.fromMillis(baseMs + 1000)),
@@ -775,8 +791,8 @@ describe('diagnostics rules', () => {
         diagnosticPayload(PILOT_UID, 'restricted')
       )
     })
-    const coachDb = testEnv.authenticatedContext(COACH_UID).firestore()
-    const pilotDb = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+    const coachDb = testEnv.authenticatedContext(COACH_UID, { email_verified: true }).firestore()
+    const pilotDb = testEnv.authenticatedContext(SECOND_PILOT_UID, { email_verified: true }).firestore()
     const unauthenticatedDb = testEnv.unauthenticatedContext().firestore()
     await assertFails(getDocs(query(collectionGroup(coachDb, 'diagnostics'), limit(50))))
     await assertFails(getDocs(query(collectionGroup(pilotDb, 'diagnostics'), limit(50))))
@@ -808,21 +824,21 @@ describe('diagnostics rules', () => {
       orderBy('receivedAt', 'asc'),
       limit(200)
     )
-    const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore()
+    const adminDb = testEnv.authenticatedContext(ADMIN_UID, { email_verified: true }).firestore()
     const expired = await assertSucceeds(getDocs(cleanupQuery(adminDb)))
     const cleanupBatch = writeBatch(adminDb)
     expired.docs.forEach(snapshot => cleanupBatch.delete(snapshot.ref))
     await assertSucceeds(cleanupBatch.commit())
     expect((await getDocs(cleanupQuery(adminDb))).empty).toBe(true)
     expect((await getDoc(doc(adminDb, `users/${PILOT_UID}/diagnostics/recent`))).exists()).toBe(true)
-    await assertFails(getDocs(cleanupQuery(testEnv.authenticatedContext(COACH_UID).firestore())))
-    await assertFails(getDocs(cleanupQuery(testEnv.authenticatedContext(SECOND_PILOT_UID).firestore())))
+    await assertFails(getDocs(cleanupQuery(testEnv.authenticatedContext(COACH_UID, { email_verified: true }).firestore())))
+    await assertFails(getDocs(cleanupQuery(testEnv.authenticatedContext(SECOND_PILOT_UID, { email_verified: true }).firestore())))
   })
 })
 
 describe('heartbeat and admin projection rules', () => {
   it('mantiene distinte due installazioni dello stesso utente', async () => {
-    const db = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const db = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
     const a = doc(db, `users/${PILOT_UID}/runtimeInstallations/install-a`)
     const b = doc(db, `users/${PILOT_UID}/runtimeInstallations/install-b`)
 
@@ -839,7 +855,7 @@ describe('heartbeat and admin projection rules', () => {
   })
 
   it('vincola schema, identita e startedAt del report installation-aware', async () => {
-    const db = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const db = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
     const ref = doc(db, `users/${PILOT_UID}/runtimeInstallations/install-a`)
     await assertFails(setDoc(ref, runtimeInstallationPayload('install-b')))
     await assertFails(setDoc(ref, { ...runtimeInstallationPayload('install-a'), rootKey: 'secret' }))
@@ -865,9 +881,9 @@ describe('heartbeat and admin projection rules', () => {
         runtimeInstallationPayload('install-a')
       )
     })
-    const otherDb = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
-    const coachDb = testEnv.authenticatedContext(COACH_UID).firestore()
-    const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore()
+    const otherDb = testEnv.authenticatedContext(SECOND_PILOT_UID, { email_verified: true }).firestore()
+    const coachDb = testEnv.authenticatedContext(COACH_UID, { email_verified: true }).firestore()
+    const adminDb = testEnv.authenticatedContext(ADMIN_UID, { email_verified: true }).firestore()
 
     await assertFails(getDoc(doc(otherDb, `users/${PILOT_UID}/runtimeInstallations/install-a`)))
     await assertFails(getDocs(collectionGroup(coachDb, 'runtimeInstallations')))
@@ -876,7 +892,7 @@ describe('heartbeat and admin projection rules', () => {
   })
 
   it('permette heartbeat owner e mirror pilotDirectory senza cambiare ruolo', async () => {
-    const db = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const db = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
     await assertSucceeds(setDoc(doc(db, `users/${PILOT_UID}`), {
       clientRuntime: {
         schemaVersion: 1,
@@ -903,8 +919,8 @@ describe('heartbeat and admin projection rules', () => {
       })
     })
 
-    const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore()
-    const otherDb = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+    const adminDb = testEnv.authenticatedContext(ADMIN_UID, { email_verified: true }).firestore()
+    const otherDb = testEnv.authenticatedContext(SECOND_PILOT_UID, { email_verified: true }).firestore()
     await assertSucceeds(getDoc(doc(adminDb, `pilotDirectory/${PILOT_UID}`)))
     await assertFails(getDoc(doc(otherDb, `pilotDirectory/${PILOT_UID}`)))
   })
@@ -912,7 +928,7 @@ describe('heartbeat and admin projection rules', () => {
 
 describe('migration checkpoint emulator', () => {
   it('serializza checkpoint e rifiuta un writer stale dopo cambio lease', async () => {
-    const db = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const db = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
     const userRef = doc(db, `users/${PILOT_UID}`)
     await assertSucceeds(setDoc(userRef, {
       maintenance: {
@@ -976,7 +992,7 @@ describe('migration checkpoint emulator', () => {
   })
 
   it('nega downgrade future e richiede completed prima di healthy', async () => {
-    const db = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const db = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
     const userRef = doc(db, `users/${PILOT_UID}`)
     await assertSucceeds(setDoc(userRef, {
       maintenance: {
@@ -1027,7 +1043,7 @@ describe('startup index documents (PIP-441)', () => {
   })
 
   it('trackBestsIndex/v1: owner crea, merge incrementale, legge ed elimina; altri negati', async () => {
-    const owner = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const owner = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
     const ref = doc(owner, `users/${PILOT_UID}/trackBestsIndex/v1`)
     await assertSucceeds(setDoc(ref, trackBestsIndex()))
     await assertSucceeds(setDoc(ref, { version: 1, updatedAt: '2026-09-22T11:00:00.000Z', tracks: { spa: { version: 4, bestRulesVersion: 5, trackId: 'spa', bests: {}, activity: {}, lastSessionDate: null } } }, { merge: true }))
@@ -1039,17 +1055,17 @@ describe('startup index documents (PIP-441)', () => {
     await assertFails(setDoc(ref, trackBestsIndex({ tracks: 'not-a-map' })))
     await assertFails(setDoc(doc(owner, `users/${PILOT_UID}/trackBestsIndex/v2`), trackBestsIndex()))
 
-    const other = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+    const other = testEnv.authenticatedContext(SECOND_PILOT_UID, { email_verified: true }).firestore()
     await assertFails(getDoc(doc(other, `users/${PILOT_UID}/trackBestsIndex/v1`)))
     await assertFails(setDoc(doc(other, `users/${PILOT_UID}/trackBestsIndex/v1`), trackBestsIndex()))
     await assertFails(deleteDoc(doc(other, `users/${PILOT_UID}/trackBestsIndex/v1`)))
-    await assertSucceeds(getDoc(doc(testEnv.authenticatedContext(ADMIN_UID).firestore(), `users/${PILOT_UID}/trackBestsIndex/v1`)))
+    await assertSucceeds(getDoc(doc(testEnv.authenticatedContext(ADMIN_UID, { email_verified: true }).firestore(), `users/${PILOT_UID}/trackBestsIndex/v1`)))
     await assertSucceeds(deleteDoc(ref))
   })
 
   // PIP-444 (b): un documento per pista, scritto solo dall'owner (sezioni mappa, versione 1, trackId = id).
   it('trackProjections/{trackId}: owner crea per sezione, legge ed elimina; coach legge; altri negati; schema vincolato', async () => {
-    const owner = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const owner = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
     const ref = doc(owner, `users/${PILOT_UID}/trackProjections/monza`)
     const bests = { version: 4, bestRulesVersion: 5, trackId: 'monza', bests: {}, activity: { sessionCount: 1 }, syncedSessionIds: ['s1'], lastSessionDate: null }
     const detail = { schemaVersion: 2, trackId: 'monza', lastSessionDate: null, categories: {} }
@@ -1065,18 +1081,18 @@ describe('startup index documents (PIP-441)', () => {
     await assertFails(setDoc(ref, { schemaVersion: 1, trackId: 'monza', extra: true }))
     await assertFails(setDoc(ref, { trackId: 'monza', bests }))
 
-    const other = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+    const other = testEnv.authenticatedContext(SECOND_PILOT_UID, { email_verified: true }).firestore()
     await assertFails(getDoc(doc(other, `users/${PILOT_UID}/trackProjections/monza`)))
     await assertFails(setDoc(doc(other, `users/${PILOT_UID}/trackProjections/monza`), { schemaVersion: 1, trackId: 'monza', bests, detail }))
     await assertFails(deleteDoc(doc(other, `users/${PILOT_UID}/trackProjections/monza`)))
     // Coach non assegnato (coachId null nel fixture): negato come per trackBests.
-    await assertFails(getDoc(doc(testEnv.authenticatedContext(COACH_UID).firestore(), `users/${PILOT_UID}/trackProjections/monza`)))
-    await assertSucceeds(getDoc(doc(testEnv.authenticatedContext(ADMIN_UID).firestore(), `users/${PILOT_UID}/trackProjections/monza`)))
+    await assertFails(getDoc(doc(testEnv.authenticatedContext(COACH_UID, { email_verified: true }).firestore(), `users/${PILOT_UID}/trackProjections/monza`)))
+    await assertSucceeds(getDoc(doc(testEnv.authenticatedContext(ADMIN_UID, { email_verified: true }).firestore(), `users/${PILOT_UID}/trackProjections/monza`)))
     await assertSucceeds(deleteDoc(ref))
   })
 
   it('raceCalendarIndex/v1: owner e coach assegnato scrivono, altri negati, versione e lista vincolate', async () => {
-    const owner = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const owner = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
     const ref = doc(owner, `users/${PILOT_UID}/raceCalendarIndex/v1`)
     await assertSucceeds(setDoc(ref, raceCalendarIndex()))
     await assertSucceeds(setDoc(ref, raceCalendarIndex({ events: [] })))
@@ -1085,11 +1101,11 @@ describe('startup index documents (PIP-441)', () => {
     await assertFails(setDoc(ref, raceCalendarIndex({ truncated: 'no' })))
     await assertFails(setDoc(ref, raceCalendarIndex({ events: Array.from({ length: 26 }, (_, index) => ({ id: `e${index}` })) })))
 
-    const other = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+    const other = testEnv.authenticatedContext(SECOND_PILOT_UID, { email_verified: true }).firestore()
     await assertFails(getDoc(doc(other, `users/${PILOT_UID}/raceCalendarIndex/v1`)))
     await assertFails(setDoc(doc(other, `users/${PILOT_UID}/raceCalendarIndex/v1`), raceCalendarIndex()))
 
-    const coach = testEnv.authenticatedContext(COACH_UID).firestore()
+    const coach = testEnv.authenticatedContext(COACH_UID, { email_verified: true }).firestore()
     await assertFails(setDoc(doc(coach, `users/${PILOT_UID}/raceCalendarIndex/v1`), raceCalendarIndex()))
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await updateDoc(doc(context.firestore(), `users/${PILOT_UID}`), { coachId: COACH_UID })
@@ -1114,7 +1130,7 @@ describe('Pitwall cutover: legacy Firestore protocol is closed for every client'
       })
     })
     for (const uid of [PILOT_UID, COACH_UID, ADMIN_UID]) {
-      const db = testEnv.authenticatedContext(uid).firestore()
+      const db = testEnv.authenticatedContext(uid, { email_verified: true }).firestore()
       for (const path of paths) {
         await assertFails(getDoc(doc(db, path)))
         await assertFails(updateDoc(doc(db, path), { status: 'applied' }))
@@ -1126,7 +1142,7 @@ describe('Pitwall cutover: legacy Firestore protocol is closed for every client'
 })
 
 it('PIP-591 public raw chunks are readable only while their session is public too', async () => {
-  const foreign = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+  const foreign = testEnv.authenticatedContext(SECOND_PILOT_UID, { email_verified: true }).firestore()
   const sessionPath = `users/${PILOT_UID}/sessions/pip591-share`
   const chunkPath = `${sessionPath}/rawChunks/0`
   await testEnv.withSecurityRulesDisabled(async (context) => {
@@ -1145,8 +1161,8 @@ it('PIP-591 public raw chunks are readable only while their session is public to
 })
 
 it('PIP-591 a shared session stays shared after a new sync that rewrites and adds chunks', async () => {
-  const owner = testEnv.authenticatedContext(PILOT_UID).firestore()
-  const foreign = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+  const owner = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
+  const foreign = testEnv.authenticatedContext(SECOND_PILOT_UID, { email_verified: true }).firestore()
   const lap = (n: number) => ({ lap_number: n, lap_time_ms: 120000 + n, sector_times_ms: [], validity: 'valid', completeness: 'complete' })
   const raw = (laps: number) => ({ schema: 'racercore.session', version: 1, game_id: 'acc', session_id: 'pip591-resync', ownerId: PILOT_UID,
     capabilities: {}, session_info: { track: 'Monza', track_variant: 'gp', car: 'Ferrari', date_start: '2026-10-23T18:00:00Z',
@@ -1177,8 +1193,8 @@ it('PIP-591 a shared session stays shared after a new sync that rewrites and add
 })
 
 it('PIP-591 sharing that starts during a sync also covers the chunks that sync adds', async () => {
-  const owner = testEnv.authenticatedContext(PILOT_UID).firestore()
-  const foreign = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+  const owner = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
+  const foreign = testEnv.authenticatedContext(SECOND_PILOT_UID, { email_verified: true }).firestore()
   const lap = (n: number) => ({ lap_number: n, lap_time_ms: 120000 + n, sector_times_ms: [], validity: 'valid', completeness: 'complete' })
   const raw = (laps: number) => ({ schema: 'racercore.session', version: 1, game_id: 'acc', session_id: 'pip591-race', ownerId: PILOT_UID,
     capabilities: {}, session_info: { track: 'Monza', track_variant: 'gp', car: 'Ferrari', date_start: '2026-10-23T19:00:00Z',
@@ -1221,7 +1237,7 @@ it('PIP-591 sharing that starts during a sync also covers the chunks that sync a
 })
 
 it('PIP-591 the owner can repair an old public profile that has no createdAt', async () => {
-  const db = testEnv.authenticatedContext(PILOT_UID).firestore()
+  const db = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
   const profileRef = doc(db, `publicProfiles/${PILOT_UID}`)
   // Profilo vecchio: senza createdAt e con un nickname da riallineare.
   await testEnv.withSecurityRulesDisabled(async (context) => {

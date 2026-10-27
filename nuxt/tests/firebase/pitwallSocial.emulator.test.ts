@@ -29,7 +29,7 @@ beforeEach(async () => {
 afterEach(async () => { for (const stop of stops.splice(0).reverse()) await stop() })
 afterAll(async () => { await env?.cleanup() })
 async function participant(uid: string) {
-  const database = env.authenticatedContext(uid).database() as unknown as Database
+  const database = env.authenticatedContext(uid, { email_verified: true }).database() as unknown as Database
   const io = createPitwallRealtimeTransport(database, ROOT)
   stops.push(() => { io.dispose(); goOffline(database) })
   await vi.waitFor(() => expect(io.online()).toBe(true))
@@ -112,7 +112,7 @@ describe('social rooms with real Firebase rules', () => {
     expect(sent.ok, JSON.stringify(sent)).toBe(true)
     if (!sent.ok) return
     const path = `${ROOT}/rooms/${roomId}/orders/${sent.value}`
-    const db = env.authenticatedContext('B').database() as unknown as Database
+    const db = env.authenticatedContext('B', { email_verified: true }).database() as unknown as Database
     const order = (await get(ref(db, path))).val()
     expect(order.targetUid).toBe('A')
     await assertFails(update(ref(db, path), { 'plan/mfdV4/fuelLiters': 20 }))
@@ -237,7 +237,7 @@ describe('social rooms with real Firebase rules', () => {
 
   it('accepts reciprocal friendship once, handles duplicate and crossed requests, and revokes future access', async () => {
     const make = async (uid: string) => {
-      const database = env.authenticatedContext(uid).database() as unknown as Database
+      const database = env.authenticatedContext(uid, { email_verified: true }).database() as unknown as Database
       const io = createPitwallRealtimeTransport(database)
       await vi.waitFor(() => expect(io.online()).toBe(true))
       const service = createPitwallRealtimeEngineerService({ engineerUid: uid, io, db: {} as Firestore })
@@ -272,7 +272,7 @@ describe('social rooms with real Firebase rules', () => {
   })
   describe('PIP-561 friend request wait', () => {
     const make = async (uid: string) => {
-      const database = env.authenticatedContext(uid).database() as unknown as Database
+      const database = env.authenticatedContext(uid, { email_verified: true }).database() as unknown as Database
       const io = createPitwallRealtimeTransport(database)
       await vi.waitFor(() => expect(io.online()).toBe(true))
       const service = createPitwallRealtimeEngineerService({ engineerUid: uid, io, db: {} as Firestore })
@@ -294,7 +294,7 @@ describe('social rooms with real Firebase rules', () => {
       expect(refused).toMatchObject({ ok: false, reason: expect.stringMatching(/^Potrai inviare di nuovo la richiesta tra (23 h 59 min|24 h)\.$/) })
       expect(await Y.readFriendView('X')).toMatchObject({ mineStatus: 'revoked' })
       // An old or modified client writing the node directly is refused by the Rules too.
-      await assertFails(set(ref(env.authenticatedContext('X').database() as unknown as Database, `pitwallV3/grants/Y/X`), request('Y', 'X')))
+      await assertFails(set(ref(env.authenticatedContext('X', { email_verified: true }).database() as unknown as Database, `pitwallV3/grants/Y/X`), request('Y', 'X')))
       await age(`pitwallV3/grants/Y/X`)
       expect((await X.requestLink('Y', 'always')).ok).toBe(true)
       await vi.waitFor(async () => expect(await Y.readFriendView('X')).toMatchObject({ state: 'received', mineStatus: 'pending' }))
@@ -302,7 +302,7 @@ describe('social rooms with real Firebase rules', () => {
 
     it('stops the request/withdraw cycle and refuses forged close stamps', async () => {
       const { service: X } = await make('X')
-      const xDb = env.authenticatedContext('X').database() as unknown as Database
+      const xDb = env.authenticatedContext('X', { email_verified: true }).database() as unknown as Database
       const node = ref(xDb, `pitwallV3/grants/Y/X`)
       expect((await X.requestLink('Y', 'always')).ok).toBe(true)
       // Withdrawing without a close stamp, with no wait, or with an old stamp is refused.

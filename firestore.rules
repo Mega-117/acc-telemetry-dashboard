@@ -2,8 +2,19 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isSignedIn() {
+    // PIP-656: a signed-in account counts only once its email is verified (beta launch). Until then it may
+    // only provision and read its own profile documents (isAccountOwner), which registration writes before
+    // the verification link is opened.
+    function isAuthenticated() {
       return request.auth != null;
+    }
+
+    function isSignedIn() {
+      return isAuthenticated() && request.auth.token.get('email_verified', false) == true;
+    }
+
+    function isAccountOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
     }
 
     function isOwner(userId) {
@@ -842,9 +853,9 @@ service cloud.firestore {
     // Public profile surface for cross-user features (nickname/avatar only).
     match /publicProfiles/{userId} {
       allow read: if isSignedIn();
-      allow create: if (isOwner(userId) || isAdmin())
+      allow create: if (isAccountOwner(userId) || isAdmin())
                     && validPublicProfileCreate(userId);
-      allow update: if (isOwner(userId) && validOwnerPublicProfileUpdate(userId))
+      allow update: if (isAccountOwner(userId) && validOwnerPublicProfileUpdate(userId))
                     || (isAdmin() && validAdminPublicProfileUpdate(userId));
       allow delete: if isAdmin();
     }
@@ -852,12 +863,12 @@ service cloud.firestore {
     // Lightweight user directory for coach/admin pilot lists.
     // It intentionally excludes heavy runtime projections such as stats/sessionIndex.
     match /pilotDirectory/{userId} {
-      allow read: if isOwner(userId)
+      allow read: if isAccountOwner(userId)
                   || isAdmin()
                   || (isCurrentUserCoach() && resource.data.coachId == request.auth.uid);
-      allow create: if (isOwner(userId) || isAdmin())
+      allow create: if (isAccountOwner(userId) || isAdmin())
                     && validPilotDirectoryCreate(userId);
-      allow update: if (isOwner(userId) || isAdmin())
+      allow update: if (isAccountOwner(userId) || isAdmin())
                     && validPilotDirectoryUpdate(userId);
       allow delete: if isAdmin();
     }
@@ -865,9 +876,10 @@ service cloud.firestore {
     // Users collection (private profile + runtime state)
     match /users/{userId} {
       // Owner can read and update own profile/runtime state, but cannot self-change role or coach assignment.
-      allow read: if isOwner(userId);
-      allow create: if isOwner(userId) && validInitialPilotUser(userId);
-      allow update: if isOwner(userId) && validOwnerUserUpdate(userId);
+      // PIP-656: these three stay open to an unverified owner: registration and the verification gate need them.
+      allow read: if isAccountOwner(userId);
+      allow create: if isAccountOwner(userId) && validInitialPilotUser(userId);
+      allow update: if isAccountOwner(userId) && validOwnerUserUpdate(userId);
 
       // Coach can read assigned pilots only.
       allow read: if isCoachOfUser(userId);

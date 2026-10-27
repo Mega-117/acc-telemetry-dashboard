@@ -84,7 +84,12 @@ describe('CI publication contract', () => {
     expect(ci.on).toHaveProperty('workflow_dispatch')
     expect(ci.jobs.pages.uses).toBe('./.github/workflows/static.yml')
     expect(pages.jobs.deploy.steps.find((s: { uses?: string }) => s.uses?.startsWith('actions/checkout@')).with.ref).toBe('${{ github.sha }}')
-    expect(pages.jobs.deploy.steps.find((s: { uses?: string }) => s.uses?.startsWith('actions/upload-pages-artifact@')).with.path).toBe('.')
+    // PIP-656: only the staged build goes online, never the repository (sources, notes, rules).
+    expect(pages.jobs.deploy.steps.find((s: { uses?: string }) => s.uses?.startsWith('actions/upload-pages-artifact@')).with.path).toBe('_site')
+    const stage = pages.jobs.deploy.steps.find((s: { name?: string }) => s.name === 'Stage the generated site only').run as string
+    expect(stage).toContain('cp -R docs _site/docs')
+    expect(stage).toContain('noindex')
+    for (const leak of ['nuxt', 'firestore.rules', 'database.rules.json']) expect(stage).toContain(leak)
   })
 
   it('requires both successful jobs and only permits a main push (no always/cancel bypass)', () => {

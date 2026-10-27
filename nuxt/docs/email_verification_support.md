@@ -24,7 +24,7 @@ Evidenze raccolte:
 - UID analizzato `8IGLdQR5yKOPLGqpyHf6WbrmZ3z1`: `emailVerified=false`, `disabled=false`, nessun doppione email, `lastLoginAt` vuoto.
 - Domini autorizzati Firebase controllati: presenti `accsuite117.firebaseapp.com`, `accsuite117.web.app`, `mega-117.github.io`, `localhost`, `127.0.0.1`.
 - Template email Firebase ancora default: inglese, mittente `noreply@accsuite117.firebaseapp.com`, oggetto `Verify your email for %APP_NAME%`.
-- Test reale browser su produzione GitHub Pages con utente Tiscali `rumbapalo@tiscali.it`:
+- Test reale browser su produzione GitHub Pages con utente Tiscali `utente-redatto@example.com`:
   - login riuscito;
   - schermata verifica visibile;
   - bottone `Rinvia email di verifica` abilitato;

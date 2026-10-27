@@ -10,7 +10,7 @@ const PROJECT = 'demo-pitwall-audit'
 let env: RulesTestEnvironment
 const disposers: Array<() => void | Promise<void>> = []
 const transports: PitwallRealtimeTransport[] = []
-function db(uid: string) { return env.authenticatedContext(uid).database() as unknown as Database }
+function db(uid: string) { return env.authenticatedContext(uid, { email_verified: true }).database() as unknown as Database }
 beforeAll(async () => {
   if (!process.env.FIREBASE_DATABASE_EMULATOR_HOST) throw new Error('Run only through firebase emulators:exec --only database --project demo-pitwall-audit')
   const emulator = new URL('http://' + process.env.FIREBASE_DATABASE_EMULATOR_HOST)

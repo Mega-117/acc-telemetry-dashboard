@@ -27,7 +27,7 @@ it('500 distinct authenticated SDK clients stay connected through 250 rooms, MFD
   const started = Date.now()
   await groups(Array.from({ length: 500 }, (_, id) => id), 25, async id => {
     const uid = `load-${id}`
-    const database = env!.authenticatedContext(uid).database() as unknown as Database
+    const database = env!.authenticatedContext(uid, { email_verified: true }).database() as unknown as Database
     const io = createPitwallRealtimeTransport(database)
     const service = createPitwallRealtimeRoomService({ uid, io })
     clients[id] = service

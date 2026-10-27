@@ -45,7 +45,7 @@ describe('bounded diagnostic delivery under unchanged Rules', () => {
     const ref = doc(db, `users/${uid}/diagnostics/${id}`)
     expect((await getDoc(ref)).data()!.context._aggCount).toBe(15000)
     await assertFails(updateDoc(ref, { message: 'mutation' }))
-    await assertFails(getDoc(doc(env.authenticatedContext('foreign').firestore(), ref.path)))
+    await assertFails(getDoc(doc(env.authenticatedContext('foreign', { email_verified: true }).firestore(), ref.path)))
     await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), ref.path)))
 
     // A fresh 24-hour window with 25 distinct reports must issue only 20 creates.
