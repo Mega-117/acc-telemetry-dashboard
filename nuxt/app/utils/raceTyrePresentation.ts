@@ -16,14 +16,14 @@ export function raceSlip(wheelSlip: number | null | undefined) {
  * brakes taller and thicker, larger type so it stays readable in the small format.
  */
 export const RACE_TYRE_GEOMETRY = Object.freeze({
-  tyreWidth: 36, tyreHeight: 46, tyreRadius: 2.5,
-  slipWidth: 4.5,
-  brakeWidth: 10, brakeHeight: 34, brakeRadius: 1.5,
-  frontTop: 33, rearTop: 105,
-  midTop: 83, midBottom: 101, midText: 95,
-  damageTop: 189,
+  tyreWidth: 32, tyreHeight: 46, tyreRadius: 2.5,
+  slipWidth: 7,
+  brakeWidth: 10, brakeHeight: 30, brakeRadius: 1.5,
+  frontTop: 38, rearTop: 110,
+  midTop: 88, midBottom: 106, midText: 100,
+  damageTop: 196,
   // Vertical shift that centres the content with and without the damage section.
-  offsetWithDamage: 6, offsetWithoutDamage: 28,
+  offsetWithDamage: 4, offsetWithoutDamage: 24,
 })
 
 export type RaceTyreValueKind = 'primary' | 'average' | 'loss'
@@ -37,12 +37,12 @@ export function raceTyreCorner(index: number) {
   const bottom = top + RACE_TYRE_GEOMETRY.tyreHeight
   // Front: above the tyre, top→bottom pressure, AVG, loss. Rear: below the tyre, loss, AVG, pressure.
   const valueLines: Array<{ kind: RaceTyreValueKind, y: number }> = rear
-    ? [{ kind: 'loss', y: bottom + 10 }, { kind: 'average', y: bottom + 19 }, { kind: 'primary', y: bottom + 30 }]
-    : [{ kind: 'primary', y: top - 21 }, { kind: 'average', y: top - 11.5 }, { kind: 'loss', y: top - 3 }]
-  const tyreX = right ? 119 : 11
+    ? [{ kind: 'loss', y: bottom + 12 }, { kind: 'average', y: bottom + 24 }, { kind: 'primary', y: bottom + 36 }]
+    : [{ kind: 'primary', y: top - 27 }, { kind: 'average', y: top - 15 }, { kind: 'loss', y: top - 3 }]
+  const tyreX = right ? 123 : 11
   return right
-    ? { rear, right, top, centerY, valueLines, valuesX: tyreX + RACE_TYRE_GEOMETRY.tyreWidth / 2, slipX: 157.5, tyreX, brakeX: 106, brakeInfoX: 103.5 }
-    : { rear, right, top, centerY, valueLines, valuesX: tyreX + RACE_TYRE_GEOMETRY.tyreWidth / 2, slipX: 4, tyreX, brakeX: 50, brakeInfoX: 62.5 }
+    ? { rear, right, top, centerY, valueLines, valuesX: tyreX + RACE_TYRE_GEOMETRY.tyreWidth / 2, slipX: 156, tyreX, brakeX: 112, brakeInfoX: 109.5 }
+    : { rear, right, top, centerY, valueLines, valuesX: tyreX + RACE_TYRE_GEOMETRY.tyreWidth / 2, slipX: 3, tyreX, brakeX: 44, brakeInfoX: 56.5 }
 }
 
 export function raceNumber(value: number | null | undefined, digits = 0) {

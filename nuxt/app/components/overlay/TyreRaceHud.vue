@@ -78,14 +78,14 @@ const { t } = useI18n()
           <rect class="tyre-race__slip" :x="tyre.slipX" :y="tyre.centerY - tyre.slip.height / 2" :width="G.slipWidth" :height="tyre.slip.height" :fill="tyre.slip.color" />
           <g class="tyre-race__tyre">
             <rect :x="tyre.tyreX" :y="tyre.top" :width="G.tyreWidth" :height="G.tyreHeight" :rx="G.tyreRadius" :fill="tyre.color" stroke="#000" stroke-opacity=".4" stroke-width=".5" />
-            <text :x="tyre.tyreX + G.tyreWidth / 2" :y="tyre.centerY + 3.2" class="tyre-race__temperature">{{ raceNumber(tyre.coreTempC) }}&#176;</text>
+            <text :x="tyre.tyreX + G.tyreWidth / 2" :y="tyre.centerY + 4" class="tyre-race__temperature">{{ raceNumber(tyre.coreTempC) }}&#176;</text>
             <rect v-if="tyre.flash && expiredFlashKeys[tyre.id] !== tyre.flash.key" :key="tyre.flash.key" @animationend="expiredFlashKeys[tyre.id] = tyre.flash.key" :x="tyre.tyreX" :y="tyre.top" :width="G.tyreWidth" :height="G.tyreHeight" :rx="G.tyreRadius" class="tyre-race__pressure-flash" :style="{ animationDelay: tyre.flash.delay }" />
           </g>
           <g class="tyre-race__brake" :class="`tyre-race__brake--${tyre.rear ? 'rear' : 'front'}`">
             <rect :x="tyre.brakeX" :y="tyre.centerY - G.brakeHeight / 2" :width="G.brakeWidth" :height="G.brakeHeight" :rx="G.brakeRadius" :fill="tyre.brakeColor" stroke="#000" stroke-opacity=".4" stroke-width=".5" />
             <g :text-anchor="tyre.right ? 'end' : 'start'">
-              <text :x="tyre.brakeInfoX" :y="tyre.centerY - 1" class="tyre-race__brake-temp">{{ raceNumber(tyre.brakeTempC) }}&#176;</text>
-              <text :x="tyre.brakeInfoX" :y="tyre.centerY + 8.5" class="tyre-race__pad">{{ raceNumber(tyre.padLifePct) }}%</text>
+              <text :x="tyre.brakeInfoX" :y="tyre.centerY - 2" class="tyre-race__brake-temp">{{ raceNumber(tyre.brakeTempC) }}&#176;</text>
+              <text :x="tyre.brakeInfoX" :y="tyre.centerY + 10" class="tyre-race__pad">{{ raceNumber(tyre.padLifePct) }}%</text>
             </g>
           </g>
         </g>
@@ -115,12 +115,13 @@ const { t } = useI18n()
 <style scoped>
 .tyre-race { display:flex; flex:1; flex-direction:column; min-width:0; min-height:0; color:#f4f4f6; font-family:var(--hud-font-label); font-variant-numeric:tabular-nums; }
 .tyre-race__matrix { display:block; width:100%; flex:1; min-height:0; overflow:visible; font-family:var(--hud-font-num); font-style:italic; font-size:10px; font-weight:700; fill:#f4f4f6; text-anchor:middle; }
-.tyre-race__primary { font-size:12px; }
-.tyre-race__average { fill:#c3c5cc; font:normal 700 8px var(--hud-font-label); letter-spacing:.02em; }
-.tyre-race__loss { fill:#ffa500; font-size:8.5px; }
-.tyre-race__temperature { font-size:12px; paint-order:stroke; stroke:#000; stroke-width:.8px; stroke-opacity:.65; }
-.tyre-race__brake-temp { font-size:8.5px; }
-.tyre-race__pad { fill:#c3c5cc; font:normal 700 7.5px var(--hud-font-label); }
+/* 28/10: every corner reading at one size, a step larger, so the small format stays readable. */
+.tyre-race__primary { font-size:11px; }
+.tyre-race__average { fill:#c3c5cc; font-size:11px; }
+.tyre-race__loss { fill:#ffa500; font-size:11px; }
+.tyre-race__temperature { font-size:11px; paint-order:stroke; stroke:#000; stroke-width:1.8px; stroke-opacity:.85; stroke-linejoin:round; filter:drop-shadow(0 0 1.2px rgba(0,0,0,.9)); }
+.tyre-race__brake-temp { font-size:11px; }
+.tyre-race__pad { fill:#c3c5cc; font-size:11px; }
 .tyre-race__compound line, .tyre-race__damage line { stroke:#fff; stroke-opacity:.15; stroke-width:.5; }
 .tyre-race__compound text { font-size:9px; letter-spacing:.06em; }
 .tyre-race__damage-title { fill:#ef4444; font:normal 700 6.5px var(--hud-font-label); letter-spacing:.14em; text-anchor:start; text-transform:uppercase; }
