@@ -983,7 +983,7 @@ body:has(.sessions-page),
 // PIP-640: while the browser loading screen is up it is the only logo on screen (no double logo under it), and
 // the first interface waits for its logo to fade before fading in, slowly: logo out, then the content.
 body:has(#rc-boot) #app :is(.rc-boot__inner, .loading-text) { visibility: hidden; }
-body:has(#rc-boot.is-leaving) #app .shell-motion-enter-active { transition-duration: 900ms; transition-delay: 550ms; }
+body:has(#rc-boot.is-leaving) #app .shell-motion-enter-active { transition-duration: 700ms; transition-delay: 450ms; }
 // The shared dashboard owns scrolling below its header on every route.
 html:has(.dashboard-layout), body:has(.dashboard-layout) { overflow: hidden; scrollbar-gutter: auto; }
 #app:has(.electron-titlebar) > .dashboard-wrapper:has(.dashboard-layout) {

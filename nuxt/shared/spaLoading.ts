@@ -13,10 +13,12 @@ import { RACING_BACKDROP_BACKGROUND, RACING_SPARK_FROM, RACING_SPARK_TO, RACING_
 // The logo-and-laser loader itself (BOOT_LOADER_CSS, bootLoaderHtml) is also the app's own loading screen, in
 // place of a spinner, so there is one loader everywhere.
 export const BOOT_SCREEN_ID = 'rc-boot'
-export const BOOT_LEAVE_MS = 800
+export const BOOT_LEAVE_MS = 700
 
 export const BOOT_LOADER_CSS = [
-  `.rc-boot__inner{display:grid;justify-items:center;gap:30px;animation:rc-boot-in .55s cubic-bezier(.2,.7,.2,1) both;transition:opacity ${BOOT_LEAVE_MS}ms cubic-bezier(.4,0,.2,1),transform ${BOOT_LEAVE_MS}ms cubic-bezier(.4,0,.2,1)}`,
+  `.rc-boot__inner{display:grid;justify-items:center;gap:30px;animation:rc-boot-in .55s cubic-bezier(.2,.7,.2,1) backwards;transition:opacity ${BOOT_LEAVE_MS}ms cubic-bezier(.4,0,.2,1),transform ${BOOT_LEAVE_MS}ms cubic-bezier(.4,0,.2,1),filter ${BOOT_LEAVE_MS}ms cubic-bezier(.4,0,.2,1)}`,
+  // The entry animation must not hold its end state (fill "both" did): an animation outranks the leave
+  // transition, and the logo stayed fully visible until it was removed at once.
   '.rc-boot__inner img{width:min(410px,80vw);height:auto;filter:drop-shadow(0 0 12px #ff002438);animation:rc-boot-glow 2.4s ease-in-out infinite}',
   // Laser: a dim track and a beam of light running along it (white-hot core, red glow). The glow has room
   // above and below (no clipping) and the ends fade out through a mask instead of being cut.
@@ -38,7 +40,7 @@ const BOOT_SCREEN_CSS = [
   `${id} .rc-boot__bg{position:absolute;inset:0;z-index:-1;overflow:hidden;background:${RACING_BACKDROP_BACKGROUND}}`,
   `${id}.has-app .rc-boot__bg{display:none}`,
   `${id} .rc-boot__bg i{position:absolute;width:3px;height:3px;border-radius:50%;background:#ff7188;box-shadow:0 0 5px #f4002870;animation:rc-spark 18s linear infinite}`,
-  `${id}.is-leaving .rc-boot__inner{opacity:0;transform:scale(1.04)}`,
+  `${id}.is-leaving .rc-boot__inner{opacity:0;transform:scale(1.05);filter:blur(4px)}`,
   `@keyframes rc-spark{0%{transform:${RACING_SPARK_FROM};opacity:0}20%,70%{opacity:.7}100%{transform:${RACING_SPARK_TO};opacity:0}}`,
   `@media (prefers-reduced-motion:reduce){${id} .rc-boot__bg i{animation:none;opacity:.5}}`,
 ].join('')
