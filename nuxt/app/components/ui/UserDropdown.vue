@@ -17,6 +17,9 @@ const emit = defineEmits<{
 
 const isOpen = ref(false)
 const showSettings = ref(false)
+// PIP-661: Segnala problema, from the same menu everywhere.
+const reportOpen = ref(false)
+const openReport = () => { closeDropdown(); reportOpen.value = true }
 
 onMounted(() => {
   const api = (window as Window & {
@@ -89,6 +92,13 @@ const handleLogout = () => {
           </svg>
           Impostazioni
         </button>
+        <button class="dropdown-item" @click="openReport">
+          <svg class="item-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M8 2l6.5 11.5h-13z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            <path d="M8 6.5v3.2M8 11.6v.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          Segnala problema
+        </button>
         <div class="dropdown-divider"></div>
         <button class="dropdown-item dropdown-item--danger" @click="handleLogout">
           <svg class="item-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -98,6 +108,7 @@ const handleLogout = () => {
         </button>
       </div>
     </Transition>
+    <ReportProblemDialog v-if="reportOpen" @close="reportOpen = false" />
   </div>
 </template>
 

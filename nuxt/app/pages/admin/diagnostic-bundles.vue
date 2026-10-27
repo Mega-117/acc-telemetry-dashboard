@@ -70,6 +70,34 @@ async function download(item: DiagnosticBundleItem) {
   }
 }
 
+// PIP-661: the code a user pastes from "Segnala problema" is the package id. Reports are recent: the newest
+// pages are searched (up to 10) and only that package is shown.
+const codeFilter = ref('')
+async function findByCode() {
+  const code = codeFilter.value.trim()
+  if (!code) return
+  const revision = ++loadRevision
+  loading.value = true
+  errorMessage.value = ''
+  try {
+    let next: string | null = null
+    for (let page = 0; page < 10; page++) {
+      const result = await listDiagnosticBundles(deps, { installationId: '', date: '', cursor: next })
+      if (revision !== loadRevision) return
+      const match = result.items.find(item => item.bundleId === code)
+      if (match) { items.value = [match]; cursor.value = null; return }
+      next = result.cursor
+      if (!next) break
+    }
+    items.value = []
+    errorMessage.value = 'Nessun pacchetto con questo codice tra i più recenti.'
+  } catch (error) {
+    if (revision === loadRevision) errorMessage.value = (error as Error)?.message || 'Ricerca non riuscita.'
+  } finally {
+    if (revision === loadRevision) loading.value = false
+  }
+}
+
 function pickInstallation(item: DiagnosticBundleItem) {
   installationFilter.value = item.installationId
   void load()
@@ -77,7 +105,7 @@ function pickInstallation(item: DiagnosticBundleItem) {
 
 // I tipi creati dall'app desktop (diagnosticBundle.js); uno sconosciuto si mostra com'e'.
 const KIND_LABELS: Record<string, string> = {
-  daily: 'giornaliero', anomaly: 'anomalia', capture: 'cattura', shutdown: 'chiusura'
+  daily: 'giornaliero', anomaly: 'anomalia', capture: 'cattura', shutdown: 'chiusura', report: 'segnalazione'
 }
 
 const timeFormat = new Intl.DateTimeFormat('it-IT', { dateStyle: 'short', timeStyle: 'medium' })
@@ -116,6 +144,11 @@ onMounted(() => load())
         <input v-model="dateFilter" type="date" :disabled="!installationFilter.trim()" @change="load()" />
       </label>
       <button type="button" class="action-button" :disabled="loading" @click="load()">Cerca</button>
+      <label class="search-field">
+        <span>Codice segnalazione</span>
+        <input v-model="codeFilter" type="search" placeholder="report-…" @keyup.enter="findByCode()" />
+      </label>
+      <button type="button" class="action-button" :disabled="loading || !codeFilter.trim()" @click="findByCode()">Trova</button>
       <span class="result-count">{{ items.length }} pacchetti · {{ formatBundleSize(totalBytes) }}</span>
     </section>
 
