@@ -62,15 +62,44 @@ describe('HUD background transparency reaches only the background', () => {
     }
   })
 
-  it('Tyres (classic and race): the panel stays opaque and the page never reads the setting', () => {
+  it('Tyres classic and race: one rgba outer panel background, opaque by default, content untouched', () => {
     const page = source('app/pages/tyres-overlay.vue')
     const settings = source('app/pages/hud.vue')
 
-    expect(page).not.toMatch(/backgroundOpacity|background-opacity|useHudOverlayBackground/)
+    expect(page).toContain("const { backgroundOpacity } = useHudOverlayBackground(settings, 'tyres')")
+    expect(page).toContain(":style=\"{ '--hud-tyres-bg-opacity': String(backgroundOpacity) }\"")
+    // The panel (both variants) is the only rule reading the setting, and it is a background colour.
+    expect(declarationsUsing(page, '--hud-tyres-bg-opacity')).toEqual([
+      'background: rgba(13, 14, 18, var(--hud-tyres-bg-opacity, 1))',
+    ])
     // Only the Race page switcher fades in on hover; it never reads the setting.
     expect(opacityDeclarations(page)).toEqual(['opacity:0', 'opacity:1'])
-    expect(page).toMatch(/\.hud-overlay__panel \{[^}]*background: #0d0e12;/)
-    expect(settings).toContain("supportsHudOverlayBackground(selectedOverlayId) && selectedOverlayId !== 'tyres'")
+    // Classic cards are content tiles: their own gradient never reads the setting.
+    expect(page).toMatch(/\.hud-overlay \.tyre-slip \{[^}]*background: linear-gradient\(135deg, color-mix\(in srgb, var\(--tyre-slip-color\) var\(--tyre-slip-alarm, 0%\), #15171c\) 0%, #0b0c0f 100%\);/)
+    // Settings page: the shared slider is shown for Tyres too.
+    expect(settings).toContain('v-if="supportsHudOverlayBackground(selectedOverlayId)"')
+    expect(settings).not.toContain("selectedOverlayId !== 'tyres'")
+  })
+
+  it('Tyres race and Damage pages: no background of their own over the panel, content stays opaque', () => {
+    const race = source('app/components/overlay/TyreRaceHud.vue')
+    const weather = source('app/components/overlay/RaceWeatherHud.vue')
+    const damage = source('app/components/overlay/DamageRaceHud.vue')
+
+    // The old opaque SVG backdrop is gone: the outer panel shows through, values and rectangles do not change.
+    expect(race).not.toContain('fill="#0d0e12"')
+    expect(race).not.toMatch(/backgroundOpacity|--hud-tyres-bg-opacity/)
+    expect(opacityDeclarations(race).every(rule => !rule.includes('var('))).toBe(true)
+    // The weather strip has no background of its own; the cells keep their light tile.
+    expect(weather).toMatch(/\.tyre-race__weather \{[^}]*background:transparent;/)
+    expect(weather).toContain('background:rgba(255,255,255,0.045)')
+    expect(weather).not.toContain('#0d0e12')
+    // Damage: only the backdrop shade fades with the panel, never the car drawing or the values.
+    expect(damage).toContain('<rect class="damage-race__background" width="166" height="241" fill="#000" />')
+    expect(declarationsUsing(damage, '--hud-tyres-bg-opacity')).toEqual([
+      'fill-opacity:calc(.65 * var(--hud-tyres-bg-opacity, 1))',
+    ])
+    expect(opacityDeclarations(damage).every(rule => !rule.includes('var('))).toBe(true)
   })
 })
 

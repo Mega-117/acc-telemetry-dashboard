@@ -25,10 +25,12 @@ const { t } = useI18n()
     </header>
 </template>
 <style scoped>
-/* A small strip attached above the tyres; minutes plus a white outline icon per cell. */
+/* A small strip attached above the tyres; minutes plus a white outline icon per cell.
+   No background of its own: the outer panel behind it is the only layer that follows
+   "Trasparenza sfondo" (owner 28/10); the cells keep their light tile. */
 .tyre-race__weather {
   display:flex; flex:0 0 auto; gap:calc(6px * var(--hud-scale,1)); padding:calc(6px * var(--hud-scale,1));
-  border-bottom:1px solid rgba(255,255,255,0.15); background:#0d0e12;
+  border-bottom:1px solid rgba(255,255,255,0.15); background:transparent;
 }
 .tyre-race__weather-unavailable { flex:1; align-self:center; padding:8px; text-align:center; color:#a3a5ae; font:700 max(11px,calc(12px * var(--hud-scale,1)))/1.3 var(--hud-font-label); }
 .tyre-race__weather-cell { display:grid; flex:1 1 0; min-width:0; justify-items:center; align-content:center; gap:calc(4px * var(--hud-scale,1)); padding:calc(5px * var(--hud-scale,1)) calc(8px * var(--hud-scale,1)); background:rgba(255,255,255,0.045); }

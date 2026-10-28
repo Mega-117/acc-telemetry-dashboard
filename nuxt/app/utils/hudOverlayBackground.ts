@@ -1,8 +1,9 @@
 export const HUD_OVERLAY_BACKGROUND_DEFAULT_OPACITY = 0.8
 export const HUD_OVERLAY_BACKGROUND_DEFAULT_BY_ID: Readonly<Record<string, number>> = {
   standings: 0.5,
-  // Sectors keeps today's opaque panel unless the pilot lowers it.
+  // Sectors and Tyres keep today's opaque panel unless the pilot lowers it.
   sectors: 1,
+  tyres: 1,
 }
 
 export type HudOverlayBackgroundId = 'info' | 'tyres' | 'standings' | 'sectors'

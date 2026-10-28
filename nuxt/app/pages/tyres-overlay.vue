@@ -15,6 +15,7 @@ import TyreRaceHud from '~/components/overlay/TyreRaceHud.vue'
 import DamageRaceHud from '~/components/overlay/DamageRaceHud.vue'
 import TyreSlipHud from '~/components/overlay/TyreSlipHud.vue'
 import { useRaceHudPage, type RaceHudPage } from '~/composables/useRaceHudPage'
+import { useHudOverlayBackground } from '~/composables/useHudOverlayBackground'
 
 definePageMeta({ layout: 'hud-overlay' })
 
@@ -43,6 +44,9 @@ const variant = computed<'classic' | 'race'>(() => {
   const requested = route.query.variant ?? settings.value?.variant
   return requested === 'advanced' || requested === 'race' ? 'race' : 'classic'
 })
+// "Trasparenza sfondo" (owner 28/10): reaches ONLY the outer panel background (default 1 = opaque),
+// never the cards, values, tyre/brake rectangles, slip bars, borders or icons.
+const { backgroundOpacity } = useHudOverlayBackground(settings, 'tyres')
 const racePager = useRaceHudPage(fastState)
 const { activePage: racePage, damageFlash: raceDamageFlash } = racePager
 
@@ -87,9 +91,10 @@ const { t } = useI18n()
         'hud-overlay__panel--classic': variant === 'classic',
         'hud-overlay__panel--yellow-flag': displayFastState.flag === 2,
       }"
+      :style="{ '--hud-tyres-bg-opacity': String(backgroundOpacity) }"
     >
-      <!-- Classic: clip-path removes the border on the cut corner, this line draws it back. -->
-      <i v-if="variant === 'classic'" class="hud-cut-corner__line" aria-hidden="true" />
+      <!-- Classic and Race: clip-path removes the border on the cut corner, this line draws it back. -->
+      <i class="hud-cut-corner__line" aria-hidden="true" />
       <section
         v-if="variant === 'race'"
         class="race-hud"
@@ -144,20 +149,20 @@ const { t } = useI18n()
   border: 1px solid rgba(255, 255, 255, 0.15);
   // Owner (28/10): square outer corners and an even 12px inner margin (scaled) on every side.
   border-radius: 0;
-  // Sfondo completamente OPACO (nessuna trasparenza) e nessuna ombra.
-  background: #0d0e12;
+  // The ONLY background layer of the HUD (Classic and Race, tyres and Damage pages): opaque by
+  // default, "Trasparenza sfondo" lowers its alpha only. No shadow.
+  background: rgba(13, 14, 18, var(--hud-tyres-bg-opacity, 1));
 }
 
-// Classic (owner 28/10): the Info shape on the outer panel, only the top-right corner cut with its
-// border drawn back and the yellow frame following the cut. The four cards keep their own cut.
-.hud-overlay__panel--classic {
+// Classic and Race (owner 28/10): the Info shape on the outer panel, only the top-right corner cut
+// with its border drawn back and the yellow frame following the cut. The four cards keep their own cut.
+.hud-overlay__panel--classic,
+.hud-overlay__panel--race {
   @include hud-cut-corner(calc(14px * var(--hud-scale)), rgba(255, 255, 255, 0.15), 'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));
 }
 
 .hud-overlay__panel--race {
   padding: 0;
-  overflow: hidden;
-  border-radius: calc(12px * var(--hud-scale));
 }
 
 .race-hud {

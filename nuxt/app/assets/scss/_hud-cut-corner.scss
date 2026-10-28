@@ -1,6 +1,6 @@
 // Outer HUD panel with square corners and ONLY the top-right corner cut (owner 28/10, the Info
-// "style A" shape, see components/overlay/InfoHud.vue). Shared by the Sectors classic and the
-// Tyres classic panels.
+// "style A" shape, see components/overlay/InfoHud.vue). Shared by the Sectors classic panel and
+// the Tyres Classic and Race panels (the Race window also hosts the Damage page).
 //
 // - clip-path cuts the corner of the whole panel (background included), so the cut shows what is
 //   behind the window, never a square of a different shade, whatever the background opacity.

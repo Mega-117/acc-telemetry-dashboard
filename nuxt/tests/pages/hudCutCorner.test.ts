@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest'
 
 // Owner (28/10): the Sectors classic and Tyres classic outer panels take the Info "style A" shape:
 // square corners, only the top-right corner cut, the border drawn back on the cut and the yellow
-// frame following it. One shared mixin; Compact sectors and Race tyres keep their own panel.
+// frame following it. One shared mixin, also on the Race tyres window (owner 28/10); Compact
+// sectors keeps its own rounded panel.
 function source(relativePath: string): string {
   return readFileSync(resolve(process.cwd(), relativePath), 'utf8')
 }
@@ -47,15 +48,30 @@ describe('Sectors classic panel', () => {
   })
 })
 
-describe('Tyres classic panel', () => {
-  it('uses the cut shape and the line only in Classic; Race and the four cards are unchanged', () => {
+describe('Tyres classic and race panels', () => {
+  it('uses the same cut shape and line for Classic and Race (tyres and Damage); the four cards keep their own cut', () => {
     const page = source('app/pages/tyres-overlay.vue')
 
     expect(page).toContain("'hud-overlay__panel--classic': variant === 'classic',")
-    expect(page).toContain('<i v-if="variant === \'classic\'" class="hud-cut-corner__line" aria-hidden="true" />')
+    expect(page).toContain("'hud-overlay__panel--race': variant === 'race',")
+    // One line for both variants: the Race window (weather strip + tyres or Damage) shares the outer panel.
+    expect(page).toContain('<i class="hud-cut-corner__line" aria-hidden="true" />')
+    expect(page).not.toContain('v-if="variant === \'classic\'" class="hud-cut-corner__line"')
     expect(page).toContain("@use '~/assets/scss/hud-cut-corner' as *;")
-    expect(page).toContain(`.hud-overlay__panel--classic {\n  ${INCLUDE}\n}`)
-    expect(page).toMatch(/\.hud-overlay__panel--race \{[^}]*border-radius: calc\(12px \* var\(--hud-scale\)\);/)
+    expect(page).toContain(`.hud-overlay__panel--classic,\n.hud-overlay__panel--race {\n  ${INCLUDE}\n}`)
+    // Race no longer rounds or hides overflow: the mixin's clip-path keeps the content inside the shape.
+    const race = page.match(/\}\n\n\.hud-overlay__panel--race \{([^}]*)\}/)?.[1] ?? ''
+    expect(race).toContain('padding: 0;')
+    expect(race).not.toMatch(/border-radius|overflow/)
     expect(page).toMatch(/\.hud-overlay \.tyre-slip \{[^}]*clip-path: polygon\(0 0, calc\(100% - var\(--tyre-slip-cut\)\) 0/)
+  })
+
+  it('squares the full-size layers inside the Race window so they meet the square panel corners', () => {
+    const race = source('app/components/overlay/TyreRaceHud.vue')
+    const damage = source('app/components/overlay/DamageRaceHud.vue')
+    expect(race).not.toMatch(/<rect :width="G\.width" :height="G\.height"[^>]*rx=/)
+    expect(damage).not.toMatch(/<rect[^>]*width="166" height="241"[^>]*rx=/)
+    // The Damage drawing (car paths, yellow outline) is unchanged.
+    expect(damage).toContain('<rect v-if="fastState.flag === 2" x="1" y="1" width="164" height="239" rx="8" fill="none" stroke="#ffd400" stroke-width="1.5" />')
   })
 })

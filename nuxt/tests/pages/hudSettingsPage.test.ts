@@ -67,6 +67,10 @@ describe('HUD settings page layout contract', () => {
     expect(source).toContain('supportsHudOverlayBackground(selectedOverlayId)')
     // Sectors shares the transparency slider; 0% keeps today's opaque panel.
     expect(source).toMatch(/backgroundTransparency = reactive<[^>]*>>\(\{[^}]*sectors: 0,/)
+    // Tyres (Classic and Race) too: the slider is shown for it and 0% keeps today's opaque panel.
+    expect(source).toMatch(/backgroundTransparency = reactive<[^>]*>>\(\{[^}]*tyres: 0,/)
+    expect(source).toContain('v-if="supportsHudOverlayBackground(selectedOverlayId)"')
+    expect(source).not.toContain("selectedOverlayId !== 'tyres'")
     expect(source).toContain("v-if=\"sectorSupports('sectorCurrentLap')\"")
     // One lap checkbox, bound to the active layout: Classic saves its own key, default off.
     expect(source).toContain(':checked="sectorLapShown"')

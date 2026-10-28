@@ -70,7 +70,8 @@ const { t } = useI18n()
     <RaceWeatherHud :fast-state="fastState" />
 
     <svg class="tyre-race__matrix" :viewBox="`0 0 ${G.width} ${G.height}`" aria-label="Stato quattro pneumatici" role="img">
-      <rect :width="G.width" :height="G.height" rx="8" fill="#0d0e12" fill-opacity=".9" />
+      <!-- No background rect of its own (owner 28/10): the square outer panel is the only background
+           layer, so "Trasparenza sfondo" reaches it while every value and rectangle stays opaque. -->
       <g v-for="tyre in tyres" :key="tyre.id" class="tyre-race__corner" :class="[`tyre-race__corner--${tyre.id.toLowerCase()}`, { 'tyre-race__corner--rear': tyre.rear }]" :data-wheel="tyre.id" :aria-label="tyre.id">
         <!-- Values centred on the tyre: above the front ones (pressure, AVG, loss), below the rear ones (reverse). -->
         <g class="tyre-race__values" text-anchor="middle">
@@ -100,7 +101,7 @@ const { t } = useI18n()
       </g>
       <RaceVehicleStatus :fast-state="fastState" :has-physics="hasPhysics" :engine-top="statusTop(false)" :limiter-top="statusTop(true)" />
       <g v-if="unavailable" class="tyre-race__unavailable">
-        <rect :width="G.width" :height="G.height" rx="8" fill="black" fill-opacity=".7" />
+        <rect :width="G.width" :height="G.height" fill="black" fill-opacity=".7" />
         <text :x="G.centerX" :y="G.height / 2 + 6">{{ fastState.dataSource === 'focused' ? 'DATA N/A' : 'NO DATA' }}</text>
       </g>
     </svg>

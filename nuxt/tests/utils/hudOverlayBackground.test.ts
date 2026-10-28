@@ -25,6 +25,9 @@ describe('hudOverlayBackground', () => {
     // Sectors defaults to its opaque panel: 0% transparency in the settings slider.
     expect(getHudOverlayBackgroundDefaultOpacity('sectors')).toBe(1)
     expect(backgroundOpacityToTransparency(undefined, 'sectors')).toBe(0)
+    // Tyres too (Classic and Race): today's opaque panel until the pilot lowers it.
+    expect(getHudOverlayBackgroundDefaultOpacity('tyres')).toBe(1)
+    expect(backgroundOpacityToTransparency(undefined, 'tyres')).toBe(0)
     expect(normalizeHudOverlayBackgroundOpacity(-1)).toBe(0)
     expect(normalizeHudOverlayBackgroundOpacity(2)).toBe(1)
     expect(normalizeHudOverlayBackgroundOpacity(0.347)).toBe(0.35)

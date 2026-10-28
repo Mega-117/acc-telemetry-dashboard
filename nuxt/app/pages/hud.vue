@@ -161,7 +161,7 @@ const standingsSettings = reactive({
 })
 const backgroundTransparency = reactive<Record<HudOverlayBackgroundId, number>>({
   info: 20,
-  tyres: 20,
+  tyres: 0,
   standings: 50,
   sectors: 0,
 })
@@ -968,7 +968,7 @@ async function toggleTraining() {
               </label>
 
               <label
-                v-if="supportsHudOverlayBackground(selectedOverlayId) && selectedOverlayId !== 'tyres'"
+                v-if="supportsHudOverlayBackground(selectedOverlayId)"
                 class="hud-control hud-control--slider"
               >
                 <span>

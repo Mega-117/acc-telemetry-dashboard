@@ -34,7 +34,8 @@ function percent(value: number | null | undefined) { return value == null ? '--'
   <section class="damage-race" aria-label="Danni vettura">
     <RaceWeatherHud :fast-state="fastState" />
     <svg class="damage-race__matrix" viewBox="0 0 166 241" role="img" aria-label="Sagoma danni vettura vista dall'alto">
-      <rect width="166" height="241" rx="8" fill="#000" fill-opacity=".65" />
+      <!-- Background shade only: square like the outer panel, and it fades with "Trasparenza sfondo". -->
+      <rect class="damage-race__background" width="166" height="241" fill="#000" />
       <rect v-if="fastState.flag === 2" x="1" y="1" width="164" height="239" rx="8" fill="none" stroke="#ffd400" stroke-width="1.5" />
       <!-- Reference car 148x208, with its 5px vertical margin. -->
       <g transform="translate(9 16.5)">
@@ -61,10 +62,10 @@ function percent(value: number | null | undefined) { return value == null ? '--'
           </g>
         </template>
       </g>
-      <rect v-if="flash" :key="fastState.damage?.eventSeq" class="damage-race__flash" width="166" height="241" rx="8" />
+      <rect v-if="flash" :key="fastState.damage?.eventSeq" class="damage-race__flash" width="166" height="241" />
       <RaceVehicleStatus :fast-state="fastState" :has-physics="available" />
       <g v-if="!available" class="damage-race__unavailable">
-        <rect width="166" height="241" rx="8" fill="#000" fill-opacity=".7" />
+        <rect width="166" height="241" fill="#000" fill-opacity=".7" />
         <text x="83" y="114">{{ fastState.dataSource === 'focused' ? 'DATA N/A' : 'NO DATA' }}</text>
       </g>
     </svg>
@@ -74,6 +75,8 @@ function percent(value: number | null | undefined) { return value == null ? '--'
 <style scoped>
 .damage-race { display:flex; flex:1; flex-direction:column; min-width:0; min-height:0; color:#fff; font-family:"Segoe UI",sans-serif; font-variant-numeric:tabular-nums; }
 .damage-race__matrix { display:block; width:100%; flex:1; min-height:0; font-family:"Segoe UI",sans-serif; font-size:12px; font-weight:700; fill:#fff; text-anchor:middle; }
+/* Same shade as before over the opaque panel (.65); it fades with the panel, the car drawing never does. */
+.damage-race__background { fill-opacity:calc(.65 * var(--hud-tyres-bg-opacity, 1)); }
 .damage-race__time { font-size:10px; }
 .damage-race__label { font-size:14px; }
 .damage-race__flash { fill:red; opacity:0; animation:race-damage-flash .2s linear both; pointer-events:none; }
