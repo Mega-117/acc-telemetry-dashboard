@@ -54,6 +54,8 @@ export default defineConfig({
         // PIP-658: privacy, consenso e cancellazione account.
         'app/utils/legalVersions.ts',
         'app/services/auth/accountDeletion.ts',
+        // Beta seats (28/10).
+        'app/services/auth/betaSeatService.ts',
         // Decision 27/10: instant bell through the Firestore inbox.
         'app/services/pitwall/pitwallNotificationInbox.ts',
         'app/composables/usePitwallNotificationInbox.ts',

@@ -21,6 +21,23 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    // Beta seats (28/10): creating or updating the pilot's data needs a seat. Reading and deleting
+    // (account deletion) do not. One extra document read per write request, shared by a batch.
+    function hasBetaSeat() {
+      return exists(/databases/$(database)/documents/betaSeats/$(request.auth.uid));
+    }
+
+    function isWriter(userId) {
+      return isOwner(userId) && hasBetaSeat();
+    }
+
+    // A seat is taken only together with the counter step, and never past the limit.
+    function validBetaSeatClaim() {
+      let before = get(/databases/$(database)/documents/config/betaSeats).data;
+      let after = getAfter(/databases/$(database)/documents/config/betaSeats).data;
+      return after.taken == before.taken + 1 && after.taken <= before.limit && after.limit == before.limit;
+    }
+
     function isAdmin() {
       return isSignedIn()
              && exists(/databases/$(database)/documents/users/$(request.auth.uid))
@@ -890,6 +907,33 @@ service cloud.firestore {
              );
     }
 
+    // Beta seats: counter + limit. A verified user reads it and steps `taken` by one with their seat;
+    // the admin changes only the limit. Created by the admin tools.
+    match /config/betaSeats {
+      allow get: if isSignedIn();
+      allow update: if isSignedIn()
+                    && request.resource.data.keys().hasOnly(['taken', 'limit'])
+                    && request.resource.data.taken is int
+                    && !exists(/databases/$(database)/documents/betaSeats/$(request.auth.uid))
+                    && existsAfter(/databases/$(database)/documents/betaSeats/$(request.auth.uid))
+                    && validBetaSeatClaim();
+      allow update: if isAdmin()
+                    && request.resource.data.keys().hasOnly(['taken', 'limit'])
+                    && request.resource.data.taken == resource.data.taken
+                    && request.resource.data.limit is int
+                    && request.resource.data.limit >= 0;
+    }
+
+    match /betaSeats/{userId} {
+      allow get: if isAccountOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId)
+                    && request.resource.data.keys().hasOnly(['at'])
+                    && request.resource.data.at == request.time
+                    && validBetaSeatClaim();
+      allow delete: if isAdmin();
+    }
+
     // Public profile surface for cross-user features (nickname/avatar only).
     match /publicProfiles/{userId} {
       allow read: if isSignedIn();
@@ -959,8 +1003,9 @@ service cloud.firestore {
         // Public session sharing between authenticated users.
         allow read: if isSignedIn() && resource.data.isPublic == true;
 
-        // Owner full access.
-        allow read, write: if isOwner(userId);
+        // Owner full access; writing new data needs a beta seat.
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isWriter(userId);
 
         // Coach can read assigned pilot sessions.
         allow read: if isCoachOfUser(userId);
@@ -973,8 +1018,9 @@ service cloud.firestore {
           allow read: if isSignedIn() && resource.data.isPublic == true
             && get(/databases/$(database)/documents/users/$(userId)/sessions/$(sessionId)).data.isPublic == true;
 
-          // Owner full access.
-          allow read, write: if isOwner(userId);
+          // Owner full access; writing new data needs a beta seat.
+          allow read, delete: if isOwner(userId);
+          allow create, update: if isWriter(userId);
 
           // Coach can read assigned pilot chunks.
           allow read: if isCoachOfUser(userId);
@@ -982,13 +1028,15 @@ service cloud.firestore {
       }
 
       match /uploads/{uploadId} {
-        allow read, write: if isOwner(userId);
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isWriter(userId);
         allow read: if isAdmin();
       }
 
       match /trackBests/{trackId} {
         allow read: if isAdmin();
-        allow read, write: if isOwner(userId);
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isWriter(userId);
         allow read: if isCoachOfUser(userId);
       }
 
@@ -997,7 +1045,7 @@ service cloud.firestore {
         allow read: if isAdmin();
         allow read: if isOwner(userId);
         allow read: if isCoachOfUser(userId);
-        allow create, update: if isOwner(userId)
+        allow create, update: if isWriter(userId)
                               && docId == 'v1'
                               && validTrackBestsIndex();
         allow delete: if isOwner(userId);
@@ -1005,7 +1053,8 @@ service cloud.firestore {
 
       match /trackDetailProjections/{trackId} {
         allow read: if isAdmin();
-        allow read, write: if isOwner(userId);
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isWriter(userId);
         allow read: if isCoachOfUser(userId);
       }
 
@@ -1016,26 +1065,29 @@ service cloud.firestore {
         allow read: if isAdmin();
         allow read: if isOwner(userId);
         allow read: if isCoachOfUser(userId);
-        allow create, update: if isOwner(userId)
+        allow create, update: if isWriter(userId)
                               && validTrackProjection(trackId);
         allow delete: if isOwner(userId);
       }
 
       match /sessionListMeta/{docId} {
         allow read: if isAdmin();
-        allow read, write: if isOwner(userId);
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isWriter(userId);
         allow read: if isCoachOfUser(userId);
       }
 
       match /sessionListPages/{pageId} {
         allow read: if isAdmin();
-        allow read, write: if isOwner(userId);
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isWriter(userId);
         allow read: if isCoachOfUser(userId);
       }
 
       match /activities/{activityId} {
         allow read: if isAdmin();
-        allow read, write: if isOwner(userId);
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isWriter(userId);
         allow read: if isCoachOfUser(userId);
       }
 
@@ -1056,7 +1108,8 @@ service cloud.firestore {
 
       match /raceCalendar/{eventId} {
         allow read: if isAdmin();
-        allow read, write: if isOwner(userId);
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isWriter(userId);
         allow read: if isCoachOfUser(userId);
         allow create: if isCoachOfUser(userId)
                       && isCurrentUserCoach()
@@ -1070,7 +1123,7 @@ service cloud.firestore {
         allow read: if isAdmin();
         allow read: if isOwner(userId);
         allow read: if isCoachOfUser(userId);
-        allow create, update: if (isOwner(userId) || (isCoachOfUser(userId) && isCurrentUserCoach()))
+        allow create, update: if (isWriter(userId) || (isCoachOfUser(userId) && isCurrentUserCoach()))
                               && docId == 'v1'
                               && validRaceCalendarIndex();
         allow delete: if isOwner(userId);

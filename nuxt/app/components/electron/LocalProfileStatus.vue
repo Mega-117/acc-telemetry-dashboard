@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 
-const { localProfile, cloudSessionReady, authSessionStatus, login, resetPassword } = useFirebaseAuth()
+const { localProfile, cloudSessionReady, authSessionStatus, betaSeat, login, resetPassword } = useFirebaseAuth()
 // The development server (Nuxt dev) is never prepared for an offline restart: the notice
 // would always show there and say nothing new. Installed builds keep it, where it is a real warning.
 const offlineWarning = computed(() => !import.meta.dev && localProfile.value?.offlineReady === false)
@@ -24,7 +24,7 @@ async function reset() {
 </script>
 
 <template>
-  <aside v-if="localProfile && (!cloudSessionReady || offlineWarning)" class="local-profile-status" aria-label="Stato locale e cloud">
+  <aside v-if="localProfile && betaSeat !== 'full' && (!cloudSessionReady || offlineWarning)" class="local-profile-status" aria-label="Stato locale e cloud">
     <p v-if="!cloudSessionReady" role="status">
       <strong>Funzioni locali disponibili.</strong> Sincronizzazione in attesa.
       Lo storico mostra le sessioni disponibili su questo computer; le funzioni condivise richiedono il cloud.

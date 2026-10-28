@@ -50,6 +50,8 @@ type CachedUserProfile = UserProfileDocument
 const userProfileCache = new Map<string, CachedUserProfile | null>()
 const userProfileRequests = new Map<string, Promise<CachedUserProfile | null>>()
 const currentUserProfile = ref<CachedUserProfile | null>(null)
+// Beta seats (28/10): 'full' keeps the local program and closes the cloud until a seat frees up.
+const betaSeat = ref<'granted' | 'full' | 'unknown'>('unknown')
 
 let authListenerInitialized = false
 let authInitializationPromise: Promise<void> | null = null
@@ -178,6 +180,11 @@ async function syncAuthenticatedUser(
     if (!isCurrentRevision()) return { status: 'recoverable', user: null }
     userRole.value = ensured.role
     firestoreNickname.value = ensured.nickname
+    // Lazy like the other Firebase services: the seat is checked once per sign-in.
+    const { ensureBetaSeat } = await import('~/services/auth/betaSeatService')
+    const seat = await ensureBetaSeat(user.uid)
+    if (!isCurrentRevision()) return { status: 'recoverable', user: null }
+    betaSeat.value = seat
     if (ownsLocalIdentityBridge()) {
         if (!isCurrentRevision()) return { status: 'recoverable', user: null }
         localIdentityCleared = false
@@ -209,6 +216,7 @@ async function syncLoggedOutUser() {
     userProfileCache.clear()
     userProfileRequests.clear()
     currentUserProfile.value = null
+    betaSeat.value = 'unknown'
     if (ownsLocalIdentityBridge() && !localProfile.value) await clearOwnedIdentity()
 }
 
@@ -440,6 +448,7 @@ async function initAuthListener() {
 export function useFirebaseAuth() {
     const profileUser = computed(() => localProfile.value || currentUser.value)
     const cloudSessionReady = computed(() => authSessionStatus.value === 'ready' && !!currentUser.value
+        && betaSeat.value !== 'full'
         && (!localProfile.value || localProfile.value.uid === currentUser.value.uid)
         && (!requiresLocalIdentityBridge() || networkOnline.value))
     const isAuthenticated = computed(() => !!profileUser.value)
@@ -681,6 +690,7 @@ export function useFirebaseAuth() {
         localProfile,
         profileUser,
         cloudSessionReady,
+        betaSeat,
         isLoading,
         authSessionStatus,
         isSecondaryLocalRuntime,

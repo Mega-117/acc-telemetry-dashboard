@@ -2,6 +2,7 @@ import type { PartialDictionary } from '../types'
 
 export default {
   common: {
+    betaSeatsFull: 'All beta seats are taken: the program works locally, online features turn on as soon as a seat frees up.',
     retry: 'Retry',
     yes: 'Yes',
     no: 'No',

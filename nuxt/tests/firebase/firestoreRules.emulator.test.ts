@@ -47,6 +47,7 @@ const COACH_UID = 'qa-coach'
 const ADMIN_UID = 'qa-admin'
 const FRESH_PILOT_UID = 'qa-fresh-pilot'
 const FRESH_PILOT_EMAIL = 'qa-fresh-pilot@accsuite.invalid'
+const SEATED_UIDS = [PILOT_UID, SECOND_PILOT_UID, COACH_UID, ADMIN_UID, FRESH_PILOT_UID]
 
 let testEnv: RulesTestEnvironment
 
@@ -262,8 +263,57 @@ beforeEach(async () => {
         role: 'coach',
         coachId: null
       }),
-      setDoc(doc(db, `pilotDirectory/${PILOT_UID}`), pilotDirectoryPayload(PILOT_UID))
+      setDoc(doc(db, `pilotDirectory/${PILOT_UID}`), pilotDirectoryPayload(PILOT_UID)),
+      // Beta seats (28/10): every fixture account already holds one; the seat tests remove it.
+      ...SEATED_UIDS.map(uid => setDoc(doc(db, `betaSeats/${uid}`), { at: Timestamp.now() })),
+      setDoc(doc(db, 'config/betaSeats'), { taken: SEATED_UIDS.length, limit: SEATED_UIDS.length + 1 }),
     ])
+  })
+})
+
+describe('beta seats', () => {
+  const NEW_UID = 'qa-new-pilot'
+  const verified = (uid: string) => testEnv.authenticatedContext(uid, { email_verified: true }).firestore()
+  const claim = (db: ReturnType<typeof verified>, uid: string, taken: number, limit: number) => {
+    const batch = writeBatch(db)
+    batch.update(doc(db, 'config/betaSeats'), { taken: taken + 1, limit })
+    batch.set(doc(db, `betaSeats/${uid}`), { at: serverTimestamp() })
+    return batch.commit()
+  }
+
+  it('a verified account takes the last free seat; the next one finds them all taken', async () => {
+    const limit = SEATED_UIDS.length + 1
+    await assertSucceeds(claim(verified(NEW_UID), NEW_UID, SEATED_UIDS.length, limit))
+    await assertSucceeds(setDoc(doc(verified(NEW_UID), `users/${NEW_UID}/sessions/s1`), { meta: {} }))
+    // Full: the counter cannot pass the limit, even by lying about it.
+    await assertFails(claim(verified('qa-late'), 'qa-late', limit, limit))
+    await assertFails(claim(verified('qa-late'), 'qa-late', limit, limit + 5))
+  })
+
+  it('no seat: own data stays readable and deletable, new writes are refused', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `users/${PILOT_UID}/sessions/old`), { meta: {} })
+      await deleteDoc(doc(context.firestore(), `betaSeats/${PILOT_UID}`))
+    })
+    const db = verified(PILOT_UID)
+    await assertSucceeds(getDoc(doc(db, `users/${PILOT_UID}/sessions/old`)))
+    await assertFails(setDoc(doc(db, `users/${PILOT_UID}/sessions/new`), { meta: {} }))
+    await assertSucceeds(deleteDoc(doc(db, `users/${PILOT_UID}/sessions/old`)))
+  })
+
+  it('a seat cannot be taken twice, without the counter, or by an unverified account', async () => {
+    const db = verified(PILOT_UID)
+    await assertFails(claim(db, PILOT_UID, SEATED_UIDS.length, SEATED_UIDS.length + 1))
+    await assertFails(setDoc(doc(verified(NEW_UID), `betaSeats/${NEW_UID}`), { at: serverTimestamp() }))
+    const unverified = testEnv.authenticatedContext(NEW_UID, { email_verified: false }).firestore()
+    await assertFails(claim(unverified, NEW_UID, SEATED_UIDS.length, SEATED_UIDS.length + 1))
+  })
+
+  it('only the admin changes the limit, never the counter', async () => {
+    const admin = verified(ADMIN_UID)
+    await assertSucceeds(updateDoc(doc(admin, 'config/betaSeats'), { limit: 60 }))
+    await assertFails(updateDoc(doc(admin, 'config/betaSeats'), { taken: 0 }))
+    await assertFails(updateDoc(doc(verified(PILOT_UID), 'config/betaSeats'), { limit: 1000 }))
   })
 })
 

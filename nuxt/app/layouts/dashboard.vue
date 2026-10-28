@@ -75,6 +75,7 @@ const handleGoToSettings = () => {
       <LayoutTabsBarRouter :active-tab="activeTab" :back-label="headerBack?.label()" @back="headerBack?.run()" />
     </div>
 
+    <BetaSeatsNotice />
     <ElectronLocalProfileStatus />
     <!-- PIP-571: introduzione al primo avvio, una volta per utente e installazione -->
     <OnboardingIntro />

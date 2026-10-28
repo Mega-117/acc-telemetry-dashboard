@@ -1,6 +1,7 @@
 // Labels shared by the main pages (Panoramica, Sessioni, session detail, Statistiche, Piste, Dati).
 export default {
   common: {
+    betaSeatsFull: 'Posti della beta esauriti: il programma funziona in locale, le funzioni online si attivano appena si libera un posto.',
     retry: 'Riprova',
     yes: 'Sì',
     no: 'No',

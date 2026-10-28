@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import AdminUsageView from '~/components/admin/AdminUsageView.vue'
+import AdminBetaSeats from '~/components/admin/AdminBetaSeats.vue'
 import { loadUsage, loadUsageNames, loadUsageDetails, loadUsagePreferences } from '~/repositories/usageRepository'
 import { usageCalendarDays, type UsageItem, type UsageDetail, type UsagePeriod } from '~/utils/usageMetrics'
 definePageMeta({ layout: 'coach', middleware: ['admin-only'] })
@@ -42,4 +43,4 @@ async function visible(uids: string[]) {
 onMounted(() => refresh())
 onBeforeUnmount(() => { disposed = true; requestId++; detailId++ })
 </script>
-<template><AdminUsageView :items="items" :names="names" :days="days" :loading="loading" :updated-at="updatedAt" :error="error" :selected="selected" :details="details" :detail-loading="detailLoading" :detail-error="detailError" :preferences="preferences" @refresh="refresh" @select="select" @visible="visible" /></template>
+<template><div><AdminBetaSeats /><AdminUsageView:items="items" :names="names" :days="days" :loading="loading" :updated-at="updatedAt" :error="error" :selected="selected" :details="details" :detail-loading="detailLoading" :detail-error="detailError" :preferences="preferences" @refresh="refresh" @select="select" @visible="visible" /></div></template>
