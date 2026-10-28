@@ -13,9 +13,12 @@
 // ============================================
 
 import {
-  collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc,
+  collection, doc, limit, orderBy, query, serverTimestamp,
   type Firestore, type Unsubscribe,
 } from 'firebase/firestore'
+import { trackedDeleteDoc, trackedOnSnapshot, trackedSetDoc } from '~/composables/useFirebaseTracker'
+
+const CALLER = 'PitwallNotificationInbox'
 
 export type PitwallNotificationType = 'friend-request' | 'room-invite'
 
@@ -71,12 +74,12 @@ export async function sendPitwallNotification(db: Firestore, input: PitwallNotif
     const ref = doc(db, 'users', input.toUid, 'notifications', pitwallNotificationId(input.type, input.fromUid, input.roomId))
     // No updates are allowed: an older pointer of mine goes first. When there is none the rules refuse the
     // delete, which is expected.
-    try { await deleteDoc(ref) } catch { /* nothing of mine to replace */ }
-    await setDoc(ref, {
+    try { await trackedDeleteDoc(ref, CALLER) } catch { /* nothing of mine to replace */ }
+    await trackedSetDoc(ref, {
       type: input.type, fromUid: input.fromUid, fromNickname: nickname,
       ...(input.type === 'room-invite' ? { roomId: input.roomId } : {}),
       createdAt: serverTimestamp(),
-    })
+    }, CALLER)
     return true
   } catch { return false }
 }
@@ -84,7 +87,7 @@ export async function sendPitwallNotification(db: Firestore, input: PitwallNotif
 /** Removes one pointer (mine from my inbox, or one I wrote into someone else's). Never throws. */
 export async function removePitwallNotification(db: Firestore, ownerUid: string, id: string): Promise<boolean> {
   if (!ownerUid || !id) return false
-  try { await deleteDoc(doc(db, 'users', ownerUid, 'notifications', id)); return true } catch { return false }
+  try { await trackedDeleteDoc(doc(db, 'users', ownerUid, 'notifications', id), CALLER); return true } catch { return false }
 }
 
 /** The friend-request pointers around one account's friend actions (usePitwallFriendActions). */
@@ -142,7 +145,7 @@ export function watchPitwallNotifications(
   onError?: (error: Error) => void,
 ): Unsubscribe {
   const inbox = query(collection(db, 'users', uid, 'notifications'), orderBy('createdAt', 'desc'), limit(PITWALL_NOTIFICATION_LIMIT))
-  return onSnapshot(inbox, (snapshot) => {
+  return trackedOnSnapshot(inbox, CALLER, (snapshot) => {
     onChange(snapshot.docs.flatMap(entry => {
       const parsed = parsePitwallNotification(entry.id, entry.data())
       return parsed ? [parsed] : []

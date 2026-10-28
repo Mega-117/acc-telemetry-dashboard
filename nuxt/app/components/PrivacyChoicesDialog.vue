@@ -5,7 +5,8 @@
 // Decision 27/10: technical diagnostics are always on (necessary for the program): shown as information, no
 // switch, and no longer written in `consent` (old documents may still carry `diagnostics`: it is ignored).
 import { computed, onMounted, ref } from 'vue'
-import { doc, updateDoc } from 'firebase/firestore'
+import { doc } from 'firebase/firestore'
+import { trackedUpdateDoc } from '~/composables/useFirebaseTracker'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { db } from '~/config/firebase'
 import { loadOwnerDocument, rememberOwnerDocumentPatch } from '~/repositories/ownerDocumentRepository'
@@ -60,7 +61,7 @@ async function save() {
     const now = new Date().toISOString()
     const consent = { termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION, acceptedAt: now, choicesAt: now,
       usage: usage.value, library: library.value }
-    await updateDoc(doc(db, 'users', uid), { consent })
+    await trackedUpdateDoc(doc(db, 'users', uid), { consent }, 'PrivacyChoices')
     rememberOwnerDocumentPatch(uid, { consent })
     open.value = false
   } catch {

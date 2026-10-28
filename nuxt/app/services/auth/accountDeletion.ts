@@ -3,7 +3,10 @@
 // documents (subcollections before the profile), the Auth account last, so until the very end the user can
 // sign in again and finish. Files on the PC (sessions, laps) stay: they belong to the user, who deletes them.
 import { EmailAuthProvider, deleteUser, reauthenticateWithCredential, type User } from 'firebase/auth'
-import { collection, deleteDoc, doc, getDocs, limit, query, writeBatch, type Firestore } from 'firebase/firestore'
+import { collection, doc, limit, query, type Firestore } from 'firebase/firestore'
+import { trackedDeleteDoc, trackedGetDocs, trackedWriteBatch } from '~/composables/useFirebaseTracker'
+
+const CALLER = 'AccountDeletion'
 
 /** Every subcollection under users/{uid} (firestore.rules); sessions also hold rawChunks. */
 export const USER_SUBCOLLECTIONS = ['sessions', 'uploads', 'trackBests', 'trackBestsIndex', 'trackDetailProjections',
@@ -21,10 +24,10 @@ export interface AccountDeletionDeps {
 
 async function deleteCollection(db: Firestore, path: string, onDoc?: (id: string) => Promise<void>) {
   for (;;) {
-    const page = await getDocs(query(collection(db, path), limit(300)))
+    const page = await trackedGetDocs(query(collection(db, path), limit(300)), CALLER)
     if (page.empty) return
     if (onDoc) for (const item of page.docs) await onDoc(item.id)
-    const batch = writeBatch(db)
+    const batch = trackedWriteBatch(db, CALLER)
     for (const item of page.docs) batch.delete(item.ref)
     await batch.commit()
   }
@@ -65,9 +68,9 @@ export async function deleteAccountEverywhere(user: User, password: string, deps
   await deleteArchive(user, deps)
   await sweep()
   onStep?.('profile')
-  await deleteDoc(doc(db, 'publicProfiles', user.uid))
-  await deleteDoc(doc(db, 'pilotDirectory', user.uid))
-  await deleteDoc(doc(db, 'users', user.uid))
+  await trackedDeleteDoc(doc(db, 'publicProfiles', user.uid), CALLER)
+  await trackedDeleteDoc(doc(db, 'pilotDirectory', user.uid), CALLER)
+  await trackedDeleteDoc(doc(db, 'users', user.uid), CALLER)
   onStep?.('account')
   await deleteUser(user)
   onStep?.('done')

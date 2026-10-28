@@ -2,14 +2,17 @@
 // derived from the same values: users (private profile + search fields), publicProfiles (nickname others see),
 // pilotDirectory (coach/admin lists, rebuilt from users), the Auth display name. Email and password reuse
 // the existing flows (verifyBeforeUpdateEmail, reset email) in authService.
-import { doc, setDoc, updateDoc } from 'firebase/firestore'
+import { doc } from 'firebase/firestore'
 import { updateProfile, type User } from 'firebase/auth'
 import { db } from '~/config/firebase'
+import { trackedSetDoc, trackedUpdateDoc } from '~/composables/useFirebaseTracker'
 import { rememberOwnerDocumentPatch } from '~/repositories/ownerDocumentRepository'
 import { rememberPublicNickname } from '~/repositories/publicProfileRepository'
 import { repairPilotDirectoryFromUser } from '~/services/pilotDirectoryProjectionService'
 import { buildPilotDirectoryFields } from '~/utils/pilotDirectoryFields'
 import { useI18n } from '~/i18n'
+
+const CALLER = 'ProfileIdentity'
 
 export interface ProfileNames { firstName: string, lastName: string, nickname: string }
 
@@ -32,13 +35,19 @@ export async function saveProfileNames(user: User, input: ProfileNames, previous
   const error = validateProfileNames(input)
   if (error) throw new Error(error)
   const patch = profileNamesPatch(input, user.email)
-  await updateDoc(doc(db, 'users', user.uid), patch)
+  await trackedUpdateDoc(doc(db, 'users', user.uid), patch, CALLER)
   rememberOwnerDocumentPatch(user.uid, patch)
   if (patch.nickname !== previousNickname) {
-    await updateDoc(doc(db, 'publicProfiles', user.uid), { nickname: patch.nickname, updatedAt: new Date().toISOString() })
+    await trackedUpdateDoc(doc(db, 'publicProfiles', user.uid), { nickname: patch.nickname, updatedAt: new Date().toISOString() }, CALLER)
     rememberPublicNickname(user.uid, patch.nickname)
     await updateProfile(user, { displayName: patch.nickname }).catch(() => { /* cosmetic: Firestore is the source */ })
   }
-  await repairPilotDirectoryFromUser({ db, uid: user.uid, setDocFn: setDoc })
+  await repairPilotDirectoryFromUser({
+    db,
+    uid: user.uid,
+    setDocFn: (ref, data, options) => options
+      ? trackedSetDoc(ref, data, options, CALLER)
+      : trackedSetDoc(ref, data, CALLER),
+  })
   return patch
 }

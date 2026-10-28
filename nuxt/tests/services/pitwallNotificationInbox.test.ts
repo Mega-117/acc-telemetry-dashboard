@@ -13,9 +13,13 @@ vi.mock('firebase/firestore', () => ({
   orderBy: (field: string, dir: string) => `orderBy:${field}:${dir}`,
   limit: (n: number) => `limit:${n}`,
   serverTimestamp: () => 'SERVER_TIME',
-  deleteDoc: async (ref: string) => { calls.push(`del:${ref}`); if (failDelete) throw new Error('permission-denied') },
-  setDoc: async (ref: string, data: Record<string, unknown>) => { calls.push(`set:${ref}:${JSON.stringify(data)}`); if (failSet) throw new Error('permission-denied') },
-  onSnapshot: (_q: unknown, next: typeof snapshotHandler) => { snapshotHandler = next; return () => { calls.push('unsubscribe') } },
+}))
+// Every Firestore read/write goes through the tracker (check_firebase_tracking): the fake lives there.
+const callers = new Set<string>()
+vi.mock('~/composables/useFirebaseTracker', () => ({
+  trackedDeleteDoc: async (ref: string, caller: string) => { callers.add(caller); calls.push(`del:${ref}`); if (failDelete) throw new Error('permission-denied') },
+  trackedSetDoc: async (ref: string, data: Record<string, unknown>, caller: string) => { callers.add(caller); calls.push(`set:${ref}:${JSON.stringify(data)}`); if (failSet) throw new Error('permission-denied') },
+  trackedOnSnapshot: (_q: unknown, caller: string, next: typeof snapshotHandler) => { callers.add(caller); snapshotHandler = next; return () => { calls.push('unsubscribe') } },
 }))
 
 const inbox = await import('~/services/pitwall/pitwallNotificationInbox')
@@ -94,5 +98,13 @@ describe('pitwall notification pointers (decision 27/10)', () => {
     ]])
     stop()
     expect(calls).toContain('unsubscribe')
+  })
+
+  it('every write and the listener are tracked under one caller', async () => {
+    callers.clear()
+    await inbox.sendPitwallNotification(db, { toUid: 'bob', type: 'friend-request', fromUid: 'alice', fromNickname: 'A' })
+    await inbox.removePitwallNotification(db, 'bob', 'x')
+    inbox.watchPitwallNotifications(db, 'bob', () => {})()
+    expect([...callers]).toEqual(['PitwallNotificationInbox'])
   })
 })

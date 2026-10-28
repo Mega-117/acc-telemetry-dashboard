@@ -12,7 +12,7 @@ vi.mock('firebase/database', () => ({
   serverTimestamp: () => ({}),
 }))
 
-const { createPitwallRealtimeTransport, pitwallRealtimeDatabaseIdle, setPitwallRealtimeWake } = await import('~/services/pitwall/pitwallRealtimeTransport')
+const { createPitwallRealtimeTransport, pitwallRealtimeDatabaseIdle, setPitwallRealtimeWake, waitPitwallRealtimeConnected } = await import('~/services/pitwall/pitwallRealtimeTransport')
 
 describe('pitwall realtime idle (PIP-660)', () => {
   it('is idle with nothing going on; listeners, work and disconnect registrations pin it', async () => {
@@ -53,5 +53,9 @@ describe('pitwall realtime idle (PIP-660)', () => {
     await io.read('grants/u2').then(() => order.push('read'))
     expect(order).toEqual(['wake', 'read'])
     io.dispose()
+  })
+
+  it('the wake waits for .info/connected through the transport (the only Realtime Database owner)', async () => {
+    await expect(waitPitwallRealtimeConnected({} as never, 50)).resolves.toBeUndefined()
   })
 })

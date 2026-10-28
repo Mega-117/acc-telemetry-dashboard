@@ -13,20 +13,29 @@ vi.mock('firebase/firestore', () => ({
   query: (path: string) => path,
   limit: () => null,
   doc: (_db: unknown, ...parts: string[]) => parts.join('/'),
-  getDocs: async (path: string) => {
+}))
+// Every Firestore read/write goes through the tracker (check_firebase_tracking): the fake lives there.
+const callers = new Set<string>()
+vi.mock('~/composables/useFirebaseTracker', () => ({
+  trackedGetDocs: async (path: string, caller: string) => {
+    callers.add(caller)
     const ids = store.get(path) ?? []
     store.set(path, [])
     return { empty: ids.length === 0, docs: ids.map(id => ({ id, ref: `${path}/${id}` })) }
   },
-  writeBatch: () => { const refs: string[] = []; return { delete: (r: string) => refs.push(r), commit: async () => { calls.push(...refs.map(r => `del:${r}`)) } } },
-  deleteDoc: async (ref: string) => { calls.push(`del:${ref}`) },
+  trackedWriteBatch: (_db: unknown, caller: string) => {
+    callers.add(caller)
+    const refs: string[] = []
+    return { delete: (r: string) => refs.push(r), commit: async () => { calls.push(...refs.map(r => `del:${r}`)) } }
+  },
+  trackedDeleteDoc: async (ref: string, caller: string) => { callers.add(caller); calls.push(`del:${ref}`) },
 }))
 
 const { deleteAccountEverywhere, USER_SUBCOLLECTIONS } = await import('~/services/auth/accountDeletion')
 const user = { uid: 'u1', email: 'u1@example.com', getIdToken: async () => 'tok' } as never
 
 describe('account deletion (PIP-658)', () => {
-  beforeEach(() => { calls.length = 0; store.clear() })
+  beforeEach(() => { calls.length = 0; store.clear(); callers.clear() })
 
   it('archive first, then subcollections (chunks before their session), profile docs, the account last', async () => {
     store.set('users/u1/sessions', ['s1'])
@@ -43,6 +52,7 @@ describe('account deletion (PIP-658)', () => {
     expect(steps).toEqual(['verify', 'archive', 'documents', 'profile', 'account', 'done'])
     expect(USER_SUBCOLLECTIONS).toContain('runtimeInstallations')
     expect(USER_SUBCOLLECTIONS).toContain('notifications')
+    expect([...callers]).toEqual(['AccountDeletion'])
   })
 
   it('a wrong password or a failing archive stops before anything in Firestore or Auth is deleted', async () => {

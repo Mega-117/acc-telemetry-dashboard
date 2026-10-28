@@ -9,6 +9,8 @@ old = doc["rules"]["pitwallV3"]
 ns = "pitwallRoomsV1"
 r = f"root.child('{ns}')"
 room = f"{r}.child('rooms').child($room)"
+# Every social path requires a signed-in account with a verified email.
+verified = "(auth != null && auth.token.email_verified === true)"
 
 
 def alive(sponsor, connection):
@@ -40,8 +42,8 @@ witness_valid = (
 )
 own_conn = f"{r}.child('directory').child(auth.uid).child('connectionId').val()"
 own_alive = alive("auth.uid", own_conn)
-member = f"((auth != null && auth.token.email_verified === true) && {room}.child('access').child(auth.uid).exists() && {own_alive})"
-preview = f"((auth != null && auth.token.email_verified === true) && ({member} || {witness_valid}))"
+member = f"({verified} && {room}.child('access').child(auth.uid).exists() && {own_alive})"
+preview = f"({verified} && ({member} || {witness_valid}))"
 newroot = (  # root from rooms/$room/access/$uid
     "newData.parent().parent().parent().parent().parent()"
 )
@@ -64,9 +66,9 @@ rooms = social["rooms"]["$room"]
 rooms.pop(".write", None)
 rooms[".read"] = member
 rooms["meta"][".read"] = preview
-rooms["meta"][
-    ".write"
-] = f"(auth != null && auth.token.email_verified === true) && !data.exists() && newData.child('hostUid').val() == auth.uid && {single}"
+rooms["meta"][".write"] = (
+    f"{verified} && !data.exists() && newData.child('hostUid').val() == auth.uid && {single}"
+)
 rooms["meta"][".validate"] = rooms["meta"][".validate"].replace(".length == 16", ".length == 0")
 slotref = f"{newroot}.child('{ns}/directory').child($uid).child('slot').val()"
 slot_owned = (
@@ -76,7 +78,7 @@ rooms["access"] = {
     ".read": preview,
     "$uid": {
         ".write": (
-            f"(auth != null && auth.token.email_verified === true) && auth.uid == $uid && (!newData.exists() || ({admit} && {single}))"
+            f"{verified} && auth.uid == $uid && (!newData.exists() || ({admit} && {single}))"
         ),
         ".validate": f"newData.val() == 'member' && {slot_owned}",
     },
@@ -92,7 +94,7 @@ rooms["slots"] = {
     ".read": preview,
     "$slot": {
         ".write": (
-            "(auth != null && auth.token.email_verified === true) && ((!newData.exists() && data.child('uid').val() == auth.uid) ||"
+            f"{verified} && ((!newData.exists() && data.child('uid').val() == auth.uid) ||"
             f" ((!data.exists() || data.child('uid').val() == auth.uid || {slot_expired}) &&"
             f" newData.child('uid').val() == auth.uid && {admit} && {single}))"
         ),
@@ -109,14 +111,16 @@ rooms["slots"] = {
 newroot_occ = "newData.parent().parent().parent().parent().parent().parent()"
 newcreate_occ = create.replace(newroot, newroot_occ)
 admit_occ = admit.replace(create, newcreate_occ)
-next_access = f"{newroot_occ}.child('{ns}/rooms').child($room).child('access').child($uid).exists()"
+next_access = (
+    f"{newroot_occ}.child('{ns}/rooms').child($room).child('access').child($uid).exists()"
+)
 rooms["occupancy"] = {
     ".read": preview,
     "$uid": {
-        ".write": "(auth != null && auth.token.email_verified === true) && auth.uid == $uid && !newData.exists()",
+        ".write": f"{verified} && auth.uid == $uid && !newData.exists()",
         "$connection": {
             ".write": (
-                f"(auth != null && auth.token.email_verified === true) && auth.uid == $uid && (!newData.exists() || ({admit_occ} &&"
+                f"{verified} && auth.uid == $uid && (!newData.exists() || ({admit_occ} &&"
                 f" {next_access}))"
             ),
             ".validate": (
@@ -131,8 +135,8 @@ rooms["occupancy"] = {
 }
 social["directory"] = {
     "$uid": {
-        ".read": f"(auth != null && auth.token.email_verified === true) && (auth.uid == $uid || {friends('auth.uid','$uid')})",
-        ".write": "(auth != null && auth.token.email_verified === true) && auth.uid == $uid",
+        ".read": f"{verified} && (auth.uid == $uid || {friends('auth.uid','$uid')})",
+        ".write": f"{verified} && auth.uid == $uid",
         ".validate": (
             "newData.hasChildren(['roomId','connectionId','slot']) &&"
             " newData.child('slot').isString() && newData.child('roomId').isString() &&"
@@ -156,9 +160,9 @@ nconn = "newData.child('connectionId').val()"
 social["admissions"] = {
     "$room": {
         "$uid": {
-            ".read": "(auth != null && auth.token.email_verified === true) && auth.uid == $uid",
+            ".read": f"{verified} && auth.uid == $uid",
             ".write": (
-                "(auth != null && auth.token.email_verified === true) && auth.uid == $uid && (!newData.exists() ||"
+                f"{verified} && auth.uid == $uid && (!newData.exists() ||"
                 f" ({friends('auth.uid',nsponsor)} &&"
                 f" {room}.child('access').child({nsponsor}).exists() && {alive(nsponsor,nconn)}))"
             ),
@@ -169,16 +173,16 @@ social["admissions"] = {
         }
     }
 }
-social["connections"]["$uid"][
-    ".read"
-] = f"(auth != null && auth.token.email_verified === true) && (auth.uid == $uid || {friends('auth.uid','$uid')})"
+social["connections"]["$uid"][".read"] = (
+    f"{verified} && (auth.uid == $uid || {friends('auth.uid','$uid')})"
+)
 
 # MFD snapshots are now per account and runtime connection.
 mfd = rooms["mfd"]
 rooms["mfd"] = {".read": member, "$uid": {"$connection": mfd}}
 mfd.pop(".read", None)
 mfd[".write"] = (
-    f"(auth != null && auth.token.email_verified === true) && auth.uid == $uid && {room}.child('access').child(auth.uid).exists() &&"
+    f"{verified} && auth.uid == $uid && {room}.child('access').child(auth.uid).exists() &&"
     " newData.child('uid').val() == $uid && newData.child('connectionId').val() == $connection &&"
     f" {r}.child('connections').child($uid).child($connection).child('roomId').val() == $room"
 )
@@ -213,7 +217,7 @@ orders["claimedAtMs"][".validate"] = orders["claimedAtMs"][".validate"].replace(
 rooms["orders"]["$order"] = orders
 rooms["orders"][".read"] = member
 claim = rooms["control"]["claim"]
-claim[".write"] = f"(auth != null && auth.token.email_verified === true) && auth.uid == $target && ({claim['.write']})"
+claim[".write"] = f"{verified} && auth.uid == $target && ({claim['.write']})"
 claim[".write"] = claim[".write"].replace(
     "newData.parent().parent().parent().parent().parent()",
     "newData.parent().parent().parent().parent().parent().parent()",
@@ -267,10 +271,10 @@ reject = (
     " now))"
 )
 orders[".write"] = (
-    f"(auth != null && auth.token.email_verified === true) && newData.exists() && ({create_order} || {ack} || {finish} || {reject})"
+    f"{verified} && newData.exists() && ({create_order} || {ack} || {finish} || {reject})"
 )
 orders[".read"] = (
-    f"(auth != null && auth.token.email_verified === true) && ({member} || data.child('senderId').val() == auth.uid ||"
+    f"{verified} && ({member} || data.child('senderId').val() == auth.uid ||"
     " data.child('claimedBy').val() == auth.uid)"
 )
 # No retired applicator payload can exist in this namespace.
@@ -285,7 +289,7 @@ claim_order = f"{room}.child('orders').child(newData.child('orderId').val())"
 old_claim_order = (
     "newData.parent().parent().parent().child('orders').child(data.child('orderId').val())"
 )
-claim[".read"] = "(auth != null && auth.token.email_verified === true) && auth.uid == $target"
+claim[".read"] = f"{verified} && auth.uid == $target"
 claim_connection = connected("auth.uid", "newData.child('connectionId').val()")
 claim_driver = (
     f"{r}.child('connections').child(auth.uid).child(newData.child('connectionId').val())"
@@ -295,7 +299,7 @@ claim_connection += (
     f" true && {claim_driver}.child('sourceValid').val() == true"
 )
 claim[".write"] = (
-    f"(auth != null && auth.token.email_verified === true) && auth.uid == $target && (newData.exists() ? ({member} && {claim_connection} &&"
+    f"{verified} && auth.uid == $target && (newData.exists() ? ({member} && {claim_connection} &&"
     " (!data.exists() || data.child('leaseUntilMs').val() <= now) && newData.child('uid').val() =="
     f" auth.uid && {claim_order}.child('status').val() == 'pending' &&"
     f" {claim_order}.child('targetUid').val() == auth.uid &&"

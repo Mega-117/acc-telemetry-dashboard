@@ -6,8 +6,12 @@ const writes: Array<[string, Record<string, unknown>]> = []
 vi.mock('~/config/firebase', () => ({ db: {} }))
 vi.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...parts: string[]) => parts.join('/'),
-  updateDoc: async (ref: string, data: Record<string, unknown>) => { writes.push([ref, data]) },
-  setDoc: async () => {},
+}))
+// Every Firestore read/write goes through the tracker (check_firebase_tracking): the fake lives there.
+const callers = new Set<string>()
+vi.mock('~/composables/useFirebaseTracker', () => ({
+  trackedUpdateDoc: async (ref: string, data: Record<string, unknown>, caller: string) => { callers.add(caller); writes.push([ref, data]) },
+  trackedSetDoc: async () => {},
 }))
 vi.mock('firebase/auth', () => ({ updateProfile: vi.fn(async () => {}) }))
 vi.mock('~/repositories/ownerDocumentRepository', () => ({ rememberOwnerDocumentPatch: vi.fn() }))
@@ -46,6 +50,7 @@ describe('profile identity (PIP-659)', () => {
     await saveProfileNames(user, { firstName: 'Mario', lastName: 'Rossi', nickname: 'Mike84' }, 'Mike83')
     expect(writes.map(([ref]) => ref)).toEqual(['users/u1', 'users/u1', 'publicProfiles/u1'])
     expect(writes[2]![1]).toMatchObject({ nickname: 'Mike84' })
+    expect([...callers]).toEqual(['ProfileIdentity'])
     await expect(saveProfileNames(user, { firstName: '', lastName: 'R', nickname: 'abc' }, null)).rejects.toThrow(/nome/)
   })
 })

@@ -1,7 +1,9 @@
-import { connectDatabaseEmulator, getDatabase, goOffline, goOnline, onValue, ref, type Database } from 'firebase/database'
+import { connectDatabaseEmulator, getDatabase, goOffline, goOnline } from 'firebase/database'
 import { app } from './firebase'
 import { FIREBASE_DATABASE_EMULATOR_PORT, pitwallDatabaseUrl } from './firebaseRuntimeTarget'
-import { createPitwallRealtimeTransport, pitwallRealtimeDatabaseIdle, setPitwallRealtimeWake } from '~/services/pitwall/pitwallRealtimeTransport'
+import {
+  createPitwallRealtimeTransport, pitwallRealtimeDatabaseIdle, setPitwallRealtimeWake, waitPitwallRealtimeConnected,
+} from '~/services/pitwall/pitwallRealtimeTransport'
 import { PITWALL_SOCIAL_ROOT } from '~/services/pitwall/pitwallSocialRoom'
 import { combinePitwallIoMetrics } from '~/services/pitwall/pitwallIoMetrics'
 
@@ -37,24 +39,13 @@ const WAKE_TIMEOUT_MS = 10_000
 let closedWhileIdle = false
 let idleTimer: ReturnType<typeof setTimeout> | null = null
 
-function waitConnected(database: Database, timeoutMs: number): Promise<void> {
-  return new Promise((resolve, reject) => {
-    let stop = () => {}
-    const timer = setTimeout(() => { stop(); reject(new Error('Collegamento Pitwall non disponibile. Riprova quando torna online.')) }, timeoutMs)
-    stop = onValue(ref(database, '.info/connected'), snapshot => {
-      if (snapshot.val() !== true) return
-      clearTimeout(timer); stop(); resolve()
-    })
-  })
-}
-
 /** Reopens a connection closed while idle and waits for it; a no-op when it was never closed. */
 export async function wakePitwallRealtime(database = transport?.database): Promise<void> {
   if (idleTimer) { clearTimeout(idleTimer); idleTimer = null }
   if (!database) return
   if (closedWhileIdle) { closedWhileIdle = false; goOnline(database) }
   // Also right after start-up the first operation waits for the connection instead of failing at once.
-  await waitConnected(database, WAKE_TIMEOUT_MS)
+  await waitPitwallRealtimeConnected(database, WAKE_TIMEOUT_MS)
 }
 
 /** Closes the connection after a quiet moment, only if still nothing uses it then. */

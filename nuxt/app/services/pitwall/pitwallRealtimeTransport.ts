@@ -17,6 +17,21 @@ const transportsByDatabase = new WeakMap<Database, Set<TransportHandle>>()
 const wakeByDatabase = new WeakMap<Database, () => Promise<void>>()
 /** The config registers how to reopen an idle-closed connection; transports created later use it too. */
 export function setPitwallRealtimeWake(database: Database, wake: () => Promise<void>) { wakeByDatabase.set(database, wake) }
+/**
+ * Resolves at the first `.info/connected === true`, rejects after `timeoutMs`. Lives here, not in the config,
+ * because every Realtime Database call goes through this module (check_firebase_tracking, PIP-435); the
+ * listener on `.info/connected` is local to the SDK and costs no download.
+ */
+export function waitPitwallRealtimeConnected(database: Database, timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let stop = () => {}
+    const timer = setTimeout(() => { stop(); reject(new Error('Collegamento Pitwall non disponibile. Riprova quando torna online.')) }, timeoutMs)
+    stop = onValue(ref(database, '.info/connected'), snapshot => {
+      if (snapshot.val() !== true) return
+      clearTimeout(timer); stop(); resolve()
+    })
+  })
+}
 /** True when no transport of this Database is listening, working or holding an onDisconnect. */
 export function pitwallRealtimeDatabaseIdle(database: Database) {
   for (const handle of transportsByDatabase.get(database) ?? []) if (!handle.idle()) return false
