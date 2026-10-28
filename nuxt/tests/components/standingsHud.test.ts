@@ -205,6 +205,8 @@ describe('HUD style v2 (27/10) standings', () => {
     const html = await renderToString(createSSRApp(StandingsHud, { model: value, backgroundOpacity: 0.5 }))
     expect(html).not.toContain('standings-row__car-model')
     expect(html).not.toMatch(/<small[^>]*>Ferrari 296 GT3</)
+    // No visible text node carries the model any more (the driver tooltip may still name it).
+    expect(html).not.toMatch(/>\s*Ferrari 296 GT3\s*</)
     expect(html).toContain('class="standings-row__manufacturer-logo"')
     expect(html).toMatch(/class="[^"]*standings-row[^_"][^"]*is-local|class="[^"]*is-local[^"]*standings-row[\s"]/)
     const source = readFileSync(resolve(process.cwd(), 'app/components/overlay/StandingsHud.vue'), 'utf8')

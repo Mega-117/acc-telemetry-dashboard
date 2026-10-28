@@ -103,6 +103,32 @@ describe('HUD background transparency reaches only the background', () => {
   })
 })
 
+describe('Dashboard v3 background transparency (owner 28/10)', () => {
+  it('reaches only the shared background layer; the panel, frames and values keep full opacity', () => {
+    const page = source('app/pages/dashboard-overlay.vue')
+    const hud = source('app/components/overlay/DashboardHud.vue')
+    const styles = source('app/assets/scss/components/dashboard-hud.scss')
+
+    expect(page).toContain("const { backgroundOpacity } = useHudOverlayBackground(overlay.settings, 'dashboard')")
+    expect(page).toContain(':background-opacity="backgroundOpacity"')
+    expect(opacityDeclarations(page)).toEqual([])
+    expect(hud).toContain('<HudOverlayBackground :opacity="backgroundOpacity" />')
+    // The prop, its default and the layer: no other element reads the setting.
+    expect(hud.match(/backgroundOpacity/g)).toHaveLength(3)
+    // The panel itself is transparent; the background layer is the only fill behind the content.
+    expect(styles).toMatch(/\.dash-hud \{[^}]*background: transparent;/)
+    expect(declarationsUsing(styles, '--hud-overlay-background-opacity')).toEqual([])
+    expect(styles).not.toMatch(/backgroundOpacity|background-opacity/)
+    // Fixed design opacities (RPM markers, indicator fade, pulse keyframes) never read a variable.
+    expect(opacityDeclarations(styles).every(rule => !rule.includes('var('))).toBe(true)
+  })
+
+  it('the map has no transparency setting: the Track Map page never reads it', () => {
+    const page = source('app/pages/trackmap-overlay.vue')
+    expect(page).not.toMatch(/useHudOverlayBackground|HudOverlayBackground|background-opacity/)
+  })
+})
+
 describe('Sectors yellow-flag frame (owner 28/10)', () => {
   it('draws the tyres frame, 4px scaled, on the whole panel for Classic and Compact', () => {
     const page = source('app/pages/sectors-overlay.vue')
