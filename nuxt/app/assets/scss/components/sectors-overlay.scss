@@ -132,7 +132,7 @@
 }
 
 .hud-overlay .sector-delta-hud__comparison {
-  color: #a3a5ae;
+  color: #f4f4f6;
   font-style: normal;
 
   // "vs" minuscolo e leggero, il riferimento (BEST/CUSTOM) in grassetto chiaro.
@@ -167,7 +167,7 @@
 
 .hud-overlay .sector-delta__label {
   overflow: hidden;
-  color: #a3a5ae;
+  color: #f4f4f6;
   font: 700 calc(12px * var(--hud-scale))/1 var(--hud-font-label);
   letter-spacing: .08em;
   text-overflow: ellipsis;
@@ -232,7 +232,7 @@
   background: rgba(255, 255, 255, 0.06);
 
   b {
-    color: #a3a5ae;
+    color: #f4f4f6;
     font: 700 calc(10px * var(--hud-scale))/1 var(--hud-font-label);
     letter-spacing: .1em;
     text-transform: uppercase;

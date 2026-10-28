@@ -326,7 +326,7 @@ const { t } = useI18n()
 }
 
 .sector-compact__title > span {
-  color: #a3a5ae;
+  color: #f4f4f6;
   font: 700 calc(12px * var(--hud-scale, 1))/1 var(--hud-font-label);
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -392,7 +392,7 @@ const { t } = useI18n()
 
 /* Same face as the times and the live/wait words, so "S1" belongs to the row. */
 .sector-compact__label {
-  color: #a3a5ae;
+  color: #f4f4f6;
   font: italic 700 calc(20px * var(--hud-scale, 1))/1 var(--hud-font-num);
   letter-spacing: 0.02em;
 }
