@@ -22,7 +22,16 @@ const emit = defineEmits<{
 }>()
 
 // Firebase Auth
-const { checkEmailVerified, resendVerificationEmail, changeVerificationEmail } = useFirebaseAuth()
+const { checkEmailVerified, resendVerificationEmail, changeVerificationEmail, logout } = useFirebaseAuth()
+
+// PIP-670: a way out of this screen (another account, or verify later). Signing out brings the
+// shell back to the login form through the auth status, as any logout does.
+const isLeaving = ref(false)
+const handleBackToLogin = async () => {
+  if (isLeaving.value) return
+  isLeaving.value = true
+  try { await logout() } finally { isLeaving.value = false }
+}
 
 // State
 const RESEND_COOLDOWN_SECONDS = 60
@@ -293,5 +302,9 @@ onMounted(() => {
         </form>
       </template>
     </div>
+
+    <button class="email-fix__toggle verify-back" type="button" :disabled="isLeaving || isEmailChangeBusy" @click="handleBackToLogin">
+      {{ t('auth.verify.backToLogin') }}
+    </button>
   </div>
 </template>

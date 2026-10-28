@@ -32,23 +32,18 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
       # PIP-656: only the generated site goes online. Before, the whole repository was published (sources,
-      # nuxt/docs notes with real emails, Firebase rules, old dashboards). The app lives under /docs/ (Nuxt
-      # baseURL); the root keeps only the SPA fallback and a page that sends visitors to the app, never indexed.
+      # nuxt/docs notes with real emails, Firebase rules, old dashboards).
+      # PIP-672: the app lives at the root of app.racercore.app (custom domain in the repository Pages
+      # settings, Nuxt baseURL '/'); old /docs/ links are sent to the new path by the SPA fallback 404.html.
       - name: Stage the generated site only
         run: |
           set -eu
           test -f docs/index.html
+          test -f docs/404.html
           mkdir -p _site
-          cp -R docs _site/docs
-          cp docs/404.html _site/404.html
-          cat > _site/index.html <<'HTML'
-          <!doctype html>
-          <html lang="it"><head><meta charset="utf-8"><meta name="robots" content="noindex, nofollow">
-          <meta http-equiv="refresh" content="0; url=./docs/"><title>Racer Core</title></head>
-          <body><a href="./docs/">Racer Core</a></body></html>
-          HTML
-          # Nothing but the build: fail if a source folder slipped in.
-          for leak in nuxt beta dev scripts .github firestore.rules database.rules.json; do
+          cp -R docs/. _site/
+          # Nothing but the build: fail if a source folder slipped in (dev/ is a page of the site).
+          for leak in nuxt beta scripts .github firestore.rules database.rules.json package.json; do
             if [ -e "_site/$leak" ]; then echo "unexpected $leak in the Pages artifact" >&2; exit 1; fi
           done
       - name: Upload artifact

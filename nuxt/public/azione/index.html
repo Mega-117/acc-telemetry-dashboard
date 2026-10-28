@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="referrer" content="no-referrer">
+    <!-- PIP-672: page for the links in the Firebase emails. Nothing but this page, Google Fonts and Firebase Auth. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self'; connect-src https://identitytoolkit.googleapis.com; form-action 'none'; base-uri 'none'">
+    <title>Racer Core</title>
+    <link rel="icon" href="/favicon.ico">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@1,700&family=Inter:wght@400;600&display=swap">
+    <link rel="stylesheet" href="/azione/azione.css">
+</head>
+
+<body>
+    <main class="card" aria-live="polite">
+        <img class="logo" src="/branding/racercore-horizontal-v1.svg" alt="Racer Core" width="300" height="44">
+        <h1 id="title">…</h1>
+        <p id="message"></p>
+        <form id="reset" hidden novalidate>
+            <label><span id="label-password"></span><input id="password" type="password" autocomplete="new-password" minlength="6" required></label>
+            <label><span id="label-confirm"></span><input id="confirm" type="password" autocomplete="new-password" minlength="6" required></label>
+            <p id="form-error" class="error" hidden></p>
+            <button id="submit" type="submit"></button>
+        </form>
+        <p id="next" class="next"></p>
+    </main>
+    <script src="/azione/azione.js"></script>
+</body>
+
+</html>

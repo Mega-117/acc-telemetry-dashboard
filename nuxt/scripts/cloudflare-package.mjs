@@ -2,7 +2,9 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, realpathSy
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const APP_PATH = '/acc-telemetry-dashboard/docs/'
+// PIP-672: the site sits at the root of dev.racercore.app; addresses under the old prefix are redirected.
+export const APP_PATH = '/'
+export const LEGACY_APP_PATH = '/acc-telemetry-dashboard/docs/'
 const extensions = new Set(['.html', '.css', '.js', '.json', '.ico', '.png', '.svg', '.ttf', '.woff', '.woff2', '.txt', '.wav', '.mp3', '.webp', '.jpg', '.jpeg', '.gif', '.avif', '.ogg', '.webm'])
 
 // Validate everything before creating output; never overwrite or delete an existing directory.
@@ -35,14 +37,14 @@ export function packageCloudflare(source, destination) {
   const parent = realpathSync(dirname(output))
   const relParent = relative(input, parent)
   if (relParent === '' || (!isAbsolute(relParent) && relParent !== '..' && !relParent.startsWith(`..${sep}`))) throw new Error('Output must be outside generated docs')
-  const app = join(output, APP_PATH.slice(1))
   for (const file of files) {
-    const target = join(app, file)
+    const target = join(output, file)
     mkdirSync(dirname(target), { recursive: true })
     copyFileSync(join(input, file), target)
   }
-  copyFileSync(join(input, '404.html'), join(output, '404.html'))
-  writeFileSync(join(output, '_redirects'), `/ ${APP_PATH} 302\n`)
+  // Old deep links go through 404.html, which keeps query and fragment and never leaves the site. A
+  // `/:splat` rule here would turn "/acc-telemetry-dashboard/docs//other.example" into another host.
+  writeFileSync(join(output, '_redirects'), `${LEGACY_APP_PATH} / 301\n${LEGACY_APP_PATH.slice(0, -1)} / 301\n`)
   // Only fingerprinted assets get immutable caching; HTML and mutable manifests must revalidate.
   writeFileSync(join(output, '_headers'), [
     ...['js', 'css', 'woff2'].flatMap(extension => [

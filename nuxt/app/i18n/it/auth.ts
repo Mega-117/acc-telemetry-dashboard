@@ -79,6 +79,7 @@ export default {
       resendError: 'Errore invio email',
       notVerified: 'Email non ancora verificata. Clicca il link ricevuto via email e riprova.',
       checkError: 'Errore durante il controllo della verifica',
+      backToLogin: 'Torna al login',
     },
     // Messages for Firebase Auth codes and the account actions (authService, useFirebaseAuth).
     service: {

@@ -39,7 +39,7 @@ export default {
       eyebrow: 'Support',
       title: 'Report a problem',
       close: 'Close',
-      browserOnly: 'Reports with technical data are sent from the Racer Core app: open the menu under your name and choose "Report a problem". From the browser, describe the problem on Discord, in the #bug channel.',
+      browserOnly: 'Reports with technical data are sent from the Racer Core app: open the menu under your name and choose "Report a problem". From the browser, describe the problem on Discord, in the #segnala-bug forum.',
       sent: 'Sent, thank you.',
       queued: 'The report is waiting on your PC: it will be sent as soon as you are online. Thank you.',
       limitDay: 'You have already sent enough reports for today, thank you. You can write more tomorrow.',
@@ -54,7 +54,7 @@ export default {
       notReady: 'The app is not ready yet: try again in a moment.',
       busy: 'Already sending.',
       bundleCap: 'The app has already sent a lot of data today: try again tomorrow.',
-      rejected: 'The server did not accept the report: describe the problem on Discord in the #bug channel.',
+      rejected: 'The server did not accept the report: describe the problem on Discord in the #segnala-bug forum.',
     },
     deletion: {
       title: 'Delete account',

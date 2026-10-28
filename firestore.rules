@@ -909,8 +909,9 @@ service cloud.firestore {
 
     // Beta seats: counter + limit. A verified user reads it and steps `taken` by one with their seat;
     // the admin changes only the limit. Created by the admin tools.
+    // PIP-672: anyone reads it (two numbers): the landing shows "19/60 posti" through the Worker.
     match /config/betaSeats {
-      allow get: if isSignedIn();
+      allow get: if true;
       allow update: if isSignedIn()
                     && request.resource.data.keys().hasOnly(['taken', 'limit'])
                     && request.resource.data.taken is int

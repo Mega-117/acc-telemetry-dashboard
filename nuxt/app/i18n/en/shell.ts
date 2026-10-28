@@ -15,6 +15,7 @@ export default {
     profile: 'Profile',
     settings: 'Settings',
     report: 'Report a problem',
+    discord: 'Discord community',
     logout: 'Log out',
   },
   language: {

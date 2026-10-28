@@ -3,7 +3,8 @@
 // Dall'app desktop (protocollo locale, file o localhost) l'origine non e' raggiungibile da
 // altri: si usa il sito pubblico stabile. Firebase e' condiviso, quindi il link funziona
 // su entrambi i siti; GitHub Pages gestisce i link diretti con la sua pagina 404 SPA.
-export const PUBLIC_SITE_URL = 'https://mega-117.github.io/acc-telemetry-dashboard/docs/'
+// PIP-672: sito pubblico su app.racercore.app (Develop su dev.racercore.app).
+export const PUBLIC_SITE_URL = 'https://app.racercore.app/'
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
 
@@ -18,7 +19,7 @@ export function buildSessionShareUrl(params: {
   const { location } = params
   const reachableOrigin = location && (location.protocol === 'https:' || location.protocol === 'http:')
     && !LOCAL_HOSTS.has(location.hostname) ? location.origin : null
-  // baseURL '/' oppure '/acc-telemetry-dashboard/docs/': sempre con una sola barra ai due capi.
+  // baseURL '/' (o un eventuale prefisso): sempre con una sola barra ai due capi.
   const path = `/${String(params.baseURL || '').replace(/^\/+|\/+$/g, '')}/`.replace(/^\/\/$/, '/')
   const base = reachableOrigin ? `${reachableOrigin}${path}` : PUBLIC_SITE_URL
   return `${base}sessioni/${encodeURIComponent(params.sessionId)}?userId=${encodeURIComponent(params.userId)}${params.tab === 'telemetria' ? '&tab=telemetria' : ''}`

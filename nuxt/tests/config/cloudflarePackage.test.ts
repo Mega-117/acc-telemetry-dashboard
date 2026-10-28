@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { packageCloudflare, APP_PATH } from '../../scripts/cloudflare-package.mjs'
+import { packageCloudflare, APP_PATH, LEGACY_APP_PATH } from '../../scripts/cloudflare-package.mjs'
 
 const roots: string[] = []
 function fixture() {
@@ -20,14 +20,17 @@ function fixture() {
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }) })
 
 describe('Cloudflare static package', () => {
-  it('keeps generated asset bytes and the Pages base path, without publishing repository files', () => {
+  it('keeps generated asset bytes at the site root, without publishing repository files', () => {
     const { docs, output } = fixture()
+    expect(APP_PATH).toBe('/')
     expect(packageCloudflare(docs, output)).toMatchObject({ files: 3, appPath: APP_PATH })
     for (const file of ['index.html', '404.html', 'assets/app.js']) {
-      expect(readFileSync(join(output, APP_PATH, file))).toEqual(readFileSync(join(docs, file)))
+      expect(readFileSync(join(output, file))).toEqual(readFileSync(join(docs, file)))
     }
     expect(readFileSync(join(output, '404.html'), 'utf8')).toBe('<html>fallback</html>')
-    expect(readFileSync(join(output, '_redirects'), 'utf8')).toBe(`/ ${APP_PATH} 302\n`)
+    expect(existsSync(join(output, 'acc-telemetry-dashboard'))).toBe(false)
+    // PIP-672: the old root redirects here; deep links go through 404.html (no splat: it could leave the site).
+    expect(readFileSync(join(output, '_redirects'), 'utf8')).toBe(`${LEGACY_APP_PATH} / 301\n/acc-telemetry-dashboard/docs / 301\n`)
     const headers = readFileSync(join(output, '_headers'), 'utf8')
     expect(headers).toContain(`${APP_PATH}images/optimized/*\n  Cache-Control: public, max-age=31536000, immutable`)
     expect(headers).toContain(`${APP_PATH}assets/*.woff2`)
@@ -42,7 +45,7 @@ describe('Cloudflare static package', () => {
     writeFileSync(join(docs, 'onboarding', '01-benvenuto.webm'), 'clip')
     writeFileSync(join(docs, 'onboarding', '01-benvenuto.jpg'), 'poster')
     expect(packageCloudflare(docs, output)).toMatchObject({ files: 5 })
-    expect(readFileSync(join(output, APP_PATH, 'onboarding', '01-benvenuto.webm'), 'utf8')).toBe('clip')
+    expect(readFileSync(join(output, 'onboarding', '01-benvenuto.webm'), 'utf8')).toBe('clip')
   })
   it('refuses to overwrite previous output', () => {
     const { docs, output } = fixture()

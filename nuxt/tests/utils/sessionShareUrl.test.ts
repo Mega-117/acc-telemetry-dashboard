@@ -14,6 +14,12 @@ describe('session share url (PIP-591)', () => {
       .toBe('https://example.org/sessioni/s1?userId=u1')
   })
 
+  it('PIP-672: the public site is app.racercore.app; Develop links stay on dev.racercore.app', () => {
+    expect(PUBLIC_SITE_URL).toBe('https://app.racercore.app/')
+    expect(buildSessionShareUrl({ sessionId: 's1', userId: 'u1', location: at('https://dev.racercore.app/sessioni/s1'), baseURL: '/' }))
+      .toBe('https://dev.racercore.app/sessioni/s1?userId=u1')
+  })
+
   it('from the desktop app or localhost points to the public site', () => {
     for (const href of ['http://localhost:3000/sessioni', 'http://127.0.0.1:3000/', 'file:///C:/app/index.html']) {
       expect(buildSessionShareUrl({ sessionId: 's1', userId: 'u1', location: at(href), baseURL: '/' }))

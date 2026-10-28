@@ -315,6 +315,13 @@ describe('beta seats', () => {
     await assertFails(updateDoc(doc(admin, 'config/betaSeats'), { taken: 0 }))
     await assertFails(updateDoc(doc(verified(PILOT_UID), 'config/betaSeats'), { limit: 1000 }))
   })
+
+  it('PIP-672: the counter is public to read, never to write; the seats stay private', async () => {
+    const anonymous = testEnv.unauthenticatedContext().firestore()
+    await assertSucceeds(getDoc(doc(anonymous, 'config/betaSeats')))
+    await assertFails(updateDoc(doc(anonymous, 'config/betaSeats'), { limit: 1000 }))
+    await assertFails(getDoc(doc(anonymous, `betaSeats/${PILOT_UID}`)))
+  })
 })
 
 afterAll(async () => {

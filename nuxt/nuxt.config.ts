@@ -7,13 +7,14 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { dirname, join } from 'node:path'
 
-// Determina baseURL: '/' per dev locale, path completo per produzione
 const isDev = process.env.NODE_ENV === 'development'
 const desktopBundle = process.env.ACC_DESKTOP_BUNDLE === '1'
 const qaEmulatorPorts = isDev ? [process.env.VITE_ACC_AUTH_EMULATOR_PORT, process.env.VITE_ACC_FIRESTORE_EMULATOR_PORT, process.env.VITE_ACC_DATABASE_EMULATOR_PORT]
   .map(Number).filter(port => Number.isInteger(port) && port >= 1024 && port <= 65535) : []
 const qaEmulatorSources = [...new Set(qaEmulatorPorts)].map(port => ` http://127.0.0.1:${port} ws://127.0.0.1:${port}`).join('')
-const baseURL = isDev || desktopBundle ? '/' : '/acc-telemetry-dashboard/docs/'
+// PIP-672: every build lives at the root (app.racercore.app, dev.racercore.app, the program's
+// racercore://app/). Links from the old /acc-telemetry-dashboard/docs/ address go through public/404.html.
+const baseURL = '/'
 const robotsMeta = siteRobotsMeta(process.env)
 // PIP-640: the HTML loading screen (logo at once, before the JavaScript) needs the base path of this build,
 // so it is written next to the build cache and handed to Nuxt as its spaLoadingTemplate.

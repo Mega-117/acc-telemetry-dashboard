@@ -74,7 +74,7 @@ export async function registerWithEmail(params: {
     }
 
     try {
-        await observeFirebaseAuthOperation('verification-email', () => sendEmailVerification(user))
+        await observeFirebaseAuthOperation('verification-email', () => sendEmailVerification(interfaceLanguage(user)))
     } catch (error) {
         verificationEmailSent = false
         console.warn('[AUTH] Registration verification email deferred:', getAuthErrorCode(error))
@@ -101,8 +101,17 @@ export async function loginWithEmail(email: string, password: string) {
     return { user: auth.currentUser ?? userCredential.user }
 }
 
+/**
+ * PIP-672: Firebase writes its standard emails (verify, reset, change address) in the language of
+ * the interface; without it the project default (Italian) is used for everyone.
+ */
+function interfaceLanguage<T>(value: T): T {
+    auth.languageCode = useI18n().locale.value
+    return value
+}
+
 export async function sendPasswordResetWithEmail(email: string) {
-    await observeFirebaseAuthOperation('password-reset', () => sendPasswordResetEmail(auth, email))
+    await observeFirebaseAuthOperation('password-reset', () => sendPasswordResetEmail(interfaceLanguage(auth), email))
 }
 
 export async function logoutCurrentUser() {
@@ -110,7 +119,7 @@ export async function logoutCurrentUser() {
 }
 
 export async function resendCurrentVerificationEmail(user: User) {
-    await observeFirebaseAuthOperation('verification-email', () => sendEmailVerification(user))
+    await observeFirebaseAuthOperation('verification-email', () => sendEmailVerification(interfaceLanguage(user)))
 }
 
 /**
@@ -124,7 +133,7 @@ export async function resendCurrentVerificationEmail(user: User) {
  * irraggiungibile - la correzione non puo' peggiorare la situazione.
  */
 export async function sendVerificationToUpdatedEmail(user: User, newEmail: string) {
-    await observeFirebaseAuthOperation('verify-new-email', () => verifyBeforeUpdateEmail(user, newEmail))
+    await observeFirebaseAuthOperation('verify-new-email', () => verifyBeforeUpdateEmail(interfaceLanguage(user), newEmail))
 }
 
 export async function refreshEmailVerificationState(user: User | null) {

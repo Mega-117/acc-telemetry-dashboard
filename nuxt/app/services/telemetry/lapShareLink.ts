@@ -4,7 +4,7 @@
 
 import { useI18n } from '~/i18n'
 
-export const LAP_SHARE_LINK_BASE = 'https://mega-117.github.io/acc-telemetry-dashboard/docs/giro'
+export const LAP_SHARE_LINK_BASE = 'https://app.racercore.app/giro'
 
 export interface LapShareRef { shareId: string, key: string }
 

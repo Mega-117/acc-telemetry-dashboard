@@ -87,8 +87,9 @@ describe('CI publication contract', () => {
     // PIP-656: only the staged build goes online, never the repository (sources, notes, rules).
     expect(pages.jobs.deploy.steps.find((s: { uses?: string }) => s.uses?.startsWith('actions/upload-pages-artifact@')).with.path).toBe('_site')
     const stage = pages.jobs.deploy.steps.find((s: { name?: string }) => s.name === 'Stage the generated site only').run as string
-    expect(stage).toContain('cp -R docs _site/docs')
-    expect(stage).toContain('noindex')
+    // PIP-672: the build is the site root (app.racercore.app); no /docs/ copy and no redirect page.
+    expect(stage).toContain('cp -R docs/. _site/')
+    expect(stage).not.toContain('_site/docs')
     for (const leak of ['nuxt', 'firestore.rules', 'database.rules.json']) expect(stage).toContain(leak)
   })
 

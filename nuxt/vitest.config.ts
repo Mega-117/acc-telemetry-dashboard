@@ -50,6 +50,7 @@ export default defineConfig({
         // PIP-591: esito del salvataggio attrezzatura.
         'app/utils/equipmentSaveOutcome.ts',
         'app/utils/sessionShareUrl.ts',
+        'app/utils/communityLinks.ts',
         // PIP-654: colori di sessione unici per i grafici.
         'app/utils/sessionPalette.ts',
         // PIP-658: privacy, consenso e cancellazione account.

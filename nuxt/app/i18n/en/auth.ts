@@ -80,6 +80,7 @@ export default {
       resendError: 'Could not send the email',
       notVerified: 'Email not verified yet. Click the link you received by email and try again.',
       checkError: 'Could not check the verification',
+      backToLogin: 'Back to log in',
     },
     service: {
       generic: 'Authentication error',

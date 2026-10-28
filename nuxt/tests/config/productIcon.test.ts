@@ -11,7 +11,7 @@ afterEach(() => {
 describe('program favicon', () => {
   it.each([
     ['development', '/'],
-    ['production', '/acc-telemetry-dashboard/docs/']
+    ['production', '/']
   ])('uses the approved ICO with the correct base path in %s', async (environment, base) => {
     vi.stubEnv('NODE_ENV', environment)
     vi.stubGlobal('defineNuxtConfig', (config: unknown) => config)

@@ -34,3 +34,18 @@ describe('UserDropdown settings entry', () => {
     expect(wrapper.text()).not.toContain('Impostazioni')
   })
 })
+
+describe('UserDropdown community entry (PIP-672)', () => {
+  it('links the permanent Discord invite in a new window', async () => {
+    const wrapper = mount(UserDropdown, {
+      props: { userName: 'Pilota' },
+      global: { directives: { clickOutside: () => {} } },
+    })
+    await wrapper.get('.dropdown-trigger').trigger('click')
+    const link = wrapper.get('a.dropdown-item')
+    expect(link.text()).toContain('Community Discord')
+    expect(link.attributes('href')).toBe('https://discord.gg/hzWEVHbEc3')
+    expect(link.attributes('target')).toBe('_blank')
+    expect(link.attributes('rel')).toBe('noopener')
+  })
+})

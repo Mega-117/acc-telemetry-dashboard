@@ -9,26 +9,35 @@
         // This script preserves the URL path and redirects to index,
         // passing the path as a query parameter so the SPA can handle it
 
-        // IMPORTANT: Must match baseURL in nuxt.config.ts
-        const basePath = '/acc-telemetry-dashboard/docs';
-
-        // Get the current path after the base
+        // PIP-672: links from before app.racercore.app keep working. GitHub Pages already drops the
+        // repository folder (mega-117.github.io/acc-telemetry-dashboard/docs/x -> app.racercore.app/docs/x);
+        // the old docs prefix goes here, keeping query and fragment (a shared lap keeps its key there).
+        const legacyPrefix = /^\/(?:acc-telemetry-dashboard\/)?docs(?=\/|$)/;
         const fullPath = window.location.pathname;
-        let appPath = fullPath.replace(basePath, '');
 
-        // Store the intended path as a fallback for older published bundles.
-        if (appPath && appPath !== '/' && appPath !== '/index.html') {
-            sessionStorage.setItem('spa-redirect-path', appPath + window.location.search);
-            console.log('[404] Saving path for SPA redirect:', appPath);
+        if (legacyPrefix.test(fullPath)) {
+            // One leading slash only: "/docs//other.example" must stay on this site (Codex review).
+            const target = '/' + fullPath.replace(legacyPrefix, '').replace(/^[\/\\]+/, '');
+            window.location.replace(target + window.location.search + window.location.hash);
+        } else {
+            // IMPORTANT: Must match baseURL in nuxt.config.ts
+            const basePath = '';
+            let appPath = fullPath.replace(basePath, '');
+
+            // Store the intended path as a fallback for older published bundles.
+            if (appPath && appPath !== '/' && appPath !== '/index.html') {
+                sessionStorage.setItem('spa-redirect-path', appPath + window.location.search);
+                console.log('[404] Saving path for SPA redirect:', appPath);
+            }
+
+            // Pass the intended path explicitly. This avoids a race between the
+            // root page redirect and the app mounted hook on a cold deep link.
+            const redirectPath = appPath + window.location.search;
+            const redirectQuery = appPath && appPath !== '/' && appPath !== '/index.html'
+                ? '?spa-redirect-path=' + encodeURIComponent(redirectPath)
+                : '';
+            window.location.replace(basePath + '/' + redirectQuery);
         }
-
-        // Pass the intended path explicitly. This avoids a race between the
-        // root page redirect and the app mounted hook on a cold deep link.
-        const redirectPath = appPath + window.location.search;
-        const redirectQuery = appPath && appPath !== '/' && appPath !== '/index.html'
-            ? '?spa-redirect-path=' + encodeURIComponent(redirectPath)
-            : '';
-        window.location.replace(basePath + '/' + redirectQuery);
     </script>
 </head>
 

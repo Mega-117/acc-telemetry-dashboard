@@ -1,0 +1,1 @@
+import{initializeAuth as t,indexedDBLocalPersistence as r,browserLocalPersistence as s,browserSessionPersistence as i,getAuth as n}from"./C5947JKp.js";import{ab as e}from"./B5iYut9n.js";function o(){try{return t(e,{persistence:[r,s,i]})}catch{return n(e)}}const u=o();export{u as auth};

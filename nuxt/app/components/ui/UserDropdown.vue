@@ -5,6 +5,7 @@
 
 import { onMounted, ref } from 'vue'
 import { useI18n } from '~/i18n'
+import { DISCORD_INVITE_URL } from '~/utils/communityLinks'
 
 const { t } = useI18n()
 
@@ -104,6 +105,13 @@ const handleLogout = () => {
           </svg>
           {{ t('userMenu.report') }}
         </button>
+        <!-- PIP-672: the community; the program opens it in the system browser. -->
+        <a class="dropdown-item dropdown-item--link" :href="DISCORD_INVITE_URL" target="_blank" rel="noopener" @click="closeDropdown">
+          <svg class="item-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M3 3.5h10a1 1 0 011 1v6a1 1 0 01-1 1H7l-3 2.5v-2.5H3a1 1 0 01-1-1v-6a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+          </svg>
+          {{ t('userMenu.discord') }}
+        </a>
         <div class="dropdown-divider"></div>
         <button class="dropdown-item dropdown-item--danger" @click="handleLogout">
           <svg class="item-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -195,6 +203,7 @@ $color-racing-orange: $racing-orange;
   text-align: left;
   cursor: pointer;
   transition: all 0.15s ease;
+  text-decoration: none; // PIP-672: the Discord entry is a link
 
   &:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.08);

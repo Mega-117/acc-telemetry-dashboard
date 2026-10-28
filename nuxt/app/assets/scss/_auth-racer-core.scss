@@ -116,6 +116,7 @@
 .racer-auth :deep(.resend-btn) { color: #ff4962; }
 .racer-auth :deep(.email-fix) { width: 100%; border-top: 1px solid #555; padding-top: 26px; }
 .racer-auth :deep(.email-fix__toggle) { text-decoration: underline; }
+.racer-auth :deep(.verify-back) { margin-top: 18px; } // PIP-670
 .racer-auth :deep(.email-fix__form) { display: grid; gap: 18px; }
 .racer-auth :deep(.email-fix__submit) { font-size: 19px; min-height: 58px; }
 .racer-auth :deep(.email-fix__sent) { line-height: 1.5; }

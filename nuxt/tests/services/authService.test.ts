@@ -192,6 +192,23 @@ describe('sendPasswordResetWithEmail', () => {
     expect(sendPasswordResetEmailMock).toHaveBeenCalledWith(authMock, 'qa@example.invalid')
   })
 
+  it('PIP-672: Firebase emails follow the interface language', async () => {
+    sendPasswordResetEmailMock.mockResolvedValue(undefined)
+    sendEmailVerificationMock.mockResolvedValue(undefined)
+    verifyBeforeUpdateEmailMock.mockResolvedValue(undefined)
+    try {
+      setLocale('en')
+      await sendPasswordResetWithEmail('qa@example.invalid')
+      expect((authMock as { languageCode?: string }).languageCode).toBe('en')
+      setLocale('it')
+      await resendCurrentVerificationEmail({ uid: 'u' } as never)
+      expect((authMock as { languageCode?: string }).languageCode).toBe('it')
+      setLocale('en')
+      await sendVerificationToUpdatedEmail({ uid: 'u' } as never, 'new@example.invalid')
+      expect((authMock as { languageCode?: string }).languageCode).toBe('en')
+    } finally { setLocale('it') }
+  })
+
   it('propagates Firebase failures without mutating user or profile data', async () => {
     const error = { code: 'auth/network-request-failed' }
     sendPasswordResetEmailMock.mockRejectedValue(error)

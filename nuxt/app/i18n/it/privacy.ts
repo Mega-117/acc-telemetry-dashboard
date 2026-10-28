@@ -38,7 +38,7 @@ export default {
       eyebrow: 'Assistenza',
       title: 'Segnala un problema',
       close: 'Chiudi',
-      browserOnly: 'La segnalazione con i dati tecnici si fa dal programma Racer Core: apri il menu del tuo nome e scegli "Segnala problema". Dal browser descrivi il problema su Discord, nel canale #bug.',
+      browserOnly: 'La segnalazione con i dati tecnici si fa dal programma Racer Core: apri il menu del tuo nome e scegli "Segnala problema". Dal browser descrivi il problema su Discord, nel forum #segnala-bug.',
       sent: 'Inviato, grazie.',
       queued: "Segnalazione rimasta sul PC: partirà appena c'è connessione. Grazie.",
       limitDay: 'Hai già inviato abbastanza segnalazioni per oggi, grazie. Puoi scriverne altre domani.',
@@ -53,7 +53,7 @@ export default {
       notReady: 'Il programma non è ancora pronto: riprova tra poco.',
       busy: 'Invio già in corso.',
       bundleCap: 'Oggi il programma ha già inviato molti dati: riprova domani.',
-      rejected: 'Il server non ha accettato la segnalazione: scrivi il problema su Discord nel canale #bug.',
+      rejected: 'Il server non ha accettato la segnalazione: scrivi il problema su Discord nel forum #segnala-bug.',
     },
     deletion: {
       title: 'Cancella account',

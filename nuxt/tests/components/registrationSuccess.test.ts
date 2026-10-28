@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { setLocale } from '~/i18n'
-import { enableAutoUnmount, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import RegistrationSuccess from '~/components/auth/RegistrationSuccess.vue'
@@ -8,12 +8,14 @@ import RegistrationSuccess from '~/components/auth/RegistrationSuccess.vue'
 const checkEmailVerified = vi.hoisted(() => vi.fn())
 const resendVerificationEmail = vi.hoisted(() => vi.fn())
 const changeVerificationEmail = vi.hoisted(() => vi.fn())
+const logout = vi.hoisted(() => vi.fn())
 
 vi.mock('~/composables/useFirebaseAuth', () => ({
   useFirebaseAuth: () => ({
     checkEmailVerified,
     resendVerificationEmail,
     changeVerificationEmail,
+    logout,
   }),
 }))
 
@@ -177,5 +179,20 @@ describe('RegistrationSuccess verification reconciliation', () => {
 
     await wrapper.get('.verify-btn').trigger('click')
     await vi.waitFor(() => expect(checkEmailVerified).toHaveBeenCalledTimes(2))
+  })
+})
+
+describe('RegistrationSuccess way out (PIP-670)', () => {
+  it('signs out to go back to the login form', async () => {
+    vi.clearAllMocks()
+    checkEmailVerified.mockResolvedValue({ verified: false, error: null })
+    logout.mockResolvedValue(undefined)
+    const wrapper = mount(RegistrationSuccess, { props: { email: 'pilot@example.invalid', requireEmailVerification: true } })
+    await flushPromises()
+
+    const back = wrapper.get('.verify-back')
+    expect(back.text()).toBe('Torna al login')
+    await back.trigger('click')
+    await vi.waitFor(() => expect(logout).toHaveBeenCalledOnce())
   })
 })
