@@ -16,8 +16,8 @@ export function tyreSlipStateLabel(state: FastStateSlipState, hasData: boolean):
 
 export type TyreSlipBarAxis = 'horizontal' | 'vertical'
 
-// Classic v2 (28/10): the slip gauge is drawn as ten slanted ticks. They are only windows:
-// the fill below them stays one continuous bar sized by tyreSlipFillPercent.
+// Classic aligned (28/10): the slip gauge is split into ten steps by thin separators drawn over
+// it; the fill below them stays one continuous bar sized by tyreSlipFillPercent.
 export const TYRE_SLIP_GAUGE_TICKS = 10
 
 export function tyreSlipFillPercent(wheelSlipScaled: number | null | undefined): number {

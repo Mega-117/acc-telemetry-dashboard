@@ -49,7 +49,7 @@ describe('Sectors classic panel', () => {
 })
 
 describe('Tyres classic and race panels', () => {
-  it('uses the same cut shape and line for Classic and Race (tyres and Damage); the four cards keep their own cut', () => {
+  it('uses the same cut shape and line for Classic and Race (tyres and Damage); the four Classic tiles stay flat', () => {
     const page = source('app/pages/tyres-overlay.vue')
 
     expect(page).toContain("'hud-overlay__panel--classic': variant === 'classic',")
@@ -63,7 +63,9 @@ describe('Tyres classic and race panels', () => {
     const race = page.match(/\}\n\n\.hud-overlay__panel--race \{([^}]*)\}/)?.[1] ?? ''
     expect(race).toContain('padding: 0;')
     expect(race).not.toMatch(/border-radius|overflow/)
-    expect(page).toMatch(/\.hud-overlay \.tyre-slip \{[^}]*clip-path: polygon\(0 0, calc\(100% - var\(--tyre-slip-cut\)\) 0/)
+    // Style guide (28/10): the four Classic tiles are flat, with no cut of their own.
+    expect(page).toMatch(/\.hud-overlay \.tyre-slip \{[^}]*border: 0;/)
+    expect(page).not.toMatch(/\.hud-overlay \.tyre-slip \{[^}]*clip-path/)
   })
 
   it('squares the full-size layers inside the Race window so they meet the square panel corners', () => {

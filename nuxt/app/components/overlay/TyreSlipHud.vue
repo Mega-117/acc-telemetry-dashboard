@@ -61,27 +61,21 @@ const { t } = useI18n()
       <span>{{ t('overlays.tyres') }}</span>
     </header>
     <div class="tyre-slip-grid">
-      <!-- Classic v2 (28/10): cut top-right corner, slip-colour band on the left, square state tag. -->
+      <!-- Classic aligned (owner 28/10): flat tiles; the state is coloured text and a light tint. -->
       <div
         v-for="tyre in visibleTyres"
         :key="tyre.id"
         class="tyre-slip"
         :class="[`tyre-slip--${tyre.slipBand}`, `tyre-slip--state-${tyre.slipState}`, { 'tyre-slip--waiting': !hasSlipData(tyre) }]"
       >
-        <!-- clip-path removes the border on the cut corner: this line draws it back. -->
-        <i class="tyre-slip__cut" aria-hidden="true" />
         <div class="tyre-slip__topline">
           <strong class="tyre-slip__id">{{ tyre.id }}</strong>
           <span class="tyre-slip__state">{{ tyreSlipStateLabel(tyre.slipState, hasLiveTyres && hasSlipPolicy && tyre.wheelSlip !== null) }}</span>
         </div>
-        <!-- One continuous fill seen through ten slanted tick windows, under the tick outlines. -->
-        <div class="tyre-slip__bar" aria-hidden="true">
-          <span class="tyre-slip__track"><span class="tyre-slip__fill" :style="tyreFillStyle(tyre)" /></span>
-          <i
-            v-for="tick in TYRE_SLIP_GAUGE_TICKS"
-            :key="tick"
-            class="tyre-slip__tick"
-          />
+        <!-- One continuous fill; thin separators drawn over it split the gauge into ten steps. -->
+        <div class="tyre-slip__bar" :style="{ '--tyre-slip-ticks': TYRE_SLIP_GAUGE_TICKS }" aria-hidden="true">
+          <span class="tyre-slip__fill" :style="tyreFillStyle(tyre)" />
+          <i class="tyre-slip__ticks" />
         </div>
         <div class="tyre-slip__meta">
           <span class="tyre-slip__slip"><HudFixedDigits :value="formatSlip(tyre)" /><small> slip</small></span>

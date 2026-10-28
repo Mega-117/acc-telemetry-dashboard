@@ -74,8 +74,8 @@ describe('HUD background transparency reaches only the background', () => {
     ])
     // Only the Race page switcher fades in on hover; it never reads the setting.
     expect(opacityDeclarations(page)).toEqual(['opacity:0', 'opacity:1'])
-    // Classic cards are content tiles: their own gradient never reads the setting.
-    expect(page).toMatch(/\.hud-overlay \.tyre-slip \{[^}]*background: linear-gradient\(135deg, color-mix\(in srgb, var\(--tyre-slip-color\) var\(--tyre-slip-alarm, 0%\), #15171c\) 0%, #0b0c0f 100%\);/)
+    // Classic tiles are content: their own light tint never reads the setting (style guide 28/10).
+    expect(page).toMatch(/\.hud-overlay \.tyre-slip \{[^}]*background: color-mix\(in srgb, var\(--tyre-slip-color\) var\(--tyre-slip-alarm, 0%\), rgba\(255, 255, 255, 0\.045\)\);/)
     // Settings page: the shared slider is shown for Tyres too.
     expect(settings).toContain('v-if="supportsHudOverlayBackground(selectedOverlayId)"')
     expect(settings).not.toContain("selectedOverlayId !== 'tyres'")

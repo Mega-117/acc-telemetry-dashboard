@@ -80,7 +80,7 @@
   background: transparent;
   border: none;
   padding: 0;
-  font-family: var(--hud-font-label);
+  font-family: var(--hud-font-num);
 }
 
 .hud-overlay .sector-delta-hud__body {
@@ -122,7 +122,7 @@
 .hud-overlay .sector-delta-hud__header span,
 .hud-overlay .sector-delta-hud__header em {
   overflow: visible;
-  font: 700 calc(12px * var(--hud-scale))/1 var(--hud-font-label);
+  font: italic 700 calc(12px * var(--hud-scale))/1 var(--hud-font-num);
   letter-spacing: .14em;
   text-transform: uppercase;
 }
@@ -133,7 +133,6 @@
 
 .hud-overlay .sector-delta-hud__comparison {
   color: #f4f4f6;
-  font-style: normal;
 
   // "vs" minuscolo e leggero, il riferimento (BEST/CUSTOM) in grassetto chiaro.
   .sector-title__versus {
@@ -168,8 +167,8 @@
 .hud-overlay .sector-delta__label {
   overflow: hidden;
   color: #f4f4f6;
-  font: 700 calc(12px * var(--hud-scale))/1 var(--hud-font-label);
-  letter-spacing: .08em;
+  font: italic 700 calc(16px * var(--hud-scale))/1 var(--hud-font-num);
+  letter-spacing: .04em;
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
@@ -188,7 +187,7 @@
 
 .hud-overlay .sector-delta-hud__lap-delta {
   color: #f4f4f6;
-  font: italic 700 calc(18px * var(--hud-scale))/1 var(--hud-font-num);
+  font: italic 700 calc(13px * var(--hud-scale))/1 var(--hud-font-num);
   white-space: nowrap;
 }
 
@@ -196,15 +195,19 @@
 .hud-overlay .sector-delta-hud__lap-delta--slower { color: rgb(239, 68, 68); }
 .hud-overlay .sector-delta-hud__lap-delta--placeholder { color: #a3a5ae; }
 
+// HUD style guide (28/10) type scale at scale 1: title 12, tile name (S1) 16, sector time 20,
+// delta and PREV/BEST values 13, PREV/BEST words 11. White text; grey only for missing data.
 .hud-overlay .sector-delta strong {
   color: #f4f4f6;
-  font: italic 700 calc(26px * var(--hud-scale))/1 var(--hud-font-num);
+  font: italic 700 calc(20px * var(--hud-scale))/1 var(--hud-font-num);
 }
+
+.hud-overlay .sector-delta .sector-delta__value--placeholder { color: #a3a5ae; }
 
 .hud-overlay .sector-delta .sector-delta__delta {
   align-self: flex-start;
   color: #f4f4f6;
-  font: italic 700 calc(18px * var(--hud-scale))/1 var(--hud-font-num);
+  font: italic 700 calc(13px * var(--hud-scale))/1 var(--hud-font-num);
 }
 
 .hud-overlay .sector-delta--purple .sector-delta__delta { color: rgb(217, 70, 239); }
@@ -233,7 +236,7 @@
 
   b {
     color: #f4f4f6;
-    font: 700 calc(10px * var(--hud-scale))/1 var(--hud-font-label);
+    font: italic 700 calc(11px * var(--hud-scale))/1 var(--hud-font-num);
     letter-spacing: .1em;
     text-transform: uppercase;
   }
@@ -241,7 +244,7 @@
   em {
     overflow: hidden;
     color: #f4f4f6;
-    font: italic 600 calc(13px * var(--hud-scale))/1 var(--hud-font-num);
+    font: italic 700 calc(13px * var(--hud-scale))/1 var(--hud-font-num);
     text-overflow: ellipsis;
     white-space: nowrap;
   }

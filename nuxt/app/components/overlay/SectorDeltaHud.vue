@@ -299,7 +299,7 @@ const { t } = useI18n()
   box-sizing: border-box;
   min-height: 0;
   overflow: hidden;
-  font-family: var(--hud-font-label);
+  font-family: var(--hud-font-num);
 }
 
 .sector-compact__header {
@@ -327,7 +327,7 @@ const { t } = useI18n()
 
 .sector-compact__title > span {
   color: #f4f4f6;
-  font: 700 calc(12px * var(--hud-scale, 1))/1 var(--hud-font-label);
+  font: italic 700 calc(12px * var(--hud-scale, 1))/1 var(--hud-font-num);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -390,11 +390,12 @@ const { t } = useI18n()
   background: rgba(255, 255, 255, 0.045);
 }
 
-/* Same face as the times and the live/wait words, so "S1" belongs to the row. */
+/* Tile-name style of the HUD guide (Classic S1: 16 next to 20 times), scaled to the larger
+   Compact times (32): same face, white, same letter spacing. */
 .sector-compact__label {
   color: #f4f4f6;
-  font: italic 700 calc(20px * var(--hud-scale, 1))/1 var(--hud-font-num);
-  letter-spacing: 0.02em;
+  font: italic 700 calc(24px * var(--hud-scale, 1))/1 var(--hud-font-num);
+  letter-spacing: 0.04em;
 }
 
 /* overflow: clip (not hidden) keeps the content baseline for the row alignment. */
@@ -419,6 +420,9 @@ const { t } = useI18n()
   font-variant-numeric: tabular-nums;
   text-transform: uppercase;
 }
+
+/* live/wait and a missing delta are not values: grey, as in Classic. */
+.sector-compact__delta.sector-delta__delta--placeholder { color: #a3a5ae; }
 
 /* Sectors not reached yet stay dimmer; the running one is lifted. */
 .sector-compact__row--pending .sector-compact__time,

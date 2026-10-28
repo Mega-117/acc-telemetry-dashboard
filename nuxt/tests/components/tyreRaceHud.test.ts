@@ -233,7 +233,7 @@ describe('Race HUD components', () => {
 })
 
 describe('HUD style v2 (27/10) classic tyres', () => {
-  it('drops the speed from the header and keeps id, state, bar, slip and psi per card', async () => {
+  it('drops the speed from the header and keeps id, state, bar, slip and psi per tile', async () => {
     const state = { ...fastState(), speedKmh: 187 }
     state.tyres[0]!.slipState = 'lockup'
     const html = await renderClassic(state)
@@ -246,55 +246,69 @@ describe('HUD style v2 (27/10) classic tyres', () => {
     expect(html).not.toContain('tyre-slip--waiting')
   })
 
-  it('classic v2 (28/10): square state tag, cut corner with its border, id in the numbers font', async () => {
+  it('classic aligned (28/10): flat tiles, state as coloured text, no tag, band or cut', async () => {
     const page = readFileSync(resolve(process.cwd(), 'app/pages/tyres-overlay.vue'), 'utf8')
     const html = await renderToString(createSSRApp(TyreSlipHud, { fastState: fastState() }))
-    // The state tag is square (no pill) and filled with the slip colour.
-    expect(page).toMatch(/\.tyre-slip__state,[\s\S]*?\{[^}]*border-radius:\s*0;[^}]*background:\s*var\(--tyre-slip-color/)
-    expect(page).not.toContain('border-radius: 999px')
+    // Flat tile: no border, cut, left band or diagonal line of its own.
+    const tile = page.match(/\.hud-overlay \.tyre-slip \{([^}]*)\}/)?.[1] ?? ''
+    expect(tile).toContain('border: 0;')
+    expect(tile).toContain('border-radius: 0;')
+    expect(tile).not.toContain('clip-path')
+    expect(page).not.toContain('.tyre-slip::before')
+    expect(page).not.toContain('tyre-slip__cut')
+    expect(html).not.toContain('tyre-slip__cut')
+    // The state is coloured text in the slip colour: no filled tag, grey while waiting.
     expect(html.match(/<span class="tyre-slip__state">OK<\/span>/g)).toHaveLength(4)
-    // Cut top-right corner, and the diagonal line that draws the border back on the cut.
-    expect(page).toMatch(/\.hud-overlay \.tyre-slip \{[^}]*clip-path: polygon\(0 0, calc\(100% - var\(--tyre-slip-cut\)\) 0, 100% var\(--tyre-slip-cut\)/)
-    expect(html.match(/<i class="tyre-slip__cut" aria-hidden="true"><\/i>/g)).toHaveLength(4)
-    expect(page).toMatch(/\.tyre-slip__cut \{[^}]*width: calc\(var\(--tyre-slip-cut\) \* 1\.4142\);[^}]*background: var\(--tyre-slip-line\);[^}]*transform: rotate\(45deg\)/)
-    // Owner (28/10): square outer panel with an even scaled margin; cards fill the width; yellow frame kept.
+    const state = page.match(/\.tyre-slip--state-lockup \.tyre-slip__state \{([^}]*)\}/)?.[1] ?? ''
+    expect(state).toContain('background: transparent;')
+    expect(state).toContain('padding: 0;')
+    expect(state).toContain('color: var(--tyre-slip-color, #f4f4f6);')
+    expect(page).toContain('.hud-overlay .tyre-slip--waiting .tyre-slip__state { color: #a3a5ae; }')
+    // Owner (28/10): square outer panel with an even scaled margin; tiles fill the width; yellow frame kept.
     expect(page).toMatch(/\.hud-overlay__panel \{[^}]*padding: calc\(12px \* var\(--hud-scale\)\);[^}]*border-radius: 0;/)
     expect(page).toMatch(/\.tyre-slip-grid \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/)
     expect(page).toMatch(/\.hud-overlay__panel--yellow-flag::after \{[^}]*border: calc\(4px \* var\(--hud-scale\)\) solid #ffd400;[^}]*border-radius: inherit;/)
-    // Readability at the 0.6 minimum: tags and units never below 12px, values 14px, id 16px.
-    expect(page).toMatch(/\.tyre-slip__meta small \{[^}]*color: #d0d2d8;[^}]*font: 700 max\(12px, calc\(13px \* var\(--hud-scale\)\)\)/)
-    expect(page).toMatch(/\.tyre-slip__state,[\s\S]*?\{[^}]*font: 700 max\(12px, calc\(13px \* var\(--hud-scale\)\)\)/)
-    // Slip-colour band on the left edge.
-    expect(page).toMatch(/\.hud-overlay \.tyre-slip::before \{[^}]*left: 0;[^}]*background: var\(--tyre-slip-color\)/)
-    expect(page).toMatch(/\.tyre-slip__topline strong \{[^}]*font: italic 700 [^;]*var\(--hud-font-num\)/)
   })
 
-  it('classic v2 (28/10): ten slanted ticks over ONE continuous fill sized by the slip formula', async () => {
+  it('classic aligned (28/10): guide type scale in the italic numbers font, with the 0.6 floors', () => {
+    const page = readFileSync(resolve(process.cwd(), 'app/pages/tyres-overlay.vue'), 'utf8')
+    const font = (selector: RegExp) => page.match(new RegExp(String.raw`${selector.source} \{[^}]*font: ([^;]*);`))?.[1]
+    // Title 12, wheel id 16, values 20, state 13, units 11; labels never below 12px, values 14px.
+    expect(font(/\.tyre-slip-hud__header[\s\S]*?span/)).toBe('italic 700 max(12px, calc(12px * var(--hud-scale)))/1 var(--hud-font-num)')
+    expect(font(/\.tyre-slip__topline strong/)).toBe('italic 700 max(12px, calc(16px * var(--hud-scale)))/1 var(--hud-font-num)')
+    expect(font(/\.tyre-slip__psi/)).toBe('italic 700 max(14px, calc(20px * var(--hud-scale)))/1 var(--hud-font-num)')
+    expect(font(/\.tyre-slip--state-lockup \.tyre-slip__state/)).toBe('italic 700 max(12px, calc(13px * var(--hud-scale)))/1 var(--hud-font-num)')
+    // Units small and grey.
+    expect(page).toMatch(/\.tyre-slip__meta small \{[^}]*color: #a3a5ae;[^}]*font: italic 700 max\(11px, calc\(11px \* var\(--hud-scale\)\)\)\/1 var\(--hud-font-num\);/)
+  })
+
+  it('classic aligned (28/10): straight gauge, ONE continuous fill sized by the slip formula, thin separators over it', async () => {
     const page = readFileSync(resolve(process.cwd(), 'app/pages/tyres-overlay.vue'), 'utf8')
     const state = fastState()
     const html = await renderToString(createSSRApp(TyreSlipHud, { fastState: state }))
-    // wheelSlipScaled 3, 6, 9, 12 → 3/18, 6/18 ... of the bar: a continuous width, not whole ticks.
+    // wheelSlipScaled 3, 6, 9, 12 → 3/18, 6/18 ... of the bar: a continuous width, not whole steps.
     const widths = [...html.matchAll(/class="tyre-slip__fill" style="width:([\d.]+)%;"/g)].map(match => Number(match[1]))
     expect(widths).toHaveLength(4)
     widths.forEach((width, index) => expect(width).toBeCloseTo(((3 + index * 3) / 18) * 100, 5))
     expect(widths[0]! % 10).not.toBe(0)
-    // One fill per gauge, inside the masked track, under ten tick outlines.
+    // One fill and one separator layer per gauge, the separators drawn over the fill.
     expect(html.match(/class="tyre-slip__fill"/g)).toHaveLength(4)
-    expect(html.match(/class="tyre-slip__tick"/g)).toHaveLength(40)
-    expect(html).toMatch(/<span class="tyre-slip__track"><span class="tyre-slip__fill"[^>]*><\/span><\/span><!--\[--><i class="tyre-slip__tick">/)
-    expect(page).toMatch(/\.tyre-slip__bar \{[^}]*transform: skewX\(-18deg\)/)
-    expect(page).toMatch(/\.tyre-slip__track \{[^}]*mask-image: repeating-linear-gradient\(90deg, #000 0 calc\(10% - var\(--tyre-slip-tick-gap\)\), transparent calc\(10% - var\(--tyre-slip-tick-gap\)\) 10%\)/)
-    expect(page).toMatch(/\.tyre-slip__tick \{[^}]*flex: 0 0 calc\(10% - var\(--tyre-slip-tick-gap\)\);[^}]*margin-right: var\(--tyre-slip-tick-gap\);/)
+    expect(html.match(/<i class="tyre-slip__ticks"><\/i>/g)).toHaveLength(4)
+    expect(html).toMatch(/<div class="tyre-slip__bar" style="--tyre-slip-ticks:10;" aria-hidden="true"><span class="tyre-slip__fill"[^>]*><\/span><i class="tyre-slip__ticks"><\/i><\/div>/)
+    expect(page).not.toContain('skewX')
+    expect(page).not.toContain('mask-image')
+    expect(page).toMatch(/\.tyre-slip__ticks \{[^}]*position: absolute;[^}]*background: repeating-linear-gradient\(90deg, transparent 0 calc\(100% \/ var\(--tyre-slip-ticks\) - var\(--tyre-slip-tick-gap\)\), #0d0e12/)
+    expect(page).toMatch(/\.tyre-slip__bar \.tyre-slip__fill \{[^}]*position: absolute;[^}]*background: var\(--tyre-slip-color\);/)
   })
 
-  it('tints the card more as the state worsens and never while waiting for data', async () => {
+  it('tints the tile more as the state worsens and never while waiting for data', async () => {
     const page = readFileSync(resolve(process.cwd(), 'app/pages/tyres-overlay.vue'), 'utf8')
     const alarm = (state: string) => Number(page.match(new RegExp(String.raw`tyre-slip--state-${state}[^{]*\{ --tyre-slip-alarm: (\d+)%`))?.[1])
+    expect(alarm('limit')).toBeGreaterThan(0)
     expect(alarm('limit')).toBeLessThan(alarm('sliding'))
     expect(alarm('sliding')).toBeLessThan(alarm('wheelspin'))
     expect(alarm('wheelspin')).toBe(alarm('lockup'))
     expect(page).toContain('.hud-overlay .tyre-slip--waiting { --tyre-slip-alarm: 0%; }')
-    expect(page).toContain('.hud-overlay .tyre-slip--waiting::before { background: rgba(255, 255, 255, 0.22); }')
     const waiting = await renderToString(createSSRApp(TyreSlipHud, { fastState: { ...fastState(), isFresh: false } }))
     expect(waiting.match(/tyre-slip--waiting/g)).toHaveLength(4)
   })

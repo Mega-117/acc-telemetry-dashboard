@@ -563,8 +563,28 @@ describe('sectors second round (28/10)', () => {
   it('compact: label, time and delta share one baseline, label in the number face, larger times', () => {
     const source = hudSource()
     expect(source).toMatch(/\.sector-compact__row\s*\{[^}]*align-items:\s*baseline;[^}]*align-content:\s*center;/)
-    expect(source).toMatch(/\.sector-compact__label\s*\{[^}]*font:\s*italic 700 calc\(20px \* var\(--hud-scale, 1\)\)\/1 var\(--hud-font-num\);/)
+    expect(source).toMatch(/\.sector-compact__label\s*\{[^}]*font:\s*italic 700 calc\(24px \* var\(--hud-scale, 1\)\)\/1 var\(--hud-font-num\);/)
     expect(source).toMatch(/\.sector-compact__time > span\s*\{[^}]*overflow:\s*clip;[^}]*font:\s*italic 700 calc\(32px/)
+  })
+
+  it('HUD style guide (28/10): one type scale in the italic numbers font, grey only for missing data', () => {
+    const styles = sectorsScss()
+    const source = hudSource()
+    const font = (text: string, selector: string) => text.match(new RegExp(String.raw`${selector}\s*\{[^}]*font:\s*([^;]*);`))?.[1]
+    const num = (px: number) => `italic 700 calc(${px}px * var(--hud-scale))/1 var(--hud-font-num)`
+    // Classic at scale 1: title 12, tile name 16, sector time 20, delta and PREV/BEST values 13, PREV/BEST words 11.
+    expect(font(styles, String.raw`\.sector-delta-hud__header span,\s*\.hud-overlay \.sector-delta-hud__header em`)).toBe(num(12))
+    expect(font(styles, String.raw`\.hud-overlay \.sector-delta__label`)).toBe(num(16))
+    expect(font(styles, String.raw`\.hud-overlay \.sector-delta strong`)).toBe(num(20))
+    expect(font(styles, String.raw`\.hud-overlay \.sector-delta \.sector-delta__delta`)).toBe(num(13))
+    expect(font(styles, String.raw`\.hud-overlay \.sector-delta-hud__lap-delta`)).toBe(num(13))
+    expect(styles).toMatch(/\.sector-delta__best \{[^}]*b \{[^}]*font: italic 700 calc\(11px \* var\(--hud-scale\)\)\/1 var\(--hud-font-num\);[^}]*\}\s*em \{[^}]*font: italic 700 calc\(13px \* var\(--hud-scale\)\)\/1 var\(--hud-font-num\);/)
+    // The whole title is italic; only "vs" drops to weight 400 (no font-style override).
+    expect(styles).not.toMatch(/\.sector-delta-hud__comparison \{[^}]*font-style: normal/)
+    expect(styles).toContain('.hud-overlay .sector-delta .sector-delta__value--placeholder { color: #a3a5ae; }')
+    // Compact: same title style; its delta placeholders (live/wait) grey as in Classic.
+    expect(font(source, String.raw`\.sector-compact__title > span`)).toBe('italic 700 calc(12px * var(--hud-scale, 1))/1 var(--hud-font-num)')
+    expect(source).toContain('.sector-compact__delta.sector-delta__delta--placeholder { color: #a3a5ae; }')
   })
 
   it('classic: with the lap tile, lap and sectors share one mock grid (1.25fr + N x 1fr)', async () => {
