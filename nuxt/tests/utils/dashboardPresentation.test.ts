@@ -71,7 +71,7 @@ describe('dashboardPresentation', () => {
     const commonLive = { gameId: 'synthetic', sessionId: 'qa', connected: true, fresh: true, fields: {}, capabilities: {} }
     expect(buildDashboardPresentation(state({ commonLive, ignitionOn: false, isEngineRunning: false })).ignitionLabel).toBe('—')
     expect(buildDashboardPresentation(state({ commonLive, rpm: 12000 }), { ...DEFAULT_DASHBOARD_OPTIONS, rpmReference: true }))
-      .toMatchObject({ cornerSpeed: '—', shiftFlash: false, shiftThresholdRatio: null })
+      .toMatchObject({ shiftFlash: false, shiftThresholdRatio: null, rpmPulse: false })
     expect(buildDashboardPresentation(state({ rpm: null })).ignitionLabel).toBe('—')
     expect(buildDashboardPresentation(state({ commonLive: { ...commonLive, fields: {
       ignition_on: { value: 0, availability: 'available', unit: 'boolean' },
@@ -84,8 +84,7 @@ describe('dashboardPresentation', () => {
     const model = buildDashboardPresentation(state())
     expect(model).toMatchObject({ ignitionLabel: '7800', speed: '123', fuelPerLap: '2.71', brakeBias: '54.8' })
     expect(model.spectator).toBeNull()
-    expect(model.remainingLabel).toBe('Laps Left')
-    expect(model.remainingValue).toBe('15.6')
+    expect(model.lapsLeft).toBe('15.6')
     expect(model.fuelLeft).toBe('0:08:51')
   })
 
@@ -115,7 +114,8 @@ describe('dashboardPresentation', () => {
     expect(model).toMatchObject({
       ignitionLabel: '—', speed: '239', gear: '5', fuel: '--.-',
       fuelPerLap: '--.--', engineMap: '-', tractionControl: '-', tractionControl2: '-',
-      abs: '-', brakeBias: '--.-', cornerSpeed: '-', inputsAvailable: false,
+      abs: '-', brakeBias: '--.-', inputsAvailable: false, rpmPulse: false,
+      leftIndicatorActive: false, rightIndicatorActive: false,
       rpmRatio: 0, rpmReferenceRatio: null, shiftThresholdRatio: null, shiftFlash: false,
       spectator: {
         driverName: 'J. Ivanko', carLabel: '#16', position: 'P1', laps: '3',
@@ -221,15 +221,14 @@ describe('dashboardPresentation', () => {
       referenceTractionControl2: 3, referenceAbs: 4,
     })
     expect(buildDashboardPresentation(withReferences)).toMatchObject({
-      speedDelta: null, gearReference: null, engineMapReference: null,
+      gearReference: null, engineMapReference: null,
       tractionControlReference: null, tractionControl2Reference: null,
       absReference: null, rpmReferenceRatio: null, shiftThresholdRatio: null,
     })
     expect(buildDashboardPresentation(withReferences, {
       ...DEFAULT_DASHBOARD_OPTIONS, electronicsReference: true, rpmReference: true,
-      gearReference: true, speedDelta: true,
+      gearReference: true,
     })).toMatchObject({
-      speed: '123', speedDelta: '2.1', speedDeltaFaster: true,
       gearReference: '4', engineMapReference: '1', tractionControlReference: '2',
       tractionControl2Reference: '3', absReference: '4',
     })
@@ -251,17 +250,35 @@ describe('dashboardPresentation', () => {
       .toMatchObject({ tractionControlOffWarning: false, tractionControlActive: false })
   })
 
-  it('mostra delta Corner Speed con tono producer-owned e poi assoluto', () => {
-    expect(buildDashboardPresentation(state({
-      cornerSpeedKmh: 86, cornerSpeedDeltaKmh: 4, cornerSpeedMode: 'delta',
-    }))).toMatchObject({ cornerSpeed: '4', cornerSpeedTone: 'faster' })
-    expect(buildDashboardPresentation(state({
-      cornerSpeedKmh: 86, cornerSpeedDeltaKmh: -3, cornerSpeedMode: 'delta',
-    }))).toMatchObject({ cornerSpeed: '-3', cornerSpeedTone: 'slower' })
-    expect(buildDashboardPresentation(state({
-      cornerSpeedKmh: 86, cornerSpeedDeltaKmh: null, cornerSpeedMode: 'absolute',
-    }))).toMatchObject({ cornerSpeed: '86', cornerSpeedTone: 'neutral' })
-    expect(buildDashboardPresentation(state())).toMatchObject({ cornerSpeed: '0' })
+  it('owner 28/10: niente velocita, delta velocita, Corner Speed e spie fari/pioggia nel modello', () => {
+    const model = buildDashboardPresentation(state({
+      speedDeltaKmh: 4, cornerSpeedKmh: 86, cornerSpeedDeltaKmh: 4, cornerSpeedMode: 'delta',
+      lightsStage: 2, rainLights: true,
+    }))
+    for (const removed of ['speedDelta', 'speedDeltaFaster', 'cornerSpeed', 'cornerSpeedTone', 'lightsStage', 'rainLightsActive']) {
+      expect(model).not.toHaveProperty(removed)
+    }
+  })
+
+  it('ACC Drive: ENGINE OFF a quadro acceso e motore spento, IGNITION OFF a quadro spento', () => {
+    expect(buildDashboardPresentation(state({ ignitionOn: true, isEngineRunning: false })))
+      .toMatchObject({ ignitionLabel: 'ENGINE OFF', rpmBand: 'off', rpmPulse: true })
+    expect(buildDashboardPresentation(state({ ignitionOn: false, isEngineRunning: false })))
+      .toMatchObject({ ignitionLabel: 'IGNITION OFF', rpmBand: 'off', rpmPulse: true })
+    // Pit limiter pulses too; running and stale telemetry do not.
+    expect(buildDashboardPresentation(state({ pitLimiterOn: true })).rpmPulse).toBe(true)
+    expect(buildDashboardPresentation(state()).rpmPulse).toBe(false)
+    expect(buildDashboardPresentation(state({ pitLimiterOn: true, isFresh: false })).rpmPulse).toBe(false)
+  })
+
+  it('accende la cornice bandiera gialla solo con flag ACC 2 e gli indicatori di direzione', () => {
+    expect(buildDashboardPresentation(state({ flag: 2 })).yellowFlagActive).toBe(true)
+    expect(buildDashboardPresentation(state({ flag: 0 })).yellowFlagActive).toBe(false)
+    expect(buildDashboardPresentation(state({ flag: null })).yellowFlagActive).toBe(false)
+    expect(buildDashboardPresentation(state({ directionLightsLeft: true })))
+      .toMatchObject({ leftIndicatorActive: true, rightIndicatorActive: false })
+    expect(buildDashboardPresentation(state({ directionLightsRight: true })))
+      .toMatchObject({ leftIndicatorActive: false, rightIndicatorActive: true })
   })
 
   it('sostituisce gli RPM con PIT LIMITER ON quando il limiter e attivo', () => {
@@ -289,6 +306,12 @@ describe('dashboardPresentation', () => {
     expect(buildDashboardPresentation(state({ fuelLapsRemaining: 1 })).fuelUrgency).toBe('low')
     expect(buildDashboardPresentation(state({ fuelLapsRemaining: 0.5 })).fuelUrgency).toBe('critical')
     expect(buildDashboardPresentation(state({ fuelLapsRemaining: null })).fuelUrgency).toBe('normal')
+    // ACC Drive: 4 minutes of fuel or less is an earlier, yellow stage; laps still win.
+    expect(buildDashboardPresentation(state({ fuelLapsRemaining: 2.5, fuelLeftTimeMs: 240_000 })).fuelUrgency).toBe('warning')
+    expect(buildDashboardPresentation(state({ fuelLapsRemaining: 2.5, fuelLeftTimeMs: 240_001 })).fuelUrgency).toBe('normal')
+    expect(buildDashboardPresentation(state({ fuelLapsRemaining: null, fuelLeftTimeMs: 100_000 })).fuelUrgency).toBe('warning')
+    expect(buildDashboardPresentation(state({ fuelLapsRemaining: 0.9, fuelLeftTimeMs: 100_000 })).fuelUrgency).toBe('low')
+    expect(buildDashboardPresentation(state({ fuelLeftTimeMs: 100_000, isEngineRunning: false })).fuelUrgency).toBe('normal')
   })
 
   it('fa pulsare il bordo carburante solo nello stato critico e quando abilitato', () => {

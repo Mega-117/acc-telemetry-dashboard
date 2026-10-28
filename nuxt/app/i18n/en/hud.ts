@@ -70,7 +70,6 @@ export default {
       electronics: 'Electronics reference',
       rpm: 'RPM reference',
       gear: 'Gear reference',
-      speedDelta: 'Speed delta',
       fuelFlash: 'Critical fuel flash',
       fuelThreshold: 'Critical fuel threshold',
       fuelThresholdAria: 'Critical fuel threshold in laps',

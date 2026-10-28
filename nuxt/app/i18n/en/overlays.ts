@@ -9,6 +9,11 @@ export default {
     staleData: 'Data not updated',
     standingsWaiting: 'Waiting for session data',
     trackmapCircleUnsupported: 'Track outline not available: circle view',
+    dashboardHud: {
+      aria: 'Dashboard',
+      spectatorAria: 'Dashboard of the observed driver',
+      unavailableAria: 'Data not available for the observed driver',
+    },
     tyreRace: {
       set: 'SET',
       damage: 'DMG',

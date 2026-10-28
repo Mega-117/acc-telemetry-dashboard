@@ -14,7 +14,10 @@ describe('hudOverlayBackground', () => {
     expect(supportsHudOverlayBackground('tyres')).toBe(true)
     expect(supportsHudOverlayBackground('standings')).toBe(true)
     expect(supportsHudOverlayBackground('sectors')).toBe(true)
-    expect(supportsHudOverlayBackground('dashboard')).toBe(false)
+    // Dashboard v3 (28/10): opaque by default, the slider lowers only the panel background.
+    expect(supportsHudOverlayBackground('dashboard')).toBe(true)
+    expect(getHudOverlayBackgroundDefaultOpacity('dashboard')).toBe(1)
+    expect(supportsHudOverlayBackground('trackmap')).toBe(false)
   })
 
   it('normalizes opacity with the per-overlay default', () => {

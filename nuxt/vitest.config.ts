@@ -62,6 +62,8 @@ export default defineConfig({
         'app/services/auth/profileIdentityService.ts',
         // PIP-633: presentazione delle Statistiche.
         'app/utils/statsPresentation.ts',
+        // Dashboard v3 (28/10): the box being adjusted, ACC Drive info box timing.
+        'app/utils/dashboardAdjustment.ts',
         'app/utils/statsJourney.ts',
         'app/directives/rcSwitch.ts',
         // PIP-635: vista di partenza del dettaglio sessione.

@@ -12,6 +12,8 @@ import {
   useOverlayTelemetrySource,
 } from '~/composables/useOverlayTelemetrySource'
 import { useHudOverlay } from '~/composables/useHudOverlay'
+import { useHudOverlayBackground } from '~/composables/useHudOverlayBackground'
+import { useDashboardAdjustment } from '~/composables/useDashboardAdjustment'
 import {
   buildDashboardPresentation,
   DEFAULT_DASHBOARD_OPTIONS,
@@ -23,12 +25,12 @@ definePageMeta({ layout: 'hud-overlay' })
 const route = useRoute()
 const getApi = useOverlayRegionApi()
 const overlay = useHudOverlay('dashboard', getApi)
+const { backgroundOpacity } = useHudOverlayBackground(overlay.settings, 'dashboard')
 const telemetry = useOverlayTelemetrySource(getApi, FOCUSED_CAR_FEED_INTERVAL_MS)
 const options = computed(() => ({
   electronicsReference: overlay.settings.value?.electronicsReference ?? DEFAULT_DASHBOARD_OPTIONS.electronicsReference,
   rpmReference: overlay.settings.value?.rpmReference ?? DEFAULT_DASHBOARD_OPTIONS.rpmReference,
   gearReference: overlay.settings.value?.gearReference ?? DEFAULT_DASHBOARD_OPTIONS.gearReference,
-  speedDelta: overlay.settings.value?.speedDelta ?? DEFAULT_DASHBOARD_OPTIONS.speedDelta,
   fuelCriticalFlashEnabled: overlay.settings.value?.fuelCriticalFlashEnabled
     ?? DEFAULT_DASHBOARD_OPTIONS.fuelCriticalFlashEnabled,
   fuelCriticalLapsThreshold: normalizeFuelCriticalLapsThreshold(
@@ -42,6 +44,12 @@ const liveModel = stableComputed(() => buildDashboardPresentation(
 ))
 const canvasStyle = computed(() => ({ transform: `scale(${overlay.scale.value})` }))
 const model = useHudPresentationMemory(liveModel, telemetry.fastState)
+// The box being adjusted (TC, TC2, ABS, MAP, BB) is highlighted for 1.5 s; local live telemetry only.
+const adjustmentEnabled = computed(() => {
+  const state = telemetry.fastState.value
+  return state.dataSource !== 'focused' && state.isFresh && state.isLive
+})
+const { active: adjusting } = useDashboardAdjustment(model, adjustmentEnabled)
 
 onMounted(async () => {
   overlay.start(route.query.scale)
@@ -60,7 +68,13 @@ onUnmounted(() => {
   <main class="overlay-root">
     <OverlayPlacementLock overlay-id="dashboard" />
     <OverlaySoftwareCursor :state="overlay.pointerState" />
-    <DashboardHud :model="model" class="overlay-canvas" :style="canvasStyle" />
+    <DashboardHud
+      :model="model"
+      :background-opacity="backgroundOpacity"
+      :adjusting="adjusting"
+      class="overlay-canvas"
+      :style="canvasStyle"
+    />
     <TelemetryFeatureNotice :live="telemetry.fastState.value.commonLive" feature="speed" />
   </main>
 </template>

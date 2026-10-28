@@ -4,11 +4,13 @@ export const HUD_OVERLAY_BACKGROUND_DEFAULT_BY_ID: Readonly<Record<string, numbe
   // Sectors and Tyres keep today's opaque panel unless the pilot lowers it.
   sectors: 1,
   tyres: 1,
+  // Dashboard v3 (owner 28/10): opaque like before; the setting lowers only the panel background.
+  dashboard: 1,
 }
 
-export type HudOverlayBackgroundId = 'info' | 'tyres' | 'standings' | 'sectors'
+export type HudOverlayBackgroundId = 'info' | 'tyres' | 'standings' | 'sectors' | 'dashboard'
 
-const HUD_OVERLAY_BACKGROUND_IDS = new Set<HudOverlayBackgroundId>(['info', 'tyres', 'standings', 'sectors'])
+const HUD_OVERLAY_BACKGROUND_IDS = new Set<HudOverlayBackgroundId>(['info', 'tyres', 'standings', 'sectors', 'dashboard'])
 
 export function supportsHudOverlayBackground(id: string): id is HudOverlayBackgroundId {
   return HUD_OVERLAY_BACKGROUND_IDS.has(id as HudOverlayBackgroundId)

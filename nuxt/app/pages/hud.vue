@@ -122,7 +122,6 @@ const dashboardSettings = reactive({
   electronicsReference: false,
   rpmReference: false,
   gearReference: false,
-  speedDelta: false,
   fuelCriticalFlashEnabled: false,
   fuelCriticalLapsThreshold: 0.5,
 })
@@ -164,6 +163,7 @@ const backgroundTransparency = reactive<Record<HudOverlayBackgroundId, number>>(
   tyres: 0,
   standings: 50,
   sectors: 0,
+  dashboard: 0,
 })
 type InfoSettingKey = keyof typeof infoSettings
 const infoOptionDefinitions: Array<{ key: InfoSettingKey, labelKey: TranslationKey }> = [
@@ -314,7 +314,6 @@ async function refreshState() {
         dashboardSettings.electronicsReference = settings?.electronicsReference === true
         dashboardSettings.rpmReference = settings?.rpmReference === true
         dashboardSettings.gearReference = settings?.gearReference === true
-        dashboardSettings.speedDelta = settings?.speedDelta === true
         dashboardSettings.fuelCriticalFlashEnabled = settings?.fuelCriticalFlashEnabled === true
         dashboardSettings.fuelCriticalLapsThreshold = Number.isFinite(Number(settings?.fuelCriticalLapsThreshold))
           ? Number(settings.fuelCriticalLapsThreshold) : 0.5
@@ -1091,15 +1090,6 @@ async function toggleTraining() {
                       :checked="dashboardSettings.gearReference"
                       :disabled="selectedSettingsDisabled"
                       @change="toggleDashboardSetting('gearReference')"
-                    />
-                  </label>
-                  <label class="hud-control">
-                    <span><strong>{{ t('hud.dashboard.speedDelta') }}</strong></span>
-                    <input
-                      type="checkbox"
-                      :checked="dashboardSettings.speedDelta"
-                      :disabled="selectedSettingsDisabled"
-                      @change="toggleDashboardSetting('speedDelta')"
                     />
                   </label>
                   <label class="hud-control">

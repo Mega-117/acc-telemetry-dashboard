@@ -9,6 +9,11 @@ export default {
     staleData: 'Dati non aggiornati',
     standingsWaiting: 'In attesa dei dati della sessione',
     trackmapCircleUnsupported: 'Sagoma pista non disponibile: vista circolare',
+    dashboardHud: {
+      aria: 'Cruscotto',
+      spectatorAria: 'Cruscotto del pilota osservato',
+      unavailableAria: 'Dati non disponibili per il pilota osservato',
+    },
     tyreRace: {
       set: 'SET',
       // Middle line, only while the car is damaged: total repair time.

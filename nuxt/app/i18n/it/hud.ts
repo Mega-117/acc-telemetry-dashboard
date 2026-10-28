@@ -69,7 +69,6 @@ export default {
       electronics: 'Riferimento elettronica',
       rpm: 'Riferimento RPM',
       gear: 'Riferimento marcia',
-      speedDelta: 'Delta velocità',
       fuelFlash: 'Lampeggio carburante critico',
       fuelThreshold: 'Soglia carburante critica',
       fuelThresholdAria: 'Soglia carburante critica in giri',

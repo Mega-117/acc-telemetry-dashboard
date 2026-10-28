@@ -12,7 +12,6 @@ export interface DashboardOptions {
   electronicsReference: boolean
   rpmReference: boolean
   gearReference: boolean
-  speedDelta: boolean
   fuelCriticalFlashEnabled: boolean
   fuelCriticalLapsThreshold: number
 }
@@ -38,17 +37,16 @@ export interface DashboardSpectatorPresentation {
   ]
 }
 
+// Dashboard v3 (owner 28/10): the speed tile with its +delta, Corner Speed and the headlight/rain
+// lamps are gone from the HUD. `speed` stays for the spectator view only.
 export interface DashboardPresentation {
+  /** RPM number, or the ACC Drive state words IGNITION OFF / ENGINE OFF / PIT LIMITER ON. */
   ignitionLabel: string
   speed: string
-  speedDelta: string | null
-  speedDeltaFaster: boolean
   gear: string
   gearReference: string | null
   fuelPerLap: string
   fuel: string
-  remainingLabel: 'Laps Left'
-  remainingValue: string
   lapsLeft: string
   fuelLeft: string
   engineMap: string
@@ -64,8 +62,6 @@ export interface DashboardPresentation {
   absActive: boolean
   brakeBias: string
   inputsAvailable: boolean
-  cornerSpeed: string
-  cornerSpeedTone: 'neutral' | 'faster' | 'slower'
   throttlePct: number
   brakePct: number
   rpmRatio: number
@@ -73,13 +69,14 @@ export interface DashboardPresentation {
   shiftThresholdRatio: number | null
   rpmBand: 'off' | 'green' | 'blue' | 'pit'
   shiftFlash: boolean
-  fuelUrgency: 'normal' | 'low' | 'critical'
+  /** ACC Drive: the RPM bar pulses while the engine is off or the pit limiter holds it. */
+  rpmPulse: boolean
+  fuelUrgency: 'normal' | 'warning' | 'low' | 'critical'
   fuelCriticalPulse: boolean
   pitLimiterOn: boolean
   leftIndicatorActive: boolean
   rightIndicatorActive: boolean
-  lightsStage: number
-  rainLightsActive: boolean
+  yellowFlagActive: boolean
   spectator: DashboardSpectatorPresentation | null
 }
 
@@ -87,12 +84,13 @@ export const DEFAULT_DASHBOARD_OPTIONS: DashboardOptions = {
   electronicsReference: false,
   rpmReference: false,
   gearReference: false,
-  speedDelta: false,
   fuelCriticalFlashEnabled: false,
   fuelCriticalLapsThreshold: 0.5,
 }
 
 export const DASHBOARD_FUEL_LOW_LAPS_THRESHOLD = 1
+// ACC Drive (FuelManager): the fuel boxes turn yellow when the fuel lasts 4 minutes or less.
+export const DASHBOARD_FUEL_WARNING_TIME_MS = 240_000
 
 const NORMALIZED_SESSION_LABELS: Readonly<Record<number, string>> = Object.freeze({
   [SESSION_TYPES.PRACTICE]: 'PRACTICE',
@@ -225,10 +223,21 @@ function resolveFuelUrgency(
   criticalThreshold: number,
 ): DashboardPresentation['fuelUrgency'] {
   if (!state.isFresh || !state.isLive || !state.ignitionOn || !state.isEngineRunning) return 'normal'
-  if (state.fuelLapsRemaining === null) return 'normal'
-  if (state.fuelLapsRemaining <= criticalThreshold) return 'critical'
-  if (state.fuelLapsRemaining <= DASHBOARD_FUEL_LOW_LAPS_THRESHOLD) return 'low'
+  const laps = state.fuelLapsRemaining
+  if (laps !== null && laps <= criticalThreshold) return 'critical'
+  if (laps !== null && laps <= DASHBOARD_FUEL_LOW_LAPS_THRESHOLD) return 'low'
+  const timeMs = state.fuelLeftTimeMs
+  if (timeMs !== null && timeMs >= 0 && timeMs <= DASHBOARD_FUEL_WARNING_TIME_MS) return 'warning'
   return 'normal'
+}
+
+function resolveIgnitionLabel(state: FastOverlayState, rpm: number | null, unknown: boolean): string {
+  if (state.dataSource === 'focused' || unknown) return '—'
+  // ACC Drive: ignition off and engine off (ignition on, engine stopped) are two different words.
+  if (!state.ignitionOn) return 'IGNITION OFF'
+  if (!state.isEngineRunning) return 'ENGINE OFF'
+  if (state.pitLimiterOn) return 'PIT LIMITER ON'
+  return rpm === null ? '—' : String(Math.round(rpm))
 }
 
 function interventionVisible(state: FastOverlayState, active: boolean): boolean {
@@ -269,29 +278,16 @@ export function buildDashboardPresentation(
   const fuelCriticalThreshold = normalizeFuelCriticalLapsThreshold(options.fuelCriticalLapsThreshold)
   const referenceVisible = state.isFresh && state.isLive && state.ignitionOn && state.isEngineRunning
   const fuelUrgency = resolveFuelUrgency(state, fuelCriticalThreshold)
-  const cornerDelta = state.cornerSpeedMode === 'delta' ? state.cornerSpeedDeltaKmh : null
-  const cornerValue = cornerDelta ?? state.cornerSpeedKmh
-
-  const remainingLabel = 'Laps Left' as const
-  const remainingValue = oneDecimal(state.fuelLapsRemaining)
+  const rpmBand = resolveRpmBand(state, rpm, threshold)
 
   return {
-    ignitionLabel: spectatorMode || ignitionUnknown
-      ? '—'
-      : state.ignitionOn && state.isEngineRunning
-        ? state.pitLimiterOn ? 'PIT LIMITER ON' : rpmValid ? String(Math.round(rpm)) : '—'
-        : 'IGNITION OFF',
+    ignitionLabel: resolveIgnitionLabel(state, rpmValid ? rpm : null, ignitionUnknown),
     speed: spectatorMode && state.speedKmh === null ? '—' : integer(state.speedKmh),
-    speedDelta: referenceVisible && options.speedDelta && state.speedDeltaKmh !== null
-      ? Math.abs(state.speedDeltaKmh).toFixed(1) : null,
-    speedDeltaFaster: referenceVisible && options.speedDelta && (state.speedDeltaKmh ?? 0) > 0,
     gear: spectatorMode && state.gear === null ? '—' : formatGear(state.gear),
     gearReference: referenceVisible && options.gearReference && state.referenceGear !== null
       ? formatGear(state.referenceGear) : null,
     fuelPerLap: state.fuelPerLapL === null ? '--.--' : state.fuelPerLapL.toFixed(2),
     fuel: oneDecimal(state.fuelL),
-    remainingLabel,
-    remainingValue,
     lapsLeft: oneDecimal(state.fuelLapsRemaining),
     fuelLeft: fuelTime(state.fuelLeftTimeMs),
     engineMap: integer(state.engineMap),
@@ -310,10 +306,6 @@ export function buildDashboardPresentation(
     tractionControlOffWarning: referenceVisible && state.tractionControl === 0,
     absActive: interventionVisible(state, state.absInAction),
     brakeBias: state.brakeBiasPct === null ? '--.-' : state.brakeBiasPct.toFixed(1),
-    cornerSpeed: spectatorMode ? '-' : integer(cornerValue, policy.cornerPlaceholder),
-    cornerSpeedTone: cornerDelta === null || cornerDelta === 0
-      ? 'neutral'
-      : cornerDelta > 0 ? 'faster' : 'slower',
     inputsAvailable: state.gas !== null && state.brake !== null,
     throttlePct: clamp((state.gas ?? 0) * 100, 0, 100),
     brakePct: clamp((state.brake ?? 0) * 100, 0, 100),
@@ -324,7 +316,7 @@ export function buildDashboardPresentation(
       : null,
     shiftThresholdRatio: referenceVisible && options.rpmReference && threshold !== null && maxRpm !== null
       ? clamp(threshold / maxRpm, 0, 1) : null,
-    rpmBand: resolveRpmBand(state, rpm, threshold),
+    rpmBand,
     shiftFlash: state.isFresh
       && state.isLive
       && state.ignitionOn
@@ -332,13 +324,14 @@ export function buildDashboardPresentation(
       && threshold !== null
       && rpmValid
       && rpm >= threshold,
+    rpmPulse: !spectatorMode && !ignitionUnknown && state.isFresh && (rpmBand === 'off' || rpmBand === 'pit'),
     fuelUrgency,
     fuelCriticalPulse: fuelUrgency === 'critical' && options.fuelCriticalFlashEnabled,
     pitLimiterOn: state.pitLimiterOn,
-    leftIndicatorActive: state.directionLightsLeft,
-    rightIndicatorActive: state.directionLightsRight,
-    lightsStage: Math.max(0, Math.min(2, Math.round(state.lightsStage ?? 0))),
-    rainLightsActive: state.rainLights,
+    leftIndicatorActive: !spectatorMode && state.directionLightsLeft,
+    rightIndicatorActive: !spectatorMode && state.directionLightsRight,
+    // Same rule as the Sectors and Tyres frames: the ACC yellow flag (2) of the shown car.
+    yellowFlagActive: state.flag === 2,
     spectator: buildDashboardSpectatorPresentation(state, focusedCar),
   }
 }
