@@ -288,7 +288,7 @@ onMounted(() => {
             class="rc-btn rc-btn--primary"
             :to="referenceVoiceLabLink"
           >
-            {{ t('spotter.manageVoiceLab') }}
+            {{ t('spotter.manageVoiceLab') }}<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" />
           </NuxtLink>
         </section>
       </div>

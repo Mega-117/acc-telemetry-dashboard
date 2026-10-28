@@ -72,7 +72,8 @@
   transition: background-color .15s ease, color .15s ease;
   svg { display: block; flex-shrink: 0; }
   .rc-btn__arrow { transition: transform .15s ease; }
-  &:hover:not(:disabled), &:focus-visible { --rc-btn-edge: #ffffffb3; background: #ffffff1a; }
+  // 28/10: same hover for links (NuxtLink) and buttons — the global `a:hover` colour must not win here.
+  &:hover:not(:disabled), &:focus-visible { --rc-btn-edge: #ffffffb3; background: #ffffff1a; color: #fff; }
   &:hover:not(:disabled) .rc-btn__arrow, &:focus-visible .rc-btn__arrow { transform: translateX(3px); }
   // Il clip-path taglierebbe un outline esterno: fuoco da tastiera come bordo interno.
   &:focus-visible { outline: none; box-shadow: inset 0 0 0 2px #fff; }
