@@ -25,6 +25,7 @@ export default defineConfig({
     maxWorkers: 4,
     environment: 'node',
     globals: true,
+    setupFiles: ['tests/setup/uiLanguage.ts'],
     include: ['tests/**/*.test.ts', 'tests/**/*.spec.ts'],
     // Coverage includes the real RTDB adapter exercised against the emulator.
     // Other Firebase suites and the 500-client load run retain their own isolated gates.

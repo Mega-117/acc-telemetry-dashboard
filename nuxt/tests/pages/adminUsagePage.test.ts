@@ -13,6 +13,8 @@ vi.mock('~/repositories/usageRepository', () => ({
   loadUsageDetails: vi.fn(async () => []),
   loadUsagePreferences: vi.fn(async () => ({})),
 }))
+// The beta seats box has its own service test; here it must not touch Firebase.
+vi.mock('~/components/admin/AdminBetaSeats.vue', () => ({ default: { template: '<section class="beta-seats" />' } }))
 vi.mock('~/components/admin/AdminUsageView.vue', () => ({
   default: { props: ['items', 'names', 'error'], template: '<div class="view">{{ items.length }}|{{ JSON.stringify(names) }}|{{ error }}</div>' },
 }))
