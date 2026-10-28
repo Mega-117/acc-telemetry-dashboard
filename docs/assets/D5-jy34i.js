@@ -1,1 +1,0 @@
-import{aN as a,ct as t,aC as o,d2 as n,a1 as s}from"./Ct8rlTSL.js";const _={class:"page-container","data-page-scroll":""},c=a({__name:"PageContainer",setup(r){return(e,p)=>(t(),o("div",_,[n(e.$slots,"default",{},void 0,!0)]))}}),i=Object.assign(s(c,[["__scopeId","data-v-ffbfd31a"]]),{__name:"LayoutPageContainer"});export{i as _};
