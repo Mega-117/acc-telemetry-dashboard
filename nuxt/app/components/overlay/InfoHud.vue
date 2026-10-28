@@ -169,10 +169,12 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
 
 /* Readability at the minimum size (owner, 28/10): labels bold, bright and ~85% of the value size.
    The page scales the whole canvas by transform, so a floor of N rendered px is N / --hud-scale here:
-   labels never render below 12px, values never below 14px (at 0.6: 20px and 23.33px before scaling). */
+   labels never render below 12px, values never below 14px (at 0.6: 20px and 23.33px before scaling).
+   Owner (28/10): labels take the text style of the Standings session type ("RACE",
+   .standings-header__session): italic 700 numbers font, 0.04em, uppercase, #a3a5ae; size unchanged. */
 .info-row dt {
-  color: #d0d2d8;
-  font: 700 max(17px, calc(12px / var(--hud-scale, 1)))/1.2 var(--hud-font-label);
+  color: #a3a5ae;
+  font: italic 700 max(17px, calc(12px / var(--hud-scale, 1)))/1.2 var(--hud-font-num);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   white-space: nowrap;

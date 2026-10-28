@@ -277,11 +277,14 @@ onBeforeUnmount(() => {
       class="hud-overlay__panel"
       :class="{
         'hud-overlay__panel--compact': variant === 'compact',
+        'hud-overlay__panel--classic': variant !== 'compact',
         'hud-overlay__panel--target': onTargetPage,
         'hud-overlay__panel--yellow-flag': fastState.flag === 2,
       }"
       :style="{ '--hud-sectors-bg-opacity': String(panelBackgroundOpacity) }"
     >
+      <!-- Classic: clip-path removes the border on the cut corner, this line draws it back. -->
+      <i v-if="variant !== 'compact'" class="hud-cut-corner__line" aria-hidden="true" />
       <HudTimedPager
         v-if="variant === 'compact'"
         ref="pagerRef"

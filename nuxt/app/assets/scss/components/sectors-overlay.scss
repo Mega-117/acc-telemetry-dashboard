@@ -2,6 +2,7 @@
 // .vue per restare sotto il limite di righe. Non scoped: regolano anche il markup
 // di SectorDeltaHud, sempre sotto .hud-sectors-scope.
 @use '~/assets/scss/training-overlay' as *;
+@use '~/assets/scss/hud-cut-corner' as *;
 
 .hud-sectors-scope {
 
@@ -48,6 +49,13 @@
   border: calc(4px * var(--hud-scale)) solid #ffd400;
   border-radius: inherit;
   pointer-events: none;
+}
+
+// Classic (owner 28/10): the Info shape, square corners with only the top-right corner cut, its
+// border drawn back and the yellow frame following the cut. The cut scales with the HUD like Info's
+// 14px; the title bar sits below the corner, so nothing inside is clipped. Compact keeps its radius.
+.hud-overlay__panel--classic {
+  @include hud-cut-corner(calc(14px * var(--hud-scale)), rgba(255, 255, 255, 0.15), 'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));
 }
 
 // ── L'HUD riempie il pannello ────────────────────────────────────────────────

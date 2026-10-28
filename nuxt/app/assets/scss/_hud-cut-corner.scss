@@ -1,0 +1,47 @@
+// Outer HUD panel with square corners and ONLY the top-right corner cut (owner 28/10, the Info
+// "style A" shape, see components/overlay/InfoHud.vue). Shared by the Sectors classic and the
+// Tyres classic panels.
+//
+// - clip-path cuts the corner of the whole panel (background included), so the cut shows what is
+//   behind the window, never a square of a different shade, whatever the background opacity.
+// - clip-path also removes the border on the cut: the `.hud-cut-corner__line` child (an empty
+//   aria-hidden <i>) draws it back as a 45° line on the border-box diagonal (absolute boxes start
+//   inside the 1px border), rotated so its thickness falls inside the clip shape.
+// - With the yellow flag the frame moves onto the outer edge (covering the 1px border, as on Info)
+//   and the diagonal line becomes the same frame width, so the frame follows the cut.
+//
+// $cut          size of the cut (scale it with the HUD, e.g. calc(14px * var(--hud-scale)))
+// $line         border colour, reused by the diagonal line
+// $flag-class   modifier class of the panel while the yellow flag is shown
+// $flag-width   width of the yellow frame (the panel's ::after border width)
+@mixin hud-cut-corner($cut, $line, $flag-class, $flag-width) {
+  --hud-cut: #{$cut};
+  border-radius: 0;
+  // overflow: hidden would clip the line and the frame at the padding box; the clip-path already
+  // keeps everything inside the panel shape.
+  overflow: visible;
+  clip-path: polygon(0 0, calc(100% - var(--hud-cut)) 0, 100% var(--hud-cut), 100% 100%, 0 100%);
+
+  > .hud-cut-corner__line {
+    position: absolute;
+    z-index: 16; // above the yellow frame (z-index 15)
+    top: -1px;
+    left: calc(100% + 1px - var(--hud-cut));
+    width: calc(var(--hud-cut) * 1.4142);
+    height: 1px;
+    background: $line;
+    transform: rotate(45deg);
+    transform-origin: 0 0;
+    pointer-events: none;
+  }
+
+  &.#{$flag-class}::after {
+    inset: -1px;
+    border-radius: 0;
+  }
+
+  &.#{$flag-class} > .hud-cut-corner__line {
+    height: $flag-width;
+    background: #ffd400;
+  }
+}

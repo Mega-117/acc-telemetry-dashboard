@@ -84,9 +84,12 @@ const { t } = useI18n()
       class="hud-overlay__panel"
       :class="{
         'hud-overlay__panel--race': variant === 'race',
+        'hud-overlay__panel--classic': variant === 'classic',
         'hud-overlay__panel--yellow-flag': displayFastState.flag === 2,
       }"
     >
+      <!-- Classic: clip-path removes the border on the cut corner, this line draws it back. -->
+      <i v-if="variant === 'classic'" class="hud-cut-corner__line" aria-hidden="true" />
       <section
         v-if="variant === 'race'"
         class="race-hud"
@@ -107,6 +110,7 @@ const { t } = useI18n()
 
 <style lang="scss">
 @use '~/assets/scss/training-overlay' as *;
+@use '~/assets/scss/hud-cut-corner' as *;
 
 .hud-tyres-scope {
 
@@ -142,6 +146,12 @@ const { t } = useI18n()
   border-radius: 0;
   // Sfondo completamente OPACO (nessuna trasparenza) e nessuna ombra.
   background: #0d0e12;
+}
+
+// Classic (owner 28/10): the Info shape on the outer panel, only the top-right corner cut with its
+// border drawn back and the yellow frame following the cut. The four cards keep their own cut.
+.hud-overlay__panel--classic {
+  @include hud-cut-corner(calc(14px * var(--hud-scale)), rgba(255, 255, 255, 0.15), 'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));
 }
 
 .hud-overlay__panel--race {

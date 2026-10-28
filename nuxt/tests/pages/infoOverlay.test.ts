@@ -69,7 +69,10 @@ describe('Info overlay window contract', () => {
     // The line sits on the border-box diagonal (absolute boxes start inside the 1px border).
     expect(hud).toMatch(/\.info-hud > \.info-hud__cut\s*\{[^}]*top:\s*-1px;[^}]*left:\s*calc\(100% \+ 1px - var\(--info-cut\)\);[^}]*width:\s*calc\(var\(--info-cut\) \* 1\.4142\);[^}]*background:\s*var\(--info-line\);[^}]*transform:\s*rotate\(45deg\);[^}]*transform-origin:\s*0 0;/s)
     // Owner (28/10): labels readable at the 0.6 minimum. Floors are rendered px divided by the canvas scale.
-    expect(hud).toMatch(/\.info-row dt\s*\{[^}]*color:\s*#d0d2d8;[^}]*font:\s*700 max\(17px, calc\(12px \/ var\(--hud-scale, 1\)\)\)/s)
+    // Owner (28/10): same text style as the Standings session type ("RACE"), size and floors unchanged.
+    expect(hud).toMatch(/\.info-row dt\s*\{[^}]*color:\s*#a3a5ae;[^}]*font:\s*italic 700 max\(17px, calc\(12px \/ var\(--hud-scale, 1\)\)\)\/1\.2 var\(--hud-font-num\);[^}]*letter-spacing:\s*0\.04em;[^}]*text-transform:\s*uppercase;/s)
+    const standings = readFileSync(resolve(process.cwd(), 'app/components/overlay/StandingsHud.vue'), 'utf8')
+    expect(standings).toContain('.standings-header__session { color:#a3a5ae;font:italic 700 17px/1 var(--hud-font-num);letter-spacing:0.04em;text-transform:uppercase; }')
     expect(hud).toMatch(/\.info-row dd\s*\{[^}]*font:\s*italic 700 max\(20px, calc\(14px \/ var\(--hud-scale, 1\)\)\)/s)
     expect(hud).not.toMatch(/#ff0024|info-hud__accent/)
   })
