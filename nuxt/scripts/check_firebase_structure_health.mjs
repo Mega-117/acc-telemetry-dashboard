@@ -8,7 +8,9 @@ const files = {
   gate: fs.readFileSync(path.join(root, 'app/services/sync/ownerDataMaintenanceService.ts'), 'utf8'),
   checkpoint: fs.readFileSync(path.join(root, 'app/services/sync/canonicalMigrationCheckpoint.ts'), 'utf8'),
   repository: fs.readFileSync(path.join(root, 'app/repositories/pilotDirectoryRepository.ts'), 'utf8'),
+  // PIP-665: the visible admin texts live in the Italian dictionary of the coach area.
   admin: fs.readFileSync(path.join(root, 'app/pages/piloti/index.vue'), 'utf8')
+    + fs.readFileSync(path.join(root, 'app/i18n/it/coach.ts'), 'utf8')
 }
 
 const requirements = [
