@@ -29,6 +29,7 @@ import {
 } from 'chart.js'
 import zoomPlugin from 'chartjs-plugin-zoom'
 import { useTelemetryData } from '~/composables/useTelemetryData'
+import { useAppNotifications } from '~/composables/useAppNotifications'
 import {
   formatLapTime,
   formatCarName,

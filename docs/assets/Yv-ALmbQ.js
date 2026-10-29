@@ -1,0 +1,1 @@
+import{aT as s,en as o,cy as t,cC as n,aI as r,aE as c,a6 as _}from"./CkScp9dH.js";const p={class:"redirect-screen"},d=s({__name:"[...slug]",setup(u){const a=o();return t(()=>{a.replace("/panoramica")}),(i,e)=>(n(),r("div",p,[...e[0]||(e[0]=[c("p",null,"Reindirizzamento...",-1)])]))}}),m=_(d,[["__scopeId","data-v-5c5ada89"]]);export{m as default};
