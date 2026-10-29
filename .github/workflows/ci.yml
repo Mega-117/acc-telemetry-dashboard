@@ -94,9 +94,9 @@ jobs:
     uses: ./.github/workflows/static.yml
 
   cloudflare:
-    name: Cloudflare — verified develop commit
+    name: Cloudflare — verified develop/main commit
     needs: [fe-test, python-test]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
     permissions:
       contents: read
     uses: ./.github/workflows/cloudflare.yml
