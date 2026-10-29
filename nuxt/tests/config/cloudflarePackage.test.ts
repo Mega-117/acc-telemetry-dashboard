@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { packageCloudflare, APP_PATH, LEGACY_APP_PATH } from '../../scripts/cloudflare-package.mjs'
+import { packageCloudflare, APP_PATH, DYNAMIC_SECTIONS, LEGACY_APP_PATH } from '../../scripts/cloudflare-package.mjs'
 
 const roots: string[] = []
 function fixture() {
@@ -13,6 +13,7 @@ function fixture() {
   mkdirSync(join(docs, 'assets'), { recursive: true })
   writeFileSync(join(docs, 'index.html'), '<html>generated</html>')
   writeFileSync(join(docs, '404.html'), '<html>fallback</html>')
+  writeFileSync(join(docs, '200.html'), '<html>spa</html>')
   writeFileSync(join(docs, 'assets', 'app.js'), 'window.example = 1')
   writeFileSync(join(root, '.env'), 'PRIVATE=not-published')
   return { root, docs, output }
@@ -23,14 +24,23 @@ describe('Cloudflare static package', () => {
   it('keeps generated asset bytes at the site root, without publishing repository files', () => {
     const { docs, output } = fixture()
     expect(APP_PATH).toBe('/')
-    expect(packageCloudflare(docs, output)).toMatchObject({ files: 3, appPath: APP_PATH })
-    for (const file of ['index.html', '404.html', 'assets/app.js']) {
+    expect(packageCloudflare(docs, output)).toMatchObject({ files: 4, appPath: APP_PATH })
+    for (const file of ['index.html', '404.html', '200.html', 'assets/app.js']) {
       expect(readFileSync(join(output, file))).toEqual(readFileSync(join(docs, file)))
     }
     expect(readFileSync(join(output, '404.html'), 'utf8')).toBe('<html>fallback</html>')
     expect(existsSync(join(output, 'acc-telemetry-dashboard'))).toBe(false)
-    // PIP-672: the old root redirects here; deep links go through 404.html (no splat: it could leave the site).
-    expect(readFileSync(join(output, '_redirects'), 'utf8')).toBe(`${LEGACY_APP_PATH} / 301\n/acc-telemetry-dashboard/docs / 301\n`)
+    // PIP-672: the old root redirects here; old deep links go through 404.html (no splat: it could leave the site).
+    // PIP-640: detail pages answer 200 with the SPA shell; one segment only, so lists and unknown paths keep their files and the 404.
+    expect(DYNAMIC_SECTIONS).toEqual(['sessioni', 'piste', 'piloti'])
+    expect(readFileSync(join(output, '_redirects'), 'utf8')).toBe([
+      `${LEGACY_APP_PATH} / 301`,
+      '/acc-telemetry-dashboard/docs / 301',
+      '/sessioni/:id /200 200',
+      '/piste/:id /200 200',
+      '/piloti/:id /200 200',
+      '',
+    ].join('\n'))
     const headers = readFileSync(join(output, '_headers'), 'utf8')
     expect(headers).toContain(`${APP_PATH}images/optimized/*\n  Cache-Control: public, max-age=31536000, immutable`)
     expect(headers).toContain(`${APP_PATH}assets/*.woff2`)
@@ -44,7 +54,7 @@ describe('Cloudflare static package', () => {
     mkdirSync(join(docs, 'onboarding'))
     writeFileSync(join(docs, 'onboarding', '01-benvenuto.webm'), 'clip')
     writeFileSync(join(docs, 'onboarding', '01-benvenuto.jpg'), 'poster')
-    expect(packageCloudflare(docs, output)).toMatchObject({ files: 5 })
+    expect(packageCloudflare(docs, output)).toMatchObject({ files: 6 })
     expect(readFileSync(join(output, 'onboarding', '01-benvenuto.webm'), 'utf8')).toBe('clip')
   })
   it('refuses to overwrite previous output', () => {
@@ -54,7 +64,7 @@ describe('Cloudflare static package', () => {
     expect(() => packageCloudflare(docs, output)).toThrow('already exists')
     expect(readFileSync(join(output, 'keep'), 'utf8')).toBe('old')
   })
-  it.each(['index.html', '404.html'])('requires generated %s', (file) => {
+  it.each(['index.html', '404.html', '200.html'])('requires generated %s', (file) => {
     const { docs, output } = fixture()
     rmSync(join(docs, file))
     expect(() => packageCloudflare(docs, output)).toThrow('Missing generated')

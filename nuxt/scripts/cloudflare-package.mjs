@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url'
 // PIP-672: the site sits at the root of dev.racercore.app; addresses under the old prefix are redirected.
 export const APP_PATH = '/'
 export const LEGACY_APP_PATH = '/acc-telemetry-dashboard/docs/'
+// Detail pages (pages/<section>/[id].vue) have no generated file: the SPA shell serves them with 200, not via 404.html.
+export const DYNAMIC_SECTIONS = ['sessioni', 'piste', 'piloti']
 const extensions = new Set(['.html', '.css', '.js', '.json', '.ico', '.png', '.svg', '.ttf', '.woff', '.woff2', '.txt', '.wav', '.mp3', '.webp', '.jpg', '.jpeg', '.gif', '.avif', '.ogg', '.webm'])
 
 // Validate everything before creating output; never overwrite or delete an existing directory.
@@ -29,7 +31,7 @@ export function packageCloudflare(source, destination) {
     }
   }
   walk(input)
-  for (const required of ['index.html', '404.html']) {
+  for (const required of ['index.html', '404.html', '200.html']) {
     if (!files.includes(required)) throw new Error(`Missing generated ${required}; run npm run generate manually`)
   }
   if (files.length > 19997) throw new Error('Too many assets for Pages Free')
@@ -44,7 +46,12 @@ export function packageCloudflare(source, destination) {
   }
   // Old deep links go through 404.html, which keeps query and fragment and never leaves the site. A
   // `/:splat` rule here would turn "/acc-telemetry-dashboard/docs//other.example" into another host.
-  writeFileSync(join(output, '_redirects'), `${LEGACY_APP_PATH} / 301\n${LEGACY_APP_PATH.slice(0, -1)} / 301\n`)
+  writeFileSync(join(output, '_redirects'), [
+    `${LEGACY_APP_PATH} / 301`,
+    `${LEGACY_APP_PATH.slice(0, -1)} / 301`,
+    ...DYNAMIC_SECTIONS.map(section => `${APP_PATH}${section}/:id ${APP_PATH}200 200`),
+    '',
+  ].join('\n'))
   // Only fingerprinted assets get immutable caching; HTML and mutable manifests must revalidate.
   writeFileSync(join(output, '_headers'), [
     ...['js', 'css', 'woff2'].flatMap(extension => [
