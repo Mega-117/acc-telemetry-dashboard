@@ -1,4 +1,4 @@
-import { isNavigationFailure, NavigationFailureType, type Router } from 'vue-router'
+import { isNavigationFailure, NavigationFailureType } from 'vue-router'
 
 export type EntryPhase = 'cache' | 'overview' | 'route' | 'complete'
 export type EntryState = {
@@ -78,8 +78,13 @@ export function createDashboardEntryRecovery(options: {
  * at entry, often to the page already shown, and vue-router reports that as a duplicated navigation.
  * Already being on a dashboard page is an entry; aborted or cancelled navigations still fail.
  */
+// Structural: Nuxt's router and vue-router's own type come from different declaration copies.
+type EntryRouter = {
+  replace: (to: string) => Promise<unknown>
+  currentRoute: { value: { fullPath: string, path: string } }
+}
 export async function replaceEntryRoute(
-  router: Pick<Router, 'replace' | 'currentRoute'>,
+  router: EntryRouter,
   destination: string,
   isDashboardPath: (path: string) => boolean,
 ) {

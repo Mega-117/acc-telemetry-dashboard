@@ -402,6 +402,24 @@ describe('social rooms with real Firebase rules', () => {
     expect(first.session.isReady(roomId)).toBe(true)
   })
 
+  it('PIP-593: the pointer also comes back after a clean stop that deletes the other device occupancy', async () => {
+    const first = await participant('A')
+    const created = await first.ensureRoomForVehicle({ fingerprint: '', label: 'Clean stop' })
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+    const roomId = created.value.roomId
+    await publish(first, roomId)
+    const second = await participant('A')
+    await publish(second, roomId)
+    const pointer = async () => (await get(ref(first.io.database, `${ROOT}/directory/A`))).val()?.connectionId
+    expect(await pointer()).toBe(second.session.connectionId())
+    // A clean stop removes the occupancy at once: own_alive of the old pointer is false immediately, so a
+    // full republication would be refused (Codex review). The directory-only repair is not.
+    await second.dispose()
+    await vi.waitFor(async () => expect(await pointer()).toBe(first.session.connectionId()), { timeout: 10_000 })
+    expect((await first.publishPresence(roomId, { nickname: 'A', kind: 'engineer', driving: false, runtimeSessionId: 'again' })).ok).toBe(true)
+  })
+
   it('enforces 16 places and reclaims an expired reservation without evicting a present member', async () => {
     const A = await participant('A'), B = await participant('B'), C = await participant('C')
     const created = await A.ensureRoomForVehicle({ fingerprint: '', label: 'Capacity' })

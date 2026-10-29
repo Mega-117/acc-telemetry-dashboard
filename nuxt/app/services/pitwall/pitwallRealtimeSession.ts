@@ -19,23 +19,32 @@ export function createPitwallRealtimeSession(io: PitwallRealtimeTransport, uid: 
   const disconnectCancellations = new Set<() => Promise<void>>()
   // PIP-593: directory/<uid> names the account's last publisher. When that device closes, the room rules
   // (own_alive) refuse the account after the disconnect grace, and the signature dedup kept another live
-  // device of the same account from publishing again. That device now takes the pointer back.
+  // device of the same account from publishing again. That device now points the directory back at its own
+  // live occupancy. Only the directory is written: the directory rule needs the writer's occupancy, not the
+  // departed device's authority, so it also works after a clean stop or after the grace (Codex review).
   let stopFailover: (() => void) | null = null
-  let directoryEntry: { roomId?: string, connectionId?: string } | null = null
+  let directoryEntry: { roomId?: string, connectionId?: string, slot?: string } | null = null
   let ownConnections: Record<string, unknown> | null = null
   function checkFailover() {
     if (!currentRoom || !connectionId || !directoryEntry || !ownConnections) return
     if (directoryEntry.roomId !== currentRoom || directoryEntry.connectionId === connectionId) return
     if (directoryEntry.connectionId && ownConnections[directoryEntry.connectionId]) return // that device is alive
+    if (!directoryEntry.slot) return
+    const pointer = { roomId: currentRoom, slot: directoryEntry.slot, connectionId }
+    const token = generation
     emitPitwallDiagnostic('connection_changed', { uid, connectionId, roomId: currentRoom, reason: 'directory-failover' })
-    signature = ''
-    void enqueue().catch(() => {})
+    busy = busy.then(async () => {
+      if (token !== generation || !io.online() || currentRoom !== pointer.roomId || connectionId !== pointer.connectionId) return
+      await io.write('', { [`directory/${uid}`]: pointer })
+    }).catch(error => { for (const listener of errors) listener(error) })
   }
   function watchFailover() {
     if (stopFailover || io.namespace !== PITWALL_SOCIAL_ROOT || typeof io.watch !== 'function') return
+    // A cancelled listener drops the cached state; the next successful publication subscribes again.
+    const cancelled = () => stopFailover?.()
     const stops = [
-      io.watch(`directory/${uid}`, (value) => { directoryEntry = value as typeof directoryEntry; checkFailover() }, () => {}),
-      io.watch(`connections/${uid}`, (value) => { ownConnections = (value ?? {}) as Record<string, unknown>; checkFailover() }, () => {}),
+      io.watch(`directory/${uid}`, (value) => { directoryEntry = value as typeof directoryEntry; checkFailover() }, cancelled),
+      io.watch(`connections/${uid}`, (value) => { ownConnections = (value ?? {}) as Record<string, unknown>; checkFailover() }, cancelled),
     ]
     stopFailover = () => { for (const stop of stops) stop(); stopFailover = null; directoryEntry = null; ownConnections = null }
   }
@@ -80,7 +89,8 @@ export function createPitwallRealtimeSession(io: PitwallRealtimeTransport, uid: 
     currentRoom = captured.roomId
     recordUsage({ feature: `pitwall.${captured.kind}`, active: !!currentRoom })
     signature = nextSignature
-    if (currentRoom) watchFailover()
+    // Leaving the room also stops listening to the account's connections.
+    if (currentRoom) watchFailover(); else stopFailover?.()
     for (const listener of connectionListeners) listener()
   }
   function enqueue() {

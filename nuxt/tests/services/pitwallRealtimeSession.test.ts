@@ -109,12 +109,16 @@ describe('directory failover between devices of one account', () => {
         const pointer = changes['directory/driver'] as typeof directory | undefined
         if (pointer) directory = pointer
       }),
-      watch: vi.fn((path: string, callback: (value: unknown) => void) => { watchers.set(path, callback); return () => stops.push(path) }),
+      watch: vi.fn((path: string, callback: (value: unknown) => void, error: (cause: unknown) => void) => {
+        watchers.set(path, callback); failures.set(path, error); return () => stops.push(path)
+      }),
     }
+    const failures = new Map<string, (cause: unknown) => void>()
     const session = createPitwallRealtimeSession(io as unknown as PitwallRealtimeTransport, 'driver')
     const state = { runtimeSessionId: 'runtime', roomId: 'room', nickname: 'Driver', kind: 'engineer' as const, driving: false, sourceValid: false }
     const emit = (path: string, value: unknown) => watchers.get(path)?.(value)
-    return { io, session, state, emit, stops, pointer: () => directory }
+    const cancel = (path: string) => failures.get(path)?.(new Error('permission_denied'))
+    return { io, session, state, emit, cancel, stops, pointer: () => directory }
   }
 
   it('takes the pointer back only when the device it names is gone', async () => {
@@ -128,10 +132,12 @@ describe('directory failover between devices of one account', () => {
     f.emit('connections/driver', { B: {}, [mine]: {} })
     await Promise.resolve()
     expect(f.io.write).toHaveBeenCalledTimes(1)
-    // B closes: its connection disappears and D republishes, pointing the directory at itself.
+    // B closes: its connection disappears and D writes only the directory, pointing it at its own occupancy
+    // (no full republication: that would need the departed device's authority).
     f.emit('connections/driver', { [mine]: {} })
     await vi.waitFor(() => expect(f.io.write).toHaveBeenCalledTimes(2))
-    expect(f.io.write.mock.calls[1]![1]).toMatchObject({ 'directory/driver': { roomId: 'room', connectionId: mine } })
+    expect(f.io.write.mock.calls[1]![1]).toEqual({ 'directory/driver': { roomId: 'room', slot: 's1', connectionId: mine } })
+    expect(f.io.registerDisconnectUpdates).toHaveBeenCalledTimes(1)
     expect(f.session.isReady('room')).toBe(true)
     // A pointer for another room is not this session's to take.
     f.emit('directory/driver', { roomId: 'other', connectionId: 'X', slot: 's2' })
@@ -139,5 +145,18 @@ describe('directory failover between devices of one account', () => {
     expect(f.io.write).toHaveBeenCalledTimes(2)
     await f.session.stop()
     expect(f.stops.sort()).toEqual(['connections/driver', 'directory/driver'])
+  })
+
+  it('a cancelled listener is subscribed again by the next publication; leaving the room stops listening', async () => {
+    const f = socialFixture()
+    await f.session.update(f.state)
+    expect(f.io.watch).toHaveBeenCalledTimes(2)
+    f.cancel('connections/driver')
+    expect(f.stops.sort()).toEqual(['connections/driver', 'directory/driver'])
+    await f.session.update({ ...f.state, driving: true })
+    expect(f.io.watch).toHaveBeenCalledTimes(4)
+    await f.session.update({ ...f.state, roomId: null })
+    expect(f.stops).toHaveLength(4)
+    await f.session.stop()
   })
 })
