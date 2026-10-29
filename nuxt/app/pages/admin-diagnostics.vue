@@ -421,7 +421,7 @@ onMounted(() => resetAndLoad())
     </section>
 
     <div v-else class="event-list" :aria-busy="viewState === 'refreshing'">
-      <article
+      <div
         v-for="event in events"
         :key="event.eventId"
         class="event-card"
@@ -442,7 +442,7 @@ onMounted(() => resetAndLoad())
           </small>
         </span>
         <span class="pilot-name">{{ event.pilotNickname }}</span>
-      </article>
+      </div>
     </div>
 
     <nav v-if="totalPages > 1 && viewState !== 'loading'" class="pagination" aria-label="Pagine diagnostica">
@@ -524,7 +524,7 @@ button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .5; }
 select option { color: #fff; background: #11111b; }
 .cleanup-button { border-color: rgba(248,113,113,.45); color: #fecaca; }
-.retention-note { margin: -12px 0 20px; color: rgba(255,255,255,.45); font-size: 12px; }
+.retention-note { margin: -12px 0 20px; color: rgba(255,255,255,.62); font-size: 12px; }
 .estimate-note { display: grid; gap: 4px; margin: -8px 0 20px; padding: 12px 14px; color: rgba(255,255,255,.6); font-size: 12px; background: rgba(59,130,246,.07); border: 1px solid rgba(96,165,250,.2); border-radius: 8px; }
 .estimate-note strong { color: #bfdbfe; }
 .estimate-note span { display: block; }

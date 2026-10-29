@@ -377,7 +377,7 @@ h1 {
 .issue__dot { width: 10px; height: 10px; background: var(--dot); border-radius: 50%; }
 .issue__body strong { font-size: $font-size-base; }
 .issue__meta { margin: 2px 0 0; color: $text-secondary; font-size: $font-size-xs; }
-.issue__detail { margin: 2px 0 0; color: $text-muted; font-size: $font-size-xs; }
+.issue__detail { margin: 2px 0 0; color: $text-secondary; font-size: $font-size-xs; }
 
 .empty { margin: $spacing-md 0; color: $text-secondary; }
 

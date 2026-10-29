@@ -505,7 +505,7 @@ watch(searchQuery, () => {
   
   &--coach {
     background: rgba(#3b82f6, 0.15);
-    color: #3b82f6;
+    color: #60a5fa;
   }
 }
 
@@ -571,7 +571,7 @@ watch(searchQuery, () => {
   }
 
   &--unknown {
-    color: rgba(255, 255, 255, 0.35);
+    color: rgba(255, 255, 255, 0.55);
   }
 }
 

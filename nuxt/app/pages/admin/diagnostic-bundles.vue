@@ -303,7 +303,7 @@ h1 {
 .filter-bar label {
   display: grid;
   gap: $spacing-xs;
-  color: $text-muted;
+  color: $text-secondary;
   font-size: 11px;
 }
 
@@ -322,7 +322,7 @@ h1 {
 
 .result-count {
   margin: 0 $spacing-sm $spacing-sm auto;
-  color: $text-muted;
+  color: $text-secondary;
   font-size: $font-size-xs;
   font-variant-numeric: tabular-nums;
 }
@@ -343,7 +343,7 @@ h1 {
 
 table { width: 100%; border-collapse: collapse; font-size: $font-size-sm; }
 th, td { padding: $spacing-sm $spacing-md; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
-th { color: $text-muted; font-size: 11px; font-weight: $font-weight-medium; }
+th { color: $text-secondary; font-size: 11px; font-weight: $font-weight-medium; }
 tr:last-child td { border-bottom: 0; }
 .num { text-align: right; }
 .actions { text-align: right; }

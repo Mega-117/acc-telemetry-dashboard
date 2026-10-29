@@ -294,7 +294,7 @@ th {
   position: sticky;
   top: 0;
   z-index: $z-base;
-  color: $text-muted;
+  color: $text-secondary;
   font-weight: $font-weight-medium;
   white-space: normal;
   line-height: 1.25;

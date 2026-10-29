@@ -373,7 +373,7 @@ h1 {
 .metric small,
 .budget-note small {
   display: block;
-  color: $text-muted;
+  color: $text-secondary;
   font-size: 11px;
 }
 
@@ -478,7 +478,7 @@ h1 {
 
 .result-count {
   margin: 0 $spacing-sm $spacing-sm auto;
-  color: $text-muted;
+  color: $text-secondary;
   font-size: $font-size-xs;
   font-variant-numeric: tabular-nums;
 }
