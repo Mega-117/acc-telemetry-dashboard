@@ -38,7 +38,7 @@ watch(presentationVisible, visible => {
 import { prepareOverviewEntry, decodeOverviewImage, overviewEntryKey, type OverviewEntry } from '~/services/auth/overviewEntryPreparation'
 import { responsiveImage, OVERVIEW_CAR_SIZES } from '~/utils/responsiveImage'
 import { getOverviewCarImage } from '~/utils/overviewCarImage'
-import { createDashboardEntryRecovery, EMPTY_ENTRY_STATE } from '~/services/auth/dashboardEntryRecovery'
+import { createDashboardEntryRecovery, EMPTY_ENTRY_STATE, replaceEntryRoute } from '~/services/auth/dashboardEntryRecovery'
 import { createAuthRevisionLeaseCoordinator } from '~/services/auth/authRevisionLease'
 import { loadRaceCalendarEvents } from '~/repositories/raceCalendarRepository'
 import { bootHoldLeft, dismissBootScreen, glideBootLogoTo, handBootBackdropToApp, logoGlideStart, LOGIN_LOADER_MIN_MS, LOGO_GLIDE_MS } from '~/utils/bootScreen'
@@ -512,11 +512,7 @@ const enterDashboard = async () => {
         overviewEntry.value = entry
         await attempt.step('overview', () => entry.ready)
       }
-      await attempt.step('route', async () => {
-        const failure = await router.replace(destination)
-        // Duplicated navigation is already at the destination; aborted/redirected is not.
-        if (failure && router.currentRoute.value.fullPath !== destination) throw new Error('navigation-failed')
-      })
+      await attempt.step('route', () => replaceEntryRoute(router, destination, isDashboardRoute))
       const loaderLeft = loaderFromLoginAt === null ? 0 : LOGIN_LOADER_MIN_MS - (performance.now() - loaderFromLoginAt)
       if (loaderLeft > 0) await new Promise(resolve => setTimeout(resolve, loaderLeft))
       if (!attempt.isCurrent()) return

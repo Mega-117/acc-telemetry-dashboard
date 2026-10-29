@@ -79,5 +79,6 @@ describe('dashboard entry recovery', () => {
     expect(shell).toContain('dashboardEntryRecovery.cancel()')
     expect(shell).toContain('reportRuntimeHealth?.({ dashboardEntry: state })')
     expect(shell).toContain('if (!attempt.isCurrent()) return')
+    expect(shell).toContain("attempt.step('route', () => replaceEntryRoute(router, destination, isDashboardRoute))")
   })
 })

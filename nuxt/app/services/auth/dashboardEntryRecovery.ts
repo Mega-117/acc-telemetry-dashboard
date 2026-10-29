@@ -1,3 +1,5 @@
+import { isNavigationFailure, NavigationFailureType, type Router } from 'vue-router'
+
 export type EntryPhase = 'cache' | 'overview' | 'route' | 'complete'
 export type EntryState = {
   status: 'idle' | 'loading' | 'retrying' | 'failed' | 'ready'
@@ -69,4 +71,22 @@ export function createDashboardEntryRecovery(options: {
     return job.promise
   }
   return { run, cancel }
+}
+
+/**
+ * Entry navigation to the dashboard. PIP-674: an old address or a page closed to the role redirects
+ * at entry, often to the page already shown, and vue-router reports that as a duplicated navigation.
+ * Already being on a dashboard page is an entry; aborted or cancelled navigations still fail.
+ */
+export async function replaceEntryRoute(
+  router: Pick<Router, 'replace' | 'currentRoute'>,
+  destination: string,
+  isDashboardPath: (path: string) => boolean,
+) {
+  const failure = await router.replace(destination)
+  if (!failure) return
+  const landed = router.currentRoute.value
+  if (landed.fullPath === destination) return
+  if (isNavigationFailure(failure, NavigationFailureType.duplicated) && isDashboardPath(landed.path.replace(/\/+$/, '') || '/')) return
+  throw new Error('navigation-failed')
 }
