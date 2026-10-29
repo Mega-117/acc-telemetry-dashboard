@@ -43,7 +43,9 @@ describe('UserDropdown community entry (PIP-672)', () => {
     })
     await wrapper.get('.dropdown-trigger').trigger('click')
     const link = wrapper.get('a.dropdown-item')
-    expect(link.text()).toContain('Community Discord')
+    // PIP-676: just "Discord", with the Discord logo.
+    expect(link.text().trim()).toBe('Discord')
+    expect(link.find('svg.item-icon--discord').exists()).toBe(true)
     expect(link.attributes('href')).toBe('https://discord.gg/hzWEVHbEc3')
     expect(link.attributes('target')).toBe('_blank')
     expect(link.attributes('rel')).toBe('noopener')
