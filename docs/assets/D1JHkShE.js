@@ -1,1 +1,0 @@
-import{eq as o}from"./CkScp9dH.js";function r(){const n=o();function s(e){if(/^(https?:|data:|blob:|file:|acc-voice:)/i.test(e))return e;const i=e.startsWith("/")?e.slice(1):e,t=n.app.baseURL||"/";return(t.endsWith("/")?t:t+"/")+i}return{getPublicPath:s}}export{r as u};
