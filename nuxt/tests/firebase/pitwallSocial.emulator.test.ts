@@ -383,6 +383,25 @@ describe('social rooms with real Firebase rules', () => {
     })
   })
 
+  it('PIP-593: a second device of the account takes the directory back when the last publisher closes', async () => {
+    const first = await participant('A')
+    const created = await first.ensureRoomForVehicle({ fingerprint: '', label: 'Two devices' })
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+    const roomId = created.value.roomId
+    await publish(first, roomId)
+    const second = await participant('A')
+    await publish(second, roomId)
+    const pointer = async () => (await get(ref(first.io.database, `${ROOT}/directory/A`))).val()?.connectionId
+    expect(await pointer()).toBe(second.session.connectionId())
+    // The last publisher closes: its connection goes away and the first device must own the pointer again,
+    // or after the 30 s grace the rules (own_alive) would refuse the whole account in its own room.
+    goOffline(second.io.database)
+    await vi.waitFor(() => expect(second.io.online()).toBe(false))
+    await vi.waitFor(async () => expect(await pointer()).toBe(first.session.connectionId()), { timeout: 10_000 })
+    expect(first.session.isReady(roomId)).toBe(true)
+  })
+
   it('enforces 16 places and reclaims an expired reservation without evicting a present member', async () => {
     const A = await participant('A'), B = await participant('B'), C = await participant('C')
     const created = await A.ensureRoomForVehicle({ fingerprint: '', label: 'Capacity' })

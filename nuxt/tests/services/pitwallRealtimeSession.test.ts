@@ -91,3 +91,53 @@ describe('event-driven RTDB presence', () => {
     })
   })
 })
+
+// PIP-593: two live devices D and B of the same account in one social room; B published last.
+describe('directory failover between devices of one account', () => {
+  function socialFixture() {
+    const watchers = new Map<string, (value: unknown) => void>()
+    const stops: string[] = []
+    let directory: { roomId: string, connectionId: string, slot: string } = { roomId: 'room', connectionId: 'B', slot: 's1' }
+    const io = {
+      namespace: 'pitwallRoomsV1',
+      online: () => true,
+      onConnection: (callback: (online: boolean) => void) => { callback(true); return vi.fn() },
+      registerDisconnectUpdates: vi.fn(async () => vi.fn()),
+      serverTimestamp: () => ({ '.sv': 'timestamp' }),
+      read: vi.fn(async () => directory),
+      write: vi.fn(async (_root: string, changes: Record<string, unknown>) => {
+        const pointer = changes['directory/driver'] as typeof directory | undefined
+        if (pointer) directory = pointer
+      }),
+      watch: vi.fn((path: string, callback: (value: unknown) => void) => { watchers.set(path, callback); return () => stops.push(path) }),
+    }
+    const session = createPitwallRealtimeSession(io as unknown as PitwallRealtimeTransport, 'driver')
+    const state = { runtimeSessionId: 'runtime', roomId: 'room', nickname: 'Driver', kind: 'engineer' as const, driving: false, sourceValid: false }
+    const emit = (path: string, value: unknown) => watchers.get(path)?.(value)
+    return { io, session, state, emit, stops, pointer: () => directory }
+  }
+
+  it('takes the pointer back only when the device it names is gone', async () => {
+    const f = socialFixture()
+    await f.session.update(f.state)
+    const mine = f.session.connectionId()
+    expect(f.pointer().connectionId).toBe(mine)
+    expect(f.io.watch).toHaveBeenCalledTimes(2)
+    // B publishes again and owns the pointer while it is alive: D leaves it alone.
+    f.emit('directory/driver', { roomId: 'room', connectionId: 'B', slot: 's1' })
+    f.emit('connections/driver', { B: {}, [mine]: {} })
+    await Promise.resolve()
+    expect(f.io.write).toHaveBeenCalledTimes(1)
+    // B closes: its connection disappears and D republishes, pointing the directory at itself.
+    f.emit('connections/driver', { [mine]: {} })
+    await vi.waitFor(() => expect(f.io.write).toHaveBeenCalledTimes(2))
+    expect(f.io.write.mock.calls[1]![1]).toMatchObject({ 'directory/driver': { roomId: 'room', connectionId: mine } })
+    expect(f.session.isReady('room')).toBe(true)
+    // A pointer for another room is not this session's to take.
+    f.emit('directory/driver', { roomId: 'other', connectionId: 'X', slot: 's2' })
+    await Promise.resolve()
+    expect(f.io.write).toHaveBeenCalledTimes(2)
+    await f.session.stop()
+    expect(f.stops.sort()).toEqual(['connections/driver', 'directory/driver'])
+  })
+})

@@ -17,6 +17,28 @@ export function createPitwallRealtimeSession(io: PitwallRealtimeTransport, uid: 
   const connectionListeners = new Set<() => void>()
   const ownedPaths = new Set<string>()
   const disconnectCancellations = new Set<() => Promise<void>>()
+  // PIP-593: directory/<uid> names the account's last publisher. When that device closes, the room rules
+  // (own_alive) refuse the account after the disconnect grace, and the signature dedup kept another live
+  // device of the same account from publishing again. That device now takes the pointer back.
+  let stopFailover: (() => void) | null = null
+  let directoryEntry: { roomId?: string, connectionId?: string } | null = null
+  let ownConnections: Record<string, unknown> | null = null
+  function checkFailover() {
+    if (!currentRoom || !connectionId || !directoryEntry || !ownConnections) return
+    if (directoryEntry.roomId !== currentRoom || directoryEntry.connectionId === connectionId) return
+    if (directoryEntry.connectionId && ownConnections[directoryEntry.connectionId]) return // that device is alive
+    emitPitwallDiagnostic('connection_changed', { uid, connectionId, roomId: currentRoom, reason: 'directory-failover' })
+    signature = ''
+    void enqueue().catch(() => {})
+  }
+  function watchFailover() {
+    if (stopFailover || io.namespace !== PITWALL_SOCIAL_ROOT || typeof io.watch !== 'function') return
+    const stops = [
+      io.watch(`directory/${uid}`, (value) => { directoryEntry = value as typeof directoryEntry; checkFailover() }, () => {}),
+      io.watch(`connections/${uid}`, (value) => { ownConnections = (value ?? {}) as Record<string, unknown>; checkFailover() }, () => {}),
+    ]
+    stopFailover = () => { for (const stop of stops) stop(); stopFailover = null; directoryEntry = null; ownConnections = null }
+  }
 
   async function publish() {
     if (!wanted || !io.online()) return
@@ -58,6 +80,7 @@ export function createPitwallRealtimeSession(io: PitwallRealtimeTransport, uid: 
     currentRoom = captured.roomId
     recordUsage({ feature: `pitwall.${captured.kind}`, active: !!currentRoom })
     signature = nextSignature
+    if (currentRoom) watchFailover()
     for (const listener of connectionListeners) listener()
   }
   function enqueue() {
@@ -90,7 +113,7 @@ export function createPitwallRealtimeSession(io: PitwallRealtimeTransport, uid: 
     onError(callback: (error: unknown) => void) { errors.add(callback); return () => { errors.delete(callback) } },
     async stop() {
       if (wanted) recordUsage({ feature: `pitwall.${wanted.kind}`, active: false })
-      wanted = null; generation++; stopConnection()
+      wanted = null; generation++; stopConnection(); stopFailover?.()
       await busy
       connectionId = ''; signature = ''; currentRoom = null
       if (ownedPaths.size && io.online()) {
