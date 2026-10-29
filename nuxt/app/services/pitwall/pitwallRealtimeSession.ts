@@ -5,6 +5,9 @@ import { PITWALL_SOCIAL_ROOT } from './pitwallSocialRoom'
 import { emitPitwallDiagnostic } from './pitwallDiagnostics'
 import { recordUsage } from '../usage/usageClient'
 
+/** PIP-593: how long the device named by the directory must stay absent before another device repairs it. */
+export const PITWALL_FAILOVER_CONFIRM_MS = 2000
+
 /** Canonical device presence; room presence is only an index to this connection. */
 export function createPitwallRealtimeSession(io: PitwallRealtimeTransport, uid: string) {
   let connectionId = ''
@@ -25,11 +28,21 @@ export function createPitwallRealtimeSession(io: PitwallRealtimeTransport, uid: 
   let stopFailover: (() => void) | null = null
   let directoryEntry: { roomId?: string, connectionId?: string, slot?: string } | null = null
   let ownConnections: Record<string, unknown> | null = null
+  let confirmTimer: ReturnType<typeof setTimeout> | null = null
+  function orphaned() {
+    if (!currentRoom || !connectionId || !directoryEntry || !ownConnections || !directoryEntry.slot) return false
+    if (directoryEntry.roomId !== currentRoom || directoryEntry.connectionId === connectionId) return false
+    return !(directoryEntry.connectionId && ownConnections[directoryEntry.connectionId]) // that device is gone
+  }
   function checkFailover() {
-    if (!currentRoom || !connectionId || !directoryEntry || !ownConnections) return
-    if (directoryEntry.roomId !== currentRoom || directoryEntry.connectionId === connectionId) return
-    if (directoryEntry.connectionId && ownConnections[directoryEntry.connectionId]) return // that device is alive
-    if (!directoryEntry.slot) return
+    // A device that has just published can name itself in the directory before its connection reaches this
+    // listener: wait for a confirmation instead of stealing the pointer back (emulator race, 29/10).
+    if (!orphaned()) { if (confirmTimer) { clearTimeout(confirmTimer); confirmTimer = null } return }
+    if (confirmTimer) return
+    confirmTimer = setTimeout(() => { confirmTimer = null; if (orphaned()) repairDirectory() }, PITWALL_FAILOVER_CONFIRM_MS)
+  }
+  function repairDirectory() {
+    if (!directoryEntry?.slot || !currentRoom) return
     const pointer = { roomId: currentRoom, slot: directoryEntry.slot, connectionId }
     const token = generation
     emitPitwallDiagnostic('connection_changed', { uid, connectionId, roomId: currentRoom, reason: 'directory-failover' })
@@ -46,7 +59,11 @@ export function createPitwallRealtimeSession(io: PitwallRealtimeTransport, uid: 
       io.watch(`directory/${uid}`, (value) => { directoryEntry = value as typeof directoryEntry; checkFailover() }, cancelled),
       io.watch(`connections/${uid}`, (value) => { ownConnections = (value ?? {}) as Record<string, unknown>; checkFailover() }, cancelled),
     ]
-    stopFailover = () => { for (const stop of stops) stop(); stopFailover = null; directoryEntry = null; ownConnections = null }
+    stopFailover = () => {
+      for (const stop of stops) stop()
+      if (confirmTimer) clearTimeout(confirmTimer)
+      confirmTimer = null; stopFailover = null; directoryEntry = null; ownConnections = null
+    }
   }
 
   async function publish() {

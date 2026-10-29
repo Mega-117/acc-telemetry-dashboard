@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { createPitwallRealtimeTransport } from '~/services/pitwall/pitwallRealtimeTransport'
 import { createPitwallRealtimeRoomService } from '~/services/pitwall/pitwallRealtimeRoomService'
 import { PITWALL_SOCIAL_ROOT as ROOT } from '~/services/pitwall/pitwallSocialRoom'
+import { PITWALL_FAILOVER_CONFIRM_MS } from '~/services/pitwall/pitwallRealtimeSession'
 import { createPitwallRealtimeEngineerService } from '~/services/pitwall/pitwallRealtimeEngineerService'
 import type { Firestore } from 'firebase/firestore'
 
@@ -393,7 +394,8 @@ describe('social rooms with real Firebase rules', () => {
     const second = await participant('A')
     await publish(second, roomId)
     const pointer = async () => (await get(ref(first.io.database, `${ROOT}/directory/A`))).val()?.connectionId
-    expect(await pointer()).toBe(second.session.connectionId())
+    // The first client's own listener can serve a cached value for a moment: wait for the server state.
+    await vi.waitFor(async () => expect(await pointer()).toBe(second.session.connectionId()), { timeout: 5_000 })
     // The last publisher closes: its connection goes away and the first device must own the pointer again,
     // or after the 30 s grace the rules (own_alive) would refuse the whole account in its own room.
     goOffline(second.io.database)
@@ -412,6 +414,10 @@ describe('social rooms with real Firebase rules', () => {
     const second = await participant('A')
     await publish(second, roomId)
     const pointer = async () => (await get(ref(first.io.database, `${ROOT}/directory/A`))).val()?.connectionId
+    // The first client's own listener can serve a cached value for a moment: wait for the server state.
+    await vi.waitFor(async () => expect(await pointer()).toBe(second.session.connectionId()), { timeout: 5_000 })
+    // While the second device lives, the first never takes the pointer back, even after the confirmation time.
+    await new Promise(resolve => setTimeout(resolve, PITWALL_FAILOVER_CONFIRM_MS + 500))
     expect(await pointer()).toBe(second.session.connectionId())
     // A clean stop removes the occupancy at once: own_alive of the old pointer is false immediately, so a
     // full republication would be refused (Codex review). The directory-only repair is not.

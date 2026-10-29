@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { createPitwallRealtimeSession } from '~/services/pitwall/pitwallRealtimeSession'
+import { createPitwallRealtimeSession, PITWALL_FAILOVER_CONFIRM_MS } from '~/services/pitwall/pitwallRealtimeSession'
 import type { PitwallRealtimeTransport } from '~/services/pitwall/pitwallRealtimeTransport'
 vi.mock('~/config/pitwallRealtime', () => ({ getPitwallRealtime: vi.fn() }))
 import { createPitwallRealtimeRoomService } from '~/services/pitwall/pitwallRealtimeRoomService'
@@ -132,9 +132,15 @@ describe('directory failover between devices of one account', () => {
     f.emit('connections/driver', { B: {}, [mine]: {} })
     await Promise.resolve()
     expect(f.io.write).toHaveBeenCalledTimes(1)
-    // B closes: its connection disappears and D writes only the directory, pointing it at its own occupancy
-    // (no full republication: that would need the departed device's authority).
-    f.emit('connections/driver', { [mine]: {} })
+    // B closes: its connection disappears and, once confirmed, D writes only the directory, pointing it at
+    // its own occupancy (no full republication: that would need the departed device's authority).
+    vi.useFakeTimers()
+    try {
+      f.emit('connections/driver', { [mine]: {} })
+      await vi.advanceTimersByTimeAsync(PITWALL_FAILOVER_CONFIRM_MS - 10)
+      expect(f.io.write).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(20)
+    } finally { vi.useRealTimers() }
     await vi.waitFor(() => expect(f.io.write).toHaveBeenCalledTimes(2))
     expect(f.io.write.mock.calls[1]![1]).toEqual({ 'directory/driver': { roomId: 'room', slot: 's1', connectionId: mine } })
     expect(f.io.registerDisconnectUpdates).toHaveBeenCalledTimes(1)
@@ -145,6 +151,23 @@ describe('directory failover between devices of one account', () => {
     expect(f.io.write).toHaveBeenCalledTimes(2)
     await f.session.stop()
     expect(f.stops.sort()).toEqual(['connections/driver', 'directory/driver'])
+  })
+
+  it('a device that has just taken the pointer is not mistaken for a departed one (emulator race)', async () => {
+    const f = socialFixture()
+    await f.session.update(f.state)
+    const mine = f.session.connectionId()
+    f.emit('connections/driver', { [mine]: {} })
+    vi.useFakeTimers()
+    try {
+      // B publishes: the directory names it before B's connection reaches this listener.
+      f.emit('directory/driver', { roomId: 'room', connectionId: 'B', slot: 's1' })
+      await vi.advanceTimersByTimeAsync(300)
+      f.emit('connections/driver', { B: {}, [mine]: {} })
+      await vi.advanceTimersByTimeAsync(PITWALL_FAILOVER_CONFIRM_MS * 2)
+    } finally { vi.useRealTimers() }
+    expect(f.io.write).toHaveBeenCalledTimes(1)
+    await f.session.stop()
   })
 
   it('a cancelled listener is subscribed again by the next publication; leaving the room stops listening', async () => {
