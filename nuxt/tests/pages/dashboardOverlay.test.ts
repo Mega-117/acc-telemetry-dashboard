@@ -79,7 +79,7 @@ describe('Dashboard layout (PIP-671, approved draft "Cruscotto · race" 30/10)',
   it('renders the RPM bar, four fuel boxes, the free gear with pedals and five electronics boxes in order', async () => {
     const html = await render()
     const labels = [...html.matchAll(/<span class="dash-cell__label"><b>([^<]*)<\/b><\/span>/g)].map(match => match[1])
-    expect(labels).toEqual(['Fuel · L', 'L / lap', 'Laps left', 'Fuel left', 'TC', 'TC2', 'ABS', 'MAP', 'BB · %'])
+    expect(labels).toEqual(['Fuel', 'Fuel / lap', 'Laps left', 'Fuel left', 'TC', 'TC2', 'ABS', 'MAP', 'BB · %'])
     // The gear has no frame or GEAR label; the pedal bars sit under it with their names.
     expect(html).toContain('<span>GAS</span>')
     expect(html).toContain('<span>BRK</span>')

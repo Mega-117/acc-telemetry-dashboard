@@ -27,8 +27,8 @@ interface DashboardCell {
 // Item colours live in the stylesheet (one class per box); English HUD words stay in the component.
 // PIP-671 (approved drafts 30/10): the labels carry their unit, as in the draft.
 const fuelCells = computed<DashboardCell[]>(() => [
-  { id: 'fuel', label: 'Fuel · L', value: props.model.fuel },
-  { id: 'fuel-lap', label: 'L / lap', value: props.model.fuelPerLap },
+  { id: 'fuel', label: 'Fuel', value: props.model.fuel },
+  { id: 'fuel-lap', label: 'Fuel / lap', value: props.model.fuelPerLap },
   { id: 'laps', label: 'Laps left', value: props.model.lapsLeft },
   { id: 'fuel-left', label: 'Fuel left', value: props.model.fuelLeft },
 ])
