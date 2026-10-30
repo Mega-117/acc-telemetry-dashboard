@@ -44,8 +44,6 @@
   @include hud-cut-corner(0px, 0px, $hud-hairline-width, $hud-hairline-color, 'hud-overlay__panel--yellow-flag', $hud-flag-width);
 }
 
-// Classic without the lap tile: the three sector tiles keep the width they have in the 740px layout.
-.hud-overlay__panel:has(.sector-delta-hud__body--with-lap) { --sectors-width: 740px; }
 // Owner (30/10): narrower than the 500px draft, back to the proportions of the first compact HUD
 // (310x261 window, about 1.19:1).
 .hud-overlay__panel--compact { --sectors-width: 336px; }
@@ -63,8 +61,9 @@
 }
 
 // ── Classic (wide) ────────────────────────────────────────────────────────────
-// Title bar "SETTORI vs BEST", optional lap tile (current lap + lap delta, off by default), then one
-// tile per sector: label, time, delta, PREV/BEST rows. The tile's top edge takes the sector colour.
+// Title bar "SETTORI vs BEST", optional current lap (off by default; owner 30/10: the same
+// full-width row as the Compact layout), then one tile per sector: label, time, delta, PREV/BEST
+// rows. The tile's top edge takes the sector colour.
 .hud-overlay .sector-delta-hud {
   display: flex;
   min-height: 0;
@@ -90,10 +89,6 @@
   gap: 8px;
   min-height: 0;
 }
-
-// Lap tile and sector tiles share ONE grid (1.28fr + N x 1fr), so the sector grid dissolves into
-// the body row when the lap tile is shown (the component sets the column template).
-.hud-overlay .sector-delta-hud__body--with-lap .sector-delta-hud__grid { display: contents; }
 
 // Title bar: 2px side lines, condensed uppercase label, title and reference word bright.
 .hud-overlay .sector-delta-hud__header--classic {
@@ -133,7 +128,6 @@
   .sector-title__reference { color: #f4f6f8; font-weight: 700; }
 }
 
-.hud-overlay .sector-delta-hud__lap,
 .hud-overlay .sector-delta {
   min-height: 0;
   display: flex;
@@ -162,27 +156,6 @@
   text-transform: uppercase;
   white-space: nowrap;
 }
-
-.hud-overlay .sector-delta-hud__lap-time {
-  overflow: hidden;
-  color: #f1d541;
-  font: 800 40px/1 var(--hud-gauge-num);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.hud-overlay .sector-delta-hud__lap-time.sector-compact__lap--invalid { color: #dc1010; }
-.hud-overlay .sector-delta-hud__lap-time.sector-compact__lap--unknown { color: #6f7277; }
-
-.hud-overlay .sector-delta-hud__lap-delta {
-  color: #f4f6f8;
-  font: 800 40px/1 var(--hud-gauge-num);
-  white-space: nowrap;
-}
-
-.hud-overlay .sector-delta-hud__lap-delta--faster { color: #24c26c; }
-.hud-overlay .sector-delta-hud__lap-delta--slower { color: #f05b4b; }
-.hud-overlay .sector-delta-hud__lap-delta--placeholder { color: #a4b0bc; }
 
 // Draft type at scale 1: sector time 30, delta 38, PREV/BEST words 14 and values 23.
 .hud-overlay .sector-delta strong {

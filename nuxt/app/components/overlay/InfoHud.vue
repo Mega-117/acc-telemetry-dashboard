@@ -66,7 +66,8 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
   color: #f4f6f8;
   background: transparent;
   @include hud-gauge-type;
-  @include hud-cut-corner(0px, 14px, $hud-hairline-width, $hud-hairline-color, 'info-hud--yellow-flag', $hud-flag-width);
+  // Owner (30/10): square corners, the top-right one included.
+  @include hud-cut-corner(0px, 0px, $hud-hairline-width, $hud-hairline-color, 'info-hud--yellow-flag', $hud-flag-width);
 }
 
 .info-hud > :not(.hud-overlay-background) {

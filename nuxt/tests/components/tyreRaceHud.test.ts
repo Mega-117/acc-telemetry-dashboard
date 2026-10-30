@@ -270,14 +270,15 @@ describe('HUD style v2 (27/10) classic tyres', () => {
     expect(page).toMatch(/\.hud-overlay__panel \{[^}]*padding: calc\(12px \* var\(--hud-scale\)\);[^}]*border-radius: 0;/)
     expect(page).toMatch(/\.tyre-slip-grid \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/)
     // PIP-671: the yellow frame follows the whole outline through the shared mixin.
-    expect(page).toContain("@include hud-cut-corner(0px, calc(14px * var(--hud-scale)), $hud-hairline-width, $hud-hairline-color, 'hud-overlay__panel--yellow-flag', $hud-flag-width);")
+    // Owner (30/10): square panel, no title bar.
+    expect(page).toContain("@include hud-cut-corner(0px, 0px, $hud-hairline-width, $hud-hairline-color, 'hud-overlay__panel--yellow-flag', $hud-flag-width);")
+    expect(page).toContain('.hud-overlay .tyre-slip-hud__header { display: none; }')
   })
 
   it('classic aligned (28/10): guide type scale in the italic numbers font, with the 0.6 floors', () => {
     const page = readFileSync(resolve(process.cwd(), 'app/pages/tyres-overlay.vue'), 'utf8')
     const font = (selector: RegExp) => page.match(new RegExp(String.raw`${selector.source} \{[^}]*font: ([^;]*);`))?.[1]
-    // Title 12, wheel id 16, values 20, state 13, units 11; labels never below 12px, values 14px.
-    expect(font(/\.tyre-slip-hud__header[\s\S]*?span/)).toBe('italic 700 max(12px, calc(12px * var(--hud-scale)))/1 var(--hud-font-num)')
+    // Wheel id 16, values 20, state 13, units 11 (no title bar, owner 30/10); labels never below 12px, values 14px.
     expect(font(/\.tyre-slip__topline strong/)).toBe('italic 700 max(12px, calc(16px * var(--hud-scale)))/1 var(--hud-font-num)')
     expect(font(/\.tyre-slip__psi/)).toBe('italic 700 max(14px, calc(20px * var(--hud-scale)))/1 var(--hud-font-num)')
     expect(font(/\.tyre-slip--state-lockup \.tyre-slip__state/)).toBe('italic 700 max(12px, calc(13px * var(--hud-scale)))/1 var(--hud-font-num)')
@@ -285,7 +286,7 @@ describe('HUD style v2 (27/10) classic tyres', () => {
     expect(page).toMatch(/\.tyre-slip__meta small \{[^}]*color: #a3a5ae;[^}]*font: italic 700 max\(11px, calc\(11px \* var\(--hud-scale\)\)\)\/1 var\(--hud-font-num\);/)
   })
 
-  it('classic aligned (28/10): straight gauge, ONE continuous fill sized by the slip formula, thin separators over it', async () => {
+  it('classic aligned: straight gauge, ONE continuous fill sized by the slip formula, no separators (owner 30/10)', async () => {
     const page = readFileSync(resolve(process.cwd(), 'app/pages/tyres-overlay.vue'), 'utf8')
     const state = fastState()
     const html = await renderToString(createSSRApp(TyreSlipHud, { fastState: state }))
@@ -300,7 +301,7 @@ describe('HUD style v2 (27/10) classic tyres', () => {
     expect(html).toMatch(/<div class="tyre-slip__bar" style="--tyre-slip-ticks:10;" aria-hidden="true"><span class="tyre-slip__fill"[^>]*><\/span><i class="tyre-slip__ticks"><\/i><\/div>/)
     expect(page).not.toContain('skewX')
     expect(page).not.toContain('mask-image')
-    expect(page).toMatch(/\.tyre-slip__ticks \{[^}]*position: absolute;[^}]*background: repeating-linear-gradient\(90deg, transparent 0 calc\(100% \/ var\(--tyre-slip-ticks\) - var\(--tyre-slip-tick-gap\)\), #0d0e12/)
+    expect(page).toContain('.hud-overlay .tyre-slip__ticks { display: none; }')
     expect(page).toMatch(/\.tyre-slip__bar \.tyre-slip__fill \{[^}]*position: absolute;[^}]*background: var\(--tyre-slip-color\);/)
   })
 

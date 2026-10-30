@@ -69,7 +69,6 @@ describe('fixed-width digits: live values never move (style guide rule 6)', () =
       '<HudFixedDigits :value="compactLapTime" />',
       '<HudFixedDigits :value="valueText(sector)" />',
       '<HudFixedDigits :value="deltaText(sector)" />',
-      '<HudFixedDigits :value="formatDelta(lapDeltaMs ?? null)" />',
     ]],
     ['app/components/overlay/StandingsHud.vue', [
       '<HudFixedDigits :value="model.header.timeLeft" />',

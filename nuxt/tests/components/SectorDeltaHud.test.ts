@@ -107,13 +107,13 @@ describe('SectorDeltaHud', () => {
       expect(html.match(/class="sector-delta__label"/g)).toHaveLength(count)
     }
   })
-  it('shows outside feedback only as the compact tile colour, leaving classic unchanged', async () => {
+  it('shows outside feedback as the lap row colour, in Compact and (owner 30/10) in Classic too', async () => {
     const props = { compactDisplayLap: { timeMs: 91_000, valid: true }, targetOutcome: 'outside' }
     const compact = await renderHud({ ...props, variant: 'compact' })
     expect(compact).not.toContain('FUORI TARGET')
     expect(compact).toContain('sector-compact__lap--target-outside')
     const classic = await renderHud({ ...props, variant: 'classic' })
-    expect(classic).not.toContain('sector-compact__lap--target-outside')
+    expect(classic).toContain('sector-compact__lap--target-outside')
   })
 
   it('centra insieme SETTORI e il confronto nel layout a tre riquadri', () => {
@@ -472,25 +472,24 @@ describe.each(['custom', 'previousLap', 'bestSector'])('compact %s millisecond p
 })
 
 describe('HUD style v2 (27/10) sectors', () => {
-  it('classic: title bar, lap tile with the shown lap, PREV/BEST rows per sector', async () => {
+  it('classic: title bar, the Compact current-lap row, PREV/BEST rows per sector', async () => {
     const html = await renderHud({ variant: 'classic', showReference: true, showBest: true, compactDisplayLap: { timeMs: 103_607, valid: true } })
-    expect(html).toContain('sector-delta-hud__lap')
-    // The draft labels the tile ("Giro in corso"); kept unlabelled: the tile also shows the held last lap.
-    expect(html).not.toContain('sector-delta-hud__lap-label')
-    expect(html).toMatch(/class="sector-delta-hud__lap-time"[^>]*>01:43.607</)
+    // Owner (30/10): the same full-width row as Compact, above the sector tiles.
+    expect(html).toContain('sector-compact__lap-block sector-delta-hud__lap-row')
+    expect(html.indexOf('sector-delta-hud__lap-row')).toBeLessThan(html.indexOf('sector-delta-hud__grid'))
+    expect(html).toMatch(/class="sector-compact__lap"[^>]*>01:43.607</)
     expect(html.match(/class="sector-delta__minis"/g)).toHaveLength(3)
     // Previous lap first, then best, each a boxed label + value.
     expect(html).toMatch(/sector-delta__ref[^>]*>[\s\S]*?<b[^>]*>prec<\/b><em[^>]*>31.001<\/em>[\s\S]*?sector-delta__best[^>]*>[\s\S]*?<b[^>]*>best<\/b><em[^>]*>30.501<\/em>/)
     const page = readFileSync(resolve(process.cwd(), 'app/assets/scss/components/sectors-overlay.scss'), 'utf8')
     expect(page).toMatch(/\.sector-delta__ref,\s*\.hud-overlay \.sector-delta__best\s*\{[\s\S]*?text-transform:\s*uppercase/)
-    expect(page).toMatch(/\.sector-delta-hud__lap-time\s*\{[^}]*color:\s*#f1d541/)
   })
 
-  it('classic: the lap tile keeps the invalid and unknown colours and hides with the setting', async () => {
-    expect(await renderHud({ variant: 'classic', compactDisplayLap: { timeMs: 90_000, valid: false } })).toMatch(/sector-delta-hud__lap-time[^"]*sector-compact__lap--invalid|sector-compact__lap--invalid[^"]*sector-delta-hud__lap-time/)
+  it('classic: the lap row keeps the invalid and unknown colours and hides with the setting', async () => {
+    expect(await renderHud({ variant: 'classic', compactDisplayLap: { timeMs: 90_000, valid: false } })).toContain('sector-compact__lap--invalid')
     expect(await renderHud({ variant: 'classic', compactDisplayLap: { timeMs: 90_000, valid: null } })).toContain('sector-compact__lap--unknown')
     const hidden = await renderHud({ variant: 'classic', showCurrentLap: false })
-    expect(hidden).not.toContain('sector-delta-hud__lap')
+    expect(hidden).not.toContain('sector-delta-hud__lap-row')
     expect(hidden).toContain('sector-delta-hud__grid')
   })
 
@@ -579,13 +578,11 @@ describe('sectors second round (28/10)', () => {
     const styles = sectorsScss()
     const source = hudSource()
     const font = (text: string, selector: string) => text.match(new RegExp(String.raw`${selector}\s*\{[^}]*font:\s*([^;]*);`))?.[1]
-    // Classic (wide) at scale 1: title 14, tile name 15, sector time 30, delta 38, lap time and delta 40.
+    // Classic (wide) at scale 1: title 14, tile name 15, sector time 30, delta 38 (the lap row is Compact's).
     expect(font(styles, String.raw`\.sector-delta-hud__header span,\s*\.hud-overlay \.sector-delta-hud__header em`)).toBe('700 14px/1 var(--hud-gauge-label)')
     expect(font(styles, String.raw`\.hud-overlay \.sector-delta__label`)).toBe('700 15px/1 var(--hud-gauge-label)')
     expect(font(styles, String.raw`\.hud-overlay \.sector-delta strong`)).toBe('700 30px/1 var(--hud-gauge-num)')
     expect(font(styles, String.raw`\.hud-overlay \.sector-delta \.sector-delta__delta`)).toBe('800 38px/1 var(--hud-gauge-num)')
-    expect(font(styles, String.raw`\.hud-overlay \.sector-delta-hud__lap-time`)).toBe('800 40px/1 var(--hud-gauge-num)')
-    expect(font(styles, String.raw`\.hud-overlay \.sector-delta-hud__lap-delta`)).toBe('800 40px/1 var(--hud-gauge-num)')
     // PREV / BEST: word 14, value 23.
     expect(styles).toMatch(/\.sector-delta__best \{[^}]*b \{[^}]*font: 700 14px\/1 var\(--hud-gauge-label\);[^}]*\}\s*em \{[^}]*font: 700 23px\/1 var\(--hud-gauge-num\);/)
     expect(styles).toContain('.hud-overlay .sector-delta .sector-delta__value--placeholder { color: #a4b0bc; }')
@@ -596,15 +593,11 @@ describe('sectors second round (28/10)', () => {
     expect(source).toContain('.sector-compact__row .sector-compact__delta.sector-delta__delta--placeholder { color: #a4b0bc; }')
   })
 
-  it('classic: with the lap tile, lap and sectors share one draft grid (1.28fr + N x 1fr), 740px wide', async () => {
+  it('classic: the lap row adds height, never width (owner 30/10)', async () => {
     const withLap = await renderHud({ variant: 'classic', showCurrentLap: true })
-    expect(withLap).toContain('sector-delta-hud__body--with-lap')
-    expect(withLap).toContain('grid-template-columns:minmax(0, 1.28fr) repeat(3, minmax(0, 1fr))')
-    expect(sectorsScss()).toMatch(/\.sector-delta-hud__body--with-lap \.sector-delta-hud__grid\s*\{\s*display:\s*contents;/)
-    expect(sectorsScss()).toContain('.hud-overlay__panel:has(.sector-delta-hud__body--with-lap) { --sectors-width: 740px; }')
-    const without = await renderHud({ variant: 'classic', showCurrentLap: false })
-    expect(without).not.toContain('sector-delta-hud__body--with-lap')
-    expect(without).not.toContain('1.28fr')
+    expect(withLap).not.toContain('1.28fr')
+    expect(withLap).not.toContain('sector-delta-hud__body--with-lap')
+    expect(sectorsScss()).not.toContain('--sectors-width: 740px')
   })
 
   it('classic: draft spacing - tile padding 8, coloured top edge, PREV/BEST one row each', () => {
@@ -613,18 +606,6 @@ describe('sectors second round (28/10)', () => {
     expect(styles).toContain('.hud-overlay .sector-delta--purple { --sector-edge: #c756f0; --sector-delta: #c756f0; }')
     expect(styles).toContain('.hud-overlay .sector-delta--red { --sector-edge: #f05b4b; --sector-delta: #f05b4b; }')
     expect(styles).toMatch(/\.sector-delta__minis\s*\{[^}]*display:\s*grid;[^}]*border-top:\s*1px solid #3d4b57;/)
-    expect(styles).not.toContain('--with-lap .sector-delta__minis')
-  })
-
-  it.each([
-    { ms: -245, text: '−0.245', cls: 'sector-delta-hud__lap-delta--faster' },
-    { ms: 412, text: '+0.412', cls: 'sector-delta-hud__lap-delta--slower' },
-    { ms: null, text: '--', cls: 'sector-delta-hud__lap-delta--placeholder' },
-  ])('classic lap tile shows the live lap delta $text under the time', async ({ ms, text, cls }) => {
-    const html = await renderHud({ variant: 'classic', compactDisplayLap: { timeMs: 103_607, valid: true }, lapDeltaMs: ms })
-    const delta = html.match(/<small class="([^"]*sector-delta-hud__lap-delta[^"]*)"[^>]*>([^<]*)</)
-    expect(delta?.[1].split(' ')).toContain(cls)
-    expect(delta?.[2]).toBe(text)
   })
 
   it('the page: Classic lap tile from its own setting (default off) and the Info delta outside the hold', () => {

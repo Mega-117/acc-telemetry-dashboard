@@ -115,7 +115,7 @@ describe('Dashboard layout (PIP-671, approved draft "Cruscotto · race" 30/10)',
     expect(css).toMatch(/\.dash-hud \{[^}]*width: 700px;/s)
     expect(css).toContain('.dash-gear__value { font: 800 120px/1 var(--hud-gauge-num); color: #fff; }')
     // The bar has small cuts on both top corners, parallel to the panel's, a slanted fill end and no ticks.
-    expect(css).toMatch(/\.dash-rpm \{[^}]*height: 42px;[^}]*clip-path: polygon\(9px 0, calc\(100% - 13px\) 0, 100% 13px, 100% 100%, 0 100%, 0 9px\);/s)
+    expect(css).toMatch(/\.dash-rpm \{[^}]*height: 42px;[^}]*clip-path: polygon\(6px 0, calc\(100% - 6px\) 0, 100% 6px, 100% 100%, 0 100%, 0 6px\);/s)
     expect(css).toMatch(/\.dash-rpm__fill \{[^}]*clip-path: polygon\(0 0, calc\(100% - 12px\) 0, 100% 100%, 0 100%\);/s)
     expect(css).not.toMatch(/\.[\w-]*tick[\w-]*\s*\{/)
   })

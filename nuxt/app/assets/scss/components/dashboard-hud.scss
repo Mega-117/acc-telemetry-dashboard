@@ -42,14 +42,16 @@ $dash-caution-bg: $hud-caution-bg;
 .dash-hud > .dash-indicator--right { right: 0; }
 .dash-hud > .dash-indicator.is-active { animation: dash-indicator 0.5s ease-in-out infinite alternate; }
 
-// ── RPM bar: continuous green fill with a slanted end on a dark track; the track has small cuts
-// on both top corners, parallel to the panel's.
+// ── RPM bar: continuous green fill with a slanted end on a dark track. Owner (30/10): the track's
+// top cuts follow the panel's, at the same distance as the margins: the panel cut (14px) lies on
+// x + y = 14, the bar starts 14px in and 12px down, and the parallel line about 13px further in
+// (14 + 13 x √2 ≈ 32.4) leaves a 32.4 - 26 ≈ 6px cut on the bar, the same on both sides.
 .dash-rpm {
   position: relative;
   height: 42px;
   overflow: hidden;
   background: #18231f;
-  clip-path: polygon(9px 0, calc(100% - 13px) 0, 100% 13px, 100% 100%, 0 100%, 0 9px);
+  clip-path: polygon(6px 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%, 0 6px);
 }
 .dash-rpm__fill {
   position: absolute;

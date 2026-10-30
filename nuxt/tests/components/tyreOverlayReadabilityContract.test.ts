@@ -10,9 +10,8 @@ describe('tyre overlay minimum readability contract', () => {
   it('keeps essential slip values and labels above the minimum type floors', () => {
     const page = source('app/pages/tyres-overlay.vue')
 
-    // Classic aligned (HUD style guide 28/10): title 12, wheel id 16, values 20, state 13, units 11
-    // at scale 1; the 0.6 minimum renders labels at 12px and values at 14px, units stay 11px.
-    expect(page).toContain('max(12px, calc(12px * var(--hud-scale)))')
+    // Classic aligned (HUD style guide 28/10, no title bar since 30/10): wheel id 16, values 20, state 13,
+    // units 11 at scale 1; the 0.6 minimum renders labels at 12px and values at 14px, units stay 11px.
     expect(page).toContain('max(12px, calc(16px * var(--hud-scale)))')
     expect(page).toContain('max(14px, calc(20px * var(--hud-scale)))')
     expect(page).toContain('max(12px, calc(13px * var(--hud-scale)))')

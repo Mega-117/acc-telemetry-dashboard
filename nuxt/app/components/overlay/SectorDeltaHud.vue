@@ -98,15 +98,6 @@ const titleText = computed(() => {
   return props.variant === 'compact' ? t('overlays.sectors.lastLap') : t('overlays.sectors.titleLastLap')
 })
 
-// Green when ahead of the reference, red when behind, as in the approved mock.
-const lapDeltaClass = computed(() => {
-  const ms = props.lapDeltaMs ?? null
-  if (ms === null) return 'sector-delta-hud__lap-delta--placeholder'
-  const rounded = Math.round(ms)
-  if (rounded < 0) return 'sector-delta-hud__lap-delta--faster'
-  return rounded > 0 ? 'sector-delta-hud__lap-delta--slower' : ''
-})
-
 function formatTime(ms: number | null): string {
   if (ms === null) return '--'
   return `${(ms / 1000).toFixed(3)}`
@@ -234,24 +225,25 @@ const { t } = useI18n()
         <span class="sector-delta-hud__title">{{ titleText }}</span>
         <em class="sector-delta-hud__comparison"><span class="sector-title__versus">{{ t('overlays.sectors.versus') }}</span> <b class="sector-title__reference">{{ comparisonToken }}</b></em>
       </div>
+      <!-- Owner (30/10): the current lap is the same full-width row as the Compact layout, above
+           the sector tiles (it was a tile on their left). -->
       <div
-        class="sector-delta-hud__body"
-        :class="{ 'sector-delta-hud__body--with-lap': showCurrentLap !== false }"
-        :style="showCurrentLap !== false ? { gridTemplateColumns: `minmax(0, 1.28fr) repeat(${visibleSectors.length}, minmax(0, 1fr))` } : undefined"
+        v-if="showCurrentLap !== false"
+        class="sector-compact__lap-block sector-delta-hud__lap-row"
+        :class="{
+          'sector-compact__lap--target-inside': targetOutcome === 'inside' && compactCurrentLapValid === true,
+          'sector-compact__lap--target-outside': targetOutcome === 'outside' && compactCurrentLapValid === true,
+        }"
       >
-        <div v-if="showCurrentLap !== false" class="sector-delta-hud__lap">
-          <strong
-            class="sector-delta-hud__lap-time"
-            :class="{
-              'sector-compact__lap--invalid': compactCurrentLapValid === false,
-              'sector-compact__lap--unknown': compactCurrentLapValid === null,
-            }"
-          ><HudFixedDigits :value="compactLapTime" /></strong>
-          <small
-            class="sector-delta-hud__lap-delta"
-            :class="lapDeltaClass"
-          ><HudFixedDigits :value="formatDelta(lapDeltaMs ?? null)" /></small>
-        </div>
+        <strong
+          class="sector-compact__lap"
+          :class="{
+            'sector-compact__lap--invalid': compactCurrentLapValid === false,
+            'sector-compact__lap--unknown': compactCurrentLapValid === null,
+          }"
+        ><HudFixedDigits :value="compactLapTime" /></strong>
+      </div>
+      <div class="sector-delta-hud__body">
         <div class="sector-delta-hud__grid" :style="{ gridTemplateColumns: `repeat(${visibleSectors.length}, minmax(0, 1fr))` }">
           <div
             v-for="sector in visibleSectors"
@@ -383,7 +375,9 @@ const { t } = useI18n()
   gap: 8px;
   box-sizing: border-box;
   min-height: 0;
-  padding: 7px 10px;
+  /* Owner (30/10): the figures had 15-19px of space above and 10-11px below (the line box keeps room
+     above the digits): 3px more below than above balances the ink. */
+  padding: 4px 10px 10px;
   overflow: hidden;
   border: 0;
   border-top: 1px solid rgba(184, 194, 204, 0.22);

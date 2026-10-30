@@ -157,11 +157,10 @@ const { t } = useI18n()
   background: rgba(13, 14, 18, var(--hud-tyres-bg-opacity, 1));
 }
 
-// Classic (owner 28/10): the Info shape on the outer panel, only the top-right corner cut. The four
-// Classic tiles are flat, with no cut. The yellow flag frame (4px at scale 1) follows the whole
-// outline, cut included, above the content so nothing moves.
+// Classic (owner 30/10): a square panel, no corner cut. The four Classic tiles are flat, with no
+// cut. The yellow flag frame follows the whole outline, above the content so nothing moves.
 .hud-overlay__panel--classic {
-  @include hud-cut-corner(0px, calc(14px * var(--hud-scale)), $hud-hairline-width, $hud-hairline-color, 'hud-overlay__panel--yellow-flag', $hud-flag-width);
+  @include hud-cut-corner(0px, 0px, $hud-hairline-width, $hud-hairline-color, 'hud-overlay__panel--yellow-flag', $hud-flag-width);
 }
 
 // Race (PIP-671, approved draft "Gomme" 30/10): a square panel with the hairline frame (owner 30/10:
@@ -217,25 +216,8 @@ const { t } = useI18n()
   font-family: var(--hud-font-num);
 }
 
-.hud-overlay .tyre-slip-hud__header {
-  justify-content: center;
-  gap: calc(10px * var(--hud-scale));
-
-  &::before,
-  &::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: rgba(255, 255, 255, 0.15);
-  }
-
-  span {
-    color: #f4f4f6;
-    font: italic 700 max(12px, calc(12px * var(--hud-scale)))/1 var(--hud-font-num);
-    letter-spacing: .14em;
-    text-transform: uppercase;
-  }
-}
+// Owner (30/10): no "GOMME" title bar on this HUD (the shared component keeps it elsewhere).
+.hud-overlay .tyre-slip-hud__header { display: none; }
 
 .hud-overlay .tyre-slip-grid {
   flex: 1;
@@ -319,12 +301,8 @@ const { t } = useI18n()
 
 .hud-overlay .tyre-slip--waiting .tyre-slip__bar .tyre-slip__fill { background: rgba(255, 255, 255, 0.2); }
 
-.hud-overlay .tyre-slip__ticks {
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(90deg, transparent 0 calc(100% / var(--tyre-slip-ticks) - var(--tyre-slip-tick-gap)), #0d0e12 calc(100% / var(--tyre-slip-ticks) - var(--tyre-slip-tick-gap)) calc(100% / var(--tyre-slip-ticks)));
-  pointer-events: none;
-}
+// Owner (30/10): one continuous bar, no separators splitting it into steps.
+.hud-overlay .tyre-slip__ticks { display: none; }
 
 // Slip bottom-left and pressure bottom-right on the same row.
 .hud-overlay .tyre-slip__meta {
