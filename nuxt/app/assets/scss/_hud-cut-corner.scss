@@ -41,8 +41,14 @@ $hud-flag-width: calc(3 * var(--hud-frame-unit, 1px));
   );
 }
 
+// Both outlines are closed explicitly (first point repeated): the path then goes outer loop, a
+// bridge to the inner loop, inner loop, and back along the same bridge, which has no area. Without
+// the repeated points the two implicit closing segments crossed the left edge diagonally and cut a
+// thin wedge out of it: the frame faded towards the middle of the left side (owner 30/10).
 @function hud-ring($left-cut, $right-cut, $width) {
-  @return polygon(evenodd, #{hud-outline($left-cut, $right-cut, 0px)}, #{hud-outline($left-cut, $right-cut, $width)});
+  $outer: hud-outline($left-cut, $right-cut, 0px);
+  $inner: hud-outline($left-cut, $right-cut, $width);
+  @return polygon(evenodd, #{$outer}, #{nth($outer, 1)}, #{$inner}, #{nth($inner, 1)});
 }
 
 @mixin hud-cut-corner($left-cut, $right-cut, $width, $color, $flag-class, $flag-width) {

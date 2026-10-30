@@ -160,8 +160,8 @@ const { t } = useI18n()
   @include hud-cut-corner(0px, calc(14px * var(--hud-scale)), $hud-hairline-width, $hud-hairline-color, 'hud-overlay__panel--yellow-flag', $hud-flag-width);
 }
 
-// Race (PIP-671, approved draft "Gomme" 30/10): a square 360px panel with the hairline frame that
-// turns into a 3px amber frame while the car is damaged; the yellow flag frame covers the whole outline (weather
+// Race (PIP-671, approved draft "Gomme" 30/10): a square 360px panel with the hairline frame (owner
+// 30/10: damage only colours the two lines of the middle strip, never the frame); the yellow flag frame covers the whole outline (weather
 // strip included), for the tyres and the Damage pages alike. The panel hugs its content: the rest of
 // the window stays transparent.
 .hud-overlay__panel--race {
@@ -173,7 +173,6 @@ const { t } = useI18n()
   padding: 0;
   @include hud-cut-corner(0px, 0px, var(--hud-frame-width), var(--hud-frame), 'hud-overlay__panel--yellow-flag', $hud-flag-width);
 }
-.hud-overlay__panel--race:has(.tyre-race--damaged) { --hud-frame: #{$hud-caution}; --hud-frame-width: 3px; }
 
 // The draft is drawn at native px; the whole Race content is zoomed by the HUD scale, and the
 // components inside it read --hud-scale as 1.

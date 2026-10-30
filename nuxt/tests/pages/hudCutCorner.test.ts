@@ -23,7 +23,9 @@ describe('shared HUD outline mixin', () => {
   })
 
   it('draws the frame and the yellow flag frame as even-odd rings along the whole outline', () => {
-    expect(mixin()).toContain('@return polygon(evenodd, #{hud-outline($left-cut, $right-cut, 0px)}, #{hud-outline($left-cut, $right-cut, $width)});')
+    // Both loops closed explicitly, so the bridge between them has no area and never cuts a wedge
+    // out of the left edge (owner 30/10: the frame faded in the middle of the left side).
+    expect(mixin()).toContain('@return polygon(evenodd, #{$outer}, #{nth($outer, 1)}, #{$inner}, #{nth($inner, 1)});')
     expect(mixin()).toMatch(/&::before \{[^}]*z-index: 14;[^}]*background: \$color;[^}]*clip-path: hud-ring\(\$left-cut, \$right-cut, \$width\);/)
     expect(mixin()).toMatch(/&\.#\{\$flag-class\}::after \{[^}]*z-index: 15;[^}]*background: #ffd400;[^}]*clip-path: hud-ring\(\$left-cut, \$right-cut, \$flag-width\);/)
     // No separate line on the cut any more.
@@ -63,7 +65,8 @@ describe('draft shapes per HUD', () => {
   it('Tyres: Race square with a hairline frame that turns into a 3px amber one with damage; Classic keeps its top-right cut', () => {
     const page = source('app/pages/tyres-overlay.vue')
     expect(page).toContain("@include hud-cut-corner(0px, 0px, var(--hud-frame-width), var(--hud-frame), 'hud-overlay__panel--yellow-flag', $hud-flag-width);")
-    expect(page).toContain('.hud-overlay__panel--race:has(.tyre-race--damaged) { --hud-frame: #{$hud-caution}; --hud-frame-width: 3px; }')
+    // Owner (30/10): damage colours only the middle strip lines, never the panel frame.
+    expect(page).not.toContain(':has(.tyre-race--damaged)')
     // Owner (30/10): the tyres page is as tall as the Damage page, so switching never resizes.
     expect(page).toContain('min-height: 635px;')
     expect(page).toContain('--hud-frame: #{$hud-hairline-color};')
