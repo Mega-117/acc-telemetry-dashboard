@@ -191,7 +191,9 @@ $wheel-height: 112px;
   width: 24px;
   height: 100%;
   background: #3a3d45;
-  b { position: absolute; right: 0; bottom: 0; left: 0; display: block; }
+  // Owner (30/10): the slip arrives 20 times a second; the fill glides to each sample over 50 ms
+  // (linear) instead of jumping, like the Dashboard pedal bars.
+  b { position: absolute; right: 0; bottom: 0; left: 0; display: block; transition: height 50ms linear; }
 }
 .tyre-race__tyre {
   box-sizing: border-box;

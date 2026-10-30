@@ -317,3 +317,10 @@ describe('HUD style v2 (27/10) classic tyres', () => {
     expect(waiting.match(/tyre-slip--waiting/g)).toHaveLength(4)
   })
 })
+
+describe('Race slip bars (owner 30/10)', () => {
+  it('the slip fill glides to each 20 Hz sample over 50 ms instead of jumping', () => {
+    const race = readFileSync(resolve(process.cwd(), 'app/components/overlay/TyreRaceHud.vue'), 'utf8')
+    expect(race).toContain('b { position: absolute; right: 0; bottom: 0; left: 0; display: block; transition: height 50ms linear; }')
+  })
+})
