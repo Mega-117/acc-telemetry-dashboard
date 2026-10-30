@@ -35,16 +35,12 @@
   font-family: 'Racer Display'; src: url('../fonts/ChakraPetch-BoldItalic.woff2') format('woff2');
   font-weight: 700; font-style: italic; font-display: swap;
 }
-// Upright Chakra Petch (SIL OFL 1.1, fonts/ChakraPetch-OFL.txt, from the Google Fonts repository):
-// the Racer Core button face without the italic, owner trial on the Dashboard HUD (30/10). The
-// Owner: thick, so the Dashboard's 700 and 800 both use Bold (the heaviest Chakra Petch).
+// Titillium Web Black (SIL OFL 1.1, fonts/TitilliumWeb-OFL.txt, from the Google Fonts repository):
+// owner trial on the Dashboard HUD (30/10), a real heavy motorsport face. The Dashboard's 700 and
+// 800 both use the Black cut, never a synthetic bold.
 @font-face {
-  font-family: 'Racer Display Upright'; src: url('../fonts/ChakraPetch-Bold.woff2') format('woff2');
-  font-weight: 700; font-style: normal; font-display: block;
-}
-@font-face {
-  font-family: 'Racer Display Upright'; src: url('../fonts/ChakraPetch-Bold.woff2') format('woff2');
-  font-weight: 800; font-style: normal; font-display: block;
+  font-family: 'Racer Dash'; src: url('../fonts/TitilliumWeb-Black.woff2') format('woff2');
+  font-weight: 700 900; font-style: normal; font-display: block;
 }
 // Barlow (SIL OFL 1.1, fonts/Barlow-OFL.txt), extracted unchanged from the approved HUD drafts.
 @font-face {
