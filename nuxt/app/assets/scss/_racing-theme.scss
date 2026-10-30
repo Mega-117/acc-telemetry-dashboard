@@ -35,6 +35,13 @@
   font-family: 'Racer Display'; src: url('../fonts/ChakraPetch-BoldItalic.woff2') format('woff2');
   font-weight: 700; font-style: italic; font-display: swap;
 }
+// Upright Chakra Petch Bold (SIL OFL 1.1, fonts/ChakraPetch-OFL.txt, from the Google Fonts
+// repository): the Racer Core button face without the italic, owner trial on the Dashboard HUD
+// (30/10). Bold is the heaviest Chakra Petch: the Dashboard's 700 and 800 both use it.
+@font-face {
+  font-family: 'Racer Display Upright'; src: url('../fonts/ChakraPetch-Bold.woff2') format('woff2');
+  font-weight: 700 800; font-style: normal; font-display: block;
+}
 // Barlow (SIL OFL 1.1, fonts/Barlow-OFL.txt), extracted unchanged from the approved HUD drafts.
 @font-face {
   font-family: 'Racer Gauge'; src: url('../fonts/BarlowSemiCondensed-Bold.woff2') format('woff2');
