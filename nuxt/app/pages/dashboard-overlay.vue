@@ -42,7 +42,8 @@ const liveModel = stableComputed(() => buildDashboardPresentation(
   options.value,
   telemetry.focusedCar.value,
 ))
-const canvasStyle = computed(() => ({ transform: `scale(${overlay.scale.value})` }))
+// --hud-frame-unit keeps the panel frames whole screen pixels under the scale (hud-cut-corner).
+const canvasStyle = computed(() => ({ 'transform': `scale(${overlay.scale.value})`, '--hud-frame-unit': `${1 / overlay.scale.value}px` }))
 const model = useHudPresentationMemory(liveModel, telemetry.fastState)
 // The box being adjusted (TC, TC2, ABS, MAP, BB) is highlighted for 1.5 s; local live telemetry only.
 const adjustmentEnabled = computed(() => {

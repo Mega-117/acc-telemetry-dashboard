@@ -105,7 +105,7 @@ describe('Race HUD components', () => {
     // The frame is on the whole outer panel (weather strip included), tyres and Damage pages alike.
     const page = readFileSync(resolve(process.cwd(), 'app/pages/tyres-overlay.vue'), 'utf8')
     expect(page).toMatch(/class="hud-overlay__panel"\s*:class="\{[^}]*'hud-overlay__panel--yellow-flag': displayFastState\.flag === 2,/)
-    expect(page).toContain("'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));")
+    expect(page).toContain("'hud-overlay__panel--yellow-flag', $hud-flag-width);")
     expect(page).not.toContain('race-hud--yellow-flag')
     const damage = await renderToString(createSSRApp(DamageRaceHud, { fastState: { ...fastState(), flag: 2 } }))
     expect(damage).toContain('stroke="#ffd400"')
@@ -269,7 +269,7 @@ describe('HUD style v2 (27/10) classic tyres', () => {
     expect(page).toMatch(/\.hud-overlay__panel \{[^}]*padding: calc\(12px \* var\(--hud-scale\)\);[^}]*border-radius: 0;/)
     expect(page).toMatch(/\.tyre-slip-grid \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/)
     // PIP-671: the yellow frame follows the whole outline through the shared mixin.
-    expect(page).toContain("@include hud-cut-corner(0px, calc(14px * var(--hud-scale)), $hud-hairline-width, $hud-hairline-color, 'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));")
+    expect(page).toContain("@include hud-cut-corner(0px, calc(14px * var(--hud-scale)), $hud-hairline-width, $hud-hairline-color, 'hud-overlay__panel--yellow-flag', $hud-flag-width);")
   })
 
   it('classic aligned (28/10): guide type scale in the italic numbers font, with the 0.6 floors', () => {

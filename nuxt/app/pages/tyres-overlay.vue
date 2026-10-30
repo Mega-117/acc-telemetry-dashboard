@@ -157,7 +157,7 @@ const { t } = useI18n()
 // Classic tiles are flat, with no cut. The yellow flag frame (4px at scale 1) follows the whole
 // outline, cut included, above the content so nothing moves.
 .hud-overlay__panel--classic {
-  @include hud-cut-corner(0px, calc(14px * var(--hud-scale)), $hud-hairline-width, $hud-hairline-color, 'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));
+  @include hud-cut-corner(0px, calc(14px * var(--hud-scale)), $hud-hairline-width, $hud-hairline-color, 'hud-overlay__panel--yellow-flag', $hud-flag-width);
 }
 
 // Race (PIP-671, approved draft "Gomme" 30/10): a square 360px panel with the hairline frame that
@@ -169,11 +169,11 @@ const { t } = useI18n()
   --hud-frame-width: #{$hud-hairline-width};
   flex: 0 0 auto;
   align-self: flex-start;
-  width: calc(360px * var(--hud-scale));
+  width: round(calc(360px * var(--hud-scale)), 1px);
   padding: 0;
-  @include hud-cut-corner(0px, 0px, var(--hud-frame-width), var(--hud-frame), 'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));
+  @include hud-cut-corner(0px, 0px, var(--hud-frame-width), var(--hud-frame), 'hud-overlay__panel--yellow-flag', $hud-flag-width);
 }
-.hud-overlay__panel--race:has(.tyre-race--damaged) { --hud-frame: #{$hud-caution}; --hud-frame-width: calc(3px * var(--hud-scale)); }
+.hud-overlay__panel--race:has(.tyre-race--damaged) { --hud-frame: #{$hud-caution}; --hud-frame-width: 3px; }
 
 // The draft is drawn at native px; the whole Race content is zoomed by the HUD scale, and the
 // components inside it read --hud-scale as 1.

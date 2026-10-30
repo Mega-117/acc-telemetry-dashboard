@@ -22,7 +22,7 @@ $dash-caution-bg: $hud-caution-bg;
   @include hud-gauge-type;
   line-height: 1;
   // Both top corners cut (14px), hairline frame; the yellow flag frame follows the whole outline.
-  @include hud-cut-corner(14px, 14px, $hud-hairline-width, $hud-hairline-color, 'dash-hud--yellow-flag', 4px);
+  @include hud-cut-corner(14px, 14px, $hud-hairline-width, $hud-hairline-color, 'dash-hud--yellow-flag', $hud-flag-width);
 
   > :not(.hud-overlay-background, .dash-indicator) { position: relative; z-index: 1; }
 }

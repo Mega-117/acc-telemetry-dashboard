@@ -46,28 +46,28 @@ describe('shared HUD outline mixin', () => {
 describe('draft shapes per HUD', () => {
   it('Dashboard: both top corners cut, hairline frame, 4px yellow frame', () => {
     expect(source('app/assets/scss/components/dashboard-hud.scss'))
-      .toContain("@include hud-cut-corner(14px, 14px, $hud-hairline-width, $hud-hairline-color, 'dash-hud--yellow-flag', 4px);")
+      .toContain("@include hud-cut-corner(14px, 14px, $hud-hairline-width, $hud-hairline-color, 'dash-hud--yellow-flag', $hud-flag-width);")
   })
 
   it('Info: only the top-right corner cut, hairline frame', () => {
     expect(source('app/components/overlay/InfoHud.vue'))
-      .toContain("@include hud-cut-corner(0px, 14px, $hud-hairline-width, $hud-hairline-color, 'info-hud--yellow-flag', 4px);")
+      .toContain("@include hud-cut-corner(0px, 14px, $hud-hairline-width, $hud-hairline-color, 'info-hud--yellow-flag', $hud-flag-width);")
   })
 
   it('Sectors (Classic and Compact): square panel, hairline frame', () => {
     const styles = source('app/assets/scss/components/sectors-overlay.scss')
-    expect(styles).toContain("@include hud-cut-corner(0px, 0px, $hud-hairline-width, $hud-hairline-color, 'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));")
+    expect(styles).toContain("@include hud-cut-corner(0px, 0px, $hud-hairline-width, $hud-hairline-color, 'hud-overlay__panel--yellow-flag', $hud-flag-width);")
     expect(styles).toContain('background: rgba(9, 12, 16, var(--hud-sectors-bg-opacity, 1));')
   })
 
   it('Tyres: Race square with a hairline frame that turns into a 3px amber one with damage; Classic keeps its top-right cut', () => {
     const page = source('app/pages/tyres-overlay.vue')
-    expect(page).toContain("@include hud-cut-corner(0px, 0px, var(--hud-frame-width), var(--hud-frame), 'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));")
-    expect(page).toContain('.hud-overlay__panel--race:has(.tyre-race--damaged) { --hud-frame: #{$hud-caution}; --hud-frame-width: calc(3px * var(--hud-scale)); }')
+    expect(page).toContain("@include hud-cut-corner(0px, 0px, var(--hud-frame-width), var(--hud-frame), 'hud-overlay__panel--yellow-flag', $hud-flag-width);")
+    expect(page).toContain('.hud-overlay__panel--race:has(.tyre-race--damaged) { --hud-frame: #{$hud-caution}; --hud-frame-width: 3px; }')
     // Owner (30/10): the tyres page is as tall as the Damage page, so switching never resizes.
     expect(page).toContain('min-height: 635px;')
     expect(page).toContain('--hud-frame: #{$hud-hairline-color};')
-    expect(page).toContain("@include hud-cut-corner(0px, calc(14px * var(--hud-scale)), $hud-hairline-width, $hud-hairline-color, 'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));")
+    expect(page).toContain("@include hud-cut-corner(0px, calc(14px * var(--hud-scale)), $hud-hairline-width, $hud-hairline-color, 'hud-overlay__panel--yellow-flag', $hud-flag-width);")
     // Style guide (28/10): the four Classic tiles are flat, with no cut of their own.
     expect(page).toMatch(/\.hud-overlay \.tyre-slip \{[^}]*border: 0;/)
     expect(page).not.toMatch(/\.hud-overlay \.tyre-slip \{[^}]*clip-path/)

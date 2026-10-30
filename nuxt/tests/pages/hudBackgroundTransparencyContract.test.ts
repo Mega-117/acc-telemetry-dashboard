@@ -135,6 +135,6 @@ describe('Sectors yellow-flag frame (PIP-671)', () => {
     const styles = source('app/assets/scss/components/sectors-overlay.scss')
 
     expect(page).toContain("'hud-overlay__panel--yellow-flag': fastState.flag === 2,")
-    expect(styles).toContain("'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));")
+    expect(styles).toContain("'hud-overlay__panel--yellow-flag', $hud-flag-width);")
   })
 })

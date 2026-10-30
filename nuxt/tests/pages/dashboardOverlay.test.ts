@@ -108,7 +108,7 @@ describe('Dashboard layout (PIP-671, approved draft "Cruscotto · race" 30/10)',
     }
     for (const [id, colour] of Object.entries(colours)) expect(css).toContain(`.dash-cell--${id} { --c: ${colour}; }`)
     expect(css).toContain("@use '~/assets/scss/hud-cut-corner' as *;")
-    expect(css).toContain("@include hud-cut-corner(14px, 14px, $hud-hairline-width, $hud-hairline-color, 'dash-hud--yellow-flag', 4px);")
+    expect(css).toContain("@include hud-cut-corner(14px, 14px, $hud-hairline-width, $hud-hairline-color, 'dash-hud--yellow-flag', $hud-flag-width);")
     expect(css).toMatch(/\.dash-cell \{[^}]*--w: 3px;/s)
     expect(css).toContain('.dash-cell__value { font: 700 35px/1 var(--hud-gauge-num); color: #f4f6f8; white-space: nowrap; }')
     expect(css).toMatch(/b \{[^}]*font: 700 15px\/1 var\(--hud-gauge-num\);[^}]*text-transform: uppercase;/s)
@@ -190,7 +190,7 @@ describe('Dashboard v3 states', () => {
   it('yellow flag: 4px #ffd400 frame along the whole outline, both cuts included', async () => {
     expect(await render({ flag: 2 })).toContain('dash-hud--yellow-flag')
     expect(await render({ flag: 0 })).not.toContain('dash-hud--yellow-flag')
-    expect(styles()).toContain("'dash-hud--yellow-flag', 4px);")
+    expect(styles()).toContain("'dash-hud--yellow-flag', $hud-flag-width);")
   })
 
   it('direction lights blink the panel edges (ACC Drive tomato, 0.5 s)', async () => {

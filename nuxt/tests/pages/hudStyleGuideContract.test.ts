@@ -28,21 +28,21 @@ describe('yellow-flag frame: 4px #ffd400 along the whole outline of every overla
     expect(sectorsPage).toContain("'hud-overlay__panel--yellow-flag': fastState.flag === 2,")
     expect(tyresPage).toContain("'hud-overlay__panel--yellow-flag': displayFastState.flag === 2,")
     for (const styles of [sectorsStyles, tyresPage]) {
-      expect(styles).toContain("'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));")
+      expect(styles).toContain("'hud-overlay__panel--yellow-flag', $hud-flag-width);")
     }
   })
 
   it('Info raises it through the same mixin, 4px', () => {
     const info = source('app/components/overlay/InfoHud.vue')
     expect(info).toContain(":class=\"{ 'info-hud--yellow-flag': model.yellowFlagActive }\"")
-    expect(info).toContain("'info-hud--yellow-flag', 4px);")
+    expect(info).toContain("'info-hud--yellow-flag', $hud-flag-width);")
   })
 
   it('Dashboard raises it through the same mixin, 4px', () => {
     const hud = source('app/components/overlay/DashboardHud.vue')
     const styles = source('app/assets/scss/components/dashboard-hud.scss')
     expect(hud).toContain("'dash-hud--yellow-flag': model.yellowFlagActive,")
-    expect(styles).toContain("@include hud-cut-corner(14px, 14px, $hud-hairline-width, $hud-hairline-color, 'dash-hud--yellow-flag', 4px);")
+    expect(styles).toContain("@include hud-cut-corner(14px, 14px, $hud-hairline-width, $hud-hairline-color, 'dash-hud--yellow-flag', $hud-flag-width);")
   })
 
   it('Info and Dashboard raise it only for the ACC yellow flag (2) of the shown car', () => {

@@ -64,7 +64,7 @@ describe('Info overlay window contract', () => {
     const hud = readFileSync(resolve(process.cwd(), 'app/components/overlay/InfoHud.vue'), 'utf8')
 
     // Owner: bottom-left is a normal square corner; the shared outline draws the hairline frame.
-    expect(hud).toContain("@include hud-cut-corner(0px, 14px, $hud-hairline-width, $hud-hairline-color, 'info-hud--yellow-flag', 4px);")
+    expect(hud).toContain("@include hud-cut-corner(0px, 14px, $hud-hairline-width, $hud-hairline-color, 'info-hud--yellow-flag', $hud-flag-width);")
     expect(hud).not.toContain('info-hud__cut')
     // Labels 20px, values 27px at scale 1; floors are rendered px divided by the canvas scale.
     expect(hud).toMatch(/\.info-row dt\s*\{[^}]*color:\s*#c5ced7;[^}]*font:\s*700 max\(20px, calc\(12px \/ var\(--hud-scale, 1\)\)\)\/1\.2 var\(--hud-gauge-num\);[^}]*text-transform:\s*uppercase;/s)

@@ -20,8 +20,13 @@
 // size c inset by w moves its two ends by w * (√2 - 1) = w * 0.4142 along the edges.
 // Owner (30/10): every HUD panel has the same hairline frame, barely visible, only to detach the
 // panel from what is behind it. State colours (damage, yellow flag) keep their own frames.
-$hud-hairline-width: 1px;
+// Frames are measured in screen pixels: a page that shrinks its whole canvas with transform: scale()
+// sets --hud-frame-unit to 1px / scale, so the frame never becomes a half pixel that shows on some
+// sides and vanishes on others (owner 30/10).
+$hud-hairline-width: calc(1 * var(--hud-frame-unit, 1px));
 $hud-hairline-color: rgba(255, 255, 255, 0.16);
+// Yellow flag frame: 3 screen pixels on every HUD (owner 30/10).
+$hud-flag-width: calc(3 * var(--hud-frame-unit, 1px));
 
 @function hud-outline($left-cut, $right-cut, $inset) {
   $l: calc(#{$left-cut} + #{$inset} * 0.4142);

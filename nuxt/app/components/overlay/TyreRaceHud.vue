@@ -198,11 +198,13 @@ $wheel-height: 93.6px;
   width: 64.8px;
   height: 100%;
   margin: 0 auto;
-  border: 4px solid color-mix(in srgb, var(--t) 70%, #bcc8bf);
+  // Owner (30/10): fill and frame in the same ACC Drive palette colour.
+  border: 4px solid var(--t);
   border-radius: 5px;
-  background: color-mix(in srgb, var(--t) 42%, #09110e);
+  background: var(--t);
 }
-.tyre-race__temperature { color: #fff; font: 800 26px/1 var(--hud-gauge-num); }
+// The shadow keeps the white number readable on the light palette colours (yellow, light green).
+.tyre-race__temperature { color: #fff; font: 800 26px/1 var(--hud-gauge-num); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 4px rgba(0, 0, 0, 0.7); }
 .tyre-race__brake {
   position: absolute;
   top: 21.6px;
