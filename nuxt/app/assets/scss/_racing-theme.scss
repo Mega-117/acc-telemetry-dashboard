@@ -35,13 +35,6 @@
   font-family: 'Racer Display'; src: url('../fonts/ChakraPetch-BoldItalic.woff2') format('woff2');
   font-weight: 700; font-style: italic; font-display: swap;
 }
-// Saira Black (SIL OFL 1.1, fonts/Saira-OFL.txt): the designed wght 900 / wdth 100 instance of the
-// Google Fonts variable Saira, saved as a static file. Owner trial on the Dashboard HUD (30/10): a
-// squared motorsport face heavier than Chakra Petch Bold. The Dashboard's 700 and 800 both use it.
-@font-face {
-  font-family: 'Racer Dash'; src: url('../fonts/Saira-Black.woff2') format('woff2');
-  font-weight: 700 900; font-style: normal; font-display: block;
-}
 // Barlow (SIL OFL 1.1, fonts/Barlow-OFL.txt), extracted unchanged from the approved HUD drafts.
 @font-face {
   font-family: 'Racer Gauge'; src: url('../fonts/BarlowSemiCondensed-Bold.woff2') format('woff2');

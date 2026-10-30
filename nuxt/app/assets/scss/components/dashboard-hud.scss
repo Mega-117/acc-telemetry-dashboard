@@ -20,10 +20,6 @@ $dash-caution-bg: $hud-caution-bg;
   color: #f4f6f8;
   background: transparent;
   @include hud-gauge-type;
-  // Owner trial (30/10): Saira Black for numbers and labels alike.
-  --hud-gauge-num: 'Racer Dash', 'Arial Narrow', sans-serif;
-  --hud-gauge-label: 'Racer Dash', 'Arial Narrow', sans-serif;
-  font-family: var(--hud-gauge-num);
   line-height: 1;
   // Both top corners cut (14px), hairline frame; the yellow flag frame follows the whole outline.
   @include hud-cut-corner(14px, 14px, $hud-hairline-width, $hud-hairline-color, 'dash-hud--yellow-flag', 4px);
