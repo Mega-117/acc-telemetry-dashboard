@@ -132,7 +132,8 @@ const { t } = useI18n()
 @use '~/assets/scss/hud-gauge' as *;
 
 // Draft sizes at scale 1 (the page zooms the whole Race window by the HUD scale).
-$wheel-height: 93.6px;
+// Owner (30/10): bigger wheels and numbers than the draft, same layout, rows one under the other.
+$wheel-height: 112px;
 
 .tyre-race {
   display: flex;
@@ -148,21 +149,21 @@ $wheel-height: 93.6px;
   display: grid;
   flex: 1;
   align-content: center;
-  gap: 12px;
-  padding: 14px;
+  gap: 10px;
+  padding: 8px;
 }
 
 .tyre-race__axle {
   display: grid;
-  grid-template-columns: 116px minmax(72px, 1fr) 116px;
-  column-gap: 10px;
+  grid-template-columns: 140px minmax(72px, 1fr) 140px;
+  column-gap: 8px;
 }
 
 .tyre-race__corner {
   display: grid;
   grid-template-rows: auto auto;
   justify-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 .tyre-race__corner--left { grid-area: 1 / 1; }
@@ -173,20 +174,22 @@ $wheel-height: 93.6px;
 .tyre-race__values {
   display: grid;
   justify-items: center;
-  gap: 6px;
+  gap: 4px;
   white-space: nowrap;
 }
-.tyre-race__primary { font: 800 31px/1 var(--hud-gauge-num); }
-.tyre-race__average { color: #d4dce2; font: 700 24px/1.1 var(--hud-gauge-label); }
-.tyre-race__loss { color: #ffa500; font: 700 26px/1.1 var(--hud-gauge-num); }
+.tyre-race__primary { font: 800 36px/1 var(--hud-gauge-num); }
+.tyre-race__average { color: #d4dce2; font: 700 27px/1.1 var(--hud-gauge-label); }
+.tyre-race__loss { color: #ffa500; font: 700 29px/1.1 var(--hud-gauge-num); }
 
 // Hardware: slip bar on the outside, tyre in the middle, brake on the inside.
-.tyre-race__hardware { position: relative; width: 116px; height: $wheel-height; }
+// Owner (30/10): wider slip (24px) and brake (18px) bars beside the 80px tyre; 12px between slip
+// bar and tyre, 6px between tyre and brake.
+.tyre-race__hardware { position: relative; width: 140px; height: $wheel-height; }
 .tyre-race__slip {
   position: absolute;
   top: 0;
-  left: 5.6px;
-  width: 12px;
+  left: 0;
+  width: 24px;
   height: 100%;
   background: #3a3d45;
   b { position: absolute; right: 0; bottom: 0; left: 0; display: block; }
@@ -195,29 +198,30 @@ $wheel-height: 93.6px;
   box-sizing: border-box;
   display: grid;
   place-items: center;
-  width: 64.8px;
+  width: 80px;
   height: 100%;
-  margin: 0 auto;
+  margin: 0 0 0 36px;
   // Owner (30/10): fill and frame in the same ACC Drive palette colour.
   border: 4px solid var(--t);
   border-radius: 5px;
   background: var(--t);
 }
 // The shadow keeps the white number readable on the light palette colours (yellow, light green).
-.tyre-race__temperature { color: #fff; font: 800 26px/1 var(--hud-gauge-num); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 4px rgba(0, 0, 0, 0.7); }
+.tyre-race__temperature { color: #fff; font: 800 34px/1 var(--hud-gauge-num); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 4px rgba(0, 0, 0, 0.7); }
 .tyre-race__brake {
   position: absolute;
-  top: 21.6px;
-  right: 3.2px;
-  width: 14.4px;
-  height: 50.4px;
+  top: 20px;
+  right: 0;
+  width: 18px;
+  height: 72px;
   border: 1px solid #00000066;
   border-radius: 3px;
   box-sizing: border-box;
 }
 .tyre-race__corner--right {
-  .tyre-race__slip { right: 5.6px; left: auto; }
-  .tyre-race__brake { right: auto; left: 3.2px; }
+  .tyre-race__slip { right: 0; left: auto; }
+  .tyre-race__tyre { margin-left: 24px; }
+  .tyre-race__brake { right: auto; left: 0; }
 }
 
 // Caution (pressure drop event, overheated tyre): the wheel's tyre and readings turn amber.
@@ -235,7 +239,7 @@ $wheel-height: 93.6px;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font: 700 30px/1 var(--hud-gauge-num);
+  font: 700 34px/1 var(--hud-gauge-num);
   white-space: nowrap;
 }
 .tyre-race__pad {
@@ -243,11 +247,11 @@ $wheel-height: 93.6px;
   left: 50%;
   transform: translateX(-50%);
   color: #d4dce2;
-  font: 700 24px/1 var(--hud-gauge-num);
+  font: 700 30px/1 var(--hud-gauge-num);
   white-space: nowrap;
 }
-.tyre-race__axle--front .tyre-race__pad { bottom: calc(50% + 21px); }
-.tyre-race__axle--rear .tyre-race__pad { top: calc(50% + 21px); }
+.tyre-race__axle--front .tyre-race__pad { bottom: calc(50% + 24px); }
+.tyre-race__axle--rear .tyre-race__pad { top: calc(50% + 24px); }
 
 // ENGINE OFF (red, pulsing) and LIMITER ON (blue) boxes on the axle centre, square corners.
 .tyre-race__status {
@@ -270,14 +274,14 @@ $wheel-height: 93.6px;
 // Middle line: compound and set centred, damage (repair time) on the right.
 .tyre-race__compound {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 128px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 170px minmax(0, 1fr);
   align-items: center;
   box-sizing: border-box;
-  height: 48px;
+  height: 52px;
   padding: 8px 0;
   border-block: 1px solid #465d52;
 }
-.tyre-race__compound-set { grid-column: 2; color: #e7eee9; font: 700 24px/30px var(--hud-gauge-num); text-align: center; white-space: nowrap; }
+.tyre-race__compound-set { grid-column: 2; color: #e7eee9; font: 700 28px/34px var(--hud-gauge-num); text-align: center; white-space: nowrap; }
 .tyre-race__damage {
   grid-column: 3;
   display: flex;
@@ -285,7 +289,7 @@ $wheel-height: 93.6px;
   justify-content: flex-end;
   gap: 4px;
   color: $hud-caution;
-  font: 700 24px/30px var(--hud-gauge-num);
+  font: 700 26px/34px var(--hud-gauge-num);
   white-space: nowrap;
   span { font: 22px/1 Arial, sans-serif; }
 }

@@ -169,7 +169,11 @@ const { t } = useI18n()
   --hud-frame-width: #{$hud-hairline-width};
   flex: 0 0 auto;
   align-self: flex-start;
-  width: round(calc(360px * var(--hud-scale)), 1px);
+  // Owner (30/10): 404 (draft 360) for the wider slip and brake bars, and the Racer Core face
+  // (upright Chakra Petch Bold, as on the Dashboard) for every number and label.
+  --hud-gauge-num: 'Racer Display Upright', 'Arial Narrow', sans-serif;
+  --hud-gauge-label: 'Racer Display Upright', 'Arial Narrow', sans-serif;
+  width: round(calc(404px * var(--hud-scale)), 1px);
   padding: 0;
   @include hud-cut-corner(0px, 0px, var(--hud-frame-width), var(--hud-frame), 'hud-overlay__panel--yellow-flag', $hud-flag-width);
 }
@@ -181,9 +185,9 @@ const { t } = useI18n()
   display: flex;
   flex-direction: column;
   min-width: 0;
-  // Owner (30/10): the tyres and Damage pages have the same height, the Damage one (the taller):
-  // switching page never resizes the panel.
-  min-height: 635px;
+  // Owner (30/10): the tyres and Damage pages have the same height, the tyres one (its content):
+  // switching page never resizes the panel; the Damage drawing fits inside it.
+  height: 660px;
   padding: 3px;
   box-sizing: border-box;
   zoom: var(--hud-scale);

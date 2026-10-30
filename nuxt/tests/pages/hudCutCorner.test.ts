@@ -62,13 +62,13 @@ describe('draft shapes per HUD', () => {
     expect(styles).toContain('background: rgba(9, 12, 16, var(--hud-sectors-bg-opacity, 1));')
   })
 
-  it('Tyres: Race square with a hairline frame that turns into a 3px amber one with damage; Classic keeps its top-right cut', () => {
+  it('Tyres: Race square with a hairline frame, no damage frame; Classic keeps its top-right cut', () => {
     const page = source('app/pages/tyres-overlay.vue')
     expect(page).toContain("@include hud-cut-corner(0px, 0px, var(--hud-frame-width), var(--hud-frame), 'hud-overlay__panel--yellow-flag', $hud-flag-width);")
     // Owner (30/10): damage colours only the middle strip lines, never the panel frame.
     expect(page).not.toContain(':has(.tyre-race--damaged)')
     // Owner (30/10): the tyres page is as tall as the Damage page, so switching never resizes.
-    expect(page).toContain('min-height: 635px;')
+    expect(page).toContain('height: 660px;')
     expect(page).toContain('--hud-frame: #{$hud-hairline-color};')
     expect(page).toContain("@include hud-cut-corner(0px, calc(14px * var(--hud-scale)), $hud-hairline-width, $hud-hairline-color, 'hud-overlay__panel--yellow-flag', $hud-flag-width);")
     // Style guide (28/10): the four Classic tiles are flat, with no cut of their own.
