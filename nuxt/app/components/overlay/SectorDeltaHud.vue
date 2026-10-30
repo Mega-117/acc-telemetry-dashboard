@@ -304,7 +304,7 @@ const { t } = useI18n()
   min-height: 0;
   overflow: hidden;
   color: #f4f6f8;
-  @include hud-gauge-type;
+  @include hud-gauge-type-barlow;
 }
 
 .sector-compact__header {
@@ -329,7 +329,11 @@ const { t } = useI18n()
   background: #66717b;
 }
 
+/* "SETTORI vs BEST" (owner 30/10): flex items with the same 10px on both sides of "vs". */
 .sector-compact__title > span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
   color: #a4b0bc;
   font: 700 14px/1 var(--hud-gauge-label);
   letter-spacing: 0.08em;

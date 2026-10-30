@@ -1,18 +1,27 @@
-// PIP-671 (approved drafts 30/10): type of the Dashboard, Info, Tyres and Sectors HUDs. Upright
-// Barlow Semi Condensed ('Racer Gauge', bundled) with tabular figures, so a ticking value never
-// moves: HudFixedDigits slots take the font's own constant advance (see HudFixedDigits.vue).
+// PIP-671: type of the Dashboard, Info and Tyres HUDs, the upright Racer Core face (Chakra Petch
+// Bold, owner 30/10). Its figures are proportional even with tabular-nums ('1' 0.38em, '0' 0.65em),
+// so ticking values go through HudFixedDigits, whose default slots (FIXED_WIDTH_GLYPH_EM, digit
+// 0.66em) fit the widest Chakra Petch digit: the --hud-glyph-* slots are left to those defaults.
 @mixin hud-gauge-type {
   font-family: var(--hud-gauge-num);
   font-style: normal;
   font-variant-numeric: tabular-nums;
-  --hud-glyph-digit: auto;
-  --hud-glyph-separator: auto;
-  --hud-glyph-sign: auto;
-  --hud-glyph-space: auto;
 
   // Every `font:` shorthand below resets font-variant-numeric; tabular figures are the rule for the
   // whole HUD, so they are re-applied to every descendant.
   * { font-variant-numeric: tabular-nums !important; }
+}
+
+// Sectors keep the approved drafts' upright Barlow (owner 30/10): Barlow Semi Condensed ('Racer
+// Gauge') has true tabular figures, so the HudFixedDigits slots take the font's own constant advance.
+@mixin hud-gauge-type-barlow {
+  --hud-gauge-num: 'Racer Gauge', 'Arial Narrow', sans-serif;
+  --hud-gauge-label: 'Racer Gauge Label', 'Arial Narrow', sans-serif;
+  --hud-glyph-digit: auto;
+  --hud-glyph-separator: auto;
+  --hud-glyph-sign: auto;
+  --hud-glyph-space: auto;
+  @include hud-gauge-type;
 }
 
 // Draft caution colours (fuel, tyres, info rows, damage).

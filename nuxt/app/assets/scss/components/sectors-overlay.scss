@@ -46,7 +46,9 @@
 
 // Classic without the lap tile: the three sector tiles keep the width they have in the 740px layout.
 .hud-overlay__panel:has(.sector-delta-hud__body--with-lap) { --sectors-width: 740px; }
-.hud-overlay__panel--compact { --sectors-width: 500px; }
+// Owner (30/10): narrower than the 500px draft, back to the proportions of the first compact HUD
+// (310x261 window, about 1.19:1).
+.hud-overlay__panel--compact { --sectors-width: 336px; }
 
 // The draft is drawn at native px: the HUD (title, tiles, rows) is zoomed by the HUD scale and the
 // rules inside it read --hud-scale as 1.
@@ -72,7 +74,7 @@
   border: none;
   padding: 0;
   color: #f4f6f8;
-  @include hud-gauge-type;
+  @include hud-gauge-type-barlow;
 }
 
 .hud-overlay .sector-delta-hud__body {
@@ -121,7 +123,12 @@
 
 .hud-overlay .sector-delta-hud__title { color: #f4f6f8 !important; }
 
+// "SETTORI vs BEST" (owner 30/10): the same 10px on both sides of "vs", like the header gap
+// between title and comparison (the plain space inside the comparison was narrower).
 .hud-overlay .sector-delta-hud__comparison {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
   .sector-title__versus { letter-spacing: .04em; text-transform: none; }
   .sector-title__reference { color: #f4f6f8; font-weight: 700; }
 }

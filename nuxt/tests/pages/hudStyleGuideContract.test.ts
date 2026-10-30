@@ -95,20 +95,28 @@ describe('fixed-width digits: live values never move (style guide rule 6)', () =
     expect(hud).not.toMatch(/<strong class="dash-cell__value">\{\{/)
   })
 
-  it('PIP-671: the restyled HUDs use the Barlow face with tabular figures everywhere', () => {
+  it('PIP-671: Racer Core face on Dashboard/Info/Tyres with fixed digit slots, Barlow on Sectors', () => {
     const gauge = source('app/assets/scss/_hud-gauge.scss')
+    const gaugeMixin = gauge.slice(gauge.indexOf('@mixin hud-gauge-type {'), gauge.indexOf('@mixin hud-gauge-type-barlow'))
+    const barlowMixin = gauge.slice(gauge.indexOf('@mixin hud-gauge-type-barlow'))
     expect(gauge).toContain('font-variant-numeric: tabular-nums;')
     expect(gauge).toContain('* { font-variant-numeric: tabular-nums !important; }')
-    // HudFixedDigits slots take the font's own constant advance in these HUDs.
-    for (const kind of ['digit', 'separator', 'sign', 'space']) expect(gauge).toContain(`--hud-glyph-${kind}: auto;`)
+    // Chakra Petch figures are proportional: HudFixedDigits keeps its fixed default slots (owner 30/10:
+    // the live time flickered while the slots followed each digit's own width).
+    expect(gaugeMixin).not.toContain('--hud-glyph-')
+    // Barlow has true tabular figures: the slots take the font's own constant advance.
+    for (const kind of ['digit', 'separator', 'sign', 'space']) expect(barlowMixin).toContain(`--hud-glyph-${kind}: auto;`)
+    expect(barlowMixin).toContain("--hud-gauge-num: 'Racer Gauge', 'Arial Narrow', sans-serif;")
     expect(source('app/components/overlay/HudFixedDigits.vue')).toContain('`var(--hud-glyph-${glyph.kind}, ${FIXED_WIDTH_GLYPH_EM[glyph.kind]}em)`')
     for (const file of [
       'app/assets/scss/components/dashboard-hud.scss',
-      'app/assets/scss/components/sectors-overlay.scss',
       'app/components/overlay/InfoHud.vue',
       'app/components/overlay/TyreRaceHud.vue',
-      'app/components/overlay/SectorDeltaHud.vue',
     ]) expect(source(file)).toContain('@include hud-gauge-type;')
+    for (const file of [
+      'app/assets/scss/components/sectors-overlay.scss',
+      'app/components/overlay/SectorDeltaHud.vue',
+    ]) expect(source(file)).toContain('@include hud-gauge-type-barlow;')
   })
 })
 
