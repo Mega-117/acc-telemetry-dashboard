@@ -85,13 +85,15 @@ describe('normalizePitPrediction', () => {
   })
 })
 
-it('HUD v2 (27/10): the pit marker is white with a dark P, hollow when low confidence', async () => {
+it('PIP-671: the pit marker is a blue dot with a white P, hollow when low confidence', async () => {
   const { TRACK_MAP_PIT_COLOR, TRACK_MAP_DAMAGE_COLOR } = await import('~/services/overlay/trackMapPresentation')
-  expect(TRACK_MAP_PIT_COLOR).toBe('#FFFFFF')
+  expect(TRACK_MAP_PIT_COLOR).toBe('#1689FF')
   expect(TRACK_MAP_DAMAGE_COLOR).toBe('#0000FF')
   const hud = read('app/components/overlay/TrackMapHud.vue')
-  expect(hud).toContain(`:class="{ 'track-map__letter--on-light': marker.kind === 'pit' && !marker.hollow }"`)
-  expect(hud).toContain('.track-map__letter--on-light{fill:#0b0c0f}')
+  // The P stays, white like every other marker letter.
+  expect(hud).toContain('<text :transform="upright" y="9" class="track-map__letter">{{ marker.label }}</text>')
+  expect(hud).not.toContain('track-map__letter--on-light')
+  expect(hud).toContain('.track-map__letter{fill:#ffffff;')
   // The low-confidence style stays: dark centre, ring in the marker colour.
   expect(hud).toContain(`:fill="marker.hollow ? 'rgba(0,0,0,0.55)' : marker.fill"`)
 })
