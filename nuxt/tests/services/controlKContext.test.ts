@@ -54,7 +54,23 @@ describe('Control K context tracker (PIP-556): no flicker standing still', () =>
     const tracker = createControlKContextTracker('drive')
     expect(tracker.update({ ...cockpitInBox, isSetupMenuVisible: true }, 0)).toBe('pause')
     expect(tracker.update({ ...cockpitInBox, isEngineRunning: true, finalFf: 0 }, 10)).toBe('drive')
-    expect(tracker.update({ ...cockpitInBox, isLive: false, speedKmh: null }, 20)).toBe('pause')
     expect(tracker.update({ ...cockpitInBox, speedKmh: 80, finalFf: 0 }, 30)).toBe('drive')
+  })
+
+  // PIP-681: on 29/10 one late telemetry frame flipped the compact row to the grid and back.
+  it('keeps Guida through a live-data gap shorter than 1.5 s', () => {
+    const tracker = createControlKContextTracker('drive')
+    const stale = { ...cockpitInBox, isLive: false, speedKmh: null, isEngineRunning: false, finalFf: null }
+    expect(tracker.update({ ...cockpitInBox, speedKmh: 140 }, 0)).toBe('drive')
+    for (let t = 250; t <= 1250; t += 250) expect(tracker.update(stale, t)).toBe('drive')
+    expect(tracker.update({ ...cockpitInBox, speedKmh: 140 }, 1500)).toBe('drive')
+  })
+
+  it('goes to Pausa when live data stays missing for 1.5 s (offline ESC pause)', () => {
+    const tracker = createControlKContextTracker('drive')
+    const stale = { ...cockpitInBox, isLive: false, speedKmh: 140, isEngineRunning: true }
+    expect(tracker.update(stale, 0)).toBe('drive')
+    expect(tracker.update(stale, 1400)).toBe('drive')
+    expect(tracker.update(stale, 1500)).toBe('pause')
   })
 })

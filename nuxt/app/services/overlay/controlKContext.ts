@@ -38,13 +38,15 @@ export function resolveControlKContext(input: ControlKContextInput, previous: Co
 }
 
 /**
- * Certain facts switch at once: no live data or the setup screen (menu),
- * moving or engine running (cockpit). Force feedback alone is weak: standing
- * still with the engine off it wavers around zero (seen on 19/10), so it must
- * agree for a while before the layout changes.
+ * Certain facts switch at once: the setup screen (menu), moving or engine
+ * running (cockpit). Force feedback alone is weak: standing still with the
+ * engine off it wavers around zero (seen on 19/10), so it must agree for a
+ * while before the layout changes. Missing live data is weak too (PIP-681):
+ * one late frame is not a menu, so the panel waits CONTROL_K_SETTLE_MS.
  */
 export function isCertainContext(input: ControlKContextInput): boolean {
-  return !input.isLive || input.isSetupMenuVisible === true || input.isEngineRunning
+  if (!input.isLive) return false
+  return input.isSetupMenuVisible === true || input.isEngineRunning
     || (input.speedKmh !== null && Number.isFinite(input.speedKmh) && Math.abs(input.speedKmh) > CONTROL_K_MOVING_KMH)
 }
 
