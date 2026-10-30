@@ -42,7 +42,7 @@ describe('yellow-flag frame: 4px #ffd400 along the whole outline of every overla
     const hud = source('app/components/overlay/DashboardHud.vue')
     const styles = source('app/assets/scss/components/dashboard-hud.scss')
     expect(hud).toContain("'dash-hud--yellow-flag': model.yellowFlagActive,")
-    expect(styles).toContain("@include hud-cut-corner(14px, 14px, 2px, $dash-frame, 'dash-hud--yellow-flag', 4px);")
+    expect(styles).toContain("@include hud-cut-corner(14px, 14px, $hud-hairline-width, $hud-hairline-color, 'dash-hud--yellow-flag', 4px);")
   })
 
   it('Info and Dashboard raise it only for the ACC yellow flag (2) of the shown car', () => {

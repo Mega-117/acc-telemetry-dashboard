@@ -41,7 +41,7 @@
   // Draft: 10px inside a 2px frame.
   padding: calc(12px * var(--hud-scale));
   background: rgba(9, 12, 16, var(--hud-sectors-bg-opacity, 1));
-  @include hud-cut-corner(0px, 0px, calc(2px * var(--hud-scale)), #66717b, 'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));
+  @include hud-cut-corner(0px, 0px, $hud-hairline-width, $hud-hairline-color, 'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));
 }
 
 // Classic without the lap tile: the three sector tiles keep the width they have in the 740px layout.

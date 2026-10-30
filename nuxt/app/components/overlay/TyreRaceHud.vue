@@ -136,6 +136,7 @@ $wheel-height: 93.6px;
 
 .tyre-race {
   display: flex;
+  flex: 1;
   flex-direction: column;
   min-width: 0;
   color: #f4f6f8;
@@ -145,6 +146,8 @@ $wheel-height: 93.6px;
 .tyre-race__matrix {
   position: relative;
   display: grid;
+  flex: 1;
+  align-content: center;
   gap: 12px;
   padding: 14px;
 }

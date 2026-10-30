@@ -18,6 +18,11 @@
 
 // Outline of the panel inset by $inset; with $inset 0 it is the panel outline itself. A 45° cut of
 // size c inset by w moves its two ends by w * (√2 - 1) = w * 0.4142 along the edges.
+// Owner (30/10): every HUD panel has the same hairline frame, barely visible, only to detach the
+// panel from what is behind it. State colours (damage, yellow flag) keep their own frames.
+$hud-hairline-width: 1px;
+$hud-hairline-color: rgba(255, 255, 255, 0.16);
+
 @function hud-outline($left-cut, $right-cut, $inset) {
   $l: calc(#{$left-cut} + #{$inset} * 0.4142);
   $r: calc(#{$right-cut} + #{$inset} * 0.4142);

@@ -5,7 +5,6 @@
 @use '~/assets/scss/hud-cut-corner' as *;
 @use '~/assets/scss/hud-gauge' as *;
 
-$dash-frame: #61707d;
 $dash-ink: #071017;
 $dash-caution: $hud-caution;
 $dash-caution-bg: $hud-caution-bg;
@@ -22,8 +21,8 @@ $dash-caution-bg: $hud-caution-bg;
   background: transparent;
   @include hud-gauge-type;
   line-height: 1;
-  // Both top corners cut (14px), 2px frame; the yellow flag frame follows the whole outline.
-  @include hud-cut-corner(14px, 14px, 2px, $dash-frame, 'dash-hud--yellow-flag', 4px);
+  // Both top corners cut (14px), hairline frame; the yellow flag frame follows the whole outline.
+  @include hud-cut-corner(14px, 14px, $hud-hairline-width, $hud-hairline-color, 'dash-hud--yellow-flag', 4px);
 
   > :not(.hud-overlay-background, .dash-indicator) { position: relative; z-index: 1; }
 }

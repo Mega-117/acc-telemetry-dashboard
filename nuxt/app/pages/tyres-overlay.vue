@@ -157,22 +157,23 @@ const { t } = useI18n()
 // Classic tiles are flat, with no cut. The yellow flag frame (4px at scale 1) follows the whole
 // outline, cut included, above the content so nothing moves.
 .hud-overlay__panel--classic {
-  @include hud-cut-corner(0px, calc(14px * var(--hud-scale)), 1px, rgba(255, 255, 255, 0.15), 'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));
+  @include hud-cut-corner(0px, calc(14px * var(--hud-scale)), $hud-hairline-width, $hud-hairline-color, 'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));
 }
 
-// Race (PIP-671, approved draft "Gomme" 30/10): a square 360px panel with a 3px green-grey frame
-// that turns amber while the car is damaged; the yellow flag frame covers the whole outline (weather
+// Race (PIP-671, approved draft "Gomme" 30/10): a square 360px panel with the hairline frame that
+// turns into a 3px amber frame while the car is damaged; the yellow flag frame covers the whole outline (weather
 // strip included), for the tyres and the Damage pages alike. The panel hugs its content: the rest of
 // the window stays transparent.
 .hud-overlay__panel--race {
-  --hud-frame: #57766d;
+  --hud-frame: #{$hud-hairline-color};
+  --hud-frame-width: #{$hud-hairline-width};
   flex: 0 0 auto;
   align-self: flex-start;
   width: calc(360px * var(--hud-scale));
   padding: 0;
-  @include hud-cut-corner(0px, 0px, calc(3px * var(--hud-scale)), var(--hud-frame), 'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));
+  @include hud-cut-corner(0px, 0px, var(--hud-frame-width), var(--hud-frame), 'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));
 }
-.hud-overlay__panel--race:has(.tyre-race--damaged) { --hud-frame: #{$hud-caution}; }
+.hud-overlay__panel--race:has(.tyre-race--damaged) { --hud-frame: #{$hud-caution}; --hud-frame-width: calc(3px * var(--hud-scale)); }
 
 // The draft is drawn at native px; the whole Race content is zoomed by the HUD scale, and the
 // components inside it read --hud-scale as 1.
@@ -181,6 +182,9 @@ const { t } = useI18n()
   display: flex;
   flex-direction: column;
   min-width: 0;
+  // Owner (30/10): the tyres and Damage pages have the same height, the Damage one (the taller):
+  // switching page never resizes the panel.
+  min-height: 635px;
   padding: 3px;
   box-sizing: border-box;
   zoom: var(--hud-scale);
