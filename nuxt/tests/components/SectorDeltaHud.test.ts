@@ -122,8 +122,9 @@ describe('SectorDeltaHud', () => {
       'utf8',
     )
 
+    // PIP-671: native px, the whole HUD is zoomed by the HUD scale.
     expect(source).toMatch(
-      /\.hud-overlay \.sector-delta-hud__header--classic\s*\{[^}]*display:\s*flex;[^}]*justify-content:\s*center;[^}]*gap:\s*calc\(10px \* var\(--hud-scale\)\);/s,
+      /\.hud-overlay \.sector-delta-hud__header--classic\s*\{[^}]*display:\s*flex;[^}]*justify-content:\s*center;[^}]*gap:\s*10px;/s,
     )
     expect(source).not.toMatch(
       /\.hud-overlay \.sector-delta-hud__comparison\s*\{[^}]*justify-self:\s*end;/s,
@@ -471,9 +472,10 @@ describe.each(['custom', 'previousLap', 'bestSector'])('compact %s millisecond p
 })
 
 describe('HUD style v2 (27/10) sectors', () => {
-  it('classic: title bar, lap tile with the shown lap, PREV/BEST minis per sector', async () => {
+  it('classic: title bar, lap tile with the shown lap, PREV/BEST rows per sector', async () => {
     const html = await renderHud({ variant: 'classic', showReference: true, showBest: true, compactDisplayLap: { timeMs: 103_607, valid: true } })
     expect(html).toContain('sector-delta-hud__lap')
+    // The draft labels the tile ("Giro in corso"); kept unlabelled: the tile also shows the held last lap.
     expect(html).not.toContain('sector-delta-hud__lap-label')
     expect(html).toMatch(/class="sector-delta-hud__lap-time"[^>]*>01:43.607</)
     expect(html.match(/class="sector-delta__minis"/g)).toHaveLength(3)
@@ -481,7 +483,7 @@ describe('HUD style v2 (27/10) sectors', () => {
     expect(html).toMatch(/sector-delta__ref[^>]*>[\s\S]*?<b[^>]*>prec<\/b><em[^>]*>31.001<\/em>[\s\S]*?sector-delta__best[^>]*>[\s\S]*?<b[^>]*>best<\/b><em[^>]*>30.501<\/em>/)
     const page = readFileSync(resolve(process.cwd(), 'app/assets/scss/components/sectors-overlay.scss'), 'utf8')
     expect(page).toMatch(/\.sector-delta__ref,\s*\.hud-overlay \.sector-delta__best\s*\{[\s\S]*?text-transform:\s*uppercase/)
-    expect(page).toMatch(/\.sector-delta-hud__lap-time\s*\{[^}]*color:\s*#facc15/)
+    expect(page).toMatch(/\.sector-delta-hud__lap-time\s*\{[^}]*color:\s*#f1d541/)
   })
 
   it('classic: the lap tile keeps the invalid and unknown colours and hides with the setting', async () => {
@@ -522,15 +524,17 @@ describe('fixed-width live times', () => {
     for (const value of ['01:41.234', '30.801', '+0.300']) {
       expect(html).toContain(`class="hud-fixed-digits" aria-label="${value}"`)
     }
-    expect(html).toMatch(/class="hud-fixed-digits__glyph" style="width:0.66em;"[^>]*aria-hidden="true"[^>]*>1<\/span>/)
-    expect(html).toMatch(/class="hud-fixed-digits__glyph" style="width:0.25em;"[^>]*aria-hidden="true"[^>]*>:<\/span>/)
+    // The slot width falls back to the Chakra Petch em widths; the Barlow HUDs set the variables to auto.
+    expect(html).toMatch(/class="hud-fixed-digits__glyph" style="width:var\(--hud-glyph-digit, 0.66em\);"[^>]*aria-hidden="true"[^>]*>1<\/span>/)
+    expect(html).toMatch(/class="hud-fixed-digits__glyph" style="width:var\(--hud-glyph-separator, 0.25em\);"[^>]*aria-hidden="true"[^>]*>:<\/span>/)
     expect(html).not.toContain('aria-label="wait"')
   })
 })
 
-it('compact keeps extra, scale-proportional space between title bar and lap block', () => {
+it('compact keeps the draft space between title bar and lap block (native px, zoomed by the page)', () => {
   const source = readFileSync(resolve(process.cwd(), 'app/components/overlay/SectorDeltaHud.vue'), 'utf8')
-  expect(source).toMatch(/\.sector-compact__header\s*\{[^}]*gap:\s*calc\(13px \* var\(--hud-scale, 1\)\)/)
+  expect(source).toMatch(/\.sector-compact__header\s*\{[^}]*gap:\s*6px;/)
+  expect(source).toMatch(/\.sector-compact__lap-block\s*\{[^}]*padding:\s*5px 10px 9px;/)
 })
 
 describe('sectors overlay background', () => {
@@ -541,7 +545,7 @@ describe('sectors overlay background', () => {
     expect(page).toContain(":style=\"{ '--hud-sectors-bg-opacity': String(panelBackgroundOpacity) }\"")
     const styles = readFileSync(resolve(process.cwd(), 'app/assets/scss/components/sectors-overlay.scss'), 'utf8')
     expect(page).toContain('<style lang="scss" src="../assets/scss/components/sectors-overlay.scss"></style>')
-    expect(styles).toContain('background: rgba(13, 14, 18, var(--hud-sectors-bg-opacity, 1));')
+    expect(styles).toContain('background: rgba(9, 12, 16, var(--hud-sectors-bg-opacity, 1));')
     expect(styles).not.toMatch(/\.hud-overlay__panel\s*\{[^}]*\bopacity:/)
   })
 })
@@ -556,51 +560,59 @@ describe('sectors second round (28/10)', () => {
     expect(best).not.toContain('VS BEST')
     const custom = await renderHud({ variant, deltaReference: 'custom', customSectorTimes: [31000, 30000, 32000] })
     expect(custom).toMatch(/<span class="sector-title__versus"[^>]*>vs<\/span> <b class="sector-title__reference"[^>]*>CUSTOM<\/b>/)
-    expect(hudSource()).toMatch(/\.sector-compact__title \.sector-title__versus\s*\{[^}]*font-weight:\s*400;[^}]*text-transform:\s*none;/)
-    expect(sectorsScss()).toMatch(/\.sector-title__versus\s*\{[^}]*font-weight:\s*400;[^}]*text-transform:\s*none;/)
+    // PIP-671: the draft title bar is one condensed weight; "vs" stays lowercase.
+    expect(hudSource()).toMatch(/\.sector-compact__title \.sector-title__versus\s*\{[^}]*text-transform:\s*none;/)
+    expect(sectorsScss()).toMatch(/\.sector-title__versus\s*\{[^}]*text-transform:\s*none;/)
   })
 
-  it('compact: label, time and delta share one baseline, label in the number face, larger times', () => {
+  it('compact: label, time and delta share one baseline; draft sizes label 19, time 32, delta 38, lap 56', () => {
     const source = hudSource()
-    expect(source).toMatch(/\.sector-compact__row\s*\{[^}]*align-items:\s*baseline;[^}]*align-content:\s*center;/)
-    expect(source).toMatch(/\.sector-compact__label\s*\{[^}]*font:\s*italic 700 calc\(24px \* var\(--hud-scale, 1\)\)\/1 var\(--hud-font-num\);/)
-    expect(source).toMatch(/\.sector-compact__time > span\s*\{[^}]*overflow:\s*clip;[^}]*font:\s*italic 700 calc\(32px/)
+    expect(source).toMatch(/\.sector-compact__row\s*\{[^}]*grid-template-columns:\s*36px minmax\(0, 1fr\) max-content;[^}]*align-items:\s*baseline;/)
+    expect(source).toMatch(/\.sector-compact__row\s*\{[^}]*border-top:\s*1px solid rgba\(184, 194, 204, 0\.22\);[^}]*background:\s*transparent;/)
+    expect(source).toMatch(/\.sector-compact__label\s*\{[^}]*font:\s*700 19px\/1 var\(--hud-gauge-label\);/)
+    expect(source).toMatch(/\.sector-compact__time > span\s*\{[^}]*overflow:\s*clip;[^}]*font:\s*700 32px\/1 var\(--hud-gauge-num\);/)
+    expect(source).toMatch(/\.sector-compact__delta\s*\{[^}]*font:\s*800 38px\/1 var\(--hud-gauge-num\);/)
+    expect(source).toMatch(/\.sector-compact__lap\s*\{[^}]*color:\s*#f1d541;[^}]*font:\s*800 56px\/1 var\(--hud-gauge-num\);/)
   })
 
-  it('HUD style guide (28/10): one type scale in the italic numbers font, grey only for missing data', () => {
+  it('PIP-671: draft type scale (native px, the page zooms the HUD), grey only for missing data', () => {
     const styles = sectorsScss()
     const source = hudSource()
     const font = (text: string, selector: string) => text.match(new RegExp(String.raw`${selector}\s*\{[^}]*font:\s*([^;]*);`))?.[1]
-    const num = (px: number) => `italic 700 calc(${px}px * var(--hud-scale))/1 var(--hud-font-num)`
-    // Classic at scale 1: title 12, tile name 16, sector time 20, delta and PREV/BEST values 13, PREV/BEST words 11.
-    expect(font(styles, String.raw`\.sector-delta-hud__header span,\s*\.hud-overlay \.sector-delta-hud__header em`)).toBe(num(12))
-    expect(font(styles, String.raw`\.hud-overlay \.sector-delta__label`)).toBe(num(16))
-    expect(font(styles, String.raw`\.hud-overlay \.sector-delta strong`)).toBe(num(20))
-    expect(font(styles, String.raw`\.hud-overlay \.sector-delta \.sector-delta__delta`)).toBe(num(13))
-    expect(font(styles, String.raw`\.hud-overlay \.sector-delta-hud__lap-delta`)).toBe(num(13))
-    expect(styles).toMatch(/\.sector-delta__best \{[^}]*b \{[^}]*font: italic 700 calc\(11px \* var\(--hud-scale\)\)\/1 var\(--hud-font-num\);[^}]*\}\s*em \{[^}]*font: italic 700 calc\(13px \* var\(--hud-scale\)\)\/1 var\(--hud-font-num\);/)
-    // The whole title is italic; only "vs" drops to weight 400 (no font-style override).
-    expect(styles).not.toMatch(/\.sector-delta-hud__comparison \{[^}]*font-style: normal/)
-    expect(styles).toContain('.hud-overlay .sector-delta .sector-delta__value--placeholder { color: #a3a5ae; }')
+    // Classic (wide) at scale 1: title 14, tile name 15, sector time 30, delta 38, lap time and delta 40.
+    expect(font(styles, String.raw`\.sector-delta-hud__header span,\s*\.hud-overlay \.sector-delta-hud__header em`)).toBe('700 14px/1 var(--hud-gauge-label)')
+    expect(font(styles, String.raw`\.hud-overlay \.sector-delta__label`)).toBe('700 15px/1 var(--hud-gauge-label)')
+    expect(font(styles, String.raw`\.hud-overlay \.sector-delta strong`)).toBe('700 30px/1 var(--hud-gauge-num)')
+    expect(font(styles, String.raw`\.hud-overlay \.sector-delta \.sector-delta__delta`)).toBe('800 38px/1 var(--hud-gauge-num)')
+    expect(font(styles, String.raw`\.hud-overlay \.sector-delta-hud__lap-time`)).toBe('800 40px/1 var(--hud-gauge-num)')
+    expect(font(styles, String.raw`\.hud-overlay \.sector-delta-hud__lap-delta`)).toBe('800 40px/1 var(--hud-gauge-num)')
+    // PREV / BEST: word 14, value 23.
+    expect(styles).toMatch(/\.sector-delta__best \{[^}]*b \{[^}]*font: 700 14px\/1 var\(--hud-gauge-label\);[^}]*\}\s*em \{[^}]*font: 700 23px\/1 var\(--hud-gauge-num\);/)
+    expect(styles).toContain('.hud-overlay .sector-delta .sector-delta__value--placeholder { color: #a4b0bc; }')
+    // The zoom: native px inside, the HUD scale applied once to the whole HUD.
+    expect(styles).toMatch(/\.hud-overlay \.sector-delta-hud \{\s*zoom: var\(--hud-scale\);/)
     // Compact: same title style; its delta placeholders (live/wait) grey as in Classic.
-    expect(font(source, String.raw`\.sector-compact__title > span`)).toBe('italic 700 calc(12px * var(--hud-scale, 1))/1 var(--hud-font-num)')
-    expect(source).toContain('.sector-compact__delta.sector-delta__delta--placeholder { color: #a3a5ae; }')
+    expect(font(source, String.raw`\.sector-compact__title > span`)).toBe('700 14px/1 var(--hud-gauge-label)')
+    expect(source).toContain('.sector-compact__row .sector-compact__delta.sector-delta__delta--placeholder { color: #a4b0bc; }')
   })
 
-  it('classic: with the lap tile, lap and sectors share one mock grid (1.25fr + N x 1fr)', async () => {
+  it('classic: with the lap tile, lap and sectors share one draft grid (1.28fr + N x 1fr), 740px wide', async () => {
     const withLap = await renderHud({ variant: 'classic', showCurrentLap: true })
     expect(withLap).toContain('sector-delta-hud__body--with-lap')
-    expect(withLap).toContain('grid-template-columns:minmax(0, 1.25fr) repeat(3, minmax(0, 1fr))')
+    expect(withLap).toContain('grid-template-columns:minmax(0, 1.28fr) repeat(3, minmax(0, 1fr))')
     expect(sectorsScss()).toMatch(/\.sector-delta-hud__body--with-lap \.sector-delta-hud__grid\s*\{\s*display:\s*contents;/)
+    expect(sectorsScss()).toContain('.hud-overlay__panel:has(.sector-delta-hud__body--with-lap) { --sectors-width: 740px; }')
     const without = await renderHud({ variant: 'classic', showCurrentLap: false })
     expect(without).not.toContain('sector-delta-hud__body--with-lap')
-    expect(without).not.toContain('1.25fr')
+    expect(without).not.toContain('1.28fr')
   })
 
-  it('classic: mock spacing - tile padding 8/10, minis side by side', () => {
+  it('classic: draft spacing - tile padding 8, coloured top edge, PREV/BEST one row each', () => {
     const styles = sectorsScss()
-    expect(styles).toMatch(/\.hud-overlay \.sector-delta\s*\{[^}]*padding:\s*calc\(8px \* var\(--hud-scale\)\) calc\(10px \* var\(--hud-scale\)\);/)
-    expect(styles).toMatch(/\.sector-delta__minis\s*\{[^}]*grid-auto-columns:\s*minmax\(0, 1fr\);[^}]*grid-auto-flow:\s*column;/)
+    expect(styles).toMatch(/\.hud-overlay \.sector-delta\s*\{[^}]*padding:\s*8px;[^}]*border-top:\s*3px solid var\(--sector-edge, #485762\);/)
+    expect(styles).toContain('.hud-overlay .sector-delta--purple { --sector-edge: #c756f0; --sector-delta: #c756f0; }')
+    expect(styles).toContain('.hud-overlay .sector-delta--red { --sector-edge: #f05b4b; --sector-delta: #f05b4b; }')
+    expect(styles).toMatch(/\.sector-delta__minis\s*\{[^}]*display:\s*grid;[^}]*border-top:\s*1px solid #3d4b57;/)
     expect(styles).not.toContain('--with-lap .sector-delta__minis')
   })
 

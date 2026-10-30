@@ -45,10 +45,10 @@ async function renderClassic(state: unknown) {
     .replace(/<small[^>]*>([^<]*)<\/small>/g, '$1')
 }
 
-// The "AVG" word is its own smaller tspan (third round 28/10); read the line as the pilot does.
+// PIP-671: HTML readings; drop the SSR fragment comments to read the lines as the pilot does.
 async function renderRace(state: unknown) {
   const html = await renderToString(createSSRApp(TyreRaceHud, { fastState: state }))
-  return html.replace(/<tspan class="tyre-race__average-label"[^>]*>AVG <\/tspan>/g, 'AVG ')
+  return html.replace(/<!--[\s\S]*?-->/g, '')
 }
 
 describe('Race HUD components', () => {
@@ -64,7 +64,7 @@ describe('Race HUD components', () => {
     const race = await renderRace(partial)
     expect(race).toContain('26.7')
     expect(race).toContain('80')
-    expect(race).toContain('fill="#6b7280"')
+    expect(race).toContain('--t:#6b7280')
     expect(race).not.toContain('rgb(0, 200, 0)')
     const stale = await renderClassic({ ...partial, isFresh: false })
     expect(stale).not.toContain('26.7 psi')
@@ -93,29 +93,41 @@ describe('Race HUD components', () => {
     expect(html).toContain('DRY')
     expect(html).toContain('DRY · SET 2')
     expect(html.match(/tyre-race__corner--rear/g)).toHaveLength(2)
-    // Third round (28/10): the viewBox is only as tall as the content.
-    expect(html).toContain('viewBox="0 0 166 195"')
-    // The AVG word is smaller than its number: its own tspan inside the 12-unit line.
-    const raw = await renderToString(createSSRApp(TyreRaceHud, { fastState: fastState() }))
-    expect(raw.match(/<tspan class="tyre-race__average-label"[^>]*>AVG <\/tspan>23\.1/g)).toHaveLength(4)
+    // Slip bar filled from the bottom, tyre coloured by the temperature scale, brake by its own scale.
+    expect(html.match(/class="tyre-race__slip"[^>]*><b[^>]*style="height:/g)).toHaveLength(4)
+    expect(html.match(/class="tyre-race__tyre"[^>]*style="--t:/g)).toHaveLength(4)
+    expect(html.match(/class="tyre-race__brake--(front|rear) tyre-race__brake"[^>]*style="background:/g)).toHaveLength(4)
   })
 
-  it('third round: the yellow flag no longer draws a frame inside the tyres panel', async () => {
+  it('PIP-671: the yellow flag frame belongs to the outer panel, not to the tyres component', async () => {
     const html = await renderRace({ ...fastState(), flag: 2 })
     expect(html).not.toContain('#ffd400')
-    // The frame is on the whole outer panel (weather strip included) for Classic and Race,
-    // tyres and Damage pages alike; the Damage component itself is unchanged.
+    // The frame is on the whole outer panel (weather strip included), tyres and Damage pages alike.
     const page = readFileSync(resolve(process.cwd(), 'app/pages/tyres-overlay.vue'), 'utf8')
     expect(page).toMatch(/class="hud-overlay__panel"\s*:class="\{[^}]*'hud-overlay__panel--yellow-flag': displayFastState\.flag === 2,/)
-    // About 4px at scale 1, scaling with the HUD; an overlay above the content, so no layout shift.
-    const frame = page.match(/\.hud-overlay__panel--yellow-flag::after \{([^}]*)\}/)?.[1] ?? ''
-    expect(frame).toContain('border: calc(4px * var(--hud-scale)) solid #ffd400;')
-    expect(frame).toContain('position: absolute;')
-    expect(frame).toContain('inset: 0;')
-    expect(frame).toContain('pointer-events: none;')
+    expect(page).toContain("'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));")
     expect(page).not.toContain('race-hud--yellow-flag')
     const damage = await renderToString(createSSRApp(DamageRaceHud, { fastState: { ...fastState(), flag: 2 } }))
     expect(damage).toContain('stroke="#ffd400"')
+  })
+
+  it('PIP-671: the pressure-drop event and an overheated tyre show the caution look on that wheel only', async () => {
+    const state = fastState()
+    state.tyres[0]!.racePressure = { variationPsi: -0.72, eventSeq: 3, eventTs: Date.now() / 1000 } as any
+    state.tyres[1]!.coreTempC = 104
+    const html = await renderRace(state)
+    const corner = (id: string) => {
+      const at = html.indexOf(`tyre-race__corner--${id}`)
+      return html.slice(at, html.indexOf('"', at))
+    }
+    expect(corner('fl')).toContain('tyre-race__corner--warn')
+    expect(corner('fr')).toContain('tyre-race__corner--warn')
+    expect(corner('rl')).not.toContain('tyre-race__corner--warn')
+    expect(html.match(/tyre-race__corner--warn/g)).toHaveLength(2)
+    // An old event never re-lights the caution.
+    state.tyres[0]!.racePressure = { variationPsi: -0.72, eventSeq: 3, eventTs: Date.now() / 1000 - 10 } as any
+    state.tyres[1]!.coreTempC = 99
+    expect(await renderRace(state)).not.toContain('tyre-race__corner--warn')
   })
 
   it('rende sagoma GT3, quattro body zone, sospensioni e totali', async () => {
@@ -152,52 +164,42 @@ describe('Race HUD components', () => {
     expect(html).not.toContain('AVG 28.5')
   })
 
-  it('motore spento e limiter coesistono, centrati sugli assi; un solo valore freno per asse', async () => {
+  it('motore spento e limiter sugli assi; un freno per asse: il piu caldo e la pastiglia piu bassa', async () => {
     const state = { ...fastState(), isEngineRunning: false, pitLimiterOn: true }
     const html = await renderRace(state)
-    expect(html).toContain('tyre-race__engine-off')
-    expect(html).toContain('tyre-race__limiter')
-    // Square boxes centred on the axles: front centre 65, rear centre 131 (box 48 tall).
-    expect(html).toMatch(/tyre-race__engine-off[^>]*><rect x="43" y="41" width="80" height="48"/)
-    expect(html).toMatch(/tyre-race__limiter[^>]*><rect x="43" y="107" width="80" height="48"/)
-    expect(html).not.toMatch(/tyre-race__(engine-off|limiter)[^>]*><rect[^>]*rx=/)
-    // Third round (28/10), like ACC Drive: one averaged reading per axle, centred between the brakes.
+    const front = html.slice(html.indexOf('tyre-race__axle-brake--front'), html.indexOf('class="tyre-race__compound"'))
+    const rear = html.slice(html.indexOf('tyre-race__axle-brake--rear'))
+    expect(front).toContain('tyre-race__engine-off')
+    expect(rear).toContain('tyre-race__limiter')
     expect(html.match(/tyre-race__brake-temp/g)).toHaveLength(2)
-    for (const [axle, temp, pad] of [['front', 563, 92], ['rear', 543, 90]] as const) {
-      const block = html.slice(html.indexOf(`tyre-race__axle-brake--${axle}`))
-      expect(block).toMatch(new RegExp(`text-anchor="middle"[^>]*><text x="83"[^>]*class="tyre-race__brake-temp"[^>]*>${temp}\u00b0<[\\s\\S]*?tyre-race__pad[^>]*>${pad}%<`))
-    }
-    for (const value of ['568\u00b0', '558\u00b0', '548\u00b0', '538\u00b0']) expect(html).not.toContain(value)
-    // Each brake keeps its own colour rectangle.
-    expect(html.match(/<rect class="[^"]*tyre-race__brake--(front|rear)[^"]*"[^>]*fill="/g)).toHaveLength(4)
+    // Approved draft (30/10): hottest brake and lowest pad of the axle, not an average.
+    expect(front).toMatch(/tyre-race__brake-temp[^>]*>568°<[\s\S]*?tyre-race__pad[^>]*>91%</)
+    expect(rear).toMatch(/tyre-race__brake-temp[^>]*>548°<[\s\S]*?tyre-race__pad[^>]*>89%</)
     // The Damage page keeps its boxes where they were.
     const damage = await renderToString(createSSRApp(DamageRaceHud, { fastState: state }))
     expect(damage).toMatch(/tyre-race__engine-off[^>]*><rect x="43" y="40" width="80" height="48"/)
     expect(damage).toMatch(/tyre-race__limiter[^>]*><rect x="43" y="152" width="80" height="48"/)
   })
 
-  it('HUD v2: front values read pressure, AVG, loss; rear values loss, AVG, pressure', async () => {
+  it('front values read pressure, AVG, loss; rear values loss, AVG, pressure', async () => {
     const html = await renderRace(fastState())
     const kinds = (id: string) => {
       const start = html.indexOf(`tyre-race__corner--${id}`)
-      const values = html.slice(start, html.indexOf('</g>', start))
-      return [...values.matchAll(/class="tyre-race__(primary|average|loss)" x="[\d.]+" y="([\d.]+)"/g)]
-        .sort((a, b) => Number(a[2]) - Number(b[2])).map(match => match[1])
+      const block = html.slice(start, html.indexOf('tyre-race__hardware', start))
+      return [...block.matchAll(/class="tyre-race__(primary|average|loss)"/g)].map(match => match[1])
     }
     for (const id of ['fl', 'fr']) expect(kinds(id)).toEqual(['primary', 'average', 'loss'])
     for (const id of ['rl', 'rr']) expect(kinds(id)).toEqual(['loss', 'average', 'primary'])
   })
 
-  it('third round: damage is the total repair time in the middle line, only when damaged', async () => {
+  it('damage is the total repair time on the right of the middle line, only when damaged', async () => {
     const damaged = await renderRace(fastState())
-    // "DRY · SET 2 · DANNI 0:37.9": the damage part in red, the line fitted to the panel.
-    const line = damaged.slice(damaged.indexOf('<g class="tyre-race__compound"'), damaged.indexOf('</g>', damaged.indexOf('<g class="tyre-race__compound"')))
-    expect(line).toMatch(/DRY · SET 2(<!--\[-->)? · <tspan class="tyre-race__damage"[^>]*>DANNI 0:37\.9<\/tspan>/)
-    expect(line).toContain('textLength="156"')
-    expect(line).toContain('lengthAdjust="spacingAndGlyphs"')
+    const line = damaged.slice(damaged.indexOf('class="tyre-race__compound"'), damaged.indexOf('tyre-race__axle--rear'))
+    expect(line).toContain('DRY · SET 2')
+    expect(line).toMatch(/class="tyre-race__damage"[^>]*><span aria-hidden="true"[^>]*>⚠<\/span>37\.9 s</)
+    expect(damaged).toContain('tyre-race--damaged')
     // No separate damage section any more.
     for (const value of ['Carrozz.', 'Sospens.', 'Totale', '0:16.980', '0:21.000']) expect(damaged).not.toContain(value)
-    expect(damaged.match(/tyre-race__damage/g)).toHaveLength(1)
     const healthy = fastState()
     healthy.damage = {
       body: { front: { percentage: 0, repairTimeMs: 0 }, rear: { percentage: 0, repairTimeMs: 0 }, left: { percentage: 0, repairTimeMs: 0 }, right: { percentage: 0, repairTimeMs: 0 }, repairTimeMs: 0 },
@@ -206,9 +208,8 @@ describe('Race HUD components', () => {
     }
     const clean = await renderRace(healthy)
     expect(clean).not.toContain('tyre-race__damage')
-    expect(clean).not.toContain('DANNI')
-    expect(clean).not.toContain('textLength')
-    expect(clean).toMatch(/>DRY · SET 2(<!--\]-->|<!---->)?<\/text>/)
+    expect(clean).not.toContain('tyre-race--damaged')
+    expect(clean).toContain('DRY · SET 2')
     const observed = await renderRace({ ...fastState(), dataSource: 'focused' })
     expect(observed).not.toContain('tyre-race__damage')
   })
@@ -224,7 +225,7 @@ describe('Race HUD components', () => {
     expect(html.match(/AVG --/g)).toHaveLength(4)
     expect(html).toContain('--')
     expect(html).not.toContain('LOSS 0.00')
-    // Axle brake: the front averages only the side that exists, the rear has none.
+    // Axle brake: the front reads only the side that exists, the rear has none.
     const front = html.slice(html.indexOf('tyre-race__axle-brake--front'))
     expect(front).toMatch(/tyre-race__brake-temp[^>]*>568°<[\s\S]*?tyre-race__pad[^>]*>92%</)
     const rear = html.slice(html.indexOf('tyre-race__axle-brake--rear'))
@@ -267,7 +268,8 @@ describe('HUD style v2 (27/10) classic tyres', () => {
     // Owner (28/10): square outer panel with an even scaled margin; tiles fill the width; yellow frame kept.
     expect(page).toMatch(/\.hud-overlay__panel \{[^}]*padding: calc\(12px \* var\(--hud-scale\)\);[^}]*border-radius: 0;/)
     expect(page).toMatch(/\.tyre-slip-grid \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/)
-    expect(page).toMatch(/\.hud-overlay__panel--yellow-flag::after \{[^}]*border: calc\(4px \* var\(--hud-scale\)\) solid #ffd400;[^}]*border-radius: inherit;/)
+    // PIP-671: the yellow frame follows the whole outline through the shared mixin.
+    expect(page).toContain("@include hud-cut-corner(0px, calc(14px * var(--hud-scale)), 1px, rgba(255, 255, 255, 0.15), 'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));")
   })
 
   it('classic aligned (28/10): guide type scale in the italic numbers font, with the 0.6 floors', () => {

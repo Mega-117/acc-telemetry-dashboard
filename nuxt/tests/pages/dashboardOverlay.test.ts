@@ -75,11 +75,16 @@ describe('Dashboard overlay window contract', () => {
   })
 })
 
-describe('Dashboard v3 layout (owner 28/10, mock "Cruscotto · nuova proposta")', () => {
-  it('renders the RPM bar, four fuel boxes, the gear column and five electronics boxes in order', async () => {
+describe('Dashboard layout (PIP-671, approved draft "Cruscotto · race" 30/10)', () => {
+  it('renders the RPM bar, four fuel boxes, the free gear with pedals and five electronics boxes in order', async () => {
     const html = await render()
     const labels = [...html.matchAll(/<span class="dash-cell__label"><b>([^<]*)<\/b><\/span>/g)].map(match => match[1])
-    expect(labels).toEqual(['Fuel', 'Fuel/lap', 'Laps left', 'Fuel left', 'GEAR', 'TC', 'TC2', 'ABS', 'MAP', 'BB'])
+    expect(labels).toEqual(['Fuel · L', 'L / lap', 'Laps left', 'Fuel left', 'TC', 'TC2', 'ABS', 'MAP', 'BB · %'])
+    // The gear has no frame or GEAR label; the pedal bars sit under it with their names.
+    expect(html).toContain('<span>GAS</span>')
+    expect(html).toContain('<span>BRK</span>')
+    // No bottom row (draft): no Fuel Low / pit / autonomy line.
+    expect(html).not.toMatch(/fuel-notice|Autonomia|prepara il pit/i)
     expect(classes(html, 'dash-rpm')).toEqual(expect.arrayContaining(['dash-rpm--green']))
     expect(html).toContain('class="dash-gear__value">4</strong>')
     expect(cell(html, 'bb')).toContain('dash-cell--wide')
@@ -95,47 +100,52 @@ describe('Dashboard v3 layout (owner 28/10, mock "Cruscotto · nuova proposta")'
     }
   })
 
-  it('uses the item colour for frame and label, white italic values, and the shared cut corner', () => {
+  it('uses the draft item colours on 3px frames and labels, upright Barlow values, both top corners cut', () => {
     const css = styles()
     const colours: Record<string, string> = {
-      'fuel': '#00e5d4', 'fuel-lap': '#00a8ff', 'laps': '#00e04f', 'fuel-left': '#c6ff00',
-      'tc': '#ffb000', 'tc2': '#ff6a00', 'abs': '#2f6bff', 'map': '#ffe600', 'bb': '#ff2b2b',
+      'fuel': '#1aa89f', 'fuel-lap': '#2398cd', 'laps': '#27a75c', 'fuel-left': '#a3b33a',
+      'tc': '#cc941c', 'tc2': '#ce752b', 'abs': '#398de0', 'map': '#c4b52d', 'bb': '#b95c53',
     }
     for (const [id, colour] of Object.entries(colours)) expect(css).toContain(`.dash-cell--${id} { --c: ${colour}; }`)
     expect(css).toContain("@use '~/assets/scss/hud-cut-corner' as *;")
-    expect(css).toContain("@include hud-cut-corner(14px, $dash-line, 'dash-hud--yellow-flag', 4px);")
-    expect(css).toMatch(/\.dash-cell__value \{ font: italic 700 32px\/1 var\(--hud-font-num\); color: #fff;/)
-    expect(css).toMatch(/b \{[^}]*font: italic 700 15px\/1 var\(--hud-font-num\);[^}]*text-transform: uppercase;/s)
+    expect(css).toContain("@include hud-cut-corner(14px, 14px, 2px, $dash-frame, 'dash-hud--yellow-flag', 4px);")
+    expect(css).toMatch(/\.dash-cell \{[^}]*--w: 3px;/s)
+    expect(css).toContain('.dash-cell__value { font: 700 35px/1 var(--hud-gauge-num); color: #f4f6f8; white-space: nowrap; }')
+    expect(css).toMatch(/b \{[^}]*font: 700 15px\/1 var\(--hud-gauge-num\);[^}]*text-transform: uppercase;/s)
     expect(css).toMatch(/\.dash-hud \{[^}]*width: 700px;/s)
-    // The bar has its own top-right cut, parallel to the panel's, and no ticks.
-    expect(css).toMatch(/\.dash-rpm \{[^}]*clip-path: polygon\(0 0, calc\(100% - 10px\) 0, 100% 10px, 100% 100%, 0 100%\);/s)
+    expect(css).toContain('.dash-gear__value { font: 800 120px/1 var(--hud-gauge-num); color: #fff; }')
+    // The bar has small cuts on both top corners, parallel to the panel's, a slanted fill end and no ticks.
+    expect(css).toMatch(/\.dash-rpm \{[^}]*height: 42px;[^}]*clip-path: polygon\(9px 0, calc\(100% - 13px\) 0, 100% 13px, 100% 100%, 0 100%, 0 9px\);/s)
+    expect(css).toMatch(/\.dash-rpm__fill \{[^}]*clip-path: polygon\(0 0, calc\(100% - 12px\) 0, 100% 100%, 0 100%\);/s)
     expect(css).not.toMatch(/\.[\w-]*tick[\w-]*\s*\{/)
   })
 
-  it('highlights only the value being adjusted: thicker frame and filled label', async () => {
+  it('highlights only the value being adjusted: white frame and label, REGOLA tag', async () => {
     const html = await render({}, { adjusting: 'bb' })
     expect(cell(html, 'bb')).toContain('dash-cell--on')
     expect(cell(html, 'tc')).not.toContain('dash-cell--on')
-    expect(styles()).toContain('.dash-cell--on { --w: #{$dash-frame-on}; }')
-    expect(styles()).toContain('.dash-cell--on .dash-cell__label b { padding: 0 4px; background: var(--c); color: $dash-panel; }')
+    expect(html).toMatch(/dash-cell--bb[^"]*"[^>]*>[\s\S]*?<small class="dash-cell__tag">REGOLA<\/small>/)
+    expect(styles()).toMatch(/\.dash-cell--on \{[^}]*--c: #f4f6f8;[^}]*box-shadow: inset 0 0 0 1px #f4f6f8;/s)
   })
 })
 
 describe('Dashboard v3 states', () => {
-  it('shift point: the whole bar turns blue and flashes #001a8d / #46c7ff', async () => {
+  it('shift point: the whole bar turns blue and flashes in the draft blues (260 ms rhythm), SHIFT on the right', async () => {
     const html = await render({ context: { track: 'monza', car: 'ferrari_296_gt3', sessionType: 2, sessionIndex: 1, sessionUid: 's1', serverId: null }, rpm: 7400 })
     expect(classes(html, 'dash-rpm')).toEqual(expect.arrayContaining(['dash-rpm--blue', 'dash-rpm--flash']))
-    expect(styles()).toContain('.dash-rpm--flash .dash-rpm__fill { width: 100% !important; animation: dash-shift-flash 260ms steps(1, end) infinite; }')
-    expect(styles()).toContain('@keyframes dash-shift-flash { 0%, 49% { background: #001a8d; } 50%, 100% { background: #46c7ff; } }')
+    expect(html).toContain('<span class="dash-rpm__shift-label">SHIFT</span>')
+    expect(await render()).not.toContain('dash-rpm__shift-label')
+    expect(styles()).toContain('.dash-rpm--flash .dash-rpm__fill { width: 100% !important; clip-path: none; animation: dash-shift-flash 260ms steps(1, end) infinite; }')
+    expect(styles()).toContain('@keyframes dash-shift-flash { 0%, 49% { background: #0753d0; } 50%, 100% { background: #31b5ff; } }')
   })
 
   it('pit limiter: blue bar with PIT LIMITER ON, blue gear, pulsing bar', async () => {
     const html = await render({ pitLimiterOn: true })
     expect(classes(html, 'dash-rpm')).toEqual(expect.arrayContaining(['dash-rpm--pit', 'dash-rpm--pulse']))
     expect(html).toContain('PIT LIMITER ON')
-    expect(classes(html, 'dash-gear')).toContain('dash-gear--pit')
-    expect(styles()).toContain('.dash-rpm--pit .dash-rpm__fill { width: 100% !important; background: #0000ff; }')
-    expect(styles()).toMatch(/\.dash-gear--pit \{ background: linear-gradient\(#0000ff, #0000ff\)/)
+    expect(classes(html, 'dash-center')).toContain('dash-gear--pit')
+    expect(styles()).toContain('.dash-rpm--pit .dash-rpm__fill { width: 100% !important; clip-path: none; background: #0000ff; }')
+    expect(styles()).toContain('.dash-gear--pit .dash-gear { background: #0000ff; }')
   })
 
   it('ignition and engine off: dark orange bar with the ACC Drive words, pulsing', async () => {
@@ -143,40 +153,44 @@ describe('Dashboard v3 states', () => {
     expect(classes(ignitionOff, 'dash-rpm')).toEqual(expect.arrayContaining(['dash-rpm--off', 'dash-rpm--pulse']))
     expect(ignitionOff).toContain('IGNITION OFF')
     expect(await render({ isEngineRunning: false })).toContain('ENGINE OFF')
-    expect(styles()).toContain('.dash-rpm--off .dash-rpm__fill { width: 100% !important; background: #4a2900; }')
+    expect(styles()).toContain('.dash-rpm--off .dash-rpm__fill { width: 100% !important; clip-path: none; background: #4a2900; }')
     expect(styles()).toContain('.dash-rpm--pulse .dash-rpm__fill { animation: dash-rpm-pulse 0.5s ease-in-out infinite alternate; }')
   })
 
-  it('TC and ABS fill only on a real intervention; TC zero flashes a separate red frame', async () => {
+  it('TC and ABS fill only on a real intervention (amber / blue, ATTIVO tag); TC zero flashes a separate red frame', async () => {
     const active = await render({ tractionControlInAction: true, absInAction: true })
     expect(cell(active, 'tc')).toContain('dash-cell--active')
     expect(cell(active, 'abs')).toContain('dash-cell--active')
+    expect(active.match(/<small class="dash-cell__tag">ATTIVO<\/small>/g)).toHaveLength(2)
+    expect(await render()).not.toContain('dash-cell__tag')
     const zero = await render({ tractionControl: 0 })
     expect(cell(zero, 'tc')).toContain('dash-cell--off-warning')
     expect(cell(zero, 'tc')).not.toContain('dash-cell--active')
     const css = styles()
-    expect(css).toContain('.dash-cell--active { background: linear-gradient(var(--c), var(--c)) 0 8px / 100% calc(100% - 8px) no-repeat; }')
+    expect(css).toContain('.dash-cell--tc.dash-cell--active { --fill: #efac10; --c: #ffd05a; }')
+    expect(css).toContain('.dash-cell--abs.dash-cell--active { --fill: #179df3; --c: #7ed3ff; }')
     expect(css).toContain('.dash-cell--tc.dash-cell--off-warning { --c: #ff101b; }')
     expect(css).toMatch(/\.dash-cell--off-warning,[\s\S]*\{ animation: dash-tc-off-warning 1s linear infinite; \}/)
     expect(css).not.toMatch(/dash-cell--active[^}]*animation/)
   })
 
-  it('fuel: one urgency on Fuel, Laps left and Fuel left, colours change but text never fades', async () => {
+  it('fuel: one urgency on Fuel, Laps left and Fuel left in the draft caution look, text never fades', async () => {
     expect(await render({ fuelLapsRemaining: 2.5, fuelLeftTimeMs: 200_000 })).toContain('dash-hud--fuel-warning')
     expect(await render({ fuelLapsRemaining: 0.9 })).toContain('dash-hud--fuel-low')
     const critical = await render({ fuelLapsRemaining: 0.4 }, {}, { ...DEFAULT_DASHBOARD_OPTIONS, fuelCriticalFlashEnabled: true })
     expect(classes(critical, 'dash-hud')).toEqual(expect.arrayContaining(['dash-hud--fuel-low', 'dash-hud--fuel-critical-pulse']))
     const css = styles()
-    expect(css).toMatch(/\.dash-hud--fuel-warning :is\(\.dash-cell--fuel, \.dash-cell--laps, \.dash-cell--fuel-left\) \{\s*--c: #ffff00;/)
+    expect(css).toMatch(/\.dash-hud--fuel-warning :is\(\.dash-cell--fuel, \.dash-cell--laps, \.dash-cell--fuel-left\) \{\s*--c: #\{\$dash-caution\};\s*background: \$dash-caution-bg;/)
+    expect(css).toContain('$dash-caution: $hud-caution;')
     expect(css).toMatch(/\.dash-hud--fuel-low :is\(\.dash-cell--fuel, \.dash-cell--laps, \.dash-cell--fuel-left\) \{\s*--c: #ffae00;/)
     expect(css).toContain('animation: dash-fuel-critical-pulse 520ms steps(1, end) infinite;')
     expect(css).not.toMatch(/fuel-critical-pulse[^}]*opacity\s*:/)
   })
 
-  it('yellow flag: 4px #ffd400 frame on the outer edge, following the cut', async () => {
+  it('yellow flag: 4px #ffd400 frame along the whole outline, both cuts included', async () => {
     expect(await render({ flag: 2 })).toContain('dash-hud--yellow-flag')
     expect(await render({ flag: 0 })).not.toContain('dash-hud--yellow-flag')
-    expect(styles()).toMatch(/\.dash-hud--yellow-flag::after \{[^}]*border: 4px solid #ffd400;[^}]*pointer-events: none;/s)
+    expect(styles()).toContain("'dash-hud--yellow-flag', 4px);")
   })
 
   it('direction lights blink the panel edges (ACC Drive tomato, 0.5 s)', async () => {

@@ -1,39 +1,31 @@
-// Dashboard HUD v3 (owner 28/10), approved mock "Cruscotto · nuova proposta"
-// (docs/wiki/frontend/assets/2026-10-27-hud-stili-v2.html, classes .d3*). Styles of
-// components/overlay/DashboardHud.vue, kept here so the component stays small. Not scoped: every
-// rule sits under .dash-hud. The page scales the whole canvas by transform, so sizes are native px.
+// Dashboard HUD (PIP-671): approved draft "Cruscotto · race" (racer-core-hud-approvati, 30/10,
+// classes .d3*). Styles of components/overlay/DashboardHud.vue, kept here so the component stays
+// small. Not scoped: every rule sits under .dash-hud. The page scales the whole canvas by
+// transform, so sizes are native px (draft: 700px wide, height constant across states).
 @use '~/assets/scss/hud-cut-corner' as *;
+@use '~/assets/scss/hud-gauge' as *;
 
-$dash-panel: #07080a;
-$dash-line: rgba(255, 255, 255, 0.15);
-$dash-frame: 1.5px;
-$dash-frame-on: 2.5px;
+$dash-frame: #61707d;
+$dash-ink: #071017;
+$dash-caution: $hud-caution;
+$dash-caution-bg: $hud-caution-bg;
 
 .dash-hud {
   position: relative;
   box-sizing: border-box;
   display: grid;
-  gap: 8px;
+  gap: 10px;
   width: 700px;
-  padding: 8px 10px 10px;
-  border: 1px solid $dash-line;
-  color: #fff;
+  // Draft padding 10/12/12 inside a 2px frame.
+  padding: 12px 14px 14px;
+  color: #f4f6f8;
   background: transparent;
-  font-family: var(--hud-font-num);
+  @include hud-gauge-type;
   line-height: 1;
-  @include hud-cut-corner(14px, $dash-line, 'dash-hud--yellow-flag', 4px);
+  // Both top corners cut (14px), 2px frame; the yellow flag frame follows the whole outline.
+  @include hud-cut-corner(14px, 14px, 2px, $dash-frame, 'dash-hud--yellow-flag', 4px);
 
-  > :not(.hud-overlay-background, .hud-cut-corner__line, .dash-indicator) { position: relative; z-index: 1; }
-}
-
-// Yellow flag (owner 28/10): the 4px frame of Info, Tyres and Sectors on the outer edge, above the
-// content so nothing moves; the mixin moves it onto the border and thickens the cut line.
-.dash-hud--yellow-flag::after {
-  position: absolute;
-  z-index: 15;
-  border: 4px solid #ffd400;
-  content: '';
-  pointer-events: none;
+  > :not(.hud-overlay-background, .dash-indicator) { position: relative; z-index: 1; }
 }
 
 // ACC Drive direction lights: the left/right panel edges fade in and out (0.5 s each way).
@@ -51,21 +43,30 @@ $dash-frame-on: 2.5px;
 .dash-hud > .dash-indicator--right { right: 0; }
 .dash-hud > .dash-indicator.is-active { animation: dash-indicator 0.5s ease-in-out infinite alternate; }
 
-// ── RPM bar: plain green fill on a dark track, no ticks, its own top-right cut parallel to the panel's.
+// ── RPM bar: continuous green fill with a slanted end on a dark track; the track has small cuts
+// on both top corners, parallel to the panel's.
 .dash-rpm {
   position: relative;
-  height: 34px;
+  height: 42px;
   overflow: hidden;
-  background: #1b1c20;
-  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  background: #18231f;
+  clip-path: polygon(9px 0, calc(100% - 13px) 0, 100% 13px, 100% 100%, 0 100%, 0 9px);
 }
-.dash-rpm__fill { position: absolute; z-index: 0; inset: 0 auto 0 0; background: #008000; }
-.dash-rpm--blue .dash-rpm__fill { background: #001a8d; }
-// At the shift point the whole bar turns blue and flashes light blue.
-.dash-rpm--flash .dash-rpm__fill { width: 100% !important; animation: dash-shift-flash 260ms steps(1, end) infinite; }
+.dash-rpm__fill {
+  position: absolute;
+  z-index: 0;
+  inset: 0 auto 0 0;
+  background: linear-gradient(0deg, #086232, #108443 70%);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 100%, 0 100%);
+  box-shadow: inset 0 3px #ffffff20, inset 0 -3px #00000030;
+}
+.dash-rpm--blue .dash-rpm__fill { background: #0753d0; }
+// At the shift point the whole bar turns blue and flashes light blue (draft colours, the ACC Drive
+// 260 ms rhythm kept), with SHIFT on the right.
+.dash-rpm--flash .dash-rpm__fill { width: 100% !important; clip-path: none; animation: dash-shift-flash 260ms steps(1, end) infinite; }
 // Pit limiter (blue) and ignition/engine off (dark orange) fill the whole bar.
-.dash-rpm--pit .dash-rpm__fill { width: 100% !important; background: #0000ff; }
-.dash-rpm--off .dash-rpm__fill { width: 100% !important; background: #4a2900; }
+.dash-rpm--pit .dash-rpm__fill { width: 100% !important; clip-path: none; background: #0000ff; }
+.dash-rpm--off .dash-rpm__fill { width: 100% !important; clip-path: none; background: #4a2900; }
 // ACC Drive: the bar (not the words) pulses while the engine is off or the limiter holds it.
 .dash-rpm--pulse .dash-rpm__fill { animation: dash-rpm-pulse 0.5s ease-in-out infinite alternate; }
 .dash-rpm__reference,
@@ -77,35 +78,43 @@ $dash-frame-on: 2.5px;
   z-index: 3;
   top: 50%;
   left: 50%;
-  padding: 0 10px;
   transform: translate(-50%, -50%);
-  font: italic 700 26px/1 var(--hud-font-num);
+  font: 800 34px/1 var(--hud-gauge-num);
   color: #fff;
   white-space: nowrap;
-  // Dark outline so the number reads over any fill colour.
-  paint-order: stroke;
-  -webkit-text-stroke: 5px $dash-panel;
+  text-shadow: 0 2px 2px #052315;
   pointer-events: none;
 }
+.dash-rpm__shift-label {
+  position: absolute;
+  z-index: 3;
+  top: 13px;
+  right: 18px;
+  font: 800 16px/1 var(--hud-gauge-num);
+  color: #fff;
+}
 
-// ── Body: fuel 2x2 left, tall gear column centre, electronics right.
-.dash-body { display: grid; grid-template-columns: minmax(0, 1fr) 118px minmax(0, 1fr); gap: 10px; align-items: stretch; }
-.dash-grid { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 64px; gap: 14px 8px; padding-top: 9px; }
+// ── Body: fuel 2x2 left, free gear and pedals centre, electronics right.
+.dash-body { display: grid; grid-template-columns: minmax(0, 1fr) 118px minmax(0, 1fr); gap: 12px; align-items: stretch; }
+.dash-grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 76px 76px; gap: 16px 8px; padding-top: 10px; }
 .dash-grid--electronics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
-// A box: frame and label in the item colour; the label sits on the top border and interrupts it.
-// The top border is drawn by the label's side lines, so the gap stays see-through at any background opacity.
-.dash-cell,
-.dash-gear {
-  --c: #{$dash-line};
-  --w: #{$dash-frame};
+// A box: 3px frame and label in the item colour; the label sits on the top border and interrupts
+// it. The top border is drawn by the label's side lines, so the gap stays see-through at any
+// background opacity.
+.dash-cell {
+  --c: #495661;
+  --w: 3px;
   position: relative;
   box-sizing: border-box;
+  display: grid;
+  place-items: center;
   min-width: 0;
+  padding-top: 8px;
   border: var(--w) solid var(--c);
   border-top: 0;
+  text-align: center;
 }
-.dash-cell { display: grid; place-items: center; padding-top: 6px; text-align: center; }
 .dash-cell--wide { grid-column: span 2; }
 .dash-cell__label {
   position: absolute;
@@ -114,52 +123,79 @@ $dash-frame-on: 2.5px;
   left: calc(var(--w) * -1);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   transform: translateY(-50%);
   &::before,
   &::after { flex: 1; min-width: 4px; border-top: var(--w) solid var(--c); content: ''; }
   b {
     padding: 0 2px;
-    font: italic 700 15px/1 var(--hud-font-num);
-    letter-spacing: 0.06em;
+    font: 700 15px/1 var(--hud-gauge-num);
+    letter-spacing: 0.015em;
     text-transform: uppercase;
     color: var(--c);
     white-space: nowrap;
   }
 }
-.dash-cell__value { font: italic 700 32px/1 var(--hud-font-num); color: #fff; white-space: nowrap; }
+.dash-cell__value { font: 700 35px/1 var(--hud-gauge-num); color: #f4f6f8; white-space: nowrap; }
+.dash-cell--fuel-left .dash-cell__value { font-size: 29px; }
+.dash-cell--laps .dash-cell__value { font-weight: 800; }
+// State tag at the bottom of the box (ATTIVO / REGOLA).
+.dash-cell__tag {
+  position: absolute;
+  right: 0;
+  bottom: 4px;
+  left: 0;
+  font: 700 9px/1 var(--hud-gauge-num);
+  letter-spacing: 0.02em;
+  text-align: center;
+  color: var(--c);
+}
 
-.dash-cell--fuel { --c: #00e5d4; }
-.dash-cell--fuel-lap { --c: #00a8ff; }
-.dash-cell--laps { --c: #00e04f; }
-.dash-cell--fuel-left { --c: #c6ff00; }
-.dash-cell--tc { --c: #ffb000; }
-.dash-cell--tc2 { --c: #ff6a00; }
-.dash-cell--abs { --c: #2f6bff; }
-.dash-cell--map { --c: #ffe600; }
-.dash-cell--bb { --c: #ff2b2b; }
+// Draft item colours (revision 05).
+.dash-cell--fuel { --c: #1aa89f; }
+.dash-cell--fuel-lap { --c: #2398cd; }
+.dash-cell--laps { --c: #27a75c; }
+.dash-cell--fuel-left { --c: #a3b33a; }
+.dash-cell--tc { --c: #cc941c; }
+.dash-cell--tc2 { --c: #ce752b; }
+.dash-cell--abs { --c: #398de0; }
+.dash-cell--map { --c: #c4b52d; }
+.dash-cell--bb { --c: #b95c53; }
 
-// The value the driver is changing (1.5 s): thicker frame and filled label, nothing else.
-.dash-cell--on { --w: #{$dash-frame-on}; }
-.dash-cell--on .dash-cell__label b { padding: 0 4px; background: var(--c); color: $dash-panel; }
+// The value the driver is changing (1.5 s): white frame with an inner line, white filled label.
+.dash-cell--on {
+  --c: #f4f6f8;
+  box-shadow: inset 0 0 0 1px #f4f6f8;
+  .dash-cell__label b { padding: 0 4px; background: #f4f6f8; color: $dash-ink; }
+}
 
-// Real TC/ABS intervention: the box fills in its colour below the label (no synthetic animation).
-.dash-cell--active { background: linear-gradient(var(--c), var(--c)) 0 8px / 100% calc(100% - 8px) no-repeat; }
-.dash-cell--tc.dash-cell--active .dash-cell__value { color: $dash-panel; }
+// Real TC/ABS intervention: the whole box fills in amber (TC) or blue (ABS), dark text.
+.dash-cell--active {
+  background: var(--fill);
+  box-shadow: none;
+  .dash-cell__label b { padding: 0 4px; background: var(--fill); color: $dash-ink; }
+  .dash-cell__value,
+  .dash-cell__tag { color: $dash-ink; }
+}
+.dash-cell--tc.dash-cell--active { --fill: #efac10; --c: #ffd05a; }
+.dash-cell--abs.dash-cell--active { --fill: #179df3; --c: #7ed3ff; }
 // TC set to zero: a flashing red frame, separate from the intervention fill.
 .dash-cell--tc.dash-cell--off-warning { --c: #ff101b; }
 .dash-cell--off-warning,
 .dash-cell--off-warning .dash-cell__label::before,
 .dash-cell--off-warning .dash-cell__label::after { animation: dash-tc-off-warning 1s linear infinite; }
 
-// Fuel: one urgency for Fuel, Laps left and Fuel left. Warning (ACC Drive, 4 minutes or less) is
-// yellow, low (one lap or less) orange; critical may also pulse the frame (option).
+// Fuel: one urgency for Fuel, Laps left and Fuel left (L / lap stays as it is). The draft caution
+// (amber frame, label and value on a dark amber ground) shows the ACC Drive warning (4 minutes or
+// less); low (one lap or less) uses the same look in orange; critical may also pulse the frame.
 .dash-hud--fuel-warning :is(.dash-cell--fuel, .dash-cell--laps, .dash-cell--fuel-left) {
-  --c: #ffff00;
-  .dash-cell__value { color: #ffff00; }
+  --c: #{$dash-caution};
+  background: $dash-caution-bg;
+  .dash-cell__value { color: $dash-caution; }
 }
 .dash-hud--fuel-low :is(.dash-cell--fuel, .dash-cell--laps, .dash-cell--fuel-left) {
   --c: #ffae00;
+  background: #2b1d08;
   .dash-cell__value { color: #ffae00; }
 }
 .dash-hud--fuel-critical-pulse :is(.dash-cell--fuel, .dash-cell--laps, .dash-cell--fuel-left) {
@@ -168,31 +204,32 @@ $dash-frame-on: 2.5px;
   .dash-cell__label::after { animation: dash-fuel-critical-pulse 520ms steps(1, end) infinite; }
 }
 
-// ── Gear column: taller than wide, GEAR on the border, throttle and brake under the gear.
-.dash-gear {
-  --c: rgba(255, 255, 255, 0.44);
+// ── Centre: the gear without a frame, the pedal bars under a separator.
+.dash-center {
+  position: relative;
   display: grid;
-  grid-template-rows: 1fr auto;
-  gap: 6px;
-  height: 142px;
-  margin-top: 9px;
-  padding: 10px 8px 8px;
-  .dash-cell__label b { font-size: 13px; color: #a3a5ae; }
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 8px;
+  min-height: 0;
+  padding-top: 10px;
 }
-.dash-gear--pit { background: linear-gradient(#0000ff, #0000ff) 0 7px / 100% calc(100% - 7px) no-repeat; }
-.dash-gear__value { display: grid; place-items: center; font: italic 700 92px/0.9 var(--hud-font-num); color: #fff; }
-.dash-pedals { position: relative; display: grid; gap: 4px; }
-.dash-pedals i { position: relative; display: block; height: 7px; background: rgba(255, 255, 255, 0.09); }
-.dash-pedals span { position: absolute; inset: 0 auto 0 0; }
-.dash-pedals__gas span { background: #16a34a; }
-.dash-pedals__brake span { background: #dc2626; }
-.dash-pedals--unavailable span { display: none; }
-.dash-pedals--unavailable::after {
+.dash-gear { position: relative; display: grid; place-items: center; min-height: 0; }
+.dash-gear--pit .dash-gear { background: #0000ff; }
+.dash-gear__value { font: 800 120px/1 var(--hud-gauge-num); color: #fff; }
+.dash-pedals { position: relative; display: grid; gap: 5px; padding-top: 8px; border-top: 2px solid #59656d; }
+.dash-pedals__line { display: grid; grid-template-columns: 25px 1fr; align-items: center; gap: 4px; height: 12px; }
+.dash-pedals__line > span { font: 700 12px/12px var(--hud-gauge-label); color: #a6b4c1; }
+.dash-pedals__line i { position: relative; display: block; height: 12px; background: #26303a; }
+.dash-pedals__line b { position: absolute; inset: 0 auto 0 0; }
+.dash-pedals__gas b { background: #16ba55; }
+.dash-pedals__brake b { background: #f04436; }
+.dash-pedals--unavailable b { display: none; }
+.dash-pedals--unavailable i::after {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
-  font: 700 12px/1 var(--hud-font-num);
+  font: 700 11px/1 var(--hud-gauge-num);
   color: #fff;
   content: '—';
 }
@@ -205,7 +242,7 @@ $dash-frame-on: 2.5px;
   padding: 1px 2px;
   background: #fff;
   color: #000;
-  font: 700 10px/11px var(--hud-font-num);
+  font: 700 10px/11px var(--hud-gauge-num);
 }
 
 // ── Spectator: the observed car's proven data only, the rest is explicitly N/A.
@@ -243,8 +280,12 @@ $dash-frame-on: 2.5px;
 .spectator__unavailable b { font-size: 9px; color: #888; }
 .spectator__unavailable small { font-size: 10px; color: #ddd; }
 
-@keyframes dash-shift-flash { 0%, 49% { background: #001a8d; } 50%, 100% { background: #46c7ff; } }
+@keyframes dash-shift-flash { 0%, 49% { background: #0753d0; } 50%, 100% { background: #31b5ff; } }
 @keyframes dash-rpm-pulse { from { opacity: 1; } to { opacity: 0.45; } }
 @keyframes dash-indicator { from { opacity: 0; } to { opacity: 1; } }
 @keyframes dash-tc-off-warning { 0%, 49% { border-color: rgba(255, 16, 27, 0); } 50%, 100% { border-color: #ff101b; } }
 @keyframes dash-fuel-critical-pulse { 0%, 49% { border-color: #ffae00; } 50%, 100% { border-color: #5f4100; } }
+// Reduced motion: the shift bar stays plain light blue (draft).
+@media (prefers-reduced-motion: reduce) {
+  .dash-rpm--flash .dash-rpm__fill { animation: none; background: #1689ff; }
+}

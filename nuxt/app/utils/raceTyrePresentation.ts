@@ -9,70 +9,39 @@ export function raceSlip(wheelSlip: number | null | undefined) {
   return { height: raw < 0.1 ? 0 : Math.min(56, raw * 28), color: colors[band < 0 ? 4 : band]! }
 }
 
-/**
- * HUD style v2 (27/10, revised 28/10, third round 28/10): Race tyres laid out like a car.
- * The viewBox is only as tall as the content (no space kept for hidden elements); the
- * native window keeps its scale contract. Right corners mirror left around x = 83.
- * Pressure values sit above the front tyres and below the rear ones; one averaged brake
- * reading per axle sits between that axle's two brakes.
- */
-export const RACE_TYRE_GEOMETRY = Object.freeze({
-  width: 166, height: 195, centerX: 83,
-  tyreWidth: 30, tyreHeight: 44, tyreRadius: 2.5,
-  slipWidth: 9,
-  brakeWidth: 10, brakeHeight: 30, brakeRadius: 1.5,
-  frontTop: 43, rearTop: 109,
-  midTop: 90, midBottom: 106, midText: 102.5,
-  // Axle brake reading on the centre line x = 83: the 12-unit temperature vertically centred
-  // on the axle (baseline + 4 ≈ half its cap height), the pad wear right underneath it.
-  axleTempDy: 4, axlePadDy: 17,
-  // ENGINE OFF / LIMITER ON boxes (square corners), centred on the front / rear axle.
-  statusWidth: 80, statusHeight: 48,
-})
-
 export type RaceTyreValueKind = 'primary' | 'average' | 'loss'
 
-/** Centre line of the front or rear axle (tyres, brakes, axle brake reading, status box). */
-export function raceAxleCenterY(rear: boolean) {
-  return (rear ? RACE_TYRE_GEOMETRY.rearTop : RACE_TYRE_GEOMETRY.frontTop) + RACE_TYRE_GEOMETRY.tyreHeight / 2
+/**
+ * PIP-671 (approved draft "Gomme", 30/10): the three readings of a wheel, read from the tyre
+ * outwards: in front, pressure / AVG / loss from the top; at the rear, loss / AVG / pressure.
+ */
+export function raceTyreValueOrder(rear: boolean): RaceTyreValueKind[] {
+  return rear ? ['loss', 'average', 'primary'] : ['primary', 'average', 'loss']
 }
 
-/** Columns from the outside in, plus the value order: front pressure first, rear pressure last. */
-export function raceTyreCorner(index: number) {
-  const G = RACE_TYRE_GEOMETRY
-  const rear = index > 1
-  const right = index % 2 === 1
-  const top = rear ? G.rearTop : G.frontTop
-  const centerY = raceAxleCenterY(rear)
-  const bottom = top + G.tyreHeight
-  // Front: above the tyre, top→bottom pressure, AVG, loss. Rear: below the tyre, loss, AVG, pressure.
-  const valueLines: Array<{ kind: RaceTyreValueKind, y: number }> = rear
-    ? [{ kind: 'loss', y: bottom + 12 }, { kind: 'average', y: bottom + 25 }, { kind: 'primary', y: bottom + 38 }]
-    : [{ kind: 'primary', y: top - 29 }, { kind: 'average', y: top - 16 }, { kind: 'loss', y: top - 3 }]
-  // Left side from the edge: slip bar at 2, tyre at 12, brake at 44; the right side mirrors it.
-  const mirror = (x: number, width: number) => right ? G.width - x - width : x
-  const tyreX = mirror(12, G.tyreWidth)
-  return {
-    rear, right, top, centerY, valueLines, valuesX: tyreX + G.tyreWidth / 2,
-    slipX: mirror(2, G.slipWidth), tyreX, brakeX: mirror(44, G.brakeWidth),
-  }
+/** Slip bar fill as a fraction of the bar height (the raceSlip height is on a 0–56 scale). */
+export function raceSlipFill(wheelSlip: number | null | undefined) {
+  const slip = raceSlip(wheelSlip)
+  return { ratio: slip.height / 56, color: slip.color }
 }
 
 type AxleBrakeSource = { brakeTempC?: number | null, padLifePct?: number | null }
 
-function presentAverage(values: Array<number | null | undefined>) {
-  const present = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
-  return present.length ? present.reduce((sum, value) => sum + value, 0) / present.length : null
+function present(values: Array<number | null | undefined>) {
+  return values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
 }
 
 /**
- * One brake reading per axle, like ACC Drive: the mean brake temperature and pad wear of
- * that axle's wheels. A missing side does not count; with no side at all the value is null.
+ * One brake reading per axle (PIP-671, approved draft 30/10): the HOTTER brake temperature and the
+ * LOWER pad life of that axle's wheels, not an average, so one side in trouble is never hidden. A
+ * missing side does not count; with no side at all the value is null.
  */
 export function raceAxleBrake(wheels: AxleBrakeSource[]) {
+  const temperatures = present(wheels.map(wheel => wheel.brakeTempC))
+  const pads = present(wheels.map(wheel => wheel.padLifePct))
   return {
-    brakeTempC: presentAverage(wheels.map(wheel => wheel.brakeTempC)),
-    padLifePct: presentAverage(wheels.map(wheel => wheel.padLifePct)),
+    brakeTempC: temperatures.length ? Math.max(...temperatures) : null,
+    padLifePct: pads.length ? Math.min(...pads) : null,
   }
 }
 

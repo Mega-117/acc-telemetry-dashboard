@@ -25,15 +25,17 @@ const { t } = useI18n()
     </header>
 </template>
 <style scoped>
-/* A small strip attached above the tyres; minutes plus a white outline icon per cell.
-   No background of its own: the outer panel behind it is the only layer that follows
-   "Trasparenza sfondo" (owner 28/10); the cells keep their light tile. */
+/* PIP-671 (approved draft "Gomme", 30/10): the forecast strip on top of the Race window, one tile
+   per forecast sharing the width; minutes 26px and 50px outline icons. Native px: the page zooms
+   the whole Race window by the HUD scale. No background of its own: the outer panel is the only
+   layer that follows "Trasparenza sfondo" (owner 28/10); the cells keep their light tile. */
 .tyre-race__weather {
-  display:flex; flex:0 0 auto; gap:calc(6px * var(--hud-scale,1)); padding:calc(6px * var(--hud-scale,1));
-  border-bottom:1px solid rgba(255,255,255,0.15); background:transparent;
+  display:flex; flex:0 0 auto; gap:6px; padding:6px;
+  border-bottom:2px solid #66717b; background:transparent;
 }
-.tyre-race__weather-unavailable { flex:1; align-self:center; padding:8px; text-align:center; color:#a3a5ae; font:700 max(11px,calc(12px * var(--hud-scale,1)))/1.3 var(--hud-font-label); }
-.tyre-race__weather-cell { display:grid; flex:1 1 0; min-width:0; justify-items:center; align-content:center; gap:calc(4px * var(--hud-scale,1)); padding:calc(5px * var(--hud-scale,1)) calc(8px * var(--hud-scale,1)); background:rgba(255,255,255,0.045); }
-.tyre-race__weather strong { color:#f4f4f6; font:italic 700 max(12px,calc(16px * var(--hud-scale,1)))/1 var(--hud-font-num); }
-.tyre-race__weather span { display:grid; place-items:center; width:max(22px,calc(34px * var(--hud-scale,1))); height:max(22px,calc(34px * var(--hud-scale,1))); color:#f4f4f6; font:700 max(16px,calc(22px * var(--hud-scale,1)))/1 var(--hud-font-num); }
+.tyre-race__weather-unavailable { flex:1; align-self:center; padding:8px; text-align:center; color:#a3a5ae; font:700 16px/1.3 var(--hud-gauge-num); }
+.tyre-race__weather-cell { display:grid; flex:1 1 0; min-width:0; justify-items:center; align-content:center; gap:6px; padding:8px; background:rgba(255,255,255,0.035); }
+.tyre-race__weather strong { color:#f4f6f8; font:700 26px/1.1 var(--hud-gauge-num); }
+.tyre-race__weather span { display:grid; place-items:center; width:50px; height:50px; color:#f4f6f8; font:700 26px/1 var(--hud-gauge-num); }
+.tyre-race__weather :deep(.race-weather-icon__letter) { font:700 9px var(--hud-gauge-num); }
 </style>

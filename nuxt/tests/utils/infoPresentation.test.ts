@@ -193,6 +193,23 @@ describe('Info style A (28/10)', () => {
     expect(empty.rows.find(row => row.id === 'best')).toMatchObject({ value: '--:--.---', tone: 'default' })
   })
 
+  it('PIP-671: the warning tones are caution rows; damage above zero is a warning', () => {
+    const options = Object.fromEntries(Object.keys(DEFAULT_INFO_OPTIONS).map(key => [key, true])) as typeof DEFAULT_INFO_OPTIONS
+    const rows = (info: Record<string, unknown>) => buildInfoPresentation({ ...state, sessionType: 2, info: { ...state.info, ...info } } as any, options).rows
+    const pick = (list: ReturnType<typeof rows>, id: string) => list.find(row => row.id === id)!
+    const normal = rows({ fuelNeededL: -1.8, fuelLeftTimeMs: 2_000_000, pitExitTraffic: 0, damageTimeMs: 0 })
+    expect(normal.filter(row => row.caution)).toEqual([])
+    expect(pick(normal, 'q-fuel')).toMatchObject({ tone: 'green', caution: false })
+    expect(pick(normal, 'damage')).toMatchObject({ tone: 'default', caution: false })
+    const alarms = rows({ fuelNeededL: 8.4, fuelLeftTimeMs: 60_000, pitExitTraffic: 5, damageTimeMs: 12_400 })
+    expect(pick(alarms, 'q-fuel')).toMatchObject({ tone: 'yellow', caution: true })
+    expect(pick(alarms, 'fuel-left')).toMatchObject({ tone: 'orange', caution: true })
+    expect(pick(alarms, 'pit-exit')).toMatchObject({ value: 'Crowded', tone: 'red', caution: true })
+    expect(pick(alarms, 'damage')).toMatchObject({ value: '0:12.400', tone: 'yellow', caution: true })
+    // A set best lap is a record, not a warning.
+    expect(pick(alarms, 'best')).toMatchObject({ tone: 'purple', caution: false })
+  })
+
   it('drops only the trailing colon from row labels', () => {
     expect(infoRowLabel('Fuel Left:')).toBe('Fuel Left')
     expect(infoRowLabel('Q-Fuel:')).toBe('Q-Fuel')

@@ -13,6 +13,9 @@ export default {
       aria: 'Dashboard',
       spectatorAria: 'Dashboard of the observed driver',
       unavailableAria: 'Data not available for the observed driver',
+      // PIP-671: state tag at the bottom of the TC/ABS box (intervention) or of the box being changed.
+      aidActive: 'ACTIVE',
+      aidAdjust: 'ADJUST',
     },
     tyreRace: {
       set: 'SET',

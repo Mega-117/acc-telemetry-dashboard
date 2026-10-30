@@ -237,7 +237,7 @@ const { t } = useI18n()
       <div
         class="sector-delta-hud__body"
         :class="{ 'sector-delta-hud__body--with-lap': showCurrentLap !== false }"
-        :style="showCurrentLap !== false ? { gridTemplateColumns: `minmax(0, 1.25fr) repeat(${visibleSectors.length}, minmax(0, 1fr))` } : undefined"
+        :style="showCurrentLap !== false ? { gridTemplateColumns: `minmax(0, 1.28fr) repeat(${visibleSectors.length}, minmax(0, 1fr))` } : undefined"
       >
         <div v-if="showCurrentLap !== false" class="sector-delta-hud__lap">
           <strong
@@ -287,25 +287,29 @@ const { t } = useI18n()
   </section>
 </template>
 
-<style scoped>
-/* HUD style v2 (27/10): compact layout. The classic rules live in pages/sectors-overlay.vue. */
+<style scoped lang="scss">
+@use '~/assets/scss/hud-gauge' as *;
+
+/* PIP-671 (approved draft "Settori · compatto", 30/10): title bar, large current lap, three
+   S1/S2/S3 rows split by thin grey lines, no inner background tiles. Native px: the page zooms
+   the HUD by its scale. The classic rules live in assets/scss/components/sectors-overlay.scss. */
 .sector-delta-hud--compact {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 6px;
   padding: 0;
   border: 0;
   background: transparent;
   box-sizing: border-box;
   min-height: 0;
   overflow: hidden;
-  font-family: var(--hud-font-num);
+  color: #f4f6f8;
+  @include hud-gauge-type;
 }
 
 .sector-compact__header {
   display: grid;
-  /* Title bar -> lap block spacing (6px + 7px requested on 27/10), scales with the HUD. */
-  gap: calc(13px * var(--hud-scale, 1));
+  gap: 6px;
   flex: 0 0 auto;
   min-height: 0;
 }
@@ -314,50 +318,47 @@ const { t } = useI18n()
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: calc(8px * var(--hud-scale, 1));
+  gap: 10px;
 }
 
 .sector-compact__title::before,
 .sector-compact__title::after {
   content: '';
   width: 100%;
-  height: 1px;
-  background: rgba(255, 255, 255, 0.15);
+  height: 2px;
+  background: #66717b;
 }
 
 .sector-compact__title > span {
-  color: #f4f4f6;
-  font: italic 700 calc(12px * var(--hud-scale, 1))/1 var(--hud-font-num);
-  letter-spacing: 0.14em;
+  color: #a4b0bc;
+  font: 700 14px/1 var(--hud-gauge-label);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
-.sector-compact__title b { color: #f4f4f6; }
+.sector-compact__title b { color: #f4f6f8; }
 
-/* "SETTORI vs BEST": title and reference word bold, the link word lowercase and light. */
+/* "SETTORI vs BEST": the link word lowercase. */
 .sector-compact__title .sector-title__versus {
-  font-weight: 400;
   letter-spacing: 0.04em;
   text-transform: none;
 }
 
-/* The lap block keeps the in/out target backgrounds; neutral is a plain cell. */
+/* The lap block keeps the in/out target backgrounds (PIP-416); neutral has no tile. */
 .sector-compact__lap-block {
   display: grid;
   justify-items: center;
-  gap: calc(4px * var(--hud-scale, 1));
-  padding: calc(7px * var(--hud-scale, 1)) calc(6px * var(--hud-scale, 1));
-  background: rgba(255, 255, 255, 0.045);
+  padding: 5px 10px 9px;
+  background: transparent;
 }
 
 .sector-compact__lap-block.sector-compact__lap--target-inside { background: #0b315a; }
 .sector-compact__lap-block.sector-compact__lap--target-outside { background: #542600; }
 
 .sector-compact__lap {
-  color: #facc15;
-  font: italic 700 calc(42px * var(--hud-scale, 1))/0.92 var(--hud-font-num);
-  font-variant-numeric: tabular-nums;
+  color: #f1d541;
+  font: 800 56px/1 var(--hud-gauge-num);
   white-space: nowrap;
 }
 
@@ -366,75 +367,61 @@ const { t } = useI18n()
 
 .sector-compact__rows {
   display: grid;
-  flex: 1;
-  margin-top: calc(6px * var(--hud-scale, 1));
-  grid-template-rows: repeat(3, minmax(0, 1fr));
-  gap: calc(5px * var(--hud-scale, 1));
   min-height: 0;
   overflow: hidden;
 }
 
-/* Label, time and delta/live/wait sit on one shared baseline; the line itself is
-   centred vertically in the row (align-content), so the three read as one row. */
+/* Label, time and delta/live/wait on one shared baseline. */
 .sector-compact__row {
   display: grid;
-  grid-template-columns: calc(36px * var(--hud-scale, 1)) minmax(0, 1fr) max-content;
+  grid-template-columns: 36px minmax(0, 1fr) max-content;
   align-items: baseline;
-  align-content: center;
-  gap: calc(8px * var(--hud-scale, 1));
+  gap: 8px;
   box-sizing: border-box;
   min-height: 0;
-  padding: 0 calc(8px * var(--hud-scale, 1));
+  padding: 7px 10px;
   overflow: hidden;
   border: 0;
-  background: rgba(255, 255, 255, 0.045);
+  border-top: 1px solid rgba(184, 194, 204, 0.22);
+  background: transparent;
+  opacity: 1;
 }
 
-/* Tile-name style of the HUD guide (Classic S1: 16 next to 20 times), scaled to the larger
-   Compact times (32): same face, white, same letter spacing. */
 .sector-compact__label {
-  color: #f4f4f6;
-  font: italic 700 calc(24px * var(--hud-scale, 1))/1 var(--hud-font-num);
-  letter-spacing: 0.04em;
+  color: #c6d0d8;
+  font: 700 19px/1 var(--hud-gauge-label);
+  letter-spacing: 0.06em;
 }
 
 /* overflow: clip (not hidden) keeps the content baseline for the row alignment. */
 .sector-compact__row .sector-compact__time,
 .sector-compact__row .sector-compact__time > span {
   overflow: clip;
-  color: #f4f4f6;
-  font: italic 700 calc(32px * var(--hud-scale, 1))/1 var(--hud-font-num);
-  font-variant-numeric: tabular-nums;
+  color: #f4f6f8;
+  font: 700 32px/1 var(--hud-gauge-num);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.sector-compact__row .sector-compact__time > .sector-compact__time-value--long {
-  font-size: calc(26px * var(--hud-scale, 1));
 }
 
 .sector-compact__delta {
   justify-self: end;
   overflow: visible;
-  font: italic 700 calc(19px * var(--hud-scale, 1))/1 var(--hud-font-num);
-  font-variant-numeric: tabular-nums;
+  color: #f4f6f8;
+  font: 800 38px/1 var(--hud-gauge-num);
   text-transform: uppercase;
 }
 
-/* live/wait and a missing delta are not values: grey, as in Classic. */
-.sector-compact__delta.sector-delta__delta--placeholder { color: #a3a5ae; }
+.sector-delta--purple .sector-compact__delta { color: #c756f0; }
+.sector-delta--green .sector-compact__delta { color: #24c26c; }
+.sector-delta--yellow .sector-compact__delta { color: #edc52b; }
+.sector-delta--red .sector-compact__delta { color: #f05b4b; }
 
-/* Sectors not reached yet stay dimmer; the running one is lifted. */
+/* live/wait and a missing delta are not values: grey. */
+.sector-compact__row .sector-compact__delta.sector-delta__delta--placeholder { color: #a4b0bc; }
+
+/* Sectors not reached yet stay dimmer. */
 .sector-compact__row--pending .sector-compact__time,
 .sector-compact__row--pending .sector-compact__time > span {
   color: #6f7277;
-}
-
-.sector-compact__row--running {
-  background: rgba(255, 255, 255, 0.09);
-}
-
-.sector-compact__row--running .sector-compact__label {
-  color: #f4f4f6;
 }
 </style>

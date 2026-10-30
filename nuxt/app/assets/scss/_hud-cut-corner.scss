@@ -1,47 +1,65 @@
-// Outer HUD panel with square corners and ONLY the top-right corner cut (owner 28/10, the Info
-// "style A" shape, see components/overlay/InfoHud.vue). Shared by the Sectors classic panel and
-// the Tyres Classic and Race panels (the Race window also hosts the Damage page).
+// HUD panel outline (PIP-671, approved drafts 30/10): square corners, optionally the top-left
+// and/or the top-right corner cut at 45°. Used by Dashboard, Info, Sectors and Tyres.
 //
-// - clip-path cuts the corner of the whole panel (background included), so the cut shows what is
+// - clip-path cuts the corners of the whole panel (background included), so a cut shows what is
 //   behind the window, never a square of a different shade, whatever the background opacity.
-// - clip-path also removes the border on the cut: the `.hud-cut-corner__line` child (an empty
-//   aria-hidden <i>) draws it back as a 45° line on the border-box diagonal (absolute boxes start
-//   inside the 1px border), rotated so its thickness falls inside the clip shape.
-// - With the yellow flag the frame moves onto the outer edge (covering the 1px border, as on Info)
-//   and the diagonal line becomes the same frame width, so the frame follows the cut.
+// - The panel has no CSS border. Its frame is a ring (::before) and the yellow-flag frame is a
+//   second ring (::after), each one element whose clip-path is the panel outline minus the same
+//   outline inset by the ring width (even-odd polygon). The ring therefore runs unbroken along
+//   every edge AND along the cuts, with the same width everywhere and clean joins, at any scale.
+// - The yellow frame (#ffd400) sits above the content, so showing it moves nothing.
 //
-// $cut          size of the cut (scale it with the HUD, e.g. calc(14px * var(--hud-scale)))
-// $line         border colour, reused by the diagonal line
+// $left-cut     size of the top-left cut (0px = square corner)
+// $right-cut    size of the top-right cut (0px = square corner)
+// $width        frame width
+// $color        frame colour
 // $flag-class   modifier class of the panel while the yellow flag is shown
-// $flag-width   width of the yellow frame (the panel's ::after border width)
-@mixin hud-cut-corner($cut, $line, $flag-class, $flag-width) {
-  --hud-cut: #{$cut};
-  border-radius: 0;
-  // overflow: hidden would clip the line and the frame at the padding box; the clip-path already
-  // keeps everything inside the panel shape.
-  overflow: visible;
-  clip-path: polygon(0 0, calc(100% - var(--hud-cut)) 0, 100% var(--hud-cut), 100% 100%, 0 100%);
+// $flag-width   width of the yellow frame
 
-  > .hud-cut-corner__line {
+// Outline of the panel inset by $inset; with $inset 0 it is the panel outline itself. A 45° cut of
+// size c inset by w moves its two ends by w * (√2 - 1) = w * 0.4142 along the edges.
+@function hud-outline($left-cut, $right-cut, $inset) {
+  $l: calc(#{$left-cut} + #{$inset} * 0.4142);
+  $r: calc(#{$right-cut} + #{$inset} * 0.4142);
+  @return (
+    calc(#{$inset}) $l,
+    $l calc(#{$inset}),
+    calc(100% - #{$r}) calc(#{$inset}),
+    calc(100% - #{$inset}) $r,
+    calc(100% - #{$inset}) calc(100% - #{$inset}),
+    calc(#{$inset}) calc(100% - #{$inset})
+  );
+}
+
+@function hud-ring($left-cut, $right-cut, $width) {
+  @return polygon(evenodd, #{hud-outline($left-cut, $right-cut, 0px)}, #{hud-outline($left-cut, $right-cut, $width)});
+}
+
+@mixin hud-cut-corner($left-cut, $right-cut, $width, $color, $flag-class, $flag-width) {
+  position: relative;
+  border: 0;
+  border-radius: 0;
+  // overflow: hidden is not needed: the clip-path already keeps everything inside the shape.
+  overflow: visible;
+  clip-path: polygon(#{hud-outline($left-cut, $right-cut, 0px)});
+
+  &::before,
+  &.#{$flag-class}::after {
     position: absolute;
-    z-index: 16; // above the yellow frame (z-index 15)
-    top: -1px;
-    left: calc(100% + 1px - var(--hud-cut));
-    width: calc(var(--hud-cut) * 1.4142);
-    height: 1px;
-    background: $line;
-    transform: rotate(45deg);
-    transform-origin: 0 0;
+    inset: 0;
+    content: '';
     pointer-events: none;
   }
 
-  &.#{$flag-class}::after {
-    inset: -1px;
-    border-radius: 0;
+  &::before {
+    z-index: 14;
+    background: $color;
+    clip-path: hud-ring($left-cut, $right-cut, $width);
   }
 
-  &.#{$flag-class} > .hud-cut-corner__line {
-    height: $flag-width;
+  &.#{$flag-class}::after {
+    z-index: 15;
     background: #ffd400;
+    clip-path: hud-ring($left-cut, $right-cut, $flag-width);
   }
 }

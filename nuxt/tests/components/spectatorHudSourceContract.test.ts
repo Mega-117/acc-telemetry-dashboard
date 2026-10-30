@@ -37,7 +37,7 @@ describe('spectator HUD source contract', () => {
     const advancedTyres = source('app/components/overlay/TyreAdvancedHud.vue')
 
     expect(dashboard).toContain("'dash-pedals--unavailable': !model.inputsAvailable")
-    expect(source('app/assets/scss/components/dashboard-hud.scss')).toContain('.dash-pedals--unavailable::after')
+    expect(source('app/assets/scss/components/dashboard-hud.scss')).toContain('.dash-pedals--unavailable i::after')
     // HUD v2 (27/10): the speed left Classic tyres; a missing slip still reads WAIT, never zero.
     expect(classicTyres).not.toContain('speedKmh')
     expect(classicTyres).toContain('hasLiveTyres && hasSlipPolicy && tyre.wheelSlip !== null')

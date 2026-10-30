@@ -3,6 +3,7 @@
 // di SectorDeltaHud, sempre sotto .hud-sectors-scope.
 @use '~/assets/scss/training-overlay' as *;
 @use '~/assets/scss/hud-cut-corner' as *;
+@use '~/assets/scss/hud-gauge' as *;
 
 .hud-sectors-scope {
 
@@ -13,6 +14,7 @@
   position: absolute;
   inset: 0;
   display: flex;
+  align-items: flex-start;
   padding: calc(6px * var(--hud-scale));
   background: transparent;
   box-sizing: border-box;
@@ -21,130 +23,107 @@
 
 .hud-overlay--web { background: #0d0d12; }
 
+// PIP-671 (approved drafts "Settori · largo" 740px and "Settori · compatto" 500px, 30/10): a square
+// panel with a 2px grey frame; the yellow flag frame (4px at scale 1) follows the whole outline,
+// above the content so nothing moves. The panel hugs its content at the draft width times the HUD
+// scale: the rest of the window stays transparent. Only the background follows the chosen opacity.
 .hud-overlay__panel {
+  --sectors-width: 525px;
   position: relative;
   box-sizing: border-box;
-  flex: 1;
+  flex: 0 0 auto;
+  width: calc(var(--sectors-width) * var(--hud-scale));
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
   -webkit-app-region: drag;
-  // Stile v2 (mock 27/10): 10 px di margine interno come il pannello di riferimento.
-  padding: calc(10px * var(--hud-scale));
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 12px;
-  // Pannello stile v2 senza ombra: solo lo sfondo segue l'opacita' scelta, testo pieno.
-  background: rgba(13, 14, 18, var(--hud-sectors-bg-opacity, 1));
+  // Draft: 10px inside a 2px frame.
+  padding: calc(12px * var(--hud-scale));
+  background: rgba(9, 12, 16, var(--hud-sectors-bg-opacity, 1));
+  @include hud-cut-corner(0px, 0px, calc(2px * var(--hud-scale)), #66717b, 'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));
 }
 
-// Yellow flag (owner 28/10): the same frame as the tyres HUD, 4px at scale 1 and scaling with the HUD,
-// on the whole panel for Classic and Compact. An overlay above the content: nothing moves.
-.hud-overlay__panel--yellow-flag::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 15;
-  border: calc(4px * var(--hud-scale)) solid #ffd400;
-  border-radius: inherit;
-  pointer-events: none;
-}
+// Classic without the lap tile: the three sector tiles keep the width they have in the 740px layout.
+.hud-overlay__panel:has(.sector-delta-hud__body--with-lap) { --sectors-width: 740px; }
+.hud-overlay__panel--compact { --sectors-width: 500px; }
 
-// Classic (owner 28/10): the Info shape, square corners with only the top-right corner cut, its
-// border drawn back and the yellow frame following the cut. The cut scales with the HUD like Info's
-// 14px; the title bar sits below the corner, so nothing inside is clipped. Compact keeps its radius.
-.hud-overlay__panel--classic {
-  @include hud-cut-corner(calc(14px * var(--hud-scale)), rgba(255, 255, 255, 0.15), 'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));
-}
-
-// ── L'HUD riempie il pannello ────────────────────────────────────────────────
-.hud-overlay__panel--compact {
-  padding: calc(8px * var(--hud-scale)) calc(14px * var(--hud-scale)) calc(10px * var(--hud-scale));
-  border-radius: calc(12px * var(--hud-scale));
-}
-
-// HUD style v2 (27/10), approved mock "Settori · classico": title bar "SETTORI vs BEST",
-// optional wide lap tile (yellow time, green/red delta), then one tile per sector with
-// time, delta and the PREV/BEST minis side by side. The lap tile is off by default;
-// with it on the native window is wider (desktop `classicLap` size), so the sector
-// tiles keep the same width and sizes in both cases.
+// The draft is drawn at native px: the HUD (title, tiles, rows) is zoomed by the HUD scale and the
+// rules inside it read --hud-scale as 1.
 .hud-overlay .sector-delta-hud {
-  flex: 1;
-  width: 100%;
+  zoom: var(--hud-scale);
+  > * { --hud-scale: 1; }
+}
+
+// Compact: the pager wrapping the LIVE page takes the whole panel width, like the classic HUD.
+.hud-overlay__panel--compact:not(.hud-overlay__panel--target) {
+  :is(.hud-timed-pager, .hud-timed-pager__content, .sector-delta-hud) { width: 100%; }
+}
+
+// ── Classic (wide) ────────────────────────────────────────────────────────────
+// Title bar "SETTORI vs BEST", optional lap tile (current lap + lap delta, off by default), then one
+// tile per sector: label, time, delta, PREV/BEST rows. The tile's top edge takes the sector colour.
+.hud-overlay .sector-delta-hud {
   display: flex;
   min-height: 0;
-  overflow: hidden;
   flex-direction: column;
-  gap: calc(8px * var(--hud-scale));
+  gap: 8px;
   background: transparent;
   border: none;
   padding: 0;
-  font-family: var(--hud-font-num);
+  color: #f4f6f8;
+  @include hud-gauge-type;
 }
 
 .hud-overlay .sector-delta-hud__body {
-  flex: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: calc(8px * var(--hud-scale));
+  gap: 8px;
   min-height: 0;
 }
 
 .hud-overlay .sector-delta-hud__grid {
+  display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: calc(8px * var(--hud-scale));
+  gap: 8px;
   min-height: 0;
 }
 
-// Mock geometry: lap tile and sector tiles share ONE grid (1.25fr + N x 1fr, 8 px gaps),
-// so the sector grid dissolves into the body row when the lap tile is shown.
-.hud-overlay .sector-delta-hud__body--with-lap .sector-delta-hud__grid {
-  display: contents;
-}
+// Lap tile and sector tiles share ONE grid (1.28fr + N x 1fr), so the sector grid dissolves into
+// the body row when the lap tile is shown (the component sets the column template).
+.hud-overlay .sector-delta-hud__body--with-lap .sector-delta-hud__grid { display: contents; }
 
-// Mock title bar: 10 px between the side lines, the title and "vs BEST".
+// Title bar: 2px side lines, condensed uppercase label, title and reference word bright.
 .hud-overlay .sector-delta-hud__header--classic {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: calc(10px * var(--hud-scale));
+  gap: 10px;
 
   &::before,
   &::after {
     content: '';
     flex: 1;
-    height: 1px;
-    background: rgba(255, 255, 255, 0.15);
+    height: 2px;
+    background: #66717b;
   }
 }
 
 .hud-overlay .sector-delta-hud__header span,
 .hud-overlay .sector-delta-hud__header em {
   overflow: visible;
-  font: italic 700 calc(12px * var(--hud-scale))/1 var(--hud-font-num);
-  letter-spacing: .14em;
+  color: #a4b0bc;
+  font: 700 14px/1 var(--hud-gauge-label);
+  font-style: normal;
+  letter-spacing: .08em;
   text-transform: uppercase;
 }
 
-.hud-overlay .sector-delta-hud__title {
-  color: #f4f4f6;
-}
+.hud-overlay .sector-delta-hud__title { color: #f4f6f8 !important; }
 
 .hud-overlay .sector-delta-hud__comparison {
-  color: #f4f4f6;
-
-  // "vs" minuscolo e leggero, il riferimento (BEST/CUSTOM) in grassetto chiaro.
-  .sector-title__versus {
-    font-weight: 400;
-    letter-spacing: .04em;
-    text-transform: none;
-  }
-
-  .sector-title__reference {
-    color: #f4f4f6;
-    font-weight: 700;
-  }
+  .sector-title__versus { letter-spacing: .04em; text-transform: none; }
+  .sector-title__reference { color: #f4f6f8; font-weight: 700; }
 }
 
 .hud-overlay .sector-delta-hud__lap,
@@ -152,23 +131,26 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: calc(3px * var(--hud-scale));
-  padding: calc(8px * var(--hud-scale)) calc(10px * var(--hud-scale));
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 8px;
   overflow: hidden;
   border: 0;
+  border-top: 3px solid var(--sector-edge, #485762);
   border-radius: 0;
+  background: rgba(255, 255, 255, 0.035);
 }
 
-.hud-overlay .sector-delta-hud__lap {
-  background: rgba(255, 255, 255, 0.045);
-}
+.hud-overlay .sector-delta--purple { --sector-edge: #c756f0; --sector-delta: #c756f0; }
+.hud-overlay .sector-delta--green { --sector-edge: #24c26c; --sector-delta: #24c26c; }
+.hud-overlay .sector-delta--yellow { --sector-edge: #edc52b; --sector-delta: #edc52b; }
+.hud-overlay .sector-delta--red { --sector-edge: #f05b4b; --sector-delta: #f05b4b; }
 
 .hud-overlay .sector-delta__label {
   overflow: hidden;
-  color: #f4f4f6;
-  font: italic 700 calc(16px * var(--hud-scale))/1 var(--hud-font-num);
-  letter-spacing: .04em;
+  color: #a4b2bf;
+  font: 700 15px/1 var(--hud-gauge-label);
+  letter-spacing: .06em;
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
@@ -176,8 +158,8 @@
 
 .hud-overlay .sector-delta-hud__lap-time {
   overflow: hidden;
-  color: #facc15;
-  font: italic 700 calc(32px * var(--hud-scale))/1 var(--hud-font-num);
+  color: #f1d541;
+  font: 800 40px/1 var(--hud-gauge-num);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -186,77 +168,79 @@
 .hud-overlay .sector-delta-hud__lap-time.sector-compact__lap--unknown { color: #6f7277; }
 
 .hud-overlay .sector-delta-hud__lap-delta {
-  color: #f4f4f6;
-  font: italic 700 calc(13px * var(--hud-scale))/1 var(--hud-font-num);
+  color: #f4f6f8;
+  font: 800 40px/1 var(--hud-gauge-num);
   white-space: nowrap;
 }
 
-.hud-overlay .sector-delta-hud__lap-delta--faster { color: rgb(34, 197, 94); }
-.hud-overlay .sector-delta-hud__lap-delta--slower { color: rgb(239, 68, 68); }
-.hud-overlay .sector-delta-hud__lap-delta--placeholder { color: #a3a5ae; }
+.hud-overlay .sector-delta-hud__lap-delta--faster { color: #24c26c; }
+.hud-overlay .sector-delta-hud__lap-delta--slower { color: #f05b4b; }
+.hud-overlay .sector-delta-hud__lap-delta--placeholder { color: #a4b0bc; }
 
-// HUD style guide (28/10) type scale at scale 1: title 12, tile name (S1) 16, sector time 20,
-// delta and PREV/BEST values 13, PREV/BEST words 11. White text; grey only for missing data.
+// Draft type at scale 1: sector time 30, delta 38, PREV/BEST words 14 and values 23.
 .hud-overlay .sector-delta strong {
-  color: #f4f4f6;
-  font: italic 700 calc(20px * var(--hud-scale))/1 var(--hud-font-num);
+  color: #f4f6f8;
+  font: 700 30px/1 var(--hud-gauge-num);
+  white-space: nowrap;
 }
 
-.hud-overlay .sector-delta .sector-delta__value--placeholder { color: #a3a5ae; }
+.hud-overlay .sector-delta .sector-delta__value--placeholder { color: #a4b0bc; }
 
 .hud-overlay .sector-delta .sector-delta__delta {
   align-self: flex-start;
-  color: #f4f4f6;
-  font: italic 700 calc(13px * var(--hud-scale))/1 var(--hud-font-num);
+  color: var(--sector-delta, #f4f6f8);
+  font: 800 38px/1 var(--hud-gauge-num);
+  white-space: nowrap;
 }
 
-.hud-overlay .sector-delta--purple .sector-delta__delta { color: rgb(217, 70, 239); }
-.hud-overlay .sector-delta--green .sector-delta__delta { color: rgb(34, 197, 94); }
-.hud-overlay .sector-delta--yellow .sector-delta__delta { color: rgb(250, 204, 21); }
-.hud-overlay .sector-delta--red .sector-delta__delta { color: rgb(239, 68, 68); }
-.hud-overlay .sector-delta .sector-delta__delta--placeholder { color: #a3a5ae; text-transform: uppercase; }
+.hud-overlay .sector-delta .sector-delta__delta--placeholder { color: #a4b0bc; text-transform: uppercase; }
 
-// Minis side by side (label above value), as in the mock: one row instead of two
-// keeps the overlay shorter. A single visible mini takes the whole width.
+// PREV / BEST: one row each, word left and value right, under a thin separator.
 .hud-overlay .sector-delta__minis {
   display: grid;
-  grid-auto-columns: minmax(0, 1fr);
-  grid-auto-flow: column;
-  gap: calc(4px * var(--hud-scale));
-  margin-top: calc(2px * var(--hud-scale));
+  gap: 3px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #3d4b57;
 }
 
 .hud-overlay .sector-delta__ref,
 .hud-overlay .sector-delta__best {
-  display: grid;
-  gap: calc(1px * var(--hud-scale));
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
   min-width: 0;
-  padding: calc(3px * var(--hud-scale)) calc(5px * var(--hud-scale));
-  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 0;
+  background: none;
 
   b {
-    color: #f4f4f6;
-    font: italic 700 calc(11px * var(--hud-scale))/1 var(--hud-font-num);
-    letter-spacing: .1em;
+    color: #a4b0bc;
+    font: 700 14px/1 var(--hud-gauge-label);
+    letter-spacing: .025em;
     text-transform: uppercase;
   }
 
   em {
     overflow: hidden;
-    color: #f4f4f6;
-    font: italic 700 calc(13px * var(--hud-scale))/1 var(--hud-font-num);
+    color: #f4f6f8;
+    font: 700 23px/1 var(--hud-gauge-num);
+    font-style: normal;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 }
 
+// ── TARGET page (Compact): the editor keeps its own layout and fills the window.
 .hud-overlay--target {
   padding: 6px;
 }
 
 .hud-overlay__panel--target {
+  flex: 1;
+  align-self: stretch;
+  width: auto;
   padding: 8px;
-  border-radius: 12px;
 }
 
 .hud-overlay__panel--target .hud-timed-pager__content,

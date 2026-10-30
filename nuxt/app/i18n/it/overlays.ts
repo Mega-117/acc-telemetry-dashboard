@@ -13,6 +13,9 @@ export default {
       aria: 'Cruscotto',
       spectatorAria: 'Cruscotto del pilota osservato',
       unavailableAria: 'Dati non disponibili per il pilota osservato',
+      // PIP-671: state tag at the bottom of the TC/ABS box (intervention) or of the box being changed.
+      aidActive: 'ATTIVO',
+      aidAdjust: 'REGOLA',
     },
     tyreRace: {
       set: 'SET',

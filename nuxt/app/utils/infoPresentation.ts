@@ -22,6 +22,8 @@ export interface InfoRow {
   label: string
   value: string
   tone: 'default' | 'yellow' | 'orange' | 'green' | 'red' | 'purple'
+  /** PIP-671 (approved drafts 30/10): a warning row, drawn with the caution band. */
+  caution: boolean
   localTime?: boolean
 }
 
@@ -145,6 +147,8 @@ export function evaluateInfoTarget(
   return (lapTimeMs as number) <= (target.targetTimeMs as number) + tolerance ? 'inside' : 'outside'
 }
 
+const CAUTION_TONES: ReadonlySet<InfoRow['tone']> = new Set(['yellow', 'orange', 'red'])
+
 function fuelTone(value: number | null): InfoRow['tone'] {
   if (value === null) return 'default'
   return value < 0 ? 'green' : 'yellow'
@@ -187,7 +191,7 @@ export function buildInfoPresentation(
   const unknownCommonDelta = hudSourcePolicy(state).explicitDeltaAvailability
     && info?.delta.available !== true
   const traffic = trafficValue(info?.pitExitTraffic ?? null)
-  const rows: InfoRow[] = []
+  const rows: Array<Omit<InfoRow, 'caution'>> = []
   if (options.showStint) rows.push({ id: 'stint', label: 'Stint:', value: formatInfoStintDuration(info?.stintTimeLeftMs ?? info?.stintTimeElapsedMs), tone: 'default' })
   if (options.showQFuel) rows.push({ id: 'q-fuel', label: `${info?.fuelLabel || 'Q-Fuel'}:`, value: fuelValue(info?.fuelNeededL ?? null), tone: fuelTone(info?.fuelNeededL ?? null) })
   if (options.showFuelLeft) rows.push({ id: 'fuel-left', label: 'Fuel Left:', value: formatInfoFuelDuration(info?.fuelLeftTimeMs), tone: fuelLeftTone(info?.fuelLeftTimeMs, info?.fuelLeftReferenceLapMs) })
@@ -197,7 +201,8 @@ export function buildInfoPresentation(
   if (options.showOptimal) rows.push({ id: 'optimal', label: 'Optimal:', value: formatInfoLapTime(info?.optimalLapTimeMs), tone: 'default' })
   // Info style A (28/10): a set best lap reads in the session-best purple.
   if (options.showBest) rows.push({ id: 'best', label: 'Best:', value: formatInfoLapTime(info?.bestLapTimeMs), tone: positive(info?.bestLapTimeMs) === null ? 'default' : 'purple' })
-  if (options.showDamage) rows.push({ id: 'damage', label: 'Damage:', value: formatInfoLapTime(info?.damageTimeMs), tone: 'default' })
+  // PIP-671: a car that needs repairs (repair time above zero) is a warning row, as in the draft.
+  if (options.showDamage) rows.push({ id: 'damage', label: 'Damage:', value: formatInfoLapTime(info?.damageTimeMs), tone: positive(info?.damageTimeMs) === null ? 'default' : 'yellow' })
   if (options.showTime) rows.push({ id: 'local-time', label: 'Time:', value: '--:--:--', tone: 'default', localTime: true })
   return {
     yellowFlagActive: options.showYellowFlag && state.flag === 2,
@@ -208,7 +213,8 @@ export function buildInfoPresentation(
       ratio: unknownCommonDelta ? 0 : clamp(info?.delta.ratio ?? 0, 0, 1),
       purple: !unknownCommonDelta && info?.delta.purple === true,
     },
-    rows,
+    // The warning tones (fuel short or running out, pit-exit traffic, damage) are the caution rows.
+    rows: rows.map(row => ({ ...row, caution: CAUTION_TONES.has(row.tone) })),
   }
 }
 

@@ -48,6 +48,19 @@ export function tyreTemperatureColor(
 }
 
 /**
+ * PIP-671: the tyre is in the top band of the ACC Drive scale (yellow to red: DRY 100 °C and above,
+ * WET 86 °C and above). The HUD shows that band as a warning; the threshold is the scale's own.
+ */
+export function tyreTemperatureOverheated(
+  temperatureC: number | null | undefined,
+  compound: TyreTemperatureCompound = 'DRY',
+): boolean {
+  if (typeof temperatureC !== 'number' || !Number.isFinite(temperatureC)) return false
+  const ranges = compound === 'WET' ? WET_RANGES : DRY_RANGES
+  return Math.trunc(temperatureC) >= (ranges.at(-1)?.min ?? Infinity)
+}
+
+/**
  * PIP-613: the same ACC Drive four-band scale on any limits (brakes per axle and pad), so
  * tyres and brakes are coloured alike everywhere. `bands` are [min, max] for the light blue,
  * green, yellow and orange bands, as in ColorPickerManager.

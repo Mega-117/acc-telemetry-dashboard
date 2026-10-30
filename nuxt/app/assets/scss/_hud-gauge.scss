@@ -1,0 +1,20 @@
+// PIP-671 (approved drafts 30/10): type of the Dashboard, Info, Tyres and Sectors HUDs. Upright
+// Barlow Semi Condensed ('Racer Gauge', bundled) with tabular figures, so a ticking value never
+// moves: HudFixedDigits slots take the font's own constant advance (see HudFixedDigits.vue).
+@mixin hud-gauge-type {
+  font-family: var(--hud-gauge-num);
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  --hud-glyph-digit: auto;
+  --hud-glyph-separator: auto;
+  --hud-glyph-sign: auto;
+  --hud-glyph-space: auto;
+
+  // Every `font:` shorthand below resets font-variant-numeric; tabular figures are the rule for the
+  // whole HUD, so they are re-applied to every descendant.
+  * { font-variant-numeric: tabular-nums !important; }
+}
+
+// Draft caution colours (fuel, tyres, info rows, damage).
+$hud-caution: #edbd32;
+$hud-caution-bg: #292313;

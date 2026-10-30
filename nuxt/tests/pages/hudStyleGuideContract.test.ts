@@ -15,31 +15,34 @@ function source(relativePath: string): string {
 
 const YELLOW = '#ffd400'
 
-describe('yellow-flag frame: 4px #ffd400 on the outer edge of every overlay that has it', () => {
-  it('Sectors (Classic and Compact) and Tyres (Classic and Race) draw it on the outer panel, scaled', () => {
+describe('yellow-flag frame: 4px #ffd400 along the whole outline of every overlay that has it', () => {
+  // PIP-671: one shared mixin draws it as a ring that follows every edge and cut.
+  it('the shared outline mixin paints the flag ring in the yellow-flag colour', () => {
+    expect(source('app/assets/scss/_hud-cut-corner.scss')).toMatch(new RegExp(String.raw`::after \{[^}]*background: ${YELLOW};[^}]*clip-path: hud-ring\(\$left-cut, \$right-cut, \$flag-width\);`))
+  })
+
+  it('Sectors (Classic and Compact) and Tyres (Classic and Race) raise it on the outer panel, scaled', () => {
     const sectorsPage = source('app/pages/sectors-overlay.vue')
     const sectorsStyles = source('app/assets/scss/components/sectors-overlay.scss')
     const tyresPage = source('app/pages/tyres-overlay.vue')
     expect(sectorsPage).toContain("'hud-overlay__panel--yellow-flag': fastState.flag === 2,")
     expect(tyresPage).toContain("'hud-overlay__panel--yellow-flag': displayFastState.flag === 2,")
     for (const styles of [sectorsStyles, tyresPage]) {
-      expect(styles).toMatch(new RegExp(String.raw`\.hud-overlay__panel--yellow-flag::after \{[^}]*border: calc\(4px \* var\(--hud-scale\)\) solid ${YELLOW};[^}]*pointer-events: none;`))
+      expect(styles).toContain("'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));")
     }
   })
 
-  it('Info draws it above the content with the cut line thickened to the frame', () => {
+  it('Info raises it through the same mixin, 4px', () => {
     const info = source('app/components/overlay/InfoHud.vue')
     expect(info).toContain(":class=\"{ 'info-hud--yellow-flag': model.yellowFlagActive }\"")
-    expect(info).toMatch(new RegExp(String.raw`\.info-hud--yellow-flag::after \{[^}]*inset: -1px;[^}]*border: 4px solid ${YELLOW};[^}]*pointer-events: none;`))
-    expect(info).toContain(`.info-hud--yellow-flag > .info-hud__cut { height: 4px; background: ${YELLOW}; }`)
+    expect(info).toContain("'info-hud--yellow-flag', 4px);")
   })
 
-  it('Dashboard draws the same frame through the shared cut-corner mixin', () => {
+  it('Dashboard raises it through the same mixin, 4px', () => {
     const hud = source('app/components/overlay/DashboardHud.vue')
     const styles = source('app/assets/scss/components/dashboard-hud.scss')
     expect(hud).toContain("'dash-hud--yellow-flag': model.yellowFlagActive,")
-    expect(styles).toContain("@include hud-cut-corner(14px, $dash-line, 'dash-hud--yellow-flag', 4px);")
-    expect(styles).toMatch(new RegExp(String.raw`\.dash-hud--yellow-flag::after \{[^}]*border: 4px solid ${YELLOW};[^}]*pointer-events: none;`))
+    expect(styles).toContain("@include hud-cut-corner(14px, 14px, 2px, $dash-frame, 'dash-hud--yellow-flag', 4px);")
   })
 
   it('Info and Dashboard raise it only for the ACC yellow flag (2) of the shown car', () => {
@@ -92,10 +95,20 @@ describe('fixed-width digits: live values never move (style guide rule 6)', () =
     expect(hud).not.toMatch(/<strong class="dash-cell__value">\{\{/)
   })
 
-  it('Race tyres (SVG text, no HTML slots) keep tabular figures centred on their anchor', () => {
-    const race = source('app/components/overlay/TyreRaceHud.vue')
-    expect(race).toMatch(/\.tyre-race \{[^}]*font-variant-numeric:tabular-nums;/)
-    expect(race).toMatch(/\.tyre-race__matrix \{[^}]*text-anchor:middle;/)
+  it('PIP-671: the restyled HUDs use the Barlow face with tabular figures everywhere', () => {
+    const gauge = source('app/assets/scss/_hud-gauge.scss')
+    expect(gauge).toContain('font-variant-numeric: tabular-nums;')
+    expect(gauge).toContain('* { font-variant-numeric: tabular-nums !important; }')
+    // HudFixedDigits slots take the font's own constant advance in these HUDs.
+    for (const kind of ['digit', 'separator', 'sign', 'space']) expect(gauge).toContain(`--hud-glyph-${kind}: auto;`)
+    expect(source('app/components/overlay/HudFixedDigits.vue')).toContain('`var(--hud-glyph-${glyph.kind}, ${FIXED_WIDTH_GLYPH_EM[glyph.kind]}em)`')
+    for (const file of [
+      'app/assets/scss/components/dashboard-hud.scss',
+      'app/assets/scss/components/sectors-overlay.scss',
+      'app/components/overlay/InfoHud.vue',
+      'app/components/overlay/TyreRaceHud.vue',
+      'app/components/overlay/SectorDeltaHud.vue',
+    ]) expect(source(file)).toContain('@include hud-gauge-type;')
   })
 })
 

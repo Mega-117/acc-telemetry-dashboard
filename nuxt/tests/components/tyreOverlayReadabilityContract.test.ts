@@ -30,27 +30,24 @@ describe('tyre overlay minimum readability contract', () => {
     expect(setup).toContain('font-size: max(10px, calc(8px * var(--hud-scale, 1)));')
   })
 
-  it('keeps Race primary, secondary and status typography readable at scale 0.5', () => {
+  it('PIP-671: Race keeps the draft type sizes at scale 1 and zooms as a whole, so 0.5 stays readable', () => {
     const race = source('app/components/overlay/TyreRaceHud.vue')
     const damage = source('app/components/overlay/DamageRaceHud.vue')
     const page = source('app/pages/tyres-overlay.vue')
 
-    // Third round (28/10): the viewBox comes from the geometry (166 x 195, see raceTyrePresentation).
-    expect(race).toContain(':viewBox="`0 0 ${G.width} ${G.height}`"')
-    // Fonts in SVG units: pressure 13, AVG word 11 with its number 12, loss 12, middle line 13,
-    // tyre temperature 13 (shadow and stroke kept), brake values 12; status text keeps 18 units.
-    expect(race).toContain('.tyre-race__primary { font-size:13px; }')
-    expect(race).toContain('.tyre-race__average { fill:#c3c5cc; font-size:12px; }')
-    expect(race).toContain('.tyre-race__average-label { font-size:11px; }')
-    expect(race).toContain('.tyre-race__loss { fill:#ffa500; font-size:12px; }')
-    expect(race).toContain('.tyre-race__compound text { font-size:13px;')
-    expect(race).toMatch(/\.tyre-race__temperature \{ font-size:13px; paint-order:stroke; stroke:#000; stroke-width:1\.8px;[^}]*filter:drop-shadow/)
-    expect(race).toContain('.tyre-race__brake-temp { font-size:12px; }')
-    expect(race).toContain('.tyre-race__pad { fill:#c3c5cc; font-size:12px; }')
-    expect(race).toContain('.tyre-race__unavailable text { font-size:18px; }')
+    // Draft "Gomme" (30/10) at scale 1: pressure 31, AVG 24, loss 26, tyre temperature 26, axle brake
+    // 30 and pad 24, middle line 24. The page zooms the whole Race window by the HUD scale, so at the
+    // 0.5 minimum the smallest essential value (AVG) still renders at 12px.
+    expect(race).toContain('.tyre-race__primary { font: 800 31px/1 var(--hud-gauge-num); }')
+    expect(race).toContain('.tyre-race__average { color: #d4dce2; font: 700 24px/1.1 var(--hud-gauge-label); }')
+    expect(race).toContain('.tyre-race__loss { color: #ffa500; font: 700 26px/1.1 var(--hud-gauge-num); }')
+    expect(race).toContain('.tyre-race__temperature { color: #fff; font: 800 26px/1 var(--hud-gauge-num); }')
+    expect(race).toMatch(/\.tyre-race__brake-temp \{[^}]*font: 700 30px\/1 var\(--hud-gauge-num\);/)
+    expect(race).toMatch(/\.tyre-race__pad \{[^}]*font: 700 24px\/1 var\(--hud-gauge-num\);/)
+    expect(race).toMatch(/\.tyre-race__compound-set \{[^}]*font: 700 24px\/30px var\(--hud-gauge-num\);/)
+    expect(page).toMatch(/\.race-hud \{[^}]*zoom: var\(--hud-scale\);/)
+    expect(page).toContain('width: calc(360px * var(--hud-scale));')
     expect(damage).toContain('viewBox="0 0 166 241"')
-    expect(damage).toContain('font-size:12px')
-    expect(damage).toContain('font-size:10px')
     expect(page).toContain(':flash="raceDamageFlash"')
   })
 })

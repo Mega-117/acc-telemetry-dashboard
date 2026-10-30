@@ -33,7 +33,7 @@ describe('HUD background transparency reaches only the background', () => {
 
     expect(page).toContain(":style=\"{ '--hud-sectors-bg-opacity': String(panelBackgroundOpacity) }\"")
     expect(declarationsUsing(styles, '--hud-sectors-bg-opacity')).toEqual([
-      'background: rgba(13, 14, 18, var(--hud-sectors-bg-opacity, 1))',
+      'background: rgba(9, 12, 16, var(--hud-sectors-bg-opacity, 1))',
     ])
     expect(declarationsUsing(hud, '--hud-sectors-bg-opacity')).toEqual([])
     expect(opacityDeclarations(styles)).toEqual([])
@@ -92,7 +92,7 @@ describe('HUD background transparency reaches only the background', () => {
     expect(opacityDeclarations(race).every(rule => !rule.includes('var('))).toBe(true)
     // The weather strip has no background of its own; the cells keep their light tile.
     expect(weather).toMatch(/\.tyre-race__weather \{[^}]*background:transparent;/)
-    expect(weather).toContain('background:rgba(255,255,255,0.045)')
+    expect(weather).toContain('background:rgba(255,255,255,0.035)')
     expect(weather).not.toContain('#0d0e12')
     // Damage: only the backdrop shade fades with the panel, never the car drawing or the values.
     expect(damage).toContain('<rect class="damage-race__background" width="166" height="241" fill="#000" />')
@@ -129,12 +129,12 @@ describe('Dashboard v3 background transparency (owner 28/10)', () => {
   })
 })
 
-describe('Sectors yellow-flag frame (owner 28/10)', () => {
-  it('draws the tyres frame, 4px scaled, on the whole panel for Classic and Compact', () => {
+describe('Sectors yellow-flag frame (PIP-671)', () => {
+  it('draws the 4px scaled frame along the whole panel outline for Classic and Compact', () => {
     const page = source('app/pages/sectors-overlay.vue')
     const styles = source('app/assets/scss/components/sectors-overlay.scss')
 
     expect(page).toContain("'hud-overlay__panel--yellow-flag': fastState.flag === 2,")
-    expect(styles).toMatch(/\.hud-overlay__panel--yellow-flag::after \{[^}]*position: absolute;[^}]*inset: 0;[^}]*border: calc\(4px \* var\(--hud-scale\)\) solid #ffd400;[^}]*pointer-events: none;/)
+    expect(styles).toContain("'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));")
   })
 })

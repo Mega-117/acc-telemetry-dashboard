@@ -20,13 +20,15 @@ interface DashboardCell {
   value: string
   reference?: string | null
   wide?: boolean
+  active?: boolean
   state?: Partial<Record<string, boolean>>
 }
 
 // Item colours live in the stylesheet (one class per box); English HUD words stay in the component.
+// PIP-671 (approved drafts 30/10): the labels carry their unit, as in the draft.
 const fuelCells = computed<DashboardCell[]>(() => [
-  { id: 'fuel', label: 'Fuel', value: props.model.fuel },
-  { id: 'fuel-lap', label: 'Fuel/lap', value: props.model.fuelPerLap },
+  { id: 'fuel', label: 'Fuel · L', value: props.model.fuel },
+  { id: 'fuel-lap', label: 'L / lap', value: props.model.fuelPerLap },
   { id: 'laps', label: 'Laps left', value: props.model.lapsLeft },
   { id: 'fuel-left', label: 'Fuel left', value: props.model.fuelLeft },
 ])
@@ -34,31 +36,42 @@ const fuelCells = computed<DashboardCell[]>(() => [
 const electronicsCells = computed<DashboardCell[]>(() => [
   {
     id: 'tc', label: 'TC', value: props.model.tractionControl, reference: props.model.tractionControlReference,
-    state: {
-      'dash-cell--active': props.model.tractionControlActive,
-      'dash-cell--off-warning': props.model.tractionControlOffWarning,
-    },
+    active: props.model.tractionControlActive,
+    state: { 'dash-cell--off-warning': props.model.tractionControlOffWarning },
   },
   { id: 'tc2', label: 'TC2', value: props.model.tractionControl2, reference: props.model.tractionControl2Reference },
   {
     id: 'abs', label: 'ABS', value: props.model.abs, reference: props.model.absReference,
-    state: { 'dash-cell--active': props.model.absActive },
+    active: props.model.absActive,
   },
   { id: 'map', label: 'MAP', value: props.model.engineMap, reference: props.model.engineMapReference },
-  { id: 'bb', label: 'BB', value: props.model.brakeBias, wide: true },
+  { id: 'bb', label: 'BB · %', value: props.model.brakeBias, wide: true },
 ])
 
 function cellClass(cell: DashboardCell) {
   return [
     `dash-cell--${cell.id}`,
-    { 'dash-cell--wide': cell.wide === true, 'dash-cell--on': props.adjusting === cell.id, ...cell.state },
+    {
+      'dash-cell--wide': cell.wide === true,
+      'dash-cell--on': props.adjusting === cell.id,
+      'dash-cell--active': cell.active === true,
+      ...cell.state,
+    },
   ]
+}
+
+// Draft state tag at the bottom of the box: a real TC/ABS intervention wins over an adjustment.
+function cellTag(cell: DashboardCell): string {
+  if (cell.active === true) return t('overlays.dashboardHud.aidActive')
+  if (props.adjusting === cell.id) return t('overlays.dashboardHud.aidAdjust')
+  return ''
 }
 </script>
 
 <template>
-  <!-- Dashboard v3 (owner 28/10, mock "Cruscotto · nuova proposta"): square corners with only the
-       top-right corner cut, plain RPM bar on top, fuel boxes left, tall gear column, electronics right. -->
+  <!-- Dashboard (PIP-671, approved draft "Cruscotto · race" 30/10): both top corners cut, continuous
+       green RPM bar, coloured 3px boxes for fuel (left) and electronics (right), free gear and
+       separate pedal bars in the middle. No bottom row: alarms live inside the existing boxes. -->
   <section
     class="dash-hud"
     :class="{
@@ -72,8 +85,6 @@ function cellClass(cell: DashboardCell) {
   >
     <!-- Background transparency acts on this layer only, never on the content. -->
     <HudOverlayBackground :opacity="backgroundOpacity" />
-    <!-- clip-path removes the border on the cut: this line draws it back. -->
-    <i class="hud-cut-corner__line" aria-hidden="true" />
 
     <section v-if="model.spectator" class="spectator" :aria-label="t('overlays.dashboardHud.spectatorAria')">
       <header class="spectator__header">
@@ -147,6 +158,7 @@ function cellClass(cell: DashboardCell) {
           :style="{ left: `${model.shiftThresholdRatio * 100}%` }"
         />
         <strong class="dash-rpm__value"><HudFixedDigits :value="model.ignitionLabel" /></strong>
+        <span v-if="model.shiftFlash" class="dash-rpm__shift-label">SHIFT</span>
       </div>
 
       <div class="dash-body">
@@ -157,13 +169,14 @@ function cellClass(cell: DashboardCell) {
           </div>
         </div>
 
-        <div class="dash-gear" :class="{ 'dash-gear--pit': model.pitLimiterOn }">
-          <span class="dash-cell__label"><b>GEAR</b></span>
-          <strong class="dash-gear__value">{{ model.gear }}</strong>
-          <small v-if="model.gearReference !== null" class="dash-ref">{{ model.gearReference }}</small>
+        <div class="dash-center" :class="{ 'dash-gear--pit': model.pitLimiterOn }">
+          <div class="dash-gear">
+            <strong class="dash-gear__value">{{ model.gear }}</strong>
+            <small v-if="model.gearReference !== null" class="dash-ref">{{ model.gearReference }}</small>
+          </div>
           <div class="dash-pedals" :class="{ 'dash-pedals--unavailable': !model.inputsAvailable }">
-            <i class="dash-pedals__gas"><span :style="{ width: `${model.throttlePct}%` }" /></i>
-            <i class="dash-pedals__brake"><span :style="{ width: `${model.brakePct}%` }" /></i>
+            <div class="dash-pedals__line dash-pedals__gas"><span>GAS</span><i><b :style="{ width: `${model.throttlePct}%` }" /></i></div>
+            <div class="dash-pedals__line dash-pedals__brake"><span>BRK</span><i><b :style="{ width: `${model.brakePct}%` }" /></i></div>
           </div>
         </div>
 
@@ -172,6 +185,7 @@ function cellClass(cell: DashboardCell) {
             <span class="dash-cell__label"><b>{{ cell.label }}</b></span>
             <strong class="dash-cell__value"><HudFixedDigits :value="cell.value" /></strong>
             <small v-if="cell.reference" class="dash-ref">{{ cell.reference }}</small>
+            <small v-if="cellTag(cell)" class="dash-cell__tag">{{ cellTag(cell) }}</small>
           </div>
         </div>
       </div>

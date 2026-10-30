@@ -93,8 +93,6 @@ const { t } = useI18n()
       }"
       :style="{ '--hud-tyres-bg-opacity': String(backgroundOpacity) }"
     >
-      <!-- Classic and Race: clip-path removes the border on the cut corner, this line draws it back. -->
-      <i class="hud-cut-corner__line" aria-hidden="true" />
       <section
         v-if="variant === 'race'"
         class="race-hud"
@@ -116,6 +114,7 @@ const { t } = useI18n()
 <style lang="scss">
 @use '~/assets/scss/training-overlay' as *;
 @use '~/assets/scss/hud-cut-corner' as *;
+@use '~/assets/scss/hud-gauge' as *;
 
 .hud-tyres-scope {
 
@@ -154,39 +153,38 @@ const { t } = useI18n()
   background: rgba(13, 14, 18, var(--hud-tyres-bg-opacity, 1));
 }
 
-// Classic and Race (owner 28/10): the Info shape on the outer panel, only the top-right corner cut
-// with its border drawn back and the yellow frame following the cut. The four Classic tiles are flat, with no cut.
-.hud-overlay__panel--classic,
-.hud-overlay__panel--race {
-  @include hud-cut-corner(calc(14px * var(--hud-scale)), rgba(255, 255, 255, 0.15), 'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));
+// Classic (owner 28/10): the Info shape on the outer panel, only the top-right corner cut. The four
+// Classic tiles are flat, with no cut. The yellow flag frame (4px at scale 1) follows the whole
+// outline, cut included, above the content so nothing moves.
+.hud-overlay__panel--classic {
+  @include hud-cut-corner(0px, calc(14px * var(--hud-scale)), 1px, rgba(255, 255, 255, 0.15), 'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));
 }
 
+// Race (PIP-671, approved draft "Gomme" 30/10): a square 360px panel with a 3px green-grey frame
+// that turns amber while the car is damaged; the yellow flag frame covers the whole outline (weather
+// strip included), for the tyres and the Damage pages alike. The panel hugs its content: the rest of
+// the window stays transparent.
 .hud-overlay__panel--race {
+  --hud-frame: #57766d;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  width: calc(360px * var(--hud-scale));
   padding: 0;
+  @include hud-cut-corner(0px, 0px, calc(3px * var(--hud-scale)), var(--hud-frame), 'hud-overlay__panel--yellow-flag', calc(4px * var(--hud-scale)));
 }
+.hud-overlay__panel--race:has(.tyre-race--damaged) { --hud-frame: #{$hud-caution}; }
 
+// The draft is drawn at native px; the whole Race content is zoomed by the HUD scale, and the
+// components inside it read --hud-scale as 1.
 .race-hud {
   position: relative;
   display: flex;
-  flex: 1;
+  flex-direction: column;
   min-width: 0;
-  min-height: 0;
-  padding: calc(8px * var(--hud-scale));
-  border: calc(2px * var(--hud-scale)) solid transparent;
+  padding: 3px;
   box-sizing: border-box;
-}
-
-// Yellow flag (third round 28/10): a 4px frame (at scale 1, scaling with the HUD) on the
-// whole outer panel, for Classic and Race (tyres and Damage pages, weather strip included).
-// Drawn by an overlay above the content, so nothing moves and nothing covers it.
-.hud-overlay__panel--yellow-flag::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 15;
-  border: calc(4px * var(--hud-scale)) solid #ffd400;
-  border-radius: inherit;
-  pointer-events: none;
+  zoom: var(--hud-scale);
+  > * { --hud-scale: 1; }
 }
 
 .race-hud__switcher { position:absolute; top:calc(7px * var(--hud-scale)); right:calc(7px * var(--hud-scale)); z-index:20; display:flex; overflow:hidden; border:1px solid #666; border-radius:999px; background:#050608; opacity:0; transition:opacity 120ms ease; -webkit-app-region:no-drag; }

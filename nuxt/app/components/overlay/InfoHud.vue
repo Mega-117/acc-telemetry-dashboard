@@ -16,9 +16,9 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
 </script>
 
 <template>
-  <!-- Info style A (28/10): only the top-right corner is cut (owner), centre-out Delta bar,
-       LABEL ... value rows. Times use fixed-width digit slots so ticking values never jitter;
-       words such as Clear or Optimum render as plain text through the same component. -->
+  <!-- Info (PIP-671, approved draft "Info" 30/10): 300px, only the top-right corner cut (the
+       bottom-left one stays at 90°), centre-out Delta bar, large LABEL ... value rows; a warning
+       row takes the caution band. Ticking values never move (tabular figures). -->
   <section
     class="info-hud"
     :class="{ 'info-hud--yellow-flag': model.yellowFlagActive }"
@@ -26,8 +26,6 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
   >
     <!-- Background transparency acts on this layer only, never on the content. -->
     <HudOverlayBackground :opacity="backgroundOpacity" />
-    <!-- clip-path removes the border on the cut: this line draws it back. -->
-    <i class="info-hud__cut" aria-hidden="true" />
     <div
       v-if="model.delta.visible"
       class="info-delta"
@@ -44,7 +42,7 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
         v-for="row in model.rows"
         :key="row.id"
         class="info-row"
-        :class="`info-row--${row.tone}`"
+        :class="[`info-row--${row.tone}`, { 'info-row--caution': row.caution }]"
       >
         <dt>{{ infoRowLabel(row.label) }}</dt>
         <dd><HudFixedDigits :value="rowValue(row)" /></dd>
@@ -53,24 +51,22 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
   </section>
 </template>
 
-<style scoped>
+<style scoped lang="scss">
+@use '~/assets/scss/hud-cut-corner' as *;
+@use '~/assets/scss/hud-gauge' as *;
+
 .info-hud {
-  --info-cut: 14px;
-  --info-line: rgba(255, 255, 255, 0.18);
-  position: relative;
   box-sizing: border-box;
   display: grid;
   gap: 8px;
-  width: 344px;
+  width: 300px;
   height: auto;
-  padding: 14px 16px;
-  overflow: visible;
-  border: 1px solid var(--info-line);
-  border-radius: 0;
-  color: #f4f4f6;
+  // Draft: 12px inside a 3px frame.
+  padding: 15px;
+  color: #f4f6f8;
   background: transparent;
-  font-family: var(--hud-font-label);
-  clip-path: polygon(0 0, calc(100% - var(--info-cut)) 0, 100% var(--info-cut), 100% 100%, 0 100%);
+  @include hud-gauge-type;
+  @include hud-cut-corner(0px, 14px, 3px, rgba(255, 255, 255, 0.18), 'info-hud--yellow-flag', 4px);
 }
 
 .info-hud > :not(.hud-overlay-background) {
@@ -78,39 +74,9 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
   z-index: 1;
 }
 
-/* The diagonal border line on the cut, placed on the border-box diagonal (absolute boxes start
-   inside the 1px border) and rotated so its thickness falls inside the clip shape. */
-.info-hud > .info-hud__cut {
-  position: absolute;
-  z-index: 3;
-  top: -1px;
-  left: calc(100% + 1px - var(--info-cut));
-  width: calc(var(--info-cut) * 1.4142);
-  height: 1px;
-  background: var(--info-line);
-  transform: rotate(45deg);
-  transform-origin: 0 0;
-  pointer-events: none;
-}
-
-/* Yellow flag (owner 28/10): the same frame as the tyres HUD, 4px at native size on the OUTER edge
-   (it covers the 1px border), drawn above the content so nothing moves. The page scales the whole
-   canvas by transform, so 4px here scales with the HUD like the tyres frame. The cut gets the same
-   4px line, so the frame follows the diagonal. */
-.info-hud--yellow-flag::after {
-  position: absolute;
-  z-index: 2;
-  inset: -1px;
-  border: 4px solid #ffd400;
-  content: '';
-  pointer-events: none;
-}
-
-.info-hud--yellow-flag > .info-hud__cut { height: 4px; background: #ffd400; }
-
 .info-delta {
   position: relative;
-  height: 44px;
+  height: 64px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
@@ -139,7 +105,7 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
   transform: translateX(-1px);
 }
 .info-delta--negative .info-delta__bar i { background: #9acd32; }
-.info-delta--positive .info-delta__bar i { background: #ff0000; }
+.info-delta--positive .info-delta__bar i { background: #ef4444; }
 .info-delta--purple .info-delta__bar i { background: #b600b6; }
 
 .info-delta strong {
@@ -148,7 +114,7 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
   display: grid;
   height: 100%;
   place-items: center;
-  font: italic 700 30px/1 var(--hud-font-num);
+  font: 800 48px/1 var(--hud-gauge-num);
   text-shadow: 0 0 4px #000;
 }
 
@@ -160,22 +126,22 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
 
 .info-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 14px;
+  min-height: 43px;
+  box-sizing: border-box;
   padding: 5px 2px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* Readability at the minimum size (owner, 28/10): labels bold, bright and ~85% of the value size.
-   The page scales the whole canvas by transform, so a floor of N rendered px is N / --hud-scale here:
-   labels never render below 12px, values never below 14px (at 0.6: 20px and 23.33px before scaling).
-   Owner (28/10): labels take the text style of the Standings session type ("RACE",
-   .standings-header__session): italic 700 numbers font, 0.04em, uppercase, #a3a5ae; size unchanged. */
+/* Readability at the minimum size (owner, 28/10): the page scales the whole canvas by transform, so
+   a floor of N rendered px is N / --hud-scale here: labels never render below 12px, values never
+   below 14px. Draft sizes at scale 1: labels 20px, values 27px. */
 .info-row dt {
-  color: #a3a5ae;
-  font: italic 700 max(17px, calc(12px / var(--hud-scale, 1)))/1.2 var(--hud-font-num);
-  letter-spacing: 0.04em;
+  color: #c5ced7;
+  font: 700 max(20px, calc(12px / var(--hud-scale, 1)))/1.2 var(--hud-gauge-num);
+  letter-spacing: 0;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -185,9 +151,7 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
   margin: 0;
   overflow: hidden;
   white-space: nowrap;
-  font: italic 700 max(20px, calc(14px / var(--hud-scale, 1)))/1 var(--hud-font-num);
-  font-variant-numeric: tabular-nums;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
+  font: 700 max(27px, calc(14px / var(--hud-scale, 1)))/1 var(--hud-gauge-num);
 }
 
 .info-row--green dd { color: #9acd32; }
@@ -195,4 +159,17 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
 .info-row--orange dd { color: #ff9d00; }
 .info-row--red dd { color: #ef4444; }
 .info-row--purple dd { color: #d946ef; }
+
+/* Draft caution row: dark amber band, amber left edge, label and value in the warning colour
+   (amber; orange or red when the existing tone is stronger). */
+.info-row--caution {
+  --caution: #{$hud-caution};
+  padding: 5px 6px;
+  border-left: 3px solid var(--caution);
+  background: $hud-caution-bg;
+  dt,
+  dd { color: var(--caution); }
+}
+.info-row--caution.info-row--orange { --caution: #ff9d00; }
+.info-row--caution.info-row--red { --caution: #ef4444; }
 </style>
