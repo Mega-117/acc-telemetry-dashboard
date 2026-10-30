@@ -16,6 +16,11 @@
   // italic only), labels in a condensed stack. Overlays never load remote fonts.
   --hud-font-num: 'Racer Display', 'Arial Narrow', sans-serif;
   --hud-font-label: 'Barlow Condensed', 'Arial Narrow', 'Roboto Condensed', sans-serif;
+  // PIP-671 (approved drafts 30/10): Dashboard, Info, Tyres and Sectors use the drafts' upright
+  // Barlow Semi Condensed (numbers, labels) and Barlow Condensed (small tags), bundled locally
+  // under their own family names so Standings and the minimap keep their current faces.
+  --hud-gauge-num: 'Racer Gauge', 'Arial Narrow', sans-serif;
+  --hud-gauge-label: 'Racer Gauge Label', 'Arial Narrow', sans-serif;
 }
 // PIP-639: on short screens (landscape tablets, phones on their side) the page starts closer to the tabs.
 @media (max-height: 780px) { :root { --app-content-top-space: 16px; } }
@@ -29,6 +34,19 @@
 @font-face {
   font-family: 'Racer Display'; src: url('../fonts/ChakraPetch-BoldItalic.woff2') format('woff2');
   font-weight: 700; font-style: italic; font-display: swap;
+}
+// Barlow (SIL OFL 1.1, fonts/Barlow-OFL.txt), extracted unchanged from the approved HUD drafts.
+@font-face {
+  font-family: 'Racer Gauge'; src: url('../fonts/BarlowSemiCondensed-Bold.woff2') format('woff2');
+  font-weight: 700; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: 'Racer Gauge'; src: url('../fonts/BarlowSemiCondensed-ExtraBold.woff2') format('woff2');
+  font-weight: 800; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: 'Racer Gauge Label'; src: url('../fonts/BarlowCondensed-Bold.woff2') format('woff2');
+  font-weight: 700; font-style: normal; font-display: block;
 }
 .racing-button {
   position: relative;
