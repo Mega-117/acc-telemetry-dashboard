@@ -1,3 +1,5 @@
+@use 'sass:list';
+
 // HUD panel outline (PIP-671, approved drafts 30/10): square corners, optionally the top-left
 // and/or the top-right corner cut at 45°. Used by Dashboard, Info, Sectors and Tyres.
 //
@@ -7,7 +9,9 @@
 //   second ring (::after), each one element whose clip-path is the panel outline minus the same
 //   outline inset by the ring width (even-odd polygon). The ring therefore runs unbroken along
 //   every edge AND along the cuts, with the same width everywhere and clean joins, at any scale.
-// - The yellow frame (#ffd400) sits above the content, so showing it moves nothing.
+// - The yellow frame (#ffd400) sits above the content, so showing it moves nothing. Owner (30/10):
+//   it must never cover the content, so every panel keeps at least $hud-flag-width of inner margin
+//   at any scale: the band is invisible until the flag turns it solid yellow.
 //
 // $left-cut     size of the top-left cut (0px = square corner)
 // $right-cut    size of the top-right cut (0px = square corner)
@@ -48,7 +52,7 @@ $hud-flag-width: calc(3 * var(--hud-frame-unit, 1px));
 @function hud-ring($left-cut, $right-cut, $width) {
   $outer: hud-outline($left-cut, $right-cut, 0px);
   $inner: hud-outline($left-cut, $right-cut, $width);
-  @return polygon(evenodd, #{$outer}, #{nth($outer, 1)}, #{$inner}, #{nth($inner, 1)});
+  @return polygon(evenodd, #{$outer}, #{list.nth($outer, 1)}, #{$inner}, #{list.nth($inner, 1)});
 }
 
 @mixin hud-cut-corner($left-cut, $right-cut, $width, $color, $flag-class, $flag-width) {

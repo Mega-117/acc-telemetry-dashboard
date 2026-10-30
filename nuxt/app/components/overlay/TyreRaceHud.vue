@@ -60,7 +60,6 @@ const damageTime = computed(() => {
   const damage = hasPhysics.value ? raceDamageSummary(props.fastState.damage) : null
   return damage ? raceDamageZoneTime(damage.totalMs, 1).replace(/^0:/, '') : null
 })
-const engineOff = computed(() => hasPhysics.value && props.fastState.isEngineRunning === false)
 const limiterOn = computed(() => hasPhysics.value && props.fastState.pitLimiterOn === true)
 const AVERAGE_LABEL = "Pressione media dell'ultimo giro concluso"
 function valueText(tyre: typeof tyres.value[number], kind: RaceTyreValueKind) {
@@ -108,11 +107,11 @@ const { t } = useI18n()
             </div>
           </div>
           <!-- One reading per axle on the wheel centre line: hottest brake, lowest pad life above
-               (front) or below (rear). The ENGINE OFF / LIMITER ON boxes sit on the same spot. -->
+               (front) or below (rear). The LIMITER ON box sits on the same spot (owner 30/10: no
+               ENGINE OFF box on the tyres page). -->
           <div class="tyre-race__axle-brake" :class="`tyre-race__axle-brake--${axle.id}`">
             <span class="tyre-race__brake-temp">{{ raceNumber(axle.brakeTempC) }}&#176;</span>
             <small class="tyre-race__pad">{{ raceNumber(axle.padLifePct) }}%</small>
-            <strong v-if="!axle.rear && engineOff" class="tyre-race__status tyre-race__engine-off">ENGINE<br>OFF</strong>
             <strong v-if="axle.rear && limiterOn" class="tyre-race__status tyre-race__limiter">LIMITER<br>ON</strong>
           </div>
         </div>
@@ -253,7 +252,7 @@ $wheel-height: 112px;
 .tyre-race__axle--front .tyre-race__pad { bottom: calc(50% + 24px); }
 .tyre-race__axle--rear .tyre-race__pad { top: calc(50% + 24px); }
 
-// ENGINE OFF (red, pulsing) and LIMITER ON (blue) boxes on the axle centre, square corners.
+// LIMITER ON (blue) box on the rear axle centre, square corners.
 .tyre-race__status {
   position: absolute;
   z-index: 2;
@@ -268,7 +267,6 @@ $wheel-height: 112px;
   font: 800 17px/1.05 var(--hud-gauge-num);
   text-align: center;
 }
-.tyre-race__engine-off { background: rgba(255, 0, 0, 0.7); animation: race-engine-pulse 0.8s linear infinite; }
 .tyre-race__limiter { background: #0000ff; }
 
 // Middle line: compound and set centred, damage (repair time) on the right.
@@ -305,6 +303,4 @@ $wheel-height: 112px;
   font: 800 28px/1 var(--hud-gauge-num);
 }
 
-@keyframes race-engine-pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .tyre-race__engine-off { animation: none; } }
 </style>

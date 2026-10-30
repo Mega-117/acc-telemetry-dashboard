@@ -25,7 +25,9 @@ describe('shared HUD outline mixin', () => {
   it('draws the frame and the yellow flag frame as even-odd rings along the whole outline', () => {
     // Both loops closed explicitly, so the bridge between them has no area and never cuts a wedge
     // out of the left edge (owner 30/10: the frame faded in the middle of the left side).
-    expect(mixin()).toContain('@return polygon(evenodd, #{$outer}, #{nth($outer, 1)}, #{$inner}, #{nth($inner, 1)});')
+    expect(mixin()).toContain('@return polygon(evenodd, #{$outer}, #{list.nth($outer, 1)}, #{$inner}, #{list.nth($inner, 1)});')
+    // Dart Sass 3 removes the global built-ins: the module form avoids the dev server warning.
+    expect(mixin()).toContain("@use 'sass:list';")
     expect(mixin()).toMatch(/&::before \{[^}]*z-index: 14;[^}]*background: \$color;[^}]*clip-path: hud-ring\(\$left-cut, \$right-cut, \$width\);/)
     expect(mixin()).toMatch(/&\.#\{\$flag-class\}::after \{[^}]*z-index: 15;[^}]*background: #ffd400;[^}]*clip-path: hud-ring\(\$left-cut, \$right-cut, \$flag-width\);/)
     // No separate line on the cut any more.
@@ -67,8 +69,12 @@ describe('draft shapes per HUD', () => {
     expect(page).toContain("@include hud-cut-corner(0px, 0px, var(--hud-frame-width), var(--hud-frame), 'hud-overlay__panel--yellow-flag', $hud-flag-width);")
     // Owner (30/10): damage colours only the middle strip lines, never the panel frame.
     expect(page).not.toContain(':has(.tyre-race--damaged)')
-    // Owner (30/10): the tyres page is as tall as the Damage page, so switching never resizes.
-    expect(page).toContain('height: 660px;')
+    // Owner (30/10): the tyres page is as tall as the Damage page, so switching never resizes; the
+    // 3 screen px band for the yellow flag frame is kept free of content at any scale.
+    expect(page).toContain('--race-hud-band: calc(3px / var(--hud-scale));')
+    expect(page).toContain('height: calc(654px + 2 * var(--race-hud-band));')
+    expect(page).toContain('padding: var(--race-hud-band);')
+    expect(page).toContain('.hud-overlay:has(.hud-overlay__panel--race) { padding: calc(6px * var(--hud-scale)); }')
     expect(page).toContain('--hud-frame: #{$hud-hairline-color};')
     expect(page).toContain("@include hud-cut-corner(0px, calc(14px * var(--hud-scale)), $hud-hairline-width, $hud-hairline-color, 'hud-overlay__panel--yellow-flag', $hud-flag-width);")
     // Style guide (28/10): the four Classic tiles are flat, with no cut of their own.

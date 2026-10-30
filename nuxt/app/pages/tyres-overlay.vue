@@ -132,6 +132,10 @@ const { t } = useI18n()
   color: #f4f8ff;
 }
 
+// Race: the floating margin scales with the HUD like the window (native size x scale), so the
+// panel is never cut at the bottom below scale 1 (30/10).
+.hud-overlay:has(.hud-overlay__panel--race) { padding: calc(6px * var(--hud-scale)); }
+
 // Fuori da Electron (browser/Playwright): sfondo scuro per poter testare.
 .hud-overlay--web { background: #0d0d12; }
 
@@ -160,10 +164,10 @@ const { t } = useI18n()
   @include hud-cut-corner(0px, calc(14px * var(--hud-scale)), $hud-hairline-width, $hud-hairline-color, 'hud-overlay__panel--yellow-flag', $hud-flag-width);
 }
 
-// Race (PIP-671, approved draft "Gomme" 30/10): a square 360px panel with the hairline frame (owner
-// 30/10: damage only colours the two lines of the middle strip, never the frame); the yellow flag frame covers the whole outline (weather
-// strip included), for the tyres and the Damage pages alike. The panel hugs its content: the rest of
-// the window stays transparent.
+// Race (PIP-671, approved draft "Gomme" 30/10): a square panel with the hairline frame (owner 30/10:
+// damage only colours the two lines of the middle strip, never the frame); the yellow flag frame
+// runs along the whole outline on the reserved band of .race-hud, for the tyres and the Damage pages
+// alike. The panel hugs its content: the rest of the window stays transparent.
 .hud-overlay__panel--race {
   --hud-frame: #{$hud-hairline-color};
   --hud-frame-width: #{$hud-hairline-width};
@@ -186,9 +190,12 @@ const { t } = useI18n()
   flex-direction: column;
   min-width: 0;
   // Owner (30/10): the tyres and Damage pages have the same height, the tyres one (its content):
-  // switching page never resizes the panel; the Damage drawing fits inside it.
-  height: 660px;
-  padding: 3px;
+  // switching page never resizes the panel; the Damage drawing fits inside it. The padding is 3
+  // screen pixels at any scale (zoom multiplies it by the scale): the yellow flag frame lies on
+  // that band and never covers the content. The 654px of content are added to it.
+  --race-hud-band: calc(3px / var(--hud-scale));
+  height: calc(654px + 2 * var(--race-hud-band));
+  padding: var(--race-hud-band);
   box-sizing: border-box;
   zoom: var(--hud-scale);
   > * { --hud-scale: 1; }

@@ -164,12 +164,13 @@ describe('Race HUD components', () => {
     expect(html).not.toContain('AVG 28.5')
   })
 
-  it('motore spento e limiter sugli assi; un freno per asse: il piu caldo e la pastiglia piu bassa', async () => {
+  it('limiter sull asse posteriore, niente ENGINE OFF; un freno per asse: il piu caldo e la pastiglia piu bassa', async () => {
     const state = { ...fastState(), isEngineRunning: false, pitLimiterOn: true }
     const html = await renderRace(state)
     const front = html.slice(html.indexOf('tyre-race__axle-brake--front'), html.indexOf('class="tyre-race__compound"'))
     const rear = html.slice(html.indexOf('tyre-race__axle-brake--rear'))
-    expect(front).toContain('tyre-race__engine-off')
+    // Owner (30/10): the tyres page shows no ENGINE OFF box.
+    expect(html).not.toContain('ENGINE')
     expect(rear).toContain('tyre-race__limiter')
     expect(html.match(/tyre-race__brake-temp/g)).toHaveLength(2)
     // Approved draft (30/10): hottest brake and lowest pad of the axle, not an average.
