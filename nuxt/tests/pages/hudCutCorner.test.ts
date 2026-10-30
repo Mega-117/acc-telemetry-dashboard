@@ -21,7 +21,8 @@ describe('shared HUD outline mixin', () => {
     expect(mixin()).toContain('$l: hud-cut-end($left-cut, $inset);')
     expect(mixin()).toContain('$r: hud-cut-end($right-cut, $inset);')
     // A square corner insets to (w, w): no self-crossing inner outline, no hole in the frame corner.
-    expect(mixin()).toMatch(/@if \$cut == 0px \{\s*@return calc\(#\{\$inset\}\);/)
+    // Sass: 0 == 0px is false, so a unitless 0 is matched explicitly.
+    expect(mixin()).toMatch(/@if \$cut == 0 or \$cut == 0px \{\s*@return calc\(#\{\$inset\}\);/)
     expect(mixin()).toContain('overflow: visible;')
   })
 

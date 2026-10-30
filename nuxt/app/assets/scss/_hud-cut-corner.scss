@@ -22,10 +22,10 @@
 
 // Outline of the panel inset by $inset; with $inset 0 it is the panel outline itself. A 45° cut of
 // size c inset by w moves its two ends by w * (√2 - 1) = w * 0.4142 along the edges. A square
-// corner (c = 0) has no cut to move: its inset corner is simply (w, w), otherwise the inner outline
+// corner (c = 0, with or without px) has no cut to move: its inset corner is simply (w, w), otherwise the inner outline
 // crosses itself and the ring loses a small triangle at that corner.
 @function hud-cut-end($cut, $inset) {
-  @if $cut == 0px {
+  @if $cut == 0 or $cut == 0px {
     @return calc(#{$inset});
   }
   @return calc(#{$cut} + #{$inset} * 0.4142);
