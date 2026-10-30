@@ -173,10 +173,7 @@ const { t } = useI18n()
   --hud-frame-width: #{$hud-hairline-width};
   flex: 0 0 auto;
   align-self: flex-start;
-  // Owner (30/10): 404 (draft 360) for the wider slip and brake bars, and the Racer Core face
-  // (upright Chakra Petch Bold, as on the Dashboard) for every number and label.
-  --hud-gauge-num: 'Racer Display Upright', 'Arial Narrow', sans-serif;
-  --hud-gauge-label: 'Racer Display Upright', 'Arial Narrow', sans-serif;
+  // Owner (30/10): 404 (draft 360) for the wider slip and brake bars.
   width: round(calc(404px * var(--hud-scale)), 1px);
   padding: 0;
   @include hud-cut-corner(0px, 0px, var(--hud-frame-width), var(--hud-frame), 'hud-overlay__panel--yellow-flag', $hud-flag-width);

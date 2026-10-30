@@ -16,11 +16,11 @@
   // italic only), labels in a condensed stack. Overlays never load remote fonts.
   --hud-font-num: 'Racer Display', 'Arial Narrow', sans-serif;
   --hud-font-label: 'Barlow Condensed', 'Arial Narrow', 'Roboto Condensed', sans-serif;
-  // PIP-671 (approved drafts 30/10): Dashboard, Info, Tyres and Sectors use the drafts' upright
-  // Barlow Semi Condensed (numbers, labels) and Barlow Condensed (small tags), bundled locally
-  // under their own family names so Standings and the minimap keep their current faces.
-  --hud-gauge-num: 'Racer Gauge', 'Arial Narrow', sans-serif;
-  --hud-gauge-label: 'Racer Gauge Label', 'Arial Narrow', sans-serif;
+  // PIP-671: Dashboard, Info, Tyres and Sectors use the Racer Core button face, upright (owner
+  // 30/10, in place of the drafts' Barlow), for numbers and labels alike. Own family name, so
+  // Standings and the minimap keep their current faces.
+  --hud-gauge-num: 'Racer Display Upright', 'Arial Narrow', sans-serif;
+  --hud-gauge-label: 'Racer Display Upright', 'Arial Narrow', sans-serif;
 }
 // PIP-639: on short screens (landscape tablets, phones on their side) the page starts closer to the tabs.
 @media (max-height: 780px) { :root { --app-content-top-space: 16px; } }
@@ -36,8 +36,8 @@
   font-weight: 700; font-style: italic; font-display: swap;
 }
 // Upright Chakra Petch Bold (SIL OFL 1.1, fonts/ChakraPetch-OFL.txt, from the Google Fonts
-// repository): the Racer Core button face without the italic, owner trial on the Dashboard HUD
-// (30/10). Bold is the heaviest Chakra Petch: the Dashboard's 700 and 800 both use it.
+// repository): the Racer Core button face without the italic, the HUD face since 30/10. Bold is
+// the heaviest Chakra Petch: the HUDs' 700 and 800 both use it.
 @font-face {
   font-family: 'Racer Display Upright'; src: url('../fonts/ChakraPetch-Bold.woff2') format('woff2');
   font-weight: 700 800; font-style: normal; font-display: block;
