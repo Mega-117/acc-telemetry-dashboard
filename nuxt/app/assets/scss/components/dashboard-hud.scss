@@ -25,9 +25,6 @@ $dash-caution-bg: $hud-caution-bg;
   --hud-gauge-label: 'Racer Display Upright', 'Arial Narrow', sans-serif;
   font-family: var(--hud-gauge-num);
   line-height: 1;
-  // Owner (30/10): heavier than Chakra Petch Bold, its heaviest weight: a stroke in the text colour
-  // thickens every glyph in proportion to its size.
-  &, * { -webkit-text-stroke: 0.035em currentColor; }
   // Both top corners cut (14px), hairline frame; the yellow flag frame follows the whole outline.
   @include hud-cut-corner(14px, 14px, $hud-hairline-width, $hud-hairline-color, 'dash-hud--yellow-flag', 4px);
 
