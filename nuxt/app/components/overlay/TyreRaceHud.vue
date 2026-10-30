@@ -2,15 +2,24 @@
 import { useI18n } from '~/i18n'
 import { hudSourcePolicy } from '~/services/sim/hudSourceAdapter'
 
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { FastOverlayState, FastStateTyre } from '~/composables/useFastStatePoller'
 import { tyreTemperatureColor, tyreTemperatureOverheated, temperatureTargetColor } from '~/utils/tyreTemperaturePresentation'
 import { brakeTemperatureColor } from '~/utils/brakeTemperaturePresentation'
 import { raceSlipFill, raceNumber, racePressureFlash, raceAxleBrake, raceTyreValueOrder, type RaceTyreValueKind } from '~/utils/raceTyrePresentation'
 import { raceDamageSummary, raceDamageZoneTime } from '~/utils/raceDamagePresentation'
 import RaceWeatherHud from './RaceWeatherHud.vue'
+import HudFixedDigits from './HudFixedDigits.vue'
 
 const props = defineProps<{ fastState: FastOverlayState }>()
+// The pressure warning lasts 2 s from its event. While one is shown a 250 ms clock keeps the
+// computed fresh, so the warning also expires when telemetry stops sending new frames.
+const clockMs = ref(Date.now())
+let clockTimer: ReturnType<typeof setInterval> | null = null
+function stopClock() {
+  if (clockTimer) clearInterval(clockTimer)
+  clockTimer = null
+}
 const ids = ['FL', 'FR', 'RL', 'RR'] as const
 const hasPhysics = computed(() => props.fastState.isFresh && props.fastState.isLive && props.fastState.dataSource !== 'focused')
 const hasCompoundTyrePolicy = computed(() => hudSourcePolicy(props.fastState).compoundTyreBands)
@@ -28,7 +37,7 @@ const tyres = computed(() => ids.map((id, index) => {
   const slip = hasCompoundTyrePolicy.value ? raceSlipFill(tyre.wheelSlipRaw ?? tyre.wheelSlip) : { ratio: 0, color: '#6b7280' }
   // Existing alarms in the draft's caution look: the pressure-drop event (2 s, the former red
   // flash) and a tyre in the top band of the ACC Drive temperature scale.
-  const pressureWarning = hasPhysics.value && racePressureFlash(tyre, Date.now()) !== null
+  const pressureWarning = hasPhysics.value && racePressureFlash(tyre, Math.max(clockMs.value, Date.now())) !== null
   const temperatureWarning = hasPhysics.value && hasCompoundTyrePolicy.value
     && tyreTemperatureOverheated(tyre.coreTempC, compoundKind.value)
   return {
@@ -45,6 +54,11 @@ const tyres = computed(() => ids.map((id, index) => {
     temperatureWarning,
   }
 }))
+watch(() => tyres.value.some(tyre => tyre.pressureWarning), active => {
+  if (!active) return stopClock()
+  if (!clockTimer) clockTimer = setInterval(() => { clockMs.value = Date.now() }, 250)
+}, { immediate: true })
+onBeforeUnmount(stopClock)
 const axles = computed(() => [false, true].map(rear => ({
   id: rear ? 'rear' : 'front',
   rear,
@@ -60,6 +74,9 @@ const damageTime = computed(() => {
   const damage = hasPhysics.value ? raceDamageSummary(props.fastState.damage) : null
   return damage ? raceDamageZoneTime(damage.totalMs, 1).replace(/^0:/, '') : null
 })
+// Over a minute (m:ss.s) the colon already says it is a time: no " s" and a smaller size, so it
+// stays inside its column beside a two-digit tyre set.
+const damageLong = computed(() => damageTime.value?.includes(':') === true)
 const limiterOn = computed(() => hasPhysics.value && props.fastState.pitLimiterOn === true)
 const AVERAGE_LABEL = "Pressione media dell'ultimo giro concluso"
 function valueText(tyre: typeof tyres.value[number], kind: RaceTyreValueKind) {
@@ -98,11 +115,11 @@ const { t } = useI18n()
                 :key="kind"
                 :class="`tyre-race__${kind}`"
                 :aria-label="kind === 'average' ? AVERAGE_LABEL : undefined"
-              ><template v-if="kind === 'average'">AVG </template>{{ valueText(tyre, kind) }}</span>
+              ><template v-if="kind === 'average'">AVG </template><HudFixedDigits :value="valueText(tyre, kind)" /></span>
             </div>
             <div class="tyre-race__hardware">
               <i class="tyre-race__slip"><b :style="{ height: `${tyre.slip.ratio * 100}%`, background: tyre.slip.color }" /></i>
-              <span class="tyre-race__tyre" :style="{ '--t': tyre.color }"><span class="tyre-race__temperature">{{ raceNumber(tyre.coreTempC) }}&#176;</span></span>
+              <span class="tyre-race__tyre" :style="{ '--t': tyre.color }"><span class="tyre-race__temperature"><HudFixedDigits :value="raceNumber(tyre.coreTempC)" />&#176;</span></span>
               <i class="tyre-race__brake" :class="`tyre-race__brake--${tyre.rear ? 'rear' : 'front'}`" :style="{ background: tyre.brakeColor }" />
             </div>
           </div>
@@ -110,14 +127,14 @@ const { t } = useI18n()
                (front) or below (rear). The LIMITER ON box sits on the same spot (owner 30/10: no
                ENGINE OFF box on the tyres page). -->
           <div class="tyre-race__axle-brake" :class="`tyre-race__axle-brake--${axle.id}`">
-            <span class="tyre-race__brake-temp">{{ raceNumber(axle.brakeTempC) }}&#176;</span>
-            <small class="tyre-race__pad">{{ raceNumber(axle.padLifePct) }}%</small>
+            <span class="tyre-race__brake-temp"><HudFixedDigits :value="raceNumber(axle.brakeTempC)" />&#176;</span>
+            <small class="tyre-race__pad"><HudFixedDigits :value="raceNumber(axle.padLifePct)" />%</small>
             <strong v-if="axle.rear && limiterOn" class="tyre-race__status tyre-race__limiter">LIMITER<br>ON</strong>
           </div>
         </div>
         <div v-if="!axle.rear" class="tyre-race__compound">
           <span class="tyre-race__compound-set">{{ compound }} · {{ t('overlays.tyreRace.set') }} {{ tyreSet }}</span>
-          <strong v-if="damageTime" class="tyre-race__damage" :aria-label="`${t('overlays.tyreRace.damage')} ${damageTime} s`"><span aria-hidden="true">&#9888;</span>{{ damageTime }} s</strong>
+          <strong v-if="damageTime" class="tyre-race__damage" :class="{ 'tyre-race__damage--long': damageLong }" :aria-label="`${t('overlays.tyreRace.damage')} ${damageTime} s`"><span aria-hidden="true">&#9888;</span>{{ damageTime }}<template v-if="!damageLong"> s</template></strong>
         </div>
       </template>
       <div v-if="unavailable" class="tyre-race__unavailable">
@@ -274,7 +291,7 @@ $wheel-height: 112px;
 // Middle line: compound and set centred, damage (repair time) on the right.
 .tyre-race__compound {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 170px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(170px, auto) minmax(0, 1fr);
   align-items: center;
   box-sizing: border-box;
   height: 52px;
@@ -293,6 +310,7 @@ $wheel-height: 112px;
   white-space: nowrap;
   span { font: 22px/1 Arial, sans-serif; }
 }
+.tyre-race__damage--long { font-size: 22px; span { font-size: 18px; } }
 .tyre-race--damaged .tyre-race__compound { border-color: $hud-caution; }
 
 .tyre-race__unavailable {

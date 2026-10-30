@@ -616,3 +616,15 @@ describe('sectors second round (28/10)', () => {
     expect(page).toContain(':lap-delta-ms="lapDeltaMs"')
   })
 })
+
+describe('compact long values (Codex review 30/10)', () => {
+  it('a sector over 100 s and a delta of 100 s or more step down one size instead of being clipped', async () => {
+    const long = { ...entry(2), currentMs: 200_000, referenceMs: 100_000, deltaMs: 100_000, color: 'red' as const }
+    const html = await renderHud({ variant: 'compact', sectorHud: { ...sectorHud, sectors: [entry(1), long, entry(3)] } })
+    expect(html.match(/sector-compact__time-value--long/g)).toHaveLength(1)
+    expect(html.match(/sector-compact__delta--long/g)).toHaveLength(1)
+    const source = readFileSync(resolve(process.cwd(), 'app/components/overlay/SectorDeltaHud.vue'), 'utf8')
+    expect(source).toContain('.sector-compact__row .sector-compact__time > .sector-compact__time-value--long { font-size: 26px; }')
+    expect(source).toContain('.sector-compact__row .sector-compact__delta.sector-compact__delta--long { font-size: 30px; }')
+  })
+})

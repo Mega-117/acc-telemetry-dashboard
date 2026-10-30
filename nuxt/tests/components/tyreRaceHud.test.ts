@@ -45,10 +45,16 @@ async function renderClassic(state: unknown) {
     .replace(/<small[^>]*>([^<]*)<\/small>/g, '$1')
 }
 
-// PIP-671: HTML readings; drop the SSR fragment comments to read the lines as the pilot does.
-async function renderRace(state: unknown) {
+// PIP-671: HTML readings; drop the SSR fragment comments and the fixed-width digit slots to read
+// the lines as the pilot does (renderRaceRaw keeps the slots).
+async function renderRaceRaw(state: unknown) {
   const html = await renderToString(createSSRApp(TyreRaceHud, { fastState: state }))
   return html.replace(/<!--[\s\S]*?-->/g, '')
+}
+async function renderRace(state: unknown) {
+  return (await renderRaceRaw(state))
+    .replace(/<span class="hud-fixed-digits__glyph"[^>]*>([^<]*)<\/span>/g, '$1')
+    .replace(/<span class="hud-fixed-digits"[^>]*>([^<]*)<\/span>/g, '$1')
 }
 
 describe('Race HUD components', () => {
@@ -322,5 +328,33 @@ describe('Race slip bars (owner 30/10)', () => {
   it('the slip fill glides to each 20 Hz sample over 50 ms instead of jumping', () => {
     const race = readFileSync(resolve(process.cwd(), 'app/components/overlay/TyreRaceHud.vue'), 'utf8')
     expect(race).toContain('b { position: absolute; right: 0; bottom: 0; left: 0; display: block; transition: height 50ms linear; }')
+  })
+})
+
+describe('Codex review fixes (30/10)', () => {
+  it('live tyre numbers sit in fixed-width slots, so 27.0 -> 27.1 never shifts the reading', async () => {
+    const html = await renderRaceRaw(fastState())
+    for (const value of ['23.2', '76', '568', '91']) {
+      expect(html).toContain(`class="hud-fixed-digits" aria-label="${value}"`)
+    }
+    expect(await renderRace(fastState())).toContain('AVG 23.1')
+  })
+
+  it('a repair time over a minute drops the " s" and steps down, staying beside a two-digit set', async () => {
+    const long = await renderRace({ ...fastState(), currentTyreSet: 12, damage: { ...fastState().damage, totalRepairTimeMs: 150_000 } })
+    expect(long).toContain('tyre-race__damage--long')
+    expect(long).toMatch(/<\/span>2:30\.0<\/strong>/)
+    const short = await renderRace(fastState())
+    expect(short).not.toContain('tyre-race__damage--long')
+    expect(short).toMatch(/<\/span>37\.9 s<\/strong>/)
+    const source = readFileSync(resolve(process.cwd(), 'app/components/overlay/TyreRaceHud.vue'), 'utf8')
+    expect(source).toContain('grid-template-columns: minmax(0, 1fr) minmax(170px, auto) minmax(0, 1fr);')
+  })
+
+  it('the 2 s pressure warning expires on its own clock, also when frames stop', () => {
+    const source = readFileSync(resolve(process.cwd(), 'app/components/overlay/TyreRaceHud.vue'), 'utf8')
+    expect(source).toContain('racePressureFlash(tyre, Math.max(clockMs.value, Date.now())) !== null')
+    expect(source).toContain('clockTimer = setInterval(() => { clockMs.value = Date.now() }, 250)')
+    expect(source).toContain('onBeforeUnmount(stopClock)')
   })
 })

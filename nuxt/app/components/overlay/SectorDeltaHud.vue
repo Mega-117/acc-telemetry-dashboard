@@ -215,7 +215,10 @@ const { t } = useI18n()
           </strong>
           <small
             class="sector-compact__delta"
-            :class="{ 'sector-delta__delta--placeholder': sector.state !== 'complete' || sector.deltaMs === null }"
+            :class="{
+              'sector-delta__delta--placeholder': sector.state !== 'complete' || sector.deltaMs === null,
+              'sector-compact__delta--long': deltaText(sector).length > 7,
+            }"
           ><HudFixedDigits :value="deltaText(sector)" /></small>
         </div>
       </div>
@@ -413,6 +416,11 @@ const { t } = useI18n()
 .sector-delta--green .sector-compact__delta { color: #24c26c; }
 .sector-delta--yellow .sector-compact__delta { color: #edc52b; }
 .sector-delta--red .sector-compact__delta { color: #f05b4b; }
+
+/* Long values (a sector over a minute, a delta of 100 s or more, e.g. after a stop) step down
+   one size, so time and delta both stay whole inside the narrow compact row. */
+.sector-compact__row .sector-compact__time > .sector-compact__time-value--long { font-size: 26px; }
+.sector-compact__row .sector-compact__delta.sector-compact__delta--long { font-size: 30px; }
 
 /* live/wait and a missing delta are not values: grey. */
 .sector-compact__row .sector-compact__delta.sector-delta__delta--placeholder { color: #a4b0bc; }

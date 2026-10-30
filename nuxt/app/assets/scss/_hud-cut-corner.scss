@@ -21,7 +21,16 @@
 // $flag-width   width of the yellow frame
 
 // Outline of the panel inset by $inset; with $inset 0 it is the panel outline itself. A 45° cut of
-// size c inset by w moves its two ends by w * (√2 - 1) = w * 0.4142 along the edges.
+// size c inset by w moves its two ends by w * (√2 - 1) = w * 0.4142 along the edges. A square
+// corner (c = 0) has no cut to move: its inset corner is simply (w, w), otherwise the inner outline
+// crosses itself and the ring loses a small triangle at that corner.
+@function hud-cut-end($cut, $inset) {
+  @if $cut == 0px {
+    @return calc(#{$inset});
+  }
+  @return calc(#{$cut} + #{$inset} * 0.4142);
+}
+
 // Owner (30/10): every HUD panel has the same hairline frame, barely visible, only to detach the
 // panel from what is behind it. State colours (damage, yellow flag) keep their own frames.
 // Frames are measured in screen pixels: a page that shrinks its whole canvas with transform: scale()
@@ -33,8 +42,8 @@ $hud-hairline-color: rgba(255, 255, 255, 0.16);
 $hud-flag-width: calc(3 * var(--hud-frame-unit, 1px));
 
 @function hud-outline($left-cut, $right-cut, $inset) {
-  $l: calc(#{$left-cut} + #{$inset} * 0.4142);
-  $r: calc(#{$right-cut} + #{$inset} * 0.4142);
+  $l: hud-cut-end($left-cut, $inset);
+  $r: hud-cut-end($right-cut, $inset);
   @return (
     calc(#{$inset}) $l,
     $l calc(#{$inset}),

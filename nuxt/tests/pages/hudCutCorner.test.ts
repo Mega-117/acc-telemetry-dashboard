@@ -17,8 +17,11 @@ describe('shared HUD outline mixin', () => {
     expect(mixin()).toContain('border-radius: 0;')
     expect(mixin()).toContain('clip-path: polygon(#{hud-outline($left-cut, $right-cut, 0px)});')
     // A 45° cut inset by w moves its ends by w * (√2 - 1) along the edges.
-    expect(mixin()).toContain('$l: calc(#{$left-cut} + #{$inset} * 0.4142);')
-    expect(mixin()).toContain('$r: calc(#{$right-cut} + #{$inset} * 0.4142);')
+    expect(mixin()).toContain('@return calc(#{$cut} + #{$inset} * 0.4142);')
+    expect(mixin()).toContain('$l: hud-cut-end($left-cut, $inset);')
+    expect(mixin()).toContain('$r: hud-cut-end($right-cut, $inset);')
+    // A square corner insets to (w, w): no self-crossing inner outline, no hole in the frame corner.
+    expect(mixin()).toMatch(/@if \$cut == 0px \{\s*@return calc\(#\{\$inset\}\);/)
     expect(mixin()).toContain('overflow: visible;')
   })
 
