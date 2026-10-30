@@ -223,3 +223,10 @@ describe('Dashboard v3 background transparency', () => {
     expect(await render({}, { backgroundOpacity: 0.3 })).toContain('--hud-overlay-background-opacity:0.3')
   })
 })
+
+describe('Dashboard live bars (owner 30/10)', () => {
+  it('pedal and RPM bars glide to each 20 Hz sample over 50 ms instead of jumping', () => {
+    expect(styles()).toContain('.dash-pedals__line b { position: absolute; inset: 0 auto 0 0; transition: width 50ms linear; }')
+    expect(styles()).toMatch(/\.dash-rpm__fill \{[^}]*transition: width 50ms linear;/s)
+  })
+})

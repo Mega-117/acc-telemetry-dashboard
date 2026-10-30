@@ -60,6 +60,8 @@ $dash-caution-bg: $hud-caution-bg;
   background: linear-gradient(0deg, #086232, #108443 70%);
   clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 100%, 0 100%);
   box-shadow: inset 0 3px #ffffff20, inset 0 -3px #00000030;
+  // Glides to each 20 Hz sample over 50 ms (see the pedal bars).
+  transition: width 50ms linear;
 }
 .dash-rpm--blue .dash-rpm__fill { background: #0753d0; }
 // At the shift point the whole bar turns blue and flashes light blue (draft colours, the ACC Drive
@@ -221,7 +223,10 @@ $dash-caution-bg: $hud-caution-bg;
 .dash-pedals__line { display: grid; grid-template-columns: 25px 1fr; align-items: center; gap: 4px; height: 12px; }
 .dash-pedals__line > span { font: 700 12px/12px var(--hud-gauge-label); color: #a6b4c1; }
 .dash-pedals__line i { position: relative; display: block; height: 12px; background: #26303a; }
-.dash-pedals__line b { position: absolute; inset: 0 auto 0 0; }
+// Owner (30/10): the logger writes the pedals and the RPM 20 times a second; each bar glides to the
+// new value over one sample (50 ms, linear) instead of jumping, so it moves smoothly at the screen
+// rate with at most one sample of extra delay.
+.dash-pedals__line b { position: absolute; inset: 0 auto 0 0; transition: width 50ms linear; }
 .dash-pedals__gas b { background: #16ba55; }
 .dash-pedals__brake b { background: #f04436; }
 .dash-pedals--unavailable b { display: none; }
