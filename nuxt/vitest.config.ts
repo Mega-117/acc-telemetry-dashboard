@@ -164,6 +164,8 @@ export default defineConfig({
         'app/components/overlay/TelemetryFeatureNotice.vue',
         'app/services/telemetry/gameIdentity.ts',
         'app/services/pitwall/friendRequestQueue.ts',
+        // PIP-701: at-the-wheel changes reach the room only once they held.
+        'app/services/pitwall/pitwallSteadyDriving.ts',
         'app/composables/useControlKFriendRequests.ts',
         'app/components/overlay/ControlKFriendRequests.vue',
         'app/services/ui/pagePreparation.ts',

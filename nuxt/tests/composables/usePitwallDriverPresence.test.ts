@@ -84,4 +84,14 @@ describe('Pitwall presence on demand', () => {
     expect(f.driver).not.toHaveBeenCalled(); expect(h.presence.active.value).toBe(false)
     expect((await requestPitwallOpen()).ok).toBe(false)
   })
+  it('PIP-701: without the UDP identity the presence still says who drives, never a vehicle room', async () => {
+    const car = { applicationMethods: ['standard'], pressures: null, tyreSet: 3, fuelToAdd: 10 }
+    ;(window as unknown as { electronAPI: { pitwallGetStrategyState: unknown } }).electronAPI.pitwallGetStrategyState = vi.fn(async () => ({
+      live: true, fresh: true, driverState: 'driving', car, identity: { track: 'hungaroring', fittedTyreSet: 3 },
+      vehicle: { available: false, reason: 'standings-unavailable', fingerprint: null, label: null }, crew: { available: false } }))
+    start(ref(true)); await settle()
+    const vehicle = await f.driver.mock.calls[0]![0].readVehicle()
+    expect(vehicle).toEqual({ fingerprint: null, label: 'Gara in corso', track: 'hungaroring', driving: true,
+      crew: null, strategy: { ...car, fittedTyreSet: 3 } })
+  })
 })

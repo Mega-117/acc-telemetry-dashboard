@@ -81,7 +81,8 @@ export interface PitwallRoomDriverOptions {
    * una stanza, e il battito rallenta.
    */
   readVehicle: () => Promise<{
-    fingerprint: string
+    /** PIP-701: null when ACC's UDP gives no shared identity: presence only, never a vehicle room. */
+    fingerprint: string | null
     label: string
     track?: string | null
     raceNumber?: number | null
@@ -470,7 +471,9 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
       vehicle = null
     }
 
-    if (!vehicle) {
+    // PIP-701: senza identità UDP (impronta null) questo vecchio servizio non apre stanze di vettura.
+    if (!vehicle || !vehicle.fingerprint) {
+      vehicle = null
       // ACC non e' vivo: non si inventa una stanza. Se ce n'era una si resta
       // membri - il punto della feature e' proprio poter rientrare - ma il
       // battito rallenta, perche' non c'e' niente di nuovo da dire.

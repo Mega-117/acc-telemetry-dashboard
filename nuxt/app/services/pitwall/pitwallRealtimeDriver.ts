@@ -135,20 +135,21 @@ export function startPitwallRealtimeDriver(options: Options): PitwallRoomDriverH
       if (!wanted || stopped) { await rooms.leaveRoom(created.value.roomId); return }
       room = created.value
     }
-    if (!social && wanted && vehicle && !room) {
+    if (!social && wanted && vehicle?.fingerprint && !room) {
       if (confirming !== vehicle.fingerprint) {
         confirming = vehicle.fingerprint; confirmed = false
         if (confirmationTimer) clearTimeout(confirmationTimer)
         confirmationTimer = setTimeout(() => { confirmed = true; void sync() }, 500)
       }
       if (confirmed) {
-        const created = await rooms.ensureRoomForVehicle({ ...vehicle, seedAllowedUids: await options.readTrustedUids?.() ?? [] })
+        const created = await rooms.ensureRoomForVehicle({ ...vehicle, fingerprint: vehicle.fingerprint, seedAllowedUids: await options.readTrustedUids?.() ?? [] })
         if (!created.ok) { reason = created.reason; emit(); return }
         if (!wanted || stopped) { await rooms.closeRoom(created.value.roomId); return }
         room = created.value
       }
     }
-    if (!social && room && vehicle && room.vehicleFingerprint !== vehicle.fingerprint) {
+    // PIP-701: a missing identity (ACC's UDP silent) is not a different car: the room stays.
+    if (!social && room && vehicle?.fingerprint && room.vehicleFingerprint !== vehicle.fingerprint) {
       const previous = room.roomId
       detach(); room = null; confirming = null; confirmed = false
       await rooms.clearPresence(previous)
@@ -158,7 +159,10 @@ export function startPitwallRealtimeDriver(options: Options): PitwallRoomDriverH
       runtimeSessionId: options.runtimeSessionId, driving: vehicle?.driving ?? false, crew: vehicle?.crew, strategy: vehicle?.strategy,
       car: vehicle?.label, track: vehicle?.track })
     if (!presence.ok) reason = presence.reason
-    else reason = wanted && !room ? 'Si apre appena ACC e la vettura sono disponibili.' : null
+    else reason = wanted && !room ? 'Si apre appena ACC e la vettura sono disponibili.'
+      // PIP-701: the pilot hears it too, not only the engineer.
+      : vehicle && !vehicle.fingerprint ? 'ACC non manda i dati di gara (UDP): la guida si legge dal volante, numero ed equipaggio mancano. Se dura, riavvia ACC.'
+      : null
     await bindMain()
     if (room && !stopMembers) attach(room.roomId)
     emit()

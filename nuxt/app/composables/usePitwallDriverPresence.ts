@@ -7,6 +7,7 @@ import { startPitwallRealtimeDriver } from '~/services/pitwall/pitwallRealtimeDr
 import type { PitwallDriverElectronApi } from '~/services/pitwall/pitwallDriverLinkService'
 import type { PitwallDriverStatus, PitwallRoomDriverHandle } from '~/services/pitwall/pitwallRoomDriverService'
 import { registerPitwallIntentControls, setPitwallIntentStatus } from '~/composables/usePitwallIntent'
+import { createSteadyDriving } from '~/services/pitwall/pitwallSteadyDriving'
 
 type LocalState = Awaited<ReturnType<NonNullable<PitwallDriverElectronApi['pitwallGetStrategyState']>>> & { driverState?: string }
 interface Bridge extends PitwallDriverElectronApi {
@@ -36,6 +37,7 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
   let syncAgain = false
   let disposed = false
   let explicitlyRequested = false
+  const steadyDriving = createSteadyDriving({ onSettle: () => { void handle?.sync() } })
   async function open() {
     explicitlyRequested = true
     await sync()
@@ -103,6 +105,7 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
       stops.push(links.watchTrustedUids(value => { friends = value; readyFriends(); void handle?.refreshInvites() }, () => { friends = []; readyFriends() }))
       const nickname = await links.nicknameOf(uid)
       if (token !== generation || disposed) return
+      steadyDriving.reset()
       handle = startPitwallRealtimeDriver({ uid, nickname, runtimeSessionId: crypto.randomUUID(), service,
         electronApi: bridge, bindMain: value => options.jobsEnabled.value
           ? bridge.pitwallSetRealtimeConnection!(value) : Promise.resolve(),
@@ -110,12 +113,20 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
         readVehicle: async () => {
           const state = local
           const vehicle = state?.vehicle
-          if (!state?.live || !state.fresh || !vehicle?.available || !vehicle.fingerprint) return null
+          // Codex: an outage forgets the old value, so a stale "driving" never returns after it.
+          if (!state?.live || !state.fresh) { steadyDriving.reset(); return null }
+          const driving = steadyDriving.read(state.driverState === 'driving')
+          const strategy = state.car ? { ...state.car, fittedTyreSet: state.identity?.fittedTyreSet ?? null } : null
+          // PIP-701: without ACC's UDP there is no shared vehicle identity (race number, crew). The presence still
+          // says who drives (shared memory and force feedback, decided in the main process); no vehicle room.
+          if (!vehicle?.available || !vehicle.fingerprint) {
+            return { fingerprint: null, label: 'Gara in corso', track: state.identity?.track, driving, crew: null, strategy }
+          }
           const crew = state.crew?.available ? state.crew.drivers.map(member => ({ driverIndex: member.driverIndex,
             name: `${member.firstName} ${member.lastName}`.trim() || member.shortName,
             current: member.driverIndex === state.crew?.currentDriverIndex })) : null
           return { fingerprint: vehicle.fingerprint, label: vehicle.label ?? 'Gara in corso', track: vehicle.trackName ?? state.identity?.track,
-            raceNumber: vehicle.raceNumber, teamName: vehicle.teamName, driving: state.driverState === 'driving', crew, strategy: state.car ? { ...state.car, fittedTyreSet: state.identity?.fittedTyreSet ?? null } : null }
+            raceNumber: vehicle.raceNumber, teamName: vehicle.teamName, driving, crew, strategy }
         },
         onStatus: value => { roomId.value = value.roomId; unavailableReason.value = value.reason; publishStatus(value) },
       })

@@ -127,6 +127,8 @@ const driving = computed(() => {
           <span v-if="connected.length">{{ t('pitwallConcept.myRoom.present', { names: connected.join(", ") }) }}</span>
           <span v-if="room?.drivingKnown !== false && driving">{{ driving }}</span>
         </small>
+        <!-- PIP-701: with the room open too, e.g. "ACC non manda i dati di gara (UDP)". -->
+        <small v-if="pitwall.reason" class="pwc-mine__notice" role="status">{{ pitwall.reason }}</small>
       </div>
       <div class="pwc-mine__actions">
         <button v-if="room" type="button" class="rc-btn rc-btn--compact" @click="$emit('open')">{{ t('pitwallConcept.myRoom.openPanel') }}</button>
@@ -142,6 +144,7 @@ const driving = computed(() => {
  * `.pwc-race__*`, `.pwc-empty`) sono globali dentro `.pwc`: qui resta solo la
  * disposizione propria di questa card.
  */
+.pwc-mine__notice { display: block; margin-top: 4px; color: #fbbf24; font-size: 12px; }
 .pwc-mine {
   display: grid;
   grid-template-columns: 1fr auto auto;
