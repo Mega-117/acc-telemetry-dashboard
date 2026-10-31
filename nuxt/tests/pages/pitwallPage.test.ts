@@ -629,7 +629,7 @@ describe('Pitwall wiring', () => {
     expect(conceptFixtures).toContain('export function buildPitwallConceptCrowd')
     // I dati stanno in un file loro: qui si cambia cosa racconta il prototipo,
     // di la' come si comporta.
-    expect(conceptModel).toContain("export * from '~/utils/pitwallConceptModel'")
+    expect(conceptModel).toContain("export * from './pitwallConceptModel'")
     expect(conceptFixtures).not.toContain('export function split')
   })
 

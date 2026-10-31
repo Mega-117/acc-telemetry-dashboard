@@ -24,9 +24,9 @@ import {
   type PitwallConceptExecutorState,
   type PitwallConceptReason,
   type PitwallConceptNotice,
-} from '~/utils/pitwallConceptModel'
+} from './pitwallConceptModel'
 
-export * from '~/utils/pitwallConceptModel'
+export * from './pitwallConceptModel'
 import type { PitwallOrderStatus } from '~/services/pitwall/pitwallLink'
 
 

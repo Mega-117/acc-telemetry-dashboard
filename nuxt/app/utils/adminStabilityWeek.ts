@@ -1,15 +1,12 @@
 // PIP-615: "Giorno X di 7" della settimana di stabilita' (decisione 2026-10-15). Logica pura.
+// Una sola definizione del giorno locale (auto-import Nuxt: niente nomi doppi tra le utils).
+import { localDay } from './statsJourney'
 
 export interface StabilityReset { at: string, reason: string, task: string | null, by: string }
 export interface StabilityState { schemaVersion: number, startedAt: string, resets: StabilityReset[] }
 
 export const STABILITY_WEEK_DAYS = 7
 
-/** Giorno di calendario locale (AAAA-MM-GG) di un istante. */
-export function localDay(ms: number): string {
-  const d = new Date(ms)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
 
 /** Il giorno d'inizio conta come giorno 1; oltre il settimo la settimana e' completata. */
 export function stabilityWeekDay(startedAt: string, nowMs: number): { day: number, complete: boolean } | null {

@@ -10,6 +10,8 @@
 
 import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { db } from '~/config/firebase'
+// Esito per campo: definito una volta sola nel contratto della stanza (niente auto-import doppi).
+import type { PitwallFieldOutcome } from '~/services/pitwall/pitwallRoomContract'
 import { createPitwallRealtimeEngineerService as createPitwallEngineerService } from '~/services/pitwall/pitwallRealtimeEngineerService'
 import { closePitwallRealtimeWhenIdle } from '~/config/pitwallRealtime'
 import { createPitwallPresenceWatch } from '~/composables/usePitwallPresenceWatch'
@@ -26,17 +28,6 @@ import {
   type PitwallOrderStatus,
 } from '~/services/pitwall/pitwallLink'
 
-/** Esito per campo dichiarato dal PC del pilota: mai appiattito in un "fatto". */
-export interface PitwallFieldOutcome {
-  outcome: 'verified' | 'selected' | 'not-verifiable' | null
-  requested: unknown
-  observed: unknown
-  reason: string | null
-  /** Da dove viene l'esito: l'occhio sullo schermo, la shared memory, o un tasto alla cieca. */
-  via?: 'screen' | 'memory' | 'blind' | null
-  /** Non chiesta: ACC l'ha cambiata insieme a un'altra riparazione. */
-  dragged?: boolean
-}
 
 /** PIP-561: result of one permission action, with a short reason code for diagnostics. */
 export interface PitwallActionOutcome {

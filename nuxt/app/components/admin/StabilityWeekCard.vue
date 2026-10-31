@@ -5,7 +5,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { resolveDiagnosticsOrigin } from '~/repositories/diagnosticBundlesRepository'
 import { loadStabilityState, resetStabilityWeek, type StabilityDeps } from '~/repositories/adminStabilityRepository'
-import { STABILITY_WEEK_DAYS, localDay, stabilityWeekDay, type StabilityState } from '~/utils/adminStabilityWeek'
+import { STABILITY_WEEK_DAYS, stabilityWeekDay, type StabilityState } from '~/utils/adminStabilityWeek'
+import { localDay } from '~/utils/statsJourney'
 
 const props = defineProps<{ nowMs: number }>()
 const { currentUser } = useFirebaseAuth()

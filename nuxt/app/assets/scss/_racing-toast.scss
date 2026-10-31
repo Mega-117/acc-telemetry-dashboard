@@ -1,10 +1,12 @@
 // Small top-right messages (notifications, sync result, runtime status): one look in the site's style. A see-through
 // blurred card (no solid fill) with a light edge and the buttons' cut top-right corner; the kind of message is the
 // colour bar on the left, like the session-type bars of the overview's activity card. They stack in AppNotifications.
+@use 'sass:map';
+
 $toast-tones: (info: #38bdf8, success: #22c55e, warning: #fbbf24, error: #ff2442, danger: #ff2442);
 
 @mixin toast {
-  --toast-tone: #{map-get($toast-tones, info)};
+  --toast-tone: #{map.get($toast-tones, info)};
   --toast-edge: #ffffff40;
   position: relative;
   pointer-events: auto;
