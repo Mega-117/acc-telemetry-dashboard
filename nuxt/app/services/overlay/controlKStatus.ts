@@ -94,3 +94,29 @@ export function notificationItemFromElement(element: Element): ControlKNotificat
   const text = (element.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 240)
   return { key: `info|${text}`, label: text, kind: 'info', announce: false }
 }
+
+/**
+ * PIP-697: order of the cards (ACC shows one per page). A friend request comes first: it waits
+ * for the driver and was lost behind other cards; then errors, decisions, outcomes.
+ */
+export function notificationRank(item: Pick<ControlKNotificationItem, 'key' | 'kind'>): number {
+  if (item.kind === 'action' && item.key.startsWith('azione|amicizia|')) return -1
+  return { error: 0, action: 1, info: 2 }[item.kind]
+}
+
+/** PIP-697: an outcome is news for a moment, not a to-do: it leaves after this time. */
+export const OUTCOME_VISIBLE_MS = 10_000
+
+/**
+ * Tracks when each outcome card appeared (mutates `seenAt`) and returns the ones to clear now
+ * plus the delay to the next expiry (null when nothing is waiting).
+ */
+export function expireOutcomeCards(items: Pick<ControlKNotificationItem, 'key' | 'kind'>[], seenAt: Map<string, number>, now: number,
+  visibleMs = OUTCOME_VISIBLE_MS): { expired: string[], nextInMs: number | null } {
+  const infoKeys = new Set(items.filter(item => item.kind === 'info').map(item => item.key))
+  for (const key of [...seenAt.keys()]) if (!infoKeys.has(key)) seenAt.delete(key)
+  for (const key of infoKeys) if (!seenAt.has(key)) seenAt.set(key, now)
+  const expired = [...seenAt].filter(([, seen]) => seen + visibleMs <= now).map(([key]) => key)
+  const waiting = [...seenAt].filter(([key]) => !expired.includes(key)).map(([, seen]) => seen + visibleMs - now)
+  return { expired, nextInMs: waiting.length ? Math.max(0, Math.min(...waiting)) : null }
+}

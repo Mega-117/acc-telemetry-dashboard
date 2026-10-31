@@ -32,8 +32,9 @@ export function resolveSectorDeltaPresentation(
   // keep their time and delta but never a judgement colour (PIP-524).
   const neutral = sector.color === 'grey'
 
-  if (reference === 'custom') {
-    if (customReferenceMs === null || !Number.isFinite(customReferenceMs)) return { deltaMs: null, color: 'white' }
+  // PIP-697: custom chosen but no time saved for this track and car: compare with the best
+  // sector instead of a blank tile with no delta.
+  if (reference === 'custom' && customReferenceMs !== null && Number.isFinite(customReferenceMs)) {
     const deltaMs = sector.currentMs - customReferenceMs
     return { deltaMs, color: neutral ? 'grey' : deltaMs <= 0 ? 'green' : 'red' }
   }

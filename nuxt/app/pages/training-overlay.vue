@@ -66,7 +66,7 @@ import {
 } from '~/services/overlay/qaBotPresentation'
 import { pressureActionPresentation, pressureOriginLine, pressureOutcomeMessage, pressureProgressBadge } from '~/services/overlay/pressureActionPresentation'
 import { createControlKContextTracker, type ControlKContext } from '~/services/overlay/controlKContext'
-import { notificationItemFromElement as readNotificationItem, pickControlKStatus,
+import { notificationItemFromElement as readNotificationItem, notificationRank, expireOutcomeCards, pickControlKStatus,
   type ControlKNotificationItem, type ControlKNotificationKind, type ControlKStatusMessage } from '~/services/overlay/controlKStatus'
 import { useTrackVoiceReferenceAvailability } from '~/composables/useTrackVoiceReferenceAvailability'
 import { formatInfoLapTime } from '~/utils/infoPresentation'
@@ -243,9 +243,9 @@ function countNotifications() {
     .map(element => ({ element, item: readNotificationItem(element) })) : []
   for (const { element, item } of items) element.hidden = clearedNotifications.has(item.key)
   const visible = items.filter(({ item }) => !clearedNotifications.has(item.key))
-  // ACC shows one whole card at a time: errors first, then decisions, then outcomes.
-  const order: Record<ControlKNotificationKind, number> = { error: 0, action: 1, info: 2 }
-  visible.sort((a, b) => order[a.item.kind] - order[b.item.kind])
+  // ACC shows one whole card at a time: friend request, errors, decisions, outcomes (PIP-697).
+  visible.sort((a, b) => notificationRank(a.item) - notificationRank(b.item))
+  expireOutcomes(visible.map(({ item }) => item))
   notificationPages.value = visible.length
   notificationPage.value = Math.min(notificationPage.value, Math.max(0, visible.length - 1))
   visible.forEach(({ element }, index) => element.toggleAttribute('data-ck-offpage', usesAccLayout.value && index !== notificationPage.value))
@@ -260,6 +260,21 @@ function countNotifications() {
   notificationErrorCount = unreadErrors.length
   if (!visibleNotifications.length && isNotificationsOpen.value) closeNotifications()
 }
+// PIP-697: an outcome ("pressioni applicate", fuel set, estimate result) leaves by itself
+// after OUTCOME_VISIBLE_MS, unless the driver is reading Notifiche (closing it clears them anyway).
+const outcomeSeenAt = new Map<string, number>()
+let outcomeExpiryTimer: ReturnType<typeof setTimeout> | null = null
+function expireOutcomes(visible: ControlKNotificationItem[]) {
+  if (outcomeExpiryTimer) { clearTimeout(outcomeExpiryTimer); outcomeExpiryTimer = null }
+  const { nextInMs } = expireOutcomeCards(visible, outcomeSeenAt, Date.now())
+  if (isNotificationsOpen.value || nextInMs === null) return
+  outcomeExpiryTimer = setTimeout(() => {
+    outcomeExpiryTimer = null
+    expireOutcomeCards(visibleNotifications, outcomeSeenAt, Date.now()).expired.forEach(key => clearedNotifications.add(key))
+    countNotifications()
+  }, nextInMs)
+}
+onBeforeUnmount(() => { if (outcomeExpiryTimer) clearTimeout(outcomeExpiryTimer) })
 function pulseNotifications() {
   if (notificationPulseTimer) clearTimeout(notificationPulseTimer)
   notificationPulse.value = true
@@ -796,16 +811,23 @@ const showQuickPanelPressurePreview = computed(() => !quickPanelPressureState.va
   && (isFullQuickPanelPreview.value || isCarStoppedWithEngineOff.value
     || (usesAccLayout.value && effectiveControlKContext.value === 'pause')))
 let pressureOutcomeTimer: ReturnType<typeof setTimeout> | null = null
-watch(() => pressureOutcomeMessage(quickPanelPressureState.value), (outcome) => {
+// PIP-697: watch the message itself, not the state object: the state is polled every 500 ms and
+// a deep watch restarted the 5 s timer on every poll, so "pressioni applicate" never left.
+watch(() => {
+  const outcome = pressureOutcomeMessage(quickPanelPressureState.value)
+  return outcome ? `${outcome.tone}|${outcome.text}` : ''
+}, (key) => {
   if (pressureOutcomeTimer) clearTimeout(pressureOutcomeTimer)
   pressureOutcomeTimer = null
-  if (outcome?.tone !== 'ok' || outcome.text === dismissedPressureOutcome.value) return
+  const [tone, ...rest] = key.split('|')
+  const text = rest.join('|')
+  if (tone !== 'ok' || text === dismissedPressureOutcome.value) return
   pressureOutcomeTimer = setTimeout(() => {
-    dismissedPressureOutcome.value = outcome.text
+    dismissedPressureOutcome.value = text
     pressureOutcomeTimer = null
     scheduleOverlaySizeSync()
   }, PRESSURE_SUCCESS_VISIBLE_MS)
-}, { deep: true })
+})
 const quickPanelSupport = computed(() => isFullQuickPanelPreview.value ? gameUiSupport('acc') : support.value)
 let blockPreviewAction: ((event: Event, preview: boolean) => void) | undefined
 async function toggleQuickPanelPreview() {

@@ -43,6 +43,8 @@ describe('custom sector references', () => {
   expect(resolveSectorDeltaPresentation(sector,'custom',27000)).toEqual({deltaMs:50,color:'red'})
   expect(resolveSectorDeltaPresentation(sector,'custom',27100)).toEqual({deltaMs:-50,color:'green'})
   expect(resolveSectorDeltaPresentation(sector,'custom')).toEqual({deltaMs:null,color:'white'})
+  // PIP-697: no custom time for this track/car -> the best sector instead of a blank tile.
+  expect(resolveSectorDeltaPresentation({...sector,bestReferenceMs:27000},'custom',null)).toEqual({deltaMs:50,color:'red'})
   expect(resolveSectorDeltaPresentation({...sector,state:'running'},'custom',27100).deltaMs).toBeNull()
   // PIP-524: a saved previous-lap reference reads as best (no best here -> wait).
   expect(resolveSectorDeltaPresentation(sector,'previousLap')).toEqual({deltaMs:null,color:'white'})

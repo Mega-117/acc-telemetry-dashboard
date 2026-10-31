@@ -78,8 +78,13 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     expect(source).toContain("if (actionId === 'pressure' && quickPanelPressureState.value.state !== 'ready') return t('controlK.pressureHint', { guidance: dryPressurePresentation.value.guidance })")
     expect(source).toContain('const PRESSURE_SUCCESS_VISIBLE_MS = 5000')
     // The watcher reads the pressure state at setup: it must come after its declaration.
-    expect(source.indexOf('watch(() => pressureOutcomeMessage(quickPanelPressureState.value)'))
-      .toBeGreaterThan(source.indexOf('const quickPanelPressureState = computed('))
+    const watcher = source.indexOf('// PIP-697: watch the message itself')
+    expect(watcher).toBeGreaterThan(source.indexOf('const quickPanelPressureState = computed('))
+    // PIP-697: the watcher follows the message text, never the polled state object (a deep watch
+    // restarted the 5 s timer every 500 ms and the success message never left).
+    const block = source.slice(watcher, source.indexOf('const quickPanelSupport'))
+    expect(block).toContain('`${outcome.tone}|${outcome.text}`')
+    expect(block).not.toContain('deep: true')
   })
   it('PIP-522/527: horizontal header column; the layout switch in the top-right corner on hover', () => {
     const block = styles.slice(styles.indexOf('// PIP-522: horizontal header'), styles.indexOf('// PIP-522: lap progress'))

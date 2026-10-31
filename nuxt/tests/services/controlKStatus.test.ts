@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
-import { notificationErrorFromElement, notificationItemFromElement, pickControlKStatus, readableReason } from '~/services/overlay/controlKStatus'
+import { expireOutcomeCards, notificationErrorFromElement, notificationItemFromElement, notificationRank, OUTCOME_VISIBLE_MS, pickControlKStatus,
+  readableReason } from '~/services/overlay/controlKStatus'
 import { setLocale } from '~/i18n'
 
 // Assertions below read the Italian texts (jsdom starts in English).
@@ -87,5 +88,34 @@ describe('notification errors (PIP-556)', () => {
     estimate.className = 'launcher-hint pressure-test__error'
     estimate.innerHTML = '<p>[dati:stale] Dati ACC scaduti.</p>'
     expect(notificationErrorFromElement(estimate).label).toBe('Stima pressioni: Dati di ACC non aggiornati: riprova tra un istante.')
+  })
+})
+
+describe('notification order and outcomes that leave (PIP-697)', () => {
+  const request = notificationItemFromElement(card('control-k-request', '<strong>Pilota QA</strong> vuole essere tuo amico'))
+  const plan = notificationItemFromElement(card('pressure-plan', '<strong>Obiettivo 26,5 psi</strong>'))
+  const error = notificationItemFromElement(card('launcher-hint fuel-status fuel-status--error', '<p>Menu Pausa non trovato.</p>'))
+  const applied = notificationItemFromElement(card('launcher-hint quick-panel-pressure-status quick-panel-pressure-status--ok', '<p>Pressioni applicate.</p>'))
+
+  it('a friend request is on the first page, before errors, plans and outcomes', () => {
+    const sorted = [applied, plan, error, request].sort((a, b) => notificationRank(a) - notificationRank(b))
+    expect(sorted.map(item => item.kind)).toEqual(['action', 'error', 'action', 'info'])
+    expect(sorted[0]).toBe(request)
+    expect(sorted[2]).toBe(plan)
+  })
+  it('an outcome leaves after its time; decisions and errors never expire', () => {
+    const seenAt = new Map<string, number>()
+    const items = [applied, plan, error, request]
+    expect(expireOutcomeCards(items, seenAt, 1000)).toEqual({ expired: [], nextInMs: OUTCOME_VISIBLE_MS })
+    expect(expireOutcomeCards(items, seenAt, 1000 + OUTCOME_VISIBLE_MS - 1).expired).toEqual([])
+    expect(expireOutcomeCards(items, seenAt, 1000 + OUTCOME_VISIBLE_MS)).toEqual({ expired: [applied.key], nextInMs: null })
+  })
+  it('a new outcome starts its own time; a card that left is forgotten', () => {
+    const seenAt = new Map<string, number>()
+    expireOutcomeCards([applied], seenAt, 0)
+    const fuel = notificationItemFromElement(card('launcher-hint fuel-status', '<p>Carburante impostato: 62 L.</p>'))
+    expect(expireOutcomeCards([applied, fuel], seenAt, 4000).nextInMs).toBe(OUTCOME_VISIBLE_MS - 4000)
+    expireOutcomeCards([fuel], seenAt, 5000)
+    expect([...seenAt.keys()]).toEqual([fuel.key])
   })
 })
