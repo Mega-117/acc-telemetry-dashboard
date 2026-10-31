@@ -19,6 +19,8 @@ describe('lapChoice: status and dates', () => {
     expect(lapStatus(true, false)).toBe('incomplete')
   })
   it('reads a session token as the local wall clock and words it Oggi / Ieri / date', () => {
+    // The library gives its recordedAt as a session token: it is a date too (PIP-695 live check).
+    expect(sessionDate('', '20261029_165322')?.getDate()).toBe(29)
     const d = sessionDate('20261031_175200')!
     expect([d.getDate(), d.getHours(), d.getMinutes()]).toEqual([31, 17, 52])
     expect(whenParts(d, now)).toEqual({ day: 'today', dm: '31/10', hm: '17:52' })

@@ -169,7 +169,8 @@ const rowProps = (c: LapChoice) => ({ choice: c, selected: c.key === selected.va
 .choice-dialog :deep(.choice-link) { padding: 0; border: 0; background: none; color: #e6e6ea; font: 600 13px 'Inter', sans-serif; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
   &:focus-visible { outline: 2px solid #fff; outline-offset: 2px; } }
 .choice-dialog :deep(.choice-btn) { min-height: 40px; padding: 0 16px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 22%, transparent); color: #fff; font: 700 13px 'Inter', sans-serif; cursor: pointer;
-  &:disabled { opacity: .45; cursor: default; } &:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
-  &--ghost { border-color: #ffffff40; background: transparent; } }
+  &:disabled { opacity: .45; cursor: default; } &:focus-visible { outline: 2px solid #fff; outline-offset: 1px; } }
+// Sass cannot add a suffix to :deep(): the ghost variant has its own selector.
+.choice-dialog :deep(.choice-btn--ghost) { border-color: #ffffff40; background: transparent; }
 @media (max-width: 640px) { .choice-backdrop { padding: 10px; } .choice-dialog { padding: 16px; } .choice-dialog__foot { flex-wrap: wrap; } .choice-dialog__msg { flex-basis: 100%; } }
 </style>

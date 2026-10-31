@@ -207,6 +207,26 @@ export function useLapChoice(o: {
       mine: uid === o.myUid(), lapNumber: d.lapNumber, lapTimeMs: d.lapTimeMs ?? 0, sessionToken: d.sessionToken, status: lapStatus(d.valid, d.complete ?? true) }
   }
 
+  /**
+   * Browser (no program): your fastest valid lap here from your other sessions, from the online archive, so
+   * "Il tuo migliore" is suggested as in the program (which reads it from this PC, PIP-646).
+   */
+  async function loadArchiveBest(isCurrent: () => boolean): Promise<void> {
+    const w = where(), owner = o.myUid()
+    if (!w || !owner || o.pilotUid()) return
+    try {
+      const { laps } = await listPilotTrackLaps(owner, w, o.deps)
+      const best = laps.filter(d => d.valid === true && d.sessionToken !== o.sessionToken() && d.lapTimeMs).sort((a, b) => (a.lapTimeMs ?? 0) - (b.lapTimeMs ?? 0))[0]
+      if (!best || !isCurrent()) return
+      const raw = (await fetchPilotLap(owner, best.sessionToken, best.lapId, o.deps)).trace
+      const trace = normalizeLapTrace(raw)
+      if (!trace || !trace.complete || !isCurrent()) return
+      o.library.addLoaded({ id: `best:pilot:${best.lapId}`, origin: 'best', lapNumber: best.lapNumber ?? 0, lapTimeMs: best.lapTimeMs ?? 0, valid: true, complete: true,
+        sessionToken: best.sessionToken, ownerUid: owner, driver: nick(owner), recordedAt: null, note: trace.car !== w.car ? carMismatchNote() : undefined }, trace)
+      applyDefault()
+    } catch { /* a suggestion only: the comparison works without it */ }
+  }
+
   const myBestMs = () => fastestValid(realLaps(YOU_ORIGINS))?.lapTimeMs ?? null
   const drivers = () => leaderboard(o.library.libraryList.value, nicknames.value, o.myUid(), myBestMs())
   const driversState = (): LoadState => { const s = o.library.libraryState.value; return s === 'error' ? 'error' : s === 'ready' ? 'ready' : 'loading' }
@@ -265,5 +285,5 @@ export function useLapChoice(o: {
     currentKey: side => (side === 'you' ? youCard.value : refCard.value)?.key ?? null,
     suggested, sessionLaps, listMine, drivers, driversState, loadDriverNames, listDriverLaps, resolveLink,
   }
-  return { youCard, refCard, reason, canSwap, swap, apply, applyDefault, propose, reset, userChose, source, nick }
+  return { youCard, refCard, reason, canSwap, swap, apply, applyDefault, propose, reset, userChose, source, nick, loadArchiveBest }
 }

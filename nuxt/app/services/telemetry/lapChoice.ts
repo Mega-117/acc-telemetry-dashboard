@@ -71,7 +71,8 @@ export function lapKey(ownerUid: string | null | undefined, sessionToken: string
 
 /** A logger session token (`yyyyMMdd_HHmmss`, the PC's wall clock) or an ISO date, as a local date. */
 export function sessionDate(token: string | null | undefined, iso?: string | null): Date | null {
-  const m = token ? TOKEN.exec(token) : null
+  // The library's recordedAt is a session token too (YYYYMMDD_HHMMSS), not an ISO date.
+  const m = (token ? TOKEN.exec(token) : null) ?? (iso ? TOKEN.exec(iso) : null)
   if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6]))
   const d = iso ? new Date(iso) : null
   return d && !Number.isNaN(d.getTime()) ? d : null

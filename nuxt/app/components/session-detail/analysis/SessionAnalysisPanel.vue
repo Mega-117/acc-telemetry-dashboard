@@ -173,6 +173,7 @@ async function load() {
     const first = traces.value[usable[0]!.id]
     library.refreshIdeal()
     if (bridge && first) void (pilot ? library.loadOwnLaps(isCurrent, bridge, first.track, first.car) : library.loadBestLaps(isCurrent, bridge, first.track, first.car))
+    else if (!pilot && first) void choice.loadArchiveBest(isCurrent)
     // PIP-650: other drivers' laps here, a step above this session's best in the closest conditions.
     const bestTrace = traces.value[best.id]
     if (first) void library.loadOtherDrivers(isCurrent, archiveDeps, { game: first.gameId, track: first.track, car: first.car, variant: first.variant },
