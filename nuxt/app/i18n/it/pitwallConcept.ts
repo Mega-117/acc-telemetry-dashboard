@@ -123,7 +123,7 @@ export default {
       driving: 'Al volante',
       reconnecting: 'Riconnessione',
       connecting: 'Collegamento in corso',
-      notReported: 'Guida non segnalata',
+      notReported: 'Al muretto',
       promote: 'Promuovi',
       remove: 'Togli',
       leave: 'Esci dalla gara',

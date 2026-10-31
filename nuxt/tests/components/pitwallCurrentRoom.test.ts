@@ -13,11 +13,12 @@ setLocale('it')
 
 describe('current social party presentation', () => {
   it.each([
-    [{ driving: false }, 'Guida non segnalata'],
+    [{ driving: false }, 'Al muretto'],
     [{ driving: true }, 'Al volante'],
     [{ driving: false, reconnecting: true }, 'Riconnessione'],
     [{ driving: false, connecting: true }, 'Collegamento in corso'],
-  ])('does not infer a wall role from unavailable driving evidence (%s)', (state, expected) => {
+  // PIP-701 (decisione utente 31/10): solo "Al volante" o "Al muretto"; prima chi non guidava era "Guida non segnalata".
+  ])('shows only at the wheel or at the pit wall, plus connection states (%s)', (state, expected) => {
     const wrapper = mount(Wall, { props: {
       meId: 'A', people: [], race: { id: 'one', membershipModel: 'social', hostId: 'A', carNumber: 0, carModel: '', track: '', session: '', closed: false,
         reason: { kind: 'grant', personId: 'A' },
@@ -25,7 +26,6 @@ describe('current social party presentation', () => {
       },
     } })
     expect(wrapper.find('.pwc-chip').text()).toBe(expected)
-    expect(wrapper.text()).not.toContain('Al muretto')
     wrapper.unmount()
   })
 

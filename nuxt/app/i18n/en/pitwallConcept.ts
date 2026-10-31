@@ -124,7 +124,7 @@ export default {
       driving: 'Driving',
       reconnecting: 'Reconnecting',
       connecting: 'Connecting',
-      notReported: 'Driving not reported',
+      notReported: 'At the pit wall',
       promote: 'Promote',
       remove: 'Remove',
       leave: 'Leave race',
