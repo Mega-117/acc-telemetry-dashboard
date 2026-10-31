@@ -48,7 +48,7 @@ export function compileOne(code, file, lineOffset = 0) {
   try {
     sass.compileString(code, {
       url: pathToFileURL(file),
-      loadPaths: [scssDir, appDir],
+      // No loadPaths: Nuxt/Vite has none either, so a bare @use resolves only next to the file (Codex).
       importers: [aliasImporter],
       logger: {
         warn(message, options) {

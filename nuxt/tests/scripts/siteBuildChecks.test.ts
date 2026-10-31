@@ -25,6 +25,10 @@ describe('check_styles: what only the dev server used to show', () => {
     expect(compileOne(code, file)).toEqual([])
   })
 
+  it('fails like Vite on a bare @use that only resolves next to the file', () => {
+    expect(compileOne("@use 'variables' as *; .x { color: red; }", file).join(' ')).toMatch(/error .*Can't find stylesheet/)
+  })
+
   it('finds only the scss style blocks of a component, with their first line', () => {
     const blocks = scssBlocks('<template>\n<div/>\n</template>\n<style>\n.a{}\n</style>\n<style scoped lang="scss">\n.b { .c {} }\n</style>')
     expect(blocks).toEqual([{ code: '\n.b { .c {} }\n', line: 7 }])
