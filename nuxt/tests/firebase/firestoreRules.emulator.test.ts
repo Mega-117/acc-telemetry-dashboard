@@ -81,10 +81,11 @@ it.each(['acc', 'evo', 'synthetic'])('PIP-469 isolates uploaded %s raw chunks an
   expect(chunks.size).toBeGreaterThan(1)
   expect(chunks.docs.map(item => item.data()).sort((a, b) => a.idx - b.idx)
     .map(item => item.chunk).join('')).toBe(text)
-  await assertFails(getDoc(doc(foreign, path)))
+  // PIP-694: other drivers read the session and its chunks; they never write them.
+  await assertSucceeds(getDoc(doc(foreign, path)))
   await assertFails(setDoc(doc(foreign, path), saved))
   for (const chunk of chunks.docs) {
-    await assertFails(getDoc(doc(foreign, chunk.ref.path)))
+    await assertSucceeds(getDoc(doc(foreign, chunk.ref.path)))
     await assertFails(setDoc(doc(foreign, chunk.ref.path), chunk.data()))
   }
   await refreshSyncProjections({ db: owner, uid: PILOT_UID, changedCount: 1,
@@ -1219,23 +1220,21 @@ describe('Pitwall cutover: legacy Firestore protocol is closed for every client'
   })
 })
 
-it('PIP-591 public raw chunks are readable only while their session is public too', async () => {
+it("PIP-694 every signed-in driver reads other drivers' sessions and chunks; signed-out never", async () => {
   const foreign = testEnv.authenticatedContext(SECOND_PILOT_UID, { email_verified: true }).firestore()
-  const sessionPath = `users/${PILOT_UID}/sessions/pip591-share`
+  const anonymous = testEnv.unauthenticatedContext().firestore()
+  const sessionPath = `users/${PILOT_UID}/sessions/pip694-visible`
   const chunkPath = `${sessionPath}/rawChunks/0`
   await testEnv.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore()
-    // Stato lasciato da una revoca interrotta: sessione privata, chunk ancora pubblico.
     await setDoc(doc(db, sessionPath), { isPublic: false, ownerId: PILOT_UID })
-    await setDoc(doc(db, chunkPath), { isPublic: true, idx: 0, chunk: 'x' })
+    await setDoc(doc(db, chunkPath), { isPublic: false, idx: 0, chunk: 'x' })
   })
-  await assertFails(getDoc(doc(foreign, chunkPath)))
-  await assertFails(getDocs(query(collection(foreign, `${sessionPath}/rawChunks`), where('isPublic', '==', true))))
-  await testEnv.withSecurityRulesDisabled(async (context) => {
-    await setDoc(doc(context.firestore(), sessionPath), { isPublic: true, ownerId: PILOT_UID })
-  })
+  await assertSucceeds(getDoc(doc(foreign, sessionPath)))
   await assertSucceeds(getDoc(doc(foreign, chunkPath)))
-  await assertSucceeds(getDocs(query(collection(foreign, `${sessionPath}/rawChunks`), where('isPublic', '==', true))))
+  await assertSucceeds(getDocs(collection(foreign, `${sessionPath}/rawChunks`)))
+  await assertFails(getDoc(doc(anonymous, sessionPath)))
+  await assertFails(getDoc(doc(anonymous, chunkPath)))
 })
 
 it('PIP-591 a shared session stays shared after a new sync that rewrites and adds chunks', async () => {
