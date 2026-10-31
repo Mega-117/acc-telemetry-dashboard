@@ -102,4 +102,22 @@ describe('VoicePlaybackQueue', () => {
     await queue.drain()
     expect(terminal).toEqual(['broken:playback_error', 'next:playback_ended'])
   })
+
+  it('PIP-697: a failed playback says why (refused play, broken media, watchdog)', async () => {
+    const reasons: Record<string, string | undefined> = {}
+    const outcomes: Record<string, () => Promise<any>> = {
+      '/refused.wav': async () => { throw Object.assign(new Error('no gesture'), { name: 'NotAllowedError' }) },
+      '/broken.wav': async () => 'error',
+      '/slow.wav': async () => 'timeout',
+      '/ok.wav': async () => 'ended',
+    }
+    const queue = createVoicePlaybackQueue({
+      createAudio: () => fakeAudio(),
+      play: (_audio: any, path: string) => outcomes[path]!(),
+      onEvent: event => { if (event.kind.startsWith('playback_') && event.kind !== 'playback_started') reasons[event.cue.id] = event.reason },
+    })
+    for (const id of ['refused', 'broken', 'slow', 'ok']) queue.enqueue({ id, path: `/${id}.wav`, source: 'lap-time' })
+    await queue.drain()
+    expect(reasons).toEqual({ refused: 'play_rejected_NotAllowedError', broken: 'media_error', slow: 'watchdog', ok: undefined })
+  })
 })

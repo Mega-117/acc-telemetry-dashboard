@@ -241,11 +241,15 @@ function countNotifications() {
   const items = body ? [...body.querySelectorAll<HTMLElement>(NOTIFICATION_ITEMS)]
     .filter(element => !element.parentElement?.closest(NOTIFICATION_ITEMS))
     .map(element => ({ element, item: readNotificationItem(element) })) : []
+  // PIP-697: a card that left the page is forgotten, so the same text later (a new estimate with
+  // the same values, the same error again) is shown again instead of staying hidden for good.
+  const present = new Set(items.map(({ item }) => item.key))
+  for (const key of [...clearedNotifications]) if (!present.has(key)) clearedNotifications.delete(key)
   for (const { element, item } of items) element.hidden = clearedNotifications.has(item.key)
   const visible = items.filter(({ item }) => !clearedNotifications.has(item.key))
   // ACC shows one whole card at a time: friend request, errors, decisions, outcomes (PIP-697).
   visible.sort((a, b) => notificationRank(a.item) - notificationRank(b.item))
-  expireOutcomes(visible.map(({ item }) => item))
+  if (expireOutcomes(visible.map(({ item }) => item))) { countNotifications(); return }
   notificationPages.value = visible.length
   notificationPage.value = Math.min(notificationPage.value, Math.max(0, visible.length - 1))
   visible.forEach(({ element }, index) => element.toggleAttribute('data-ck-offpage', usesAccLayout.value && index !== notificationPage.value))
@@ -264,15 +268,15 @@ function countNotifications() {
 // after OUTCOME_VISIBLE_MS, unless the driver is reading Notifiche (closing it clears them anyway).
 const outcomeSeenAt = new Map<string, number>()
 let outcomeExpiryTimer: ReturnType<typeof setTimeout> | null = null
-function expireOutcomes(visible: ControlKNotificationItem[]) {
+/** Returns true when it cleared expired cards now (the caller recounts). */
+function expireOutcomes(visible: ControlKNotificationItem[]): boolean {
   if (outcomeExpiryTimer) { clearTimeout(outcomeExpiryTimer); outcomeExpiryTimer = null }
-  const { nextInMs } = expireOutcomeCards(visible, outcomeSeenAt, Date.now())
-  if (isNotificationsOpen.value || nextInMs === null) return
-  outcomeExpiryTimer = setTimeout(() => {
-    outcomeExpiryTimer = null
-    expireOutcomeCards(visibleNotifications, outcomeSeenAt, Date.now()).expired.forEach(key => clearedNotifications.add(key))
-    countNotifications()
-  }, nextInMs)
+  const { expired, nextInMs } = expireOutcomeCards(visible, outcomeSeenAt, Date.now())
+  if (isNotificationsOpen.value) return false
+  // A DOM update can arrive after the due time but before the timer: clear those cards now.
+  if (expired.length) { expired.forEach(key => clearedNotifications.add(key)); return true }
+  if (nextInMs !== null) outcomeExpiryTimer = setTimeout(() => { outcomeExpiryTimer = null; countNotifications() }, nextInMs)
+  return false
 }
 onBeforeUnmount(() => { if (outcomeExpiryTimer) clearTimeout(outcomeExpiryTimer) })
 function pulseNotifications() {

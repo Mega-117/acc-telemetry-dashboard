@@ -117,14 +117,20 @@ export function createVoicePlaybackQueue(options: VoicePlaybackQueueOptions): Vo
     currentAudio = audio
     currentCue = cue
     emit('playback_started', cue, pathRole)
-    const outcome = await play(audio, path).catch(() => 'error' as const)
+    // PIP-697: a failure says which one, so the diary can tell a refused play() from a broken file.
+    let failure: string | undefined
+    const outcome = await play(audio, path).catch((error: unknown) => {
+      failure = `play_rejected_${(error as { name?: string })?.name || 'Error'}`
+      return 'error' as const
+    })
     if (currentAudio === audio) currentAudio = null
     if (currentCue?.id === cue.id) currentCue = null
     if (queuedGeneration !== generation) {
       emit('cancelled', cue, pathRole, 'generation_changed')
       return 'cancelled'
     }
-    emit(`playback_${outcome}` as VoicePlaybackQueueEventKind, cue, pathRole)
+    const reason = outcome === 'error' ? failure ?? 'media_error' : outcome === 'timeout' ? 'watchdog' : undefined
+    emit(`playback_${outcome}` as VoicePlaybackQueueEventKind, cue, pathRole, reason)
     return outcome
   }
 
