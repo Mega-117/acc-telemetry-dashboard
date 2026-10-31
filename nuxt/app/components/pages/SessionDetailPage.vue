@@ -431,6 +431,9 @@ async function handleSessionBSelect(sessionId: string, userId?: string, nickname
     const when = String(data.session_info?.date_start ?? '')
     compareTarget.value = token ? { ownerUid: ownerId, sessionToken: token, sharedSessionId: mine ? null : sessionId,
       label: mine ? t('sessionDetail.compare.sessionOf', { date: `${when.slice(8, 10)}/${when.slice(5, 7)}` }) : (nickname || t('sessions.picker.driver')) } : null
+    // PIP-695: seen from the Telemetria the toast speaks of laps, not stints.
+    const day = `${when.slice(8, 10)}/${when.slice(5, 7)}`
+    compareLapsToast.value = mine ? t('telemetry.choice.compareAdded', { date: day }) : t('telemetry.choice.compareAddedOf', { date: day, driver: nickname || t('sessions.picker.driver') })
   } catch {
     if (version === comparisonLoadVersion) comparisonLoadError.value = t('sessionDetail.compare.loadError')
   }
@@ -441,6 +444,12 @@ async function handleSessionBSelect(sessionId: string, userId?: string, nickname
 const compareTarget = ref<CompareTarget | null>(null)
 const pendingLapLink = ref<string | null>(null)
 function onLapLink(link: string) { pendingLapLink.value = link; chooseTab('avanzata') }
+const compareLapsToast = ref('')
+// PIP-695: a session link pasted in the Telemetria's "Cambia il riferimento": its lap token and track.
+async function readLinkedSession(sessionId: string, userId: string) {
+  const data = await fetchSessionFull(sessionId, userId)
+  return data ? { sessionToken: analysisSessionToken((data as { session_id?: unknown }).session_id, sessionId, data.session_info?.date_start), track: String(data.session_info?.track ?? '') } : null
+}
 
 function clearCrossSession() {
   compareTarget.value = null
@@ -2441,8 +2450,8 @@ const gripZones = computed(() => {
   <Teleport defer to="#app-toast-slot">
     <Transition name="autoselect-toast">
       <div v-if="showAutoSelectToast" class="autoselect-notification">
-        <span class="autoselect-notification-text">{{ t('sessionDetail.autoSelect.text') }}</span>
-        <button type="button" class="autoselect-notification-action" @click="showAutoSelectToast = false; resetBuilder()">{{ t('sessionDetail.autoSelect.change') }}</button>
+        <span class="autoselect-notification-text">{{ detailTab === 'avanzata' && compareLapsToast ? compareLapsToast : t('sessionDetail.autoSelect.text') }}</span>
+        <button v-if="detailTab !== 'avanzata'" type="button" class="autoselect-notification-action" @click="showAutoSelectToast = false; resetBuilder()">{{ t('sessionDetail.autoSelect.change') }}</button>
         <button type="button" class="autoselect-notification-close" :aria-label="t('common.close')" @click="showAutoSelectToast = false">✕</button>
       </div>
     </Transition>
@@ -2498,7 +2507,7 @@ const gripZones = computed(() => {
       </div>
     </header>
 
-    <SessionAnalysisPanel v-if="detailTab === 'avanzata' && !isEvoSession" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" :compare-with="compareTarget" :pending-lap-link="pendingLapLink" @unavailable="onTelemetryUnavailable" @compare="openSessionPicker" @lap-link-handled="pendingLapLink = null" />
+    <SessionAnalysisPanel v-if="detailTab === 'avanzata' && !isEvoSession" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" :compare-with="compareTarget" :pending-lap-link="pendingLapLink" :session-type="session?.type ?? null" :read-session="readLinkedSession" @unavailable="onTelemetryUnavailable" @compare="openSessionPicker" @lap-link-handled="pendingLapLink = null" />
 
     <!-- ========================================== -->
     <!-- MASTER / DETAIL LAYOUT -->

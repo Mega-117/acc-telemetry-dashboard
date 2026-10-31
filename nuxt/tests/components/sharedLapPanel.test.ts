@@ -95,14 +95,39 @@ describe('SessionAnalysisPanel sharing and coach view', () => {
     }
     const view = mount(SessionAnalysisPanel, { props: { sessionToken: '20261025_175240', laps }, global: { stubs: { AnalysisMap: true, AnalysisCharts: true, AnalysisCar: true } } })
     await flushPromises()
-    // PIP-635: "Condividi giro" is an action under the "Tu" lap menu.
-    await view.find('.lap-picker__button').trigger('click')
-    const button = view.findAll('.lap-picker__actions button').find(b => b.text().startsWith('Copia il link di questo giro'))!
+    // PIP-695: "Condividi" sits on the "Tu" card.
+    const button = view.get('.lap-card--you').findAll('button').find(b => b.text() === 'Condividi')!
     await button.trigger('click')
     await flushPromises()
     expect((window as any).electronAPI.shareLapTrace).toHaveBeenCalledWith('h__c/lap_20261025_175240_L006_104900ms.json.gz')
     expect(writeText).toHaveBeenCalledWith(`https://x/giro#${SHARE}.${KEY}`)
     expect(view.text()).toContain('Link copiato')
+    view.unmount()
+  })
+
+  // PIP-695: the two cards on open: Tu the last lap, Riferimento my best with its reason; "Cambia" opens the chooser.
+  it('opens with the two cards, the reason of the reference and the chooser on the right side', async () => {
+    ;(window as any).electronAPI = {
+      listLapTraces: vi.fn(async (f: { sessionToken?: string }) => f?.sessionToken ? [
+        { id: 'h__c/lap_20261025_175240_L005_104310ms.json.gz' },
+        { id: 'h__c/lap_20261025_175240_L006_104900ms.json.gz' },
+      ] : []),
+      readLapTrace: vi.fn(async (id: string) => rawLap({ lapNumber: id.includes('L005') ? 5 : 6, lapTime: id.includes('L005') ? 104.31 : 104.9 })),
+    }
+    const view = mount(SessionAnalysisPanel, { props: { sessionToken: '20261025_175240', laps, sessionType: 'race' }, attachTo: document.body, global: { stubs: { AnalysisMap: true, AnalysisCharts: true, AnalysisCar: true } } })
+    await flushPromises()
+    expect(view.get('.lap-card--you').text()).toContain('Giro 6 · 1:44.900')
+    const refCard = view.get('.lap-card--ref').text()
+    expect(refCard).toContain('Giro 5 · 1:44.310')
+    expect(refCard).toContain('Perché questo: il tuo giro valido più veloce con questa auto')
+    expect(refCard).toContain('Gara')
+    // Both laps are mine: they can be swapped.
+    await view.get('.compare-swap').trigger('click')
+    expect(view.get('.lap-card--you').text()).toContain('Giro 5')
+    expect(view.get('.lap-card--ref').text()).toContain('giro scelto da te')
+    await view.get('.lap-card--ref .lap-card__change').trigger('click')
+    await flushPromises()
+    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain('Cambia il riferimento')
     view.unmount()
   })
 

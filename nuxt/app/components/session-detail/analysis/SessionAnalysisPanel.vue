@@ -13,7 +13,10 @@ import SessionZonesCard from './SessionZonesCard.vue'
 import { ZONE_COLORS } from '~/services/telemetry/sessionZones'
 import { useSessionZones } from '~/composables/useSessionZones'
 import { useSectorCompare } from '~/composables/useSectorCompare'
-import LapPicker, { type LapAction, type LapGroup, type LapOption } from './LapPicker.vue'
+import LapChoiceCard from './LapChoiceCard.vue'
+import LapChoiceDialog from './LapChoiceDialog.vue'
+import { useLapChoice } from '~/composables/useLapChoice'
+import type { LapSide } from '~/services/telemetry/lapChoice'
 import { electronLapSource, pilotLapSource, type LapSource, type LocalLapBridge } from '~/services/telemetry/lapSources'
 import { useReferenceLibrary, type Entry } from '~/composables/useReferenceLibrary'
 import { LapsArchiveError } from '~/services/telemetry/lapsArchiveClient'
@@ -21,8 +24,7 @@ import { lapShareErrorMessage } from '~/services/telemetry/lapShareLink'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { compareCorners, cornerAdvice, detectCorners, formatDelta, stretchDelta } from '~/services/telemetry/lapAnalysis'
 import { useCornerStepper } from '~/composables/useCornerStepper'
-import { formatLapConditions, mergeLapConditions, normalizeLapTrace, type LapTraceView } from '~/services/telemetry/lapTraceChart'
-import { formatLapTime } from '~/utils/telemetryFormat'
+import { normalizeLapTrace, type LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { useTrackEdges } from '~/composables/useTrackEdges'
 import { useI18n, type TranslationKey } from '~/i18n'
 
@@ -40,6 +42,10 @@ const props = defineProps<{
   /** PIP-652: the page's "Confronta": a session to compare with (its laps become references), a lap link to load. */
   compareWith?: { ownerUid: string, sessionToken: string, sharedSessionId: string | null, label: string } | null
   pendingLapLink?: string | null
+  /** PIP-695: the shown session's type (practice / qualify / race), for the lap cards. */
+  sessionType?: string | null
+  /** PIP-695: a session link pasted in "Cambia il riferimento" → its lap token and track (the page reads it). */
+  readSession?: (sessionId: string, userId: string) => Promise<{ sessionToken: string | null, track: string } | null>
 }>()
 
 type Layout = 'pilota' | 'tracce'
@@ -68,7 +74,7 @@ const library = useReferenceLibrary({ entries, traces, refId, sessionToken: () =
 const loading = ref(false), error = ref(''), fromArchive = ref(false)
 // PIP-635: nessun giro da analizzare: la pagina torna su Sessione se l'aveva aperta da sola.
 const emit = defineEmits<{ unavailable: [], compare: [], lapLinkHandled: [] }>(); watch(error, message => { if (message) emit('unavailable') })
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const cursor = ref<number | null>(null)
 const selectedCorner = ref<number | null>(null)
 const skipped = ref(0)
@@ -82,6 +88,18 @@ function api(): LapTraceApi | null {
 }
 const { currentUser } = useFirebaseAuth()
 const archiveDeps = { getToken: async () => (await currentUser.value?.getIdToken()) ?? null }
+// PIP-695: the two lap cards and the "Cambia" chooser (modal; a side panel only in dev builds, for the usability test).
+const choice = useLapChoice({ entries, traces, lapId, refId, library, sessionToken: () => props.sessionToken, pilotUid: () => props.pilotUid || null,
+  myUid: () => currentUser.value?.uid ?? null, sessionType: () => props.sessionType ?? null, bridge: api, deps: archiveDeps, readSession: props.readSession })
+watch([() => entries.value.map(e => e.id).join(), library.suggestedId], () => choice.applyDefault())
+const chooser = ref<LapSide | null>(null)
+const chooserVariant = ref<'modal' | 'panel'>('modal')
+onMounted(() => { try { if (import.meta.dev && localStorage.getItem('rc.telemetry.picker') === 'panel') chooserVariant.value = 'panel' } catch { /* modal */ } })
+const pilotName = computed(() => choice.source.subjectName())
+const idealScope = computed(() => entries.value.find(e => e.origin === 'ideal')?.idealScope)
+const invalidPair = computed(() => [lapEntry.value, refEntry.value].some(e => e && !e.valid && !e.validUnknown))
+function openChooser(side: LapSide) { chooser.value = side }
+function wholeSession() { chooser.value = null; emit('compare') }
 // Each load gets a generation: a late answer for another session or pilot never replaces the current one.
 let loadGeneration = 0
 async function load() {
@@ -94,6 +112,7 @@ async function load() {
   entries.value = []
   traces.value = {}
   skipped.value = 0
+  choice.reset()
   if (!token) { error.value = t('telemetry.errors.noToken'); return }
   if (props.foreign && !pilot) { error.value = t('telemetry.errors.foreign'); return }
   const bridge = api()
@@ -147,25 +166,18 @@ async function load() {
     const other = [...usable].reverse().find(e => e.id !== best.id) ?? best
     // A lap picked in the Sessione table is "Tu"; the reference stays the best (or the next one).
     const picked = props.initialLap ? usable.find(e => e.lapNumber === props.initialLap) : undefined
-    if (picked) {
-      lapId.value = picked.id
-      refId.value = picked.id !== best.id ? best.id : ([...usable].filter(e => e.valid && e.id !== picked.id).sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0] ?? usable.find(e => e.id !== picked.id) ?? best).id
-    } else {
-      refId.value = best.id
-      lapId.value = other.id
-    }
+    lapId.value = (picked ?? other).id
+    // PIP-695: the reference on open, with its reason; suggestions arriving later move it only until you choose.
+    choice.applyDefault()
     // Coach view: the coach's own laps here as references; your own view: your best laps here from every session (PIP-646).
     const first = traces.value[usable[0]!.id]
     library.refreshIdeal()
     if (bridge && first) void (pilot ? library.loadOwnLaps(isCurrent, bridge, first.track, first.car) : library.loadBestLaps(isCurrent, bridge, first.track, first.car))
     // PIP-650: other drivers' laps here, a step above this session's best in the closest conditions.
     const bestTrace = traces.value[best.id]
-    // Proposed automatically as the reference, unless you picked another one meanwhile (fallback: your best).
-    const defaultRef = refId.value
     if (first) void library.loadOtherDrivers(isCurrent, archiveDeps, { game: first.gameId, track: first.track, car: first.car, variant: first.variant },
       { myUid: pilot ?? currentUser.value?.uid ?? null, myBestMs: best.valid ? best.lapTimeMs : null,
         mine: { grip: bestTrace?.conditions?.grip ?? null, airC: bestTrace?.conditions?.airC ?? null, roadC: bestTrace?.conditions?.roadC ?? null, fuelL: bestTrace?.fuelL ?? null } })
-      .then(id => { if (id && isCurrent() && refId.value === defaultRef && !picked) refId.value = id })
   } catch (e) {
     if (isCurrent()) error.value = e instanceof LapsArchiveError ? e.message : t('telemetry.errors.read')
   } finally {
@@ -176,7 +188,7 @@ async function load() {
 // PIP-652: the page's one "Confronta" (a session to compare with, a lap link that becomes the reference).
 const { linkError } = useCompareTargets({ pendingLapLink: () => props.pendingLapLink, compareWith: () => props.compareWith, currentLap: () => traces.value[lapId.value] ?? null,
   entries, traces, refId, library, deps: archiveDeps, bridge: api, viewerUid: () => currentUser.value?.uid ?? null, ownView: () => !props.pilotUid,
-  isCurrent: () => { const g = loadGeneration; return () => g === loadGeneration }, handled: () => emit('lapLinkHandled') })
+  isCurrent: () => { const g = loadGeneration; return () => g === loadGeneration }, handled: () => emit('lapLinkHandled'), propose: choice.propose })
 
 // PIP-623: "Condividi giro": the selected lap goes online (if not yet) and its link is copied.
 const shareState = ref<'idle' | 'busy' | 'copied' | 'error'>('idle')
@@ -185,11 +197,8 @@ let shareTimer: ReturnType<typeof setTimeout> | null = null
 const canShare = computed(() => !props.pilotUid && typeof api()?.shareLapTrace === 'function'
   && lapEntry.value?.origin === 'local' && lapEntry.value.complete && lapEntry.value.valid)
 const shareHint = computed(() => props.pilotUid ? '' : lapEntry.value && !lapEntry.value.valid ? t('telemetry.share.validOnly') : t('telemetry.share.hint'))
-// PIP-635: the two lap actions sit at the bottom of their menu (your lap: share it; reference: a lap by link).
-const lapActions = computed<LapAction[]>(() => !props.pilotUid && typeof api()?.shareLapTrace === 'function'
-  ? [{ id: 'share', label: shareState.value === 'busy' ? t('telemetry.share.busy') : t('telemetry.share.action'), disabled: !canShare.value || shareState.value === 'busy', hint: shareHint.value }] : [])
-const refActions = computed<LapAction[]>(() => entries.value.length ? [{ id: 'compare', label: t('telemetry.compareAction'), hint: t('sessionDetail.header.compareTitle') }] : [])
-function onLapAction(id: string) { if (id === 'share') void shareLap(); else if (id === 'compare') emit('compare') }
+// PIP-695: sharing your lap sits on the Tu card; a lap by link is in "Cambia il riferimento".
+const shareAvailable = computed(() => !props.pilotUid && typeof api()?.shareLapTrace === 'function')
 async function shareLap() {
   const id = lapId.value
   if (!canShare.value || shareState.value === 'busy') return
@@ -389,38 +398,28 @@ const traceRows = computed(() => [speedRow, ...pedalRows, steerRow, gearRow, ...
 
 // PIP-619: air/road and grip of each lap (from the lap, else this session's laps): like for like.
 const sessionEntries = computed(() => entries.value.filter(e => e.origin === 'local' || e.origin === 'pilot'))
-const ownEntries = computed(() => entries.value.filter(e => e.origin === 'own'))
-const sharedEntries = computed(() => entries.value.filter(e => e.origin === 'shared'))
-const bestEntries = computed(() => entries.value.filter(e => e.origin === 'best')), idealEntries = computed(() => entries.value.filter(e => e.origin === 'ideal'))
-const libraryEntries = computed(() => entries.value.filter(e => e.origin === 'library')), compareEntries = computed(() => entries.value.filter(e => e.origin === 'compare'))
 const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Semplice on the whole session
-// PIP-635: il best (valido e completo) della sessione, segnato nei giri come nei tempi del gioco.
-const bestId = computed(() => sessionBest.value?.id ?? '')
-const lapOption = (e: Entry): LapOption => ({ id: e.id, title: e.label ?? t('sessionDetail.chart.lap', { lap: e.lapNumber }), time: e.label ? '' : formatLapTime(e.lapTimeMs), valid: e.valid, complete: e.complete, best: e.id === bestId.value,
-  conditions: formatLapConditions(mergeLapConditions(traces.value[e.id]?.conditions ?? null, sessionRow(e))) })
-const lapGroups = computed<LapGroup[]>(() => [{ label: '', options: sessionEntries.value.map(lapOption) }])
-const refGroups = computed<LapGroup[]>(() => [{ label: props.pilotUid ? t('telemetry.groups.pilot') : t('telemetry.groups.session'), options: sessionEntries.value.map(lapOption) },
-  ...(ownEntries.value.length ? [{ label: t('telemetry.groups.mine'), options: ownEntries.value.map(lapOption) }] : []), ...(sharedEntries.value.length ? [{ label: t('telemetry.groups.shared'), options: sharedEntries.value.map(lapOption) }] : []),
-  ...(idealEntries.value.length ? [{ label: t('telemetry.groups.ideal'), options: idealEntries.value.map(lapOption) }] : []),
-  ...(bestEntries.value.length ? [{ label: t('telemetry.groups.best'), options: bestEntries.value.map(lapOption) }] : []),
-  ...(libraryEntries.value.length ? [{ label: t('telemetry.groups.library'), options: libraryEntries.value.map(lapOption) }] : []),
-  ...(compareEntries.value.length ? [{ label: t('telemetry.groups.compare'), options: compareEntries.value.map(lapOption) }] : [])])
-const short = (e: Entry | null) => e ? `${t('sessionDetail.chart.lap', { lap: e.lapNumber })} · ${formatLapTime(e.lapTimeMs)}` : '--'
-const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTime(s * 1000) : '--'
 </script>
 
 <template>
   <section class="analysis">
     <div class="analysis-bar">
-      <!-- PIP-635: one comparison block, "Tu  +1.733 s  Riferimento": each lap in its colour (Track Titan), the gap
-           between them; sharing your lap and a lap by link live in the two menus. The view sits apart, on the right. -->
+      <!-- PIP-695: two cards always in sight, "Tu  +1.733 s  Riferimento" (Track Titan colours): whose lap, which one,
+           when, its status and why the reference; "Cambia" opens the chooser. The view sits apart, on the right. -->
       <div class="compare" role="group" :aria-label="t('telemetry.compareAria')">
-        <LapPicker v-model="lapId" :name="t('telemetry.you')" color="#38bdf8" :groups="lapGroups" :actions="lapActions" :disabled="!sessionEntries.length" :hint="t('telemetry.youHint')" @action="onLapAction" />
-        <p class="compare-gap" :class="{ gain: (totalDelta ?? 0) < 0, loss: (totalDelta ?? 0) > 0 }" :title="t('telemetry.gapTitle')">
-          <template v-if="totalDelta !== null"><strong>{{ formatDelta(totalDelta) }} s</strong><em>{{ totalDelta < 0 ? t('telemetry.faster') : totalDelta > 0 ? t('telemetry.slower') : t('telemetry.even') }}</em></template><em v-else>{{ t('telemetry.versus') }}</em>
-        </p>
-        <LapPicker v-model="refId" :name="t('telemetry.reference')" align="right" color="#fbbf24" :groups="refGroups" :actions="refActions" :disabled="!entries.length" :hint="t('telemetry.referenceHint')" @action="onLapAction" />
+        <LapChoiceCard side="you" :choice="choice.youCard.value" :ideal-scope="idealScope" :disabled="!sessionEntries.length" @change="openChooser('you')">
+          <button v-if="shareAvailable" type="button" :disabled="!canShare || shareState === 'busy'" :title="shareHint" :aria-label="t('telemetry.share.action')" @click="shareLap">{{ shareState === 'busy' ? t('telemetry.share.busy') : t('telemetry.choice.share') }}</button>
+        </LapChoiceCard>
+        <div class="compare-mid">
+          <p class="compare-gap" :class="{ gain: (totalDelta ?? 0) < 0, loss: (totalDelta ?? 0) > 0 }" :title="t('telemetry.gapTitle')">
+            <template v-if="totalDelta !== null"><strong>{{ formatDelta(totalDelta).replace('.', locale === 'it' ? ',' : '.') }} s</strong><em>{{ totalDelta < 0 ? t('telemetry.faster') : totalDelta > 0 ? t('telemetry.slower') : t('telemetry.even') }}<template v-if="invalidPair"> · {{ t('telemetry.choice.invalidQualifier') }}</template></em></template><em v-else>{{ t('telemetry.versus') }}</em>
+          </p>
+          <button v-if="choice.canSwap.value" type="button" class="compare-swap" :title="t('telemetry.choice.swap')" :aria-label="t('telemetry.choice.swap')" @click="choice.swap()"><span aria-hidden="true">⇄</span></button>
+        </div>
+        <LapChoiceCard side="ref" :choice="choice.refCard.value" :reason="choice.reason.value" :ideal-scope="idealScope" :pilot-name="pilotName" :disabled="!entries.length" @change="openChooser('ref')" />
       </div>
+      <LapChoiceDialog :open="chooser !== null" :side="chooser ?? 'ref'" :source="choice.source" :apply="choice.apply" :variant="chooserVariant" :ideal-scope="idealScope"
+        @close="chooser = null" @whole-session="wholeSession" />
       <span v-if="shareMessage" class="bar-note" :class="{ failed: shareState === 'error' }" role="status">{{ shareMessage }}</span>
       <div v-rc-switch class="rc-switch views-switch" role="tablist" :aria-label="t('telemetry.viewAria')">
         <button v-for="l in LAYOUTS" :key="l.id" type="button" role="tab" :aria-selected="layout === l.id" :class="{ active: layout === l.id }" :title="t(l.hint)" @click="layout = l.id">{{ t(l.label) }}</button>
@@ -550,7 +549,10 @@ const ms = (s: number | null | undefined) => typeof s === 'number' ? formatLapTi
   em { font-style: normal; font-size: 11px; }
   &.gain strong { color: #3ddc5a; } &.loss strong { color: #ff5a6e; } }
 // Narrow screens: the two laps one under the other, the gap between them (they need about 620 px side by side).
-@media (max-width: 860px) { .compare { flex-wrap: wrap; } .compare > .lap-picker { flex: 1 1 100%; } .compare-gap { flex: 1 1 100%; height: 30px; display: flex; gap: 6px; justify-content: center; align-items: baseline; } }
+.compare-mid { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.compare-swap { width: 34px; height: 26px; padding: 0; border: 1px solid #ffffff40; background: #ffffff0d; color: #fff; font: 700 15px/1 "Inter", sans-serif; cursor: pointer;
+  &:hover { border-color: #fff; } &:focus-visible { outline: 2px solid #fff; outline-offset: 1px; } }
+@media (max-width: 860px) { .compare { flex-wrap: wrap; } .compare > .lap-card { flex: 1 1 100%; max-width: none; } .compare-mid { flex: 1 1 100%; flex-direction: row; justify-content: center; } .compare-gap { height: 30px; display: flex; gap: 6px; justify-content: center; align-items: baseline; } }
 .analysis-empty { padding: 30px 0; color: #aaa; }
 .analysis-note { margin: 4px 0 0; color: #77777d; font-size: 11px; }
 .gain { color: #3ddc5a; }

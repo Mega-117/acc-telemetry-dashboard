@@ -9,7 +9,11 @@ import { formatLapTime } from '~/utils/telemetryFormat'
 import { noteFeatureUse } from '~/services/usage/featureUseNote'
 import { useI18n } from '~/i18n'
 
-export interface SharedLapLoaded { id: string, trace: LapTraceView, label: string, lapNumber: number, lapTimeMs: number, carMismatch: boolean }
+export interface SharedLapLoaded {
+  id: string, trace: LapTraceView, label: string, lapNumber: number, lapTimeMs: number, carMismatch: boolean
+  /** PIP-695: whose lap and from which session, for the Riferimento card. */
+  ownerUid?: string | null, driver?: string | null, sessionToken?: string | null
+}
 
 export function sameLapContext(trace: LapTraceView, current: LapTraceView | null) {
   return !current || (trace.gameId === current.gameId && trace.track === current.track && (trace.variant ?? null) === (current.variant ?? null))
@@ -30,12 +34,13 @@ export async function loadSharedLapLink(text: string, current: LapTraceView | nu
     // Only whole, valid laps are references: a partial lap would compare different places.
     if (!trace.complete || trace.valid !== true) return { error: t('telemetry.sharedLap.notValid') }
     if (!sameLapContext(trace, current)) return { error: t('telemetry.sharedLap.otherTrack', { track: trace.track }) }
-    const nickname = (await (o.nickname ?? loadPublicNickname)(meta.ownerUid)) || t('sessions.picker.driver')
+    const driver = await (o.nickname ?? loadPublicNickname)(meta.ownerUid)
+    const nickname = driver || t('sessions.picker.driver')
     if (!isCurrent() || !sameLapContext(trace, current)) return null
     const lapNumber = meta.lapNumber ?? 0
     const lapTimeMs = meta.lapTimeMs ?? Math.round(trace.lapTimeS * 1000)
     noteFeatureUse({ event: 'laps.share_pasted', laps: 1 })
-    return { lap: { id: `shared:${link.shareId}`, trace, lapNumber, lapTimeMs, label: `${nickname} · ${t('sessionDetail.chart.lap', { lap: lapNumber })} · ${formatLapTime(lapTimeMs)}`, carMismatch: !!current && trace.car !== current.car } }
+    return { lap: { id: `shared:${link.shareId}`, trace, lapNumber, lapTimeMs, ownerUid: meta.ownerUid || null, driver: driver || null, sessionToken: meta.sessionToken || null, label: `${nickname} · ${t('sessionDetail.chart.lap', { lap: lapNumber })} · ${formatLapTime(lapTimeMs)}`, carMismatch: !!current && trace.car !== current.car } }
   } catch (e) {
     return isCurrent() ? { error: e instanceof LapsArchiveError ? e.message : t('telemetry.sharedLap.loadError') } : null
   }

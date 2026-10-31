@@ -15,6 +15,7 @@ import { sessionGame, sessionFilterType } from '~/services/telemetry/gameIdentit
 import { sessionTiming } from '~/services/telemetry/fuelHistorySummary'
 import { X } from '@lucide/vue'
 import { parseLapShareLink } from '~/services/telemetry/lapShareLink'
+import { parseSessionLink } from '~/services/telemetry/lapChoice'
 import { loadPublicNickname } from '~/repositories/publicProfileRepository'
 import { useI18n } from '~/i18n'
 
@@ -47,13 +48,8 @@ const sharedLink = ref('')
 const linkError = ref('')
 const isLoadingLink = ref(false)
 
-// Parse shared link to extract sessionId and userId
-function parseSharedLink(url: string): { sessionId: string, userId: string } | null {
-  // Pattern: /sessioni/SESSION_ID?userId=USER_ID
-  const match = url.match(/\/sessioni\/([^?]+)\?userId=([^&]+)/)
-  if (match && match[1] && match[2]) return { sessionId: match[1], userId: match[2] }
-  return null
-}
+// Parse shared link to extract sessionId and userId (one parser with the Telemetria, PIP-695).
+const parseSharedLink = parseSessionLink
 
 // PIP-652: a session link can also be opened (the desktop app has no address bar).
 const sessionLink = computed(() => parseSharedLink(sharedLink.value))

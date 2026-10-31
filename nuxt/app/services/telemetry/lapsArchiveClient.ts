@@ -197,6 +197,15 @@ export async function listPilotLaps(pilotUid: string, sessionToken: string, deps
   return laps
 }
 
+/** PIP-695: every lap of a driver on one track and car, from all sessions, fastest first (at most 300). */
+export async function listPilotTrackLaps(pilotUid: string, where: { game: string, track: string, car: string, variant: string | null }, deps: LapsArchiveDeps): Promise<{ laps: RemoteLapDescriptor[], truncated: boolean }> {
+  const q = new URLSearchParams({ game: where.game, track: where.track, car: where.car, variant: where.variant ?? '' })
+  const body = await request(`/v1/laps/of/${encodeURIComponent(pilotUid)}?${q}`, deps, (response) => response.json() as Promise<{ laps?: RemoteLapDescriptor[], truncated?: boolean }>)
+  const laps = (body.laps ?? []).filter(d => typeof d?.lapId === 'string' && /^[a-f0-9]{24}$/.test(d.lapId) && typeof d.sessionToken === 'string' && /^\d{8}_\d{6}$/.test(d.sessionToken)
+    && Number.isFinite(d.lapTimeMs) && Number.isFinite(d.lapNumber))
+  return { laps, truncated: body.truncated === true }
+}
+
 export async function fetchPilotLap(pilotUid: string, sessionToken: string, lapId: string, deps: LapsArchiveDeps, shared: string | null = null): Promise<{ trace: unknown, meta: RemoteLapMeta }> {
   return request(`/v1/laps/of/${encodeURIComponent(pilotUid)}/${sessionToken}/${lapId}${shared ? `?shared=${encodeURIComponent(shared)}` : ''}`, deps, async (response) => ({ trace: await readLapBody(response), meta: metaFrom(response) }))
 }

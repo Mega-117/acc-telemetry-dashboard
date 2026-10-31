@@ -1,17 +1,23 @@
-import type { Ref } from 'vue'
+import { ref, type Ref } from 'vue'
 import { listFastestLaps, listOwnLaps, type LapDescriptor, type LapOrigin, type LapSource, type LocalLapBridge } from '~/services/telemetry/lapSources'
 import { normalizeLapTrace, type LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { channelAt, sectorBounds } from '~/services/telemetry/lapAnalysis'
 import { stitchIdealLap } from '~/services/telemetry/idealLap'
 import { formatLapTime } from '~/utils/telemetryFormat'
-import { fetchLibraryLap, listLibrary, type LapsArchiveDeps } from '~/services/telemetry/lapsArchiveClient'
+import { fetchLibraryLap, listLibrary, type LapsArchiveDeps, type LibraryEntry } from '~/services/telemetry/lapsArchiveClient'
 import { pickReferences, type ReferenceConditions } from '~/services/telemetry/referencePick'
 import { loadPublicNickname } from '~/repositories/publicProfileRepository'
 import { noteFeatureUse } from '~/services/usage/featureUseNote'
 import { useI18n } from '~/i18n'
 
 /** One lap of the Telemetria menus. Only "local"/"pilot" laps of the shown session can be "Tu". */
-export interface Entry { id: string, lapNumber: number, lapTimeMs: number, valid: boolean, complete: boolean, origin: LapOrigin, sessionToken: string, label?: string, note?: string }
+export interface Entry {
+  id: string, lapNumber: number, lapTimeMs: number, valid: boolean, complete: boolean, origin: LapOrigin, sessionToken: string, label?: string, note?: string
+  /** PIP-695: who drove it (another driver's nickname) and when, for the lap cards. */
+  driver?: string | null, ownerUid?: string | null, recordedAt?: string | null, validUnknown?: boolean
+  /** The ideal lap: stitched from this session only, or also from your faster laps here. */
+  idealScope?: 'session' | 'history'
+}
 type Loaded = { trace: LapTraceView, entry: Entry }
 
 /** Note on a reference driven with another car, in the interface language. */
@@ -35,6 +41,10 @@ export function useReferenceLibrary(o: {
   /** The selected reference: when the ideal lap goes away it falls back on the session's best lap. */
   refId?: Ref<string>
 }) {
+  // PIP-695: the library list itself (best lap per driver here) for "Altri piloti", and which laps were proposed.
+  const libraryList = ref<LibraryEntry[]>([])
+  const libraryState = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const suggestedId = ref<string | null>(null), fastestId = ref<string | null>(null)
   function add(loaded: Loaded[]) {
     o.traces.value = { ...o.traces.value, ...Object.fromEntries(loaded.map(r => [r.entry.id, r.trace])) }
     o.entries.value = [...o.entries.value.filter(e => !loaded.some(r => r.entry.id === e.id)), ...loaded.map(r => r.entry)]
@@ -102,7 +112,7 @@ export function useReferenceLibrary(o: {
       return
     }
     const ms = Math.round(fastestMs + potentialS * 1000)
-    add([{ trace: { ...ideal.trace, lapTimeS: ms / 1000 }, entry: { id: IDEAL_ID, lapNumber: 0, lapTimeMs: ms, valid: true, complete: true, origin: 'ideal', sessionToken: '',
+    add([{ trace: { ...ideal.trace, lapTimeS: ms / 1000 }, entry: { id: IDEAL_ID, lapNumber: 0, lapTimeMs: ms, valid: true, complete: true, origin: 'ideal', sessionToken: '', idealScope: historyTraces.length ? 'history' : 'session',
       label: useI18n().t('telemetry.labels.ideal', { time: formatLapTime(ms), gap: seconds(potentialS) }) } }])
   }
 
@@ -112,8 +122,11 @@ export function useReferenceLibrary(o: {
    */
   async function loadOtherDrivers(isCurrent: () => boolean, deps: LapsArchiveDeps & { loadNickname?: (uid: string) => Promise<string | null> },
     where: { game: string, track: string, car: string, variant: string | null }, ctx: { myUid: string | null, myBestMs: number | null, mine: ReferenceConditions }): Promise<string | null> {
+    libraryState.value = 'loading'
     try {
-      const { suggested, fastest } = pickReferences(await listLibrary(where, deps), ctx)
+      const list = await listLibrary(where, deps)
+      if (isCurrent()) { libraryList.value = list; libraryState.value = 'ready' }
+      const { suggested, fastest } = pickReferences(list, ctx)
       const nickname = deps.loadNickname ?? loadPublicNickname
       const picked = [[suggested, useI18n().t('telemetry.labels.suggested')], [fastest, useI18n().t('telemetry.labels.fastest')]] as const
       const same = (a: string | null | undefined, b: string | null | undefined) => (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase()
@@ -128,6 +141,7 @@ export function useReferenceLibrary(o: {
             && same(trace.variant, where.variant) && Math.abs(trace.lapTimeS * 1000 - e.lapTimeMs) <= 100
             && trace.lengthM / trace.lapTimeS * 3.6 <= 330
           return believable ? { trace: trace!, entry: { id: `library:${e.libId}`, lapNumber: 0, lapTimeMs: e.lapTimeMs, valid: true, complete: true, origin: 'library', sessionToken: '',
+            driver: nick || null, ownerUid: e.uid, recordedAt: e.recordedAt,
             label: `${nick || useI18n().t('sessions.picker.driver')} · ${formatLapTime(e.lapTimeMs)} · ${tag}` } } : null
         } catch { return null }
       }))
@@ -140,15 +154,20 @@ export function useReferenceLibrary(o: {
       const usable = new Set(ok.map(r => r.entry.id)).size
       if (offered) noteFeatureUse({ event: 'laps.library_loaded', laps: usable, rejected: offered - usable })
       // The suggested lap's id, so the page can propose it as the reference (user decision: automatic).
-      return suggested && ok.some(r => r.entry.id === `library:${suggested.libId}`) ? `library:${suggested.libId}` : null
-    } catch { return null /* other drivers' laps are an extra */ }
+      suggestedId.value = suggested && ok.some(r => r.entry.id === `library:${suggested.libId}`) ? `library:${suggested.libId}` : null
+      fastestId.value = fastest && ok.some(r => r.entry.id === `library:${fastest.libId}`) ? `library:${fastest.libId}` : null
+      return suggestedId.value
+    } catch {
+      if (isCurrent()) libraryState.value = 'error'
+      return null /* other drivers' laps are an extra */
+    }
   }
 
   /**
    * PIP-652: the session picked in "Confronta" (yours or by link): its whole valid laps become references,
    * labelled with the driver; returns the id of its best lap, to propose it as the reference.
    */
-  async function loadCompareSession(isCurrent: () => boolean, source: LapSource, target: { sessionToken: string, label: string }): Promise<string | null> {
+  async function loadCompareSession(isCurrent: () => boolean, source: LapSource, target: { sessionToken: string, label: string, ownerUid?: string }): Promise<string | null> {
     try {
       const list = await source.list(target.sessionToken)
       // One lap at a time, as the archive is read for a coach, and one retry: a lap that does not arrive
@@ -158,7 +177,7 @@ export function useReferenceLibrary(o: {
           try {
             const trace = normalizeLapTrace(await source.read(d))
             return trace?.complete && (d.valid ?? trace.valid) === true ? { trace, entry: { id: `compare:${d.id}`, lapNumber: d.lapNumber, lapTimeMs: d.lapTimeMs, valid: true, complete: true,
-              origin: 'compare', sessionToken: d.sessionToken, label: `${target.label} · ${lapWord(d.lapNumber)} · ${formatLapTime(d.lapTimeMs)}` } } : null
+              origin: 'compare', sessionToken: d.sessionToken, ownerUid: target.ownerUid ?? null, label: `${target.label} · ${lapWord(d.lapNumber)} · ${formatLapTime(d.lapTimeMs)}` } } : null
           } catch { if (!isCurrent()) return null }
         }
         return null
@@ -174,5 +193,10 @@ export function useReferenceLibrary(o: {
   }
   function clearCompareSession() { o.entries.value = o.entries.value.filter(e => e.origin !== 'compare') }
 
-  return { loadOwnLaps, loadBestLaps, refreshIdeal, loadOtherDrivers, loadCompareSession, clearCompareSession }
+  /** PIP-695: one lap read on demand (a lap of another session or driver picked in "Cambia"). */
+  function addLoaded(entry: Entry, trace: LapTraceView) { add([{ entry, trace }]) }
+  function resetLibrary() { libraryList.value = []; libraryState.value = 'idle'; suggestedId.value = null; fastestId.value = null }
+
+  return { loadOwnLaps, loadBestLaps, refreshIdeal, loadOtherDrivers, loadCompareSession, clearCompareSession, addLoaded, resetLibrary,
+    libraryList, libraryState, suggestedId, fastestId }
 }
