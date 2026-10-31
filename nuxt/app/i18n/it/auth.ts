@@ -35,7 +35,7 @@ export default {
       termsLink: 'Termini della beta',
       privacyBefore: "Ho letto l'",
       privacyLink: 'Informativa privacy',
-      usage: 'Condividi statistiche di utilizzo (facoltativo, si cambia dal Profilo)',
+      usage: 'Condividi statistiche di utilizzo',
     },
     errors: {
       emailRequired: 'Inserisci la tua email.',

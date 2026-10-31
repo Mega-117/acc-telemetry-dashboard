@@ -36,7 +36,7 @@ export default {
       termsLink: 'beta Terms',
       privacyBefore: 'I have read the ',
       privacyLink: 'Privacy notice',
-      usage: 'Share usage statistics (optional, change it from your Profile)',
+      usage: 'Share usage statistics',
     },
     errors: {
       emailRequired: 'Enter your email.',
