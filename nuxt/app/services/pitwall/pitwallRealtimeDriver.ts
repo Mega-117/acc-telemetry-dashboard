@@ -9,6 +9,16 @@ type Options = Pick<PitwallRoomDriverOptions, 'uid' | 'nickname' | 'runtimeSessi
   bindMain: (value: { connectionId: string, roomId: string | null, online: boolean }) => Promise<unknown>
 }
 
+/**
+ * PIP-371: the outcome the engineer sees. A "not yet" from ACC (`waiting`, e.g. the car is not in
+ * the pits) is never a failure and never retried by itself: it ends as `rejected` with its real
+ * reason, and the engineer sends again by hand (decision of 06/09/2026).
+ */
+export function terminalPitwallOutcome(outcome: { status?: string, reason?: string | null }): { status: 'applied' | 'partial' | 'failed' | 'rejected', reason: string | null } {
+  const status = (['applied', 'partial', 'failed', 'rejected'] as const).find(value => value === outcome.status) ?? 'rejected'
+  return { status, reason: outcome.reason ?? (outcome.status === 'waiting' ? 'Impedimento rilevato: occorre un nuovo invio manuale.' : null) }
+}
+
 /** Event-driven driver: each new order is considered once, never retried when ACC becomes ready. */
 export function startPitwallRealtimeDriver(options: Options): PitwallRoomDriverHandle {
   const rooms = options.service
@@ -82,9 +92,9 @@ export function startPitwallRealtimeDriver(options: Options): PitwallRoomDriverH
           emit(); void recover(); return
         }
       }
-      const terminal = (['applied', 'partial', 'failed', 'rejected'] as const).find(value => value === outcome.status) ?? 'rejected'
+      const { status: terminal, reason: terminalReason } = terminalPitwallOutcome(outcome)
       const result = await rooms.publishOutcome(roomId, order.orderId, { status: terminal,
-        reason: outcome.reason ?? (outcome.status === 'waiting' ? 'Impedimento rilevato: occorre un nuovo invio manuale.' : null), fields: outcome.fields, tyreSetCondition: outcome.tyreSetCondition,
+        reason: terminalReason, fields: outcome.fields, tyreSetCondition: outcome.tyreSetCondition,
         method: outcome.method, diary: outcome.diary, performance: outcome.performance, sourceStatus: outcome.sourceStatus, events: outcome.events, selectedDriverId: outcome.selectedDriverId })
       if (result.ok) await confirmOutcomes([order.orderId])
       else console.warn('[PITWALL] Esito conservato localmente:', result.reason)
