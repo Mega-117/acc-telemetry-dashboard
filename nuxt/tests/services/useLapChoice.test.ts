@@ -49,6 +49,19 @@ describe('useLapChoice', () => {
     expect(s.c.userChose.value).toBe(true)
   })
 
+  it('the PC lists the 40 newest laps; older ones come from the online archive, without duplicates', async () => {
+    const items = Array.from({ length: 40 }, (_, i) => ({ id: `spa__bmw/lap_20261030_1000${String(i).padStart(2, '0')}_L001_99${String(i).padStart(3, '0')}ms.json.gz` }))
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ truncated: false, laps: [
+      { lapId: 'a'.repeat(24), sessionToken: '20261001_090000', lapNumber: 3, lapTimeMs: 98000, valid: true, complete: true },
+      { lapId: 'b'.repeat(24), sessionToken: '20261030_100000', lapNumber: 1, lapTimeMs: 99000, valid: true, complete: true },
+    ] }))) as unknown as typeof fetch
+    const s = setup({ bridge: { listLapTraces: vi.fn(async () => items), readLapTrace: vi.fn() }, fetchImpl })
+    const { laps, truncated } = await s.c.source.listMine()
+    expect(truncated).toBe(false)
+    expect(laps.some(l => l.sessionToken === '20261001_090000')).toBe(true)
+    expect(laps.filter(l => l.key === lapKey('me', '20261030_100000', 1))).toHaveLength(1)
+  })
+
   it('a lap of another session on this PC becomes Tu, read once, with unknown validity said as such', async () => {
     const readLapTrace = vi.fn(async () => trace({ valid: null }))
     const bridge = { listLapTraces: vi.fn(async () => [{ id: 'spa__bmw/lap_20261030_100000_L004_99500ms.json.gz' }]), readLapTrace }

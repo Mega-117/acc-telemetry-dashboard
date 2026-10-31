@@ -197,7 +197,15 @@ export function useLapChoice(o: {
         return p ? [{ key: lapKey(owner, p.sessionToken, p.lapNumber), ref: { kind: 'local' as const, id: item.id }, ownerUid: owner, driver: nick(owner), mine: true,
           lapNumber: p.lapNumber, lapTimeMs: p.lapTimeMs, sessionToken: p.sessionToken, status: validRaw.has(item.id) ? 'valid' as const : 'unknown' as const }] : []
       })
-      return { laps: [...loaded, ...laps], truncated: items.length >= 40 }
+      if (items.length < 40) return { laps: [...loaded, ...laps], truncated: false }
+      // The PC lists only the 40 newest laps (each one is checked on disk): the older ones come from the
+      // online archive, which keeps them forever (PIP-694).
+      const known = new Set([...loaded, ...laps].map(c => c.key))
+      try {
+        const online = await listPilotTrackLaps(owner, w, o.deps)
+        const older = online.laps.map(d => archiveChoice(owner, d)).filter(c => !known.has(c.key))
+        return { laps: [...loaded, ...laps, ...older], truncated: online.truncated }
+      } catch { return { laps: [...loaded, ...laps], truncated: true } }
     }
     const { laps, truncated } = await listPilotTrackLaps(owner, w, o.deps)
     return { laps: [...loaded, ...laps.map(d => archiveChoice(owner, d))], truncated }
