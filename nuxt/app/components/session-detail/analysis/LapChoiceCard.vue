@@ -60,7 +60,7 @@ const when = computed(() => props.choice ? text.when(props.choice) : '')
 .lap-card__lap { color: #e6e6ea; font: italic 700 14px 'Racer Display', sans-serif; letter-spacing: .02em; &.is-best { color: #c084fc; } }
 .lap-card__meta { display: flex; gap: 8px; color: #b3b3b8; font: 500 12px 'Inter', sans-serif; }
 .lap-card__status { &.is-valid { color: #3ddc5a; } &.is-invalid { color: #ff8a98; } &.is-incomplete, &.is-unknown { color: #b3b3b8; } }
-.lap-card__reason { color: #d9c08a; font: 500 11px 'Inter', sans-serif; }
+.lap-card__body .lap-card__reason { color: #d9c08a; font: 500 11px 'Inter', sans-serif; white-space: normal; } // why this lap: never cut off
 .lap-card__actions { display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 6px; }
 .lap-card__change, .lap-card__actions :slotted(button) { min-height: 28px; padding: 0 10px; border: 1px solid #ffffff40; background: #ffffff0d; color: #fff; font: 700 12px 'Inter', sans-serif; cursor: pointer;
   &:hover:not(:disabled) { border-color: var(--c); background: color-mix(in srgb, var(--c) 18%, transparent); }

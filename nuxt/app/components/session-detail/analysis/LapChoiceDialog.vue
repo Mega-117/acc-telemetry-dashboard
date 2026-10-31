@@ -104,7 +104,7 @@ const rowProps = (c: LapChoice) => ({ choice: c, selected: c.key === selected.va
         :aria-labelledby="`${uid}-title`" tabindex="-1" @keydown="onKeydown">
         <header class="choice-dialog__head">
           <h2 :id="`${uid}-title`"><span class="choice-dialog__swatch" aria-hidden="true" />{{ t(side === 'you' ? 'telemetry.choice.dialog.titleYou' : 'telemetry.choice.dialog.titleRef') }}</h2>
-          <button type="button" class="choice-dialog__x" :aria-label="t('telemetry.choice.dialog.cancel')" @click="close">✕</button>
+          <button type="button" class="choice-dialog__x" :aria-label="t('telemetry.choice.dialog.close')" @click="close">✕</button>
         </header>
         <p v-if="variant === 'panel'" class="choice-empty">{{ t('telemetry.choice.dialog.panelNote') }}</p>
         <div class="choice-dialog__tabs">

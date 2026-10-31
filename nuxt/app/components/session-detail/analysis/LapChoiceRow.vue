@@ -7,7 +7,7 @@ import type { LapChoice } from '~/services/telemetry/lapChoice'
 import { useLapChoiceText } from '~/composables/useLapChoiceText'
 import { useI18n } from '~/i18n'
 
-const props = defineProps<{ choice: LapChoice, selected: boolean, current?: boolean, otherSide?: string | null, idealScope?: 'session' | 'history', rank?: number | null, hideWhen?: boolean }>()
+const props = defineProps<{ choice: LapChoice, selected: boolean, current?: boolean, otherSide?: string | null, idealScope?: 'session' | 'history', rank?: number | null, hideWhen?: boolean, hideDriver?: boolean }>()
 const emit = defineEmits<{ select: [choice: LapChoice], confirm: [choice: LapChoice] }>()
 const { t } = useI18n()
 const text = useLapChoiceText()
@@ -26,12 +26,12 @@ function onKey(event: KeyboardEvent) {
 
 <template>
   <button type="button" class="choice-row" :class="{ 'is-selected': selected, 'is-ideal': choice.ideal, 'is-off': choice.status === 'incomplete' }" :aria-pressed="selected"
-    :data-key="choice.key" @click="emit('select', choice)" @dblclick="emit('confirm', choice)" @keydown="onKey">
+    :aria-current="current ? 'true' : undefined" :data-key="choice.key" @click="emit('select', choice)" @dblclick="emit('confirm', choice)" @keydown="onKey">
     <span v-if="rank" class="choice-row__rank">{{ rank }}</span>
     <span class="choice-row__text">
       <span class="choice-row__l1">
-        <span class="choice-row__driver">{{ text.driver(choice) }}</span>
-        <span v-if="choice.mine" class="choice-row__tag">{{ t('telemetry.choice.tagYou') }}</span>
+        <span v-if="!hideDriver" class="choice-row__driver">{{ text.driver(choice) }}</span>
+        <span v-if="choice.mine && !hideDriver" class="choice-row__tag">{{ t('telemetry.choice.tagYou') }}</span>
         <span class="choice-row__time" :class="{ 'is-best': choice.best }">{{ formatLapTime(choice.lapTimeMs) }}</span>
       </span>
       <span v-if="second" class="choice-row__l2">{{ second }}</span>

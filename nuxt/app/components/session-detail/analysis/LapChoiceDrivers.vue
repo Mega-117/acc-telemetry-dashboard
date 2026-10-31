@@ -69,7 +69,7 @@ function back() {
       <div v-else class="choice-list">
         <button v-for="r in rows" :key="r.uid" type="button" class="driver-row" :class="{ 'is-mine': r.mine }" @click="openDriver(r)">
           <span class="driver-row__rank">{{ r.rank }}</span>
-          <span class="driver-row__name">{{ name(r) }}<span v-if="r.mine" class="driver-row__tag">{{ t('telemetry.choice.tagYou') }}</span></span>
+          <span class="driver-row__name">{{ name(r) }}{{ r.mine ? ' ' : '' }}<span v-if="r.mine" class="driver-row__tag">{{ t('telemetry.choice.tagYou') }}</span></span>
           <span class="driver-row__gap">{{ gap(r) }}</span>
           <span class="driver-row__time">{{ formatLapTime(r.lapTimeMs) }}</span>
         </button>

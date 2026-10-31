@@ -82,6 +82,9 @@ describe('LapChoiceDialog', () => {
     expect(button('Usa un link')).toBeTruthy()
     expect(rows()).toHaveLength(2)
     expect(rows()[0]!.textContent).toContain('Scelta attuale')
+    expect(rows()[0]!.getAttribute('aria-current')).toBe('true')
+    expect(rows()[1]!.hasAttribute('aria-current')).toBe(false)
+    expect(document.body.querySelector('.choice-dialog__x')?.getAttribute('aria-label')).toBe('Chiudi')
     rows()[1]!.click(); await flushPromises()
     expect(rows()[1]!.getAttribute('aria-pressed')).toBe('true')
     button('Usa questo giro').click(); await flushPromises()
@@ -98,7 +101,11 @@ describe('LapChoiceDialog', () => {
     expect(dialog()?.textContent).toContain('Prima')
     const show = document.body.querySelector<HTMLButtonElement>('.my-laps__head[aria-expanded]')!
     expect(show.textContent).toContain('Mostra')
+    expect(show.textContent).toContain('1 giro')
+    expect(show.textContent).not.toContain('1 giri')
     expect(show.getAttribute('aria-expanded')).toBe('false')
+    // All these laps are mine: the rows do not repeat my name and TU.
+    expect(rows().some(r => r.textContent?.includes('Bob117') || r.querySelector('.choice-row__tag'))).toBe(false)
     show.click(); await flushPromises()
     expect(dialog()?.textContent).toContain('? Validità non disponibile')
   })
@@ -166,6 +173,7 @@ describe('LapChoiceDrivers (Altri piloti)', () => {
     button('Altri piloti').click(); await flushPromises()
     expect(loadDriverNames).toHaveBeenCalled()
     const list = () => [...document.body.querySelectorAll<HTMLButtonElement>('.driver-row')]
+    expect(list()[1]!.querySelector('.driver-row__name')?.textContent).toBe('Bob117 TU')
     expect(list().map(r => r.textContent)).toEqual([expect.stringContaining('RICO117'), expect.stringContaining('TU'), expect.stringContaining('Jérôme')])
     expect(list()[0]!.textContent).toContain('1,000 s più veloce di te')
     const search = document.body.querySelector<HTMLInputElement>('.drivers__search input')!

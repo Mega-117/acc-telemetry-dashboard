@@ -45,7 +45,8 @@ async function load() {
 }
 onMounted(() => { void load() })
 const othersCount = computed(() => groups.value.filter(g => g.bucket !== 'current').length)
-const bucketLabel = (b: string) => t(`telemetry.choice.mine.${b as 'current' | 'today' | 'yesterday' | 'week' | 'older'}`)
+const lapCount = (n: number) => n === 1 ? t('telemetry.choice.mine.oneLap') : t('telemetry.choice.mine.laps', { count: n })
+const bucketLabel =(b: string) => t(`telemetry.choice.mine.${b as 'current' | 'today' | 'yesterday' | 'week' | 'older'}`)
 </script>
 
 <template>
@@ -56,16 +57,16 @@ const bucketLabel = (b: string) => t(`telemetry.choice.mine.${b as 'current' | '
       <div v-for="s in g.sessions" :key="s.token" class="my-laps__session">
         <button v-if="!s.current" type="button" class="my-laps__head" :aria-expanded="isOpen(s.token, s.current)" @click="toggle(s.token)">
           <span>{{ text.when({ sessionToken: s.token }) || s.token }}</span>
-          <span class="my-laps__count">{{ t('telemetry.choice.mine.laps', { count: s.laps.length }) }}</span>
+          <span class="my-laps__count">{{ lapCount(s.laps.length) }}</span>
           <span class="my-laps__show">{{ isOpen(s.token, s.current) ? t('telemetry.choice.mine.hide') : t('telemetry.choice.mine.show') }}</span>
         </button>
         <p v-else class="my-laps__head my-laps__head--current">
           <span>{{ text.when(s.laps[0]!) }}</span>
-          <span class="my-laps__count">{{ t('telemetry.choice.mine.laps', { count: s.laps.length }) }}</span>
+          <span class="my-laps__count">{{ lapCount(s.laps.length) }}</span>
         </p>
         <div v-if="isOpen(s.token, s.current)" class="choice-list">
           <LapChoiceRow v-for="lap in s.laps" :key="lap.key" :choice="lap" :selected="lap.key === selectedKey" :current="lap.key === currentKey"
-            :other-side="lap.key === otherKey ? otherSide : null" hide-when @select="emit('select', $event)" @confirm="emit('confirm', $event)" />
+            :other-side="lap.key === otherKey ? otherSide : null" hide-when hide-driver @select="emit('select', $event)" @confirm="emit('confirm', $event)" />
         </div>
       </div>
     </section>
