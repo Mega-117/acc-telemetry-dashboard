@@ -60,7 +60,8 @@ function resolveDefaultForward(): ((event: VoiceRuntimeDiagnosticEvent) => void)
     const api = typeof window !== 'undefined'
       ? (window as Window & { electronAPI?: { recordVoiceDiagnostic?: (event: VoiceRuntimeDiagnosticEvent) => void } }).electronAPI
       : null
-    return typeof api?.recordVoiceDiagnostic === 'function' ? (event) => api.recordVoiceDiagnostic(event) : null
+    const record = api?.recordVoiceDiagnostic
+    return typeof record === 'function' ? (event) => record(event) : null
   } catch {
     return null
   }
