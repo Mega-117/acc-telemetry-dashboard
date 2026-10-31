@@ -14,6 +14,16 @@ describe('legal versions (PIP-658)', () => {
     expect(hasCurrentConsent({ termsVersion: '2026-01-01', privacyVersion: PRIVACY_VERSION })).toBe(false)
     expect(hasCurrentConsent(null)).toBe(false)
   })
+  it('PIP-694: the 27/10 acceptance counts as current (decision 31/10: existing drivers are not asked again)', () => {
+    expect(hasCurrentConsent({ termsVersion: '2026-10-27', privacyVersion: '2026-10-27' })).toBe(true)
+    expect(hasCurrentConsent({ termsVersion: '2026-10-27', privacyVersion: PRIVACY_VERSION })).toBe(true)
+  })
+  it('PIP-694: laps and sessions are visible to other drivers by signing up, kept while the account exists', () => {
+    const privacy = readFileSync(resolve(__dirname, '../../public/legal/privacy.html'), 'utf8')
+    expect(privacy).toContain('lo accetti registrandoti')
+    expect(privacy).not.toContain('Solo se la attivi')
+    expect(privacy).not.toContain('Archivio online 30 giorni')
+  })
   it('the published pages show the same versions', () => {
     const page = (name: string) => readFileSync(resolve(__dirname, `../../public/legal/${name}.html`), 'utf8')
     expect(page('privacy')).toContain(`versione ${PRIVACY_VERSION}`)

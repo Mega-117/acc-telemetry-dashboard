@@ -214,17 +214,6 @@ export async function fetchLibraryLap(libId: string, deps: LapsArchiveDeps): Pro
   return request(`/v1/library/lap/${libId}`, deps, async (response) => ({ trace: await readLapBody(response), meta: metaFrom(response) }))
 }
 
-/** PIP-650: your consent to the reference library (on unless you switched it off in the Profile). */
-export async function getLibraryPreference(deps: LapsArchiveDeps): Promise<boolean> {
-  return (await request('/v1/library/preference', deps, (response) => response.json() as Promise<{ share?: boolean }>)).share !== false
-}
-
-export async function setLibraryPreference(share: boolean, deps: LapsArchiveDeps): Promise<boolean> {
-  const body = await request('/v1/library/preference', deps, (response) => response.json() as Promise<{ share?: boolean }>,
-    { method: 'PUT', body: JSON.stringify({ share }), headers: { 'Content-Type': 'application/json' } })
-  return body.share !== false
-}
-
 export async function loadLapsSummary(deps: LapsArchiveDeps): Promise<unknown> {
   return request('/v1/admin/laps/summary', deps, (response) => response.json())
 }

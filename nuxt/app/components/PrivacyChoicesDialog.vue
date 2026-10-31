@@ -1,7 +1,7 @@
 <script setup lang="ts">
-// PIP-658: once per account (and again when Terms or Privacy change), the privacy choices in plain words:
-// usage statistics and sharing your laps as references. New accounts find the references off (server default,
-// library.mjs); the team keeps what it had. Changeable later in the Profile.
+// PIP-658: once per account (and again when Terms or Privacy change), the privacy choices in plain words.
+// PIP-694 (decision 31/10/2026): laps and sessions are visible to the other drivers by signing up; shown as
+// information, no switch. The only choice left is the usage statistics.
 // Decision 27/10: technical diagnostics are always on (necessary for the program): shown as information, no
 // switch, and no longer written in `consent` (old documents may still carry `diagnostics`: it is ignored).
 import { computed, onMounted, ref } from 'vue'
@@ -10,7 +10,6 @@ import { trackedUpdateDoc } from '~/composables/useFirebaseTracker'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { db } from '~/config/firebase'
 import { loadOwnerDocument, rememberOwnerDocumentPatch } from '~/repositories/ownerDocumentRepository'
-import { getLibraryPreference, setLibraryPreference } from '~/services/telemetry/lapsArchiveClient'
 import { usagePreference } from '~/services/usage/usageClient'
 import { PRIVACY_VERSION, TERMS_VERSION, hasCurrentConsent, legalPageUrl } from '~/utils/legalVersions'
 import { useI18n } from '~/i18n'
@@ -18,11 +17,10 @@ import { useI18n } from '~/i18n'
 const { t } = useI18n()
 
 const { currentUser } = useFirebaseAuth()
-const deps = { getToken: async () => (await currentUser.value?.getIdToken()) ?? null }
 const baseURL = useRuntimeConfig().app.baseURL
 const open = ref(false), needsTexts = ref(false), busy = ref(false), error = ref('')
 const acceptTerms = ref(false), acceptPrivacy = ref(false)
-const usage = ref(true), library = ref(false)
+const usage = ref(true)
 const canSave = computed(() => !busy.value && (!needsTexts.value || (acceptTerms.value && acceptPrivacy.value)))
 
 // The account is bound to the usage client a moment after the dashboard appears: a few spaced attempts.
@@ -42,11 +40,10 @@ async function check(): Promise<'done' | 'retry'> {
     needsTexts.value = !hasCurrentConsent(consent)
     if (consent?.choicesAt && !needsTexts.value) return 'done'
     // Start from what is true today, so the screen never changes anything by itself.
-    const [usagePref, libraryPref] = await Promise.all([usagePreference().catch(() => null), getLibraryPreference(deps).catch(() => null)])
-    // Codex: without the current values the screen could overwrite them: try again shortly / next start.
-    if (!usagePref || typeof libraryPref !== 'boolean') return 'retry'
+    const usagePref = await usagePreference().catch(() => null)
+    // Codex: without the current value the screen could overwrite it: try again shortly / next start.
+    if (!usagePref) return 'retry'
     usage.value = usagePref.enabled
-    library.value = libraryPref
     open.value = true
     return 'done'
   } catch { return 'retry' /* the choices stay in the Profile; never block the dashboard for them */ }
@@ -57,10 +54,10 @@ async function save() {
   if (!uid || !canSave.value) return
   busy.value = true; error.value = ''
   try {
-    await Promise.all([usagePreference(usage.value), setLibraryPreference(library.value, deps)])
+    await usagePreference(usage.value)
     const now = new Date().toISOString()
     const consent = { termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION, acceptedAt: now, choicesAt: now,
-      usage: usage.value, library: library.value }
+      usage: usage.value }
     await trackedUpdateDoc(doc(db, 'users', uid), { consent }, 'PrivacyChoices')
     rememberOwnerDocumentPatch(uid, { consent })
     open.value = false
@@ -90,10 +87,9 @@ async function save() {
         <div class="pc-choice pc-choice--info">
           <span><strong>{{ t('privacy.choices.diagnosticsTitle') }}</strong><small>{{ t('privacy.choices.diagnosticsText') }}</small></span>
         </div>
-        <label class="pc-choice">
-          <input v-model="library" type="checkbox">
-          <span><strong>{{ t('privacy.choices.libraryTitle') }}</strong><small>{{ t('privacy.choices.libraryText') }}</small></span>
-        </label>
+        <div class="pc-choice pc-choice--info">
+          <span><strong>{{ t('privacy.choices.lapsTitle') }}</strong><small>{{ t('privacy.choices.lapsText') }}</small></span>
+        </div>
 
         <p v-if="error" class="pc-error" role="alert">{{ error }}</p>
         <footer>

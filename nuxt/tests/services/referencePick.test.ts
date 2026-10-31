@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import { gzipSync } from 'node:zlib'
 import { conditionDistance, pickReferences, type ReferenceConditions } from '~/services/telemetry/referencePick'
-import { getLibraryPreference, listLibrary, setLibraryPreference, type LibraryEntry } from '~/services/telemetry/lapsArchiveClient'
+import { listLibrary, type LibraryEntry } from '~/services/telemetry/lapsArchiveClient'
 import { useReferenceLibrary, type Entry } from '~/composables/useReferenceLibrary'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
@@ -43,7 +43,7 @@ describe('pickReferences (PIP-650)', () => {
 
 describe('library client and loading (PIP-650)', () => {
   const deps = (fetchImpl: typeof fetch) => ({ getToken: async () => 'token', fetchImpl, origin: 'https://w.example' })
-  it('lists entries (dropping malformed ones) and reads / writes your preference', async () => {
+  it('lists entries (dropping malformed ones)', async () => {
     const calls: string[] = []
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
       calls.push(`${init?.method ?? 'GET'} ${url}`)
@@ -52,8 +52,6 @@ describe('library client and loading (PIP-650)', () => {
     }) as unknown as typeof fetch
     expect(await listLibrary({ game: 'acc', track: 'Hungaroring', car: 'ferrari_296_gt3', variant: null }, deps(fetchImpl))).toHaveLength(1)
     expect(calls[0]).toBe('GET https://w.example/v1/library?game=acc&track=Hungaroring&car=ferrari_296_gt3&variant=')
-    expect(await getLibraryPreference(deps(fetchImpl))).toBe(false)
-    expect(await setLibraryPreference(true, deps(fetchImpl))).toBe(true)
   })
   it('loads the suggested and the fastest lap with the driver nickname', async () => {
     // A 4.4 km lap on the 2 m grid; its declared time decides the speed check.
