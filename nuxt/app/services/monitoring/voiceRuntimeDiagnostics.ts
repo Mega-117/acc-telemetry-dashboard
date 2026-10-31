@@ -57,7 +57,9 @@ function resolveDefaultStorage(): VoiceRuntimeStorage | null {
 // only played / failed / skipped / cancelled outcomes). Outside Electron there is no diary.
 function resolveDefaultForward(): ((event: VoiceRuntimeDiagnosticEvent) => void) | null {
   try {
-    const api = typeof window !== 'undefined' ? (window as any).electronAPI : null
+    const api = typeof window !== 'undefined'
+      ? (window as Window & { electronAPI?: { recordVoiceDiagnostic?: (event: VoiceRuntimeDiagnosticEvent) => void } }).electronAPI
+      : null
     return typeof api?.recordVoiceDiagnostic === 'function' ? (event) => api.recordVoiceDiagnostic(event) : null
   } catch {
     return null
