@@ -61,3 +61,15 @@ describe('voiceRuntimeDiagnostics', () => {
     expect(diagnostics.list()).toEqual([])
   })
 })
+
+describe('voice events forwarded to the program diary (PIP-697)', () => {
+  it('each recorded event is forwarded once; a failing forward never breaks the voice', () => {
+    const forwarded: unknown[] = []
+    const diagnostics = createVoiceRuntimeDiagnostics({ storage: null, forward: event => forwarded.push(event) })
+    diagnostics.record({ kind: 'skipped', source: 'spotter' as any, reason: 'muted' })
+    expect(forwarded).toEqual([expect.objectContaining({ kind: 'skipped', reason: 'muted' })])
+    const broken = createVoiceRuntimeDiagnostics({ storage: null, forward: () => { throw new Error('ipc down') } })
+    expect(() => broken.record({ kind: 'playback_error', reason: 'x' })).not.toThrow()
+    expect(broken.list()).toHaveLength(1)
+  })
+})

@@ -53,14 +53,27 @@ function resolveDefaultStorage(): VoiceRuntimeStorage | null {
   }
 }
 
+// PIP-697: the same events also go to the program's diagnostic diary (the main process keeps
+// only played / failed / skipped / cancelled outcomes). Outside Electron there is no diary.
+function resolveDefaultForward(): ((event: VoiceRuntimeDiagnosticEvent) => void) | null {
+  try {
+    const api = typeof window !== 'undefined' ? (window as any).electronAPI : null
+    return typeof api?.recordVoiceDiagnostic === 'function' ? (event) => api.recordVoiceDiagnostic(event) : null
+  } catch {
+    return null
+  }
+}
+
 export function createVoiceRuntimeDiagnostics(options: {
   storage?: VoiceRuntimeStorage | null
   now?: () => Date
   maxEvents?: number
+  forward?: ((event: VoiceRuntimeDiagnosticEvent) => void) | null
 } = {}): VoiceRuntimeDiagnostics {
   const storage = options.storage === undefined
     ? resolveDefaultStorage()
     : options.storage
+  const forward = options.forward === undefined ? resolveDefaultForward() : options.forward
   const now = options.now ?? (() => new Date())
   const maxEvents = Math.max(16, options.maxEvents ?? VOICE_RUNTIME_DIAGNOSTICS_LIMIT)
   let memory: VoiceRuntimeDiagnosticEvent[] = []
@@ -100,6 +113,7 @@ export function createVoiceRuntimeDiagnostics(options: {
       reason: safeToken(input.reason, 160),
     }
     write([...previous, event])
+    try { forward?.(event) } catch { /* the diary never blocks the voice */ }
     return event
   }
 
