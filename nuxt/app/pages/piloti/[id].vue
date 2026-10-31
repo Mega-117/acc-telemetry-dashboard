@@ -243,6 +243,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', measureContent); he
 </template>
 
 <style lang="scss" scoped>
+@use 'sass:color';
 @use '@/assets/scss/variables' as *;
 
 .pilot-view {
@@ -294,7 +295,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', measureContent); he
     &:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
   }
   // Il pilota che stai guardando: arancio, come il vecchio "Stai visualizzando".
-  &__pilot { color: $racing-orange; font-weight: 600; &:hover { color: lighten($racing-orange, 10%); } }
+  &__pilot { color: $racing-orange; font-weight: 600; &:hover { color: color.adjust($racing-orange, $lightness: 10%); } }
   &__here { color: #fff; font-weight: 600; }
 }
 

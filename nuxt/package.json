@@ -38,6 +38,8 @@
     "check:overview-grip-badges": "node scripts/check_overview_grip_badges.mjs",
     "check:coach-calendar": "node scripts/check_coach_calendar_features.mjs",
     "check:pipeline": "powershell -ExecutionPolicy Bypass -File scripts/check_fe_pipeline.ps1",
+    "check:styles": "node scripts/check_styles.mjs",
+    "check:auto-imports": "node scripts/check_auto_imports.mjs",
     "typecheck": "nuxi typecheck",
     "check:typecheck": "npm run typecheck",
     "lint": "eslint .",

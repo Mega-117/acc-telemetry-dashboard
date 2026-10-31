@@ -23,6 +23,26 @@
         "timeoutSeconds": 180
       },
       {
+        "id": "styles",
+        "cwd": "nuxt",
+        "argv": [
+          "npm",
+          "run",
+          "check:styles"
+        ],
+        "timeoutSeconds": 120
+      },
+      {
+        "id": "auto-imports",
+        "cwd": "nuxt",
+        "argv": [
+          "npm",
+          "run",
+          "check:auto-imports"
+        ],
+        "timeoutSeconds": 240
+      },
+      {
         "id": "pipeline",
         "cwd": "nuxt",
         "argv": [
