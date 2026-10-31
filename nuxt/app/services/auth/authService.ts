@@ -1,3 +1,4 @@
+import { saveRegistrationUsageChoice } from '~/services/usage/registrationUsageChoice'
 import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
@@ -55,6 +56,9 @@ export async function registerWithEmail(params: {
     const { email, password, nickname, firstName = '', lastName = '', consent } = params
     const userCredential = await observeFirebaseAuthOperation('register', () => createUserWithEmailAndPassword(auth, email, password))
     const user = userCredential.user
+    // PIP-698: the usage-statistics choice reaches the service before anything can be collected; on failure
+    // it waits on this PC (and in the account document) for the first entry.
+    if (typeof consent?.usage === 'boolean') await saveRegistrationUsageChoice(user.uid, () => user.getIdToken(), consent.usage)
 
     let profileReady = true
     let verificationEmailSent = true

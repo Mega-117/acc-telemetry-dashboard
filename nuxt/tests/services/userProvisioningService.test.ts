@@ -213,6 +213,16 @@ describe('ensureUserDocument', () => {
 })
 
 describe('createInitialUserDocument', () => {
+  it('PIP-698: salva la scelta facoltativa delle statistiche con l accettazione', async () => {
+    const consent = { termsVersion: '2026-10-31', privacyVersion: '2026-10-31', acceptedAt: '2026-10-31T10:00:00.000Z' }
+    await createInitialUserDocument(freshUser, { nickname: 'QA Pilot', consent: { ...consent, usage: false } })
+    expect(batchSetMock).toHaveBeenNthCalledWith(1, { path: 'users/qa-fresh-pilot' },
+      expect.objectContaining({ consent: { ...consent, usage: false } }))
+    batchSetMock.mockClear()
+    await createInitialUserDocument(freshUser, { nickname: 'QA Pilot', consent })
+    expect(batchSetMock).toHaveBeenNthCalledWith(1, { path: 'users/qa-fresh-pilot' },
+      expect.objectContaining({ consent }))
+  })
   it('scrive il profilo pilot completo e la proiezione pubblica', async () => {
     await expect(createInitialUserDocument(freshUser, {
       firstName: 'QA',

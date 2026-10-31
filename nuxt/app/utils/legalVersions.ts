@@ -7,7 +7,8 @@ export const PRIVACY_VERSION = '2026-10-31'
 const ACCEPTED_AS_CURRENT = new Set(['2026-10-27'])
 
 /** What registration stores in `users/{uid}.consent` (Firestore rules: validConsent). */
-export type RegisterConsent = { termsVersion: string; privacyVersion: string; acceptedAt: string }
+/** `usage`: the optional usage-statistics box (PIP-698), applied once at the first entry (RegistrationUsageChoice). */
+export type RegisterConsent = { termsVersion: string; privacyVersion: string; acceptedAt: string; usage?: boolean }
 
 /** Absolute-to-site URL of a legal page, under the app base (Pages serves the app below /docs/). */
 export function legalPageUrl(page: 'privacy' | 'termini', baseURL = '/'): string {

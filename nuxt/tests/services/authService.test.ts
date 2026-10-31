@@ -28,6 +28,8 @@ vi.mock('firebase/auth', () => ({
 }))
 
 vi.mock('~/config/firebaseAuth', () => ({ auth: authMock }))
+const { rememberChoiceMock } = vi.hoisted(() => ({ rememberChoiceMock: vi.fn() }))
+vi.mock('~/services/usage/registrationUsageChoice', () => ({ saveRegistrationUsageChoice: rememberChoiceMock }))
 vi.mock('~/services/auth/userProvisioningService', () => ({
   createInitialUserDocument: createInitialUserDocumentMock
 }))
@@ -97,6 +99,15 @@ describe('registration and account actions', () => {
       profileReady: false,
       verificationEmailSent: false
     })
+  })
+
+  it('PIP-698: sends the usage choice right after the account is created, even if the document write fails', async () => {
+    const user = { uid: 'uid-choice', getIdToken: async () => 'token' }
+    createUserWithEmailAndPasswordMock.mockResolvedValue({ user })
+    createInitialUserDocumentMock.mockRejectedValue({ code: 'unavailable' })
+    await registerWithEmail({ email: 'choice@example.invalid', password: 'secret-123', nickname: 'Choice',
+      consent: { termsVersion: '2026-10-31', privacyVersion: '2026-10-31', acceptedAt: '2026-10-31T10:00:00.000Z', usage: false } })
+    expect(rememberChoiceMock).toHaveBeenCalledWith('uid-choice', expect.any(Function), false)
   })
 
   it('delegates logout and verification resend to Firebase Auth', async () => {

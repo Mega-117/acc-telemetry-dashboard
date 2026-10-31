@@ -2,20 +2,6 @@ import type { PartialDictionary } from '../types'
 
 export default {
   privacy: {
-    choices: {
-      eyebrow: 'Before you start',
-      title: 'Your data, your choices',
-      lead: 'How Racer Core uses your data. You can change the usage statistics any time from your Profile.',
-      usageTitle: 'Usage statistics',
-      usageText: 'Which features you use and how often, with no content. It helps us see what to improve. Kept for 90 days.',
-      diagnosticsTitle: 'Technical diagnostics: always on',
-      diagnosticsText: 'App errors and freezes, needed to run the app and fix it. No personal content, kept for at most 30 days.',
-      lapsTitle: 'Laps and sessions: visible to other drivers',
-      lapsText: "With your nickname, other drivers can compare with your laps and open your sessions. Never your email. They are kept with no expiry while you have an account.",
-      saveError: 'Could not save. Check your connection and try again.',
-      saving: 'Saving…',
-      confirm: 'Confirm',
-    },
     preference: {
       unavailableLater: 'Preference not available. Try again later.',
       unavailable: 'Preference not available. Try again.',

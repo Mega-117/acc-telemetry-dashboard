@@ -66,10 +66,18 @@ describe('Racer Core authentication presentation', () => {
     await w.get('form').trigger('submit')
     expect(w.emitted('submit')).toBeUndefined()
     expect(w.text()).toContain('accetta i Termini della beta')
-    for (const box of w.findAll('input[type="checkbox"]')) await box.setValue(true)
+    // PIP-698: the usage-statistics box is optional and starts unticked.
+    const [terms, privacy, usage] = w.findAll('input[type="checkbox"]')
+    expect((usage!.element as HTMLInputElement).checked).toBe(false)
+    await terms!.setValue(true); await privacy!.setValue(true)
     await w.get('form').trigger('submit')
-    expect(w.emitted('submit')).toEqual([[{ firstName: 'QA', lastName: 'Pilot', nickname: 'racer', email: 'qa@example.invalid', password: 'secret',
-      consent: { termsVersion: '2026-10-31', privacyVersion: '2026-10-31', acceptedAt: expect.any(String) } }]])
+    const payload = { firstName: 'QA', lastName: 'Pilot', nickname: 'racer', email: 'qa@example.invalid', password: 'secret' }
+    expect(w.emitted('submit')).toEqual([[{ ...payload,
+      consent: { termsVersion: '2026-10-31', privacyVersion: '2026-10-31', acceptedAt: expect.any(String), usage: false } }]])
+    await usage!.setValue(true)
+    await w.get('form').trigger('submit')
+    expect(w.emitted('submit')?.[1]).toEqual([{ ...payload,
+      consent: { termsVersion: '2026-10-31', privacyVersion: '2026-10-31', acceptedAt: expect.any(String), usage: true } }])
   })
   it('keeps conditional recovery success and exposed reset', async () => {
     const w = keep(mount(ResetPasswordForm, { global }))

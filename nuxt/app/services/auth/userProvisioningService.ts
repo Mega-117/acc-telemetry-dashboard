@@ -121,7 +121,9 @@ export async function createInitialUserDocument(
         createdAt: new Date().toISOString(),
         emailVerified: user.emailVerified,
         // PIP-658: the Terms/Privacy versions accepted at registration (Firestore: validConsent).
-        ...(consent ? { consent: { termsVersion: consent.termsVersion, privacyVersion: consent.privacyVersion, acceptedAt: consent.acceptedAt } } : {}),
+        // PIP-698: plus the optional usage-statistics choice.
+        ...(consent ? { consent: { termsVersion: consent.termsVersion, privacyVersion: consent.privacyVersion, acceptedAt: consent.acceptedAt,
+            ...(typeof consent.usage === 'boolean' ? { usage: consent.usage } : {}) } } : {}),
         ...buildPilotDirectoryFields({
             firstName,
             lastName,

@@ -107,6 +107,8 @@ export default defineConfig({
         'app/utils/coachLessonPermissions.ts',
         'app/repositories/usageRepository.ts',
         'app/services/usage/usageClient.ts',
+        // PIP-698: usage choice made at registration, applied once.
+        'app/services/usage/registrationUsageChoice.ts',
         'app/components/admin/AdminUsageView.vue',
         'app/components/UsagePreference.vue',
         // PIP-556: ACC Control K single layout.

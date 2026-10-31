@@ -27,6 +27,8 @@ const error = ref('')
 // PIP-658: two separate, unticked boxes; both are needed to create the account.
 const acceptTerms = ref(false)
 const acceptPrivacy = ref(false)
+// PIP-698: usage statistics need a consent, so the box is optional and starts unticked.
+const acceptUsage = ref(false)
 const baseURL = useRuntimeConfig().app.baseURL
 const termsUrl = legalPageUrl('termini', baseURL)
 const privacyUrl = legalPageUrl('privacy', baseURL)
@@ -89,7 +91,7 @@ const handleSubmit = () => {
     nickname: nickname.value.trim(),
     email: email.value.trim(),
     password: password.value,
-    consent: { termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION, acceptedAt: new Date().toISOString() }
+    consent: { termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION, acceptedAt: new Date().toISOString(), usage: acceptUsage.value }
   })
 }
 
@@ -109,6 +111,7 @@ defineExpose({
     confirmPassword.value = ''
     acceptTerms.value = false
     acceptPrivacy.value = false
+    acceptUsage.value = false
     error.value = ''
   }
 })
@@ -187,6 +190,10 @@ defineExpose({
       <label class="consent__row">
         <input v-model="acceptPrivacy" type="checkbox" required @change="clearError">
         <span>{{ t('auth.consent.privacyBefore') }}<a :href="privacyUrl" target="_blank" rel="noopener">{{ t('auth.consent.privacyLink') }}</a></span>
+      </label>
+      <label class="consent__row">
+        <input v-model="acceptUsage" type="checkbox" data-testid="register-usage">
+        <span>{{ t('auth.consent.usage') }}</span>
       </label>
     </div>
 

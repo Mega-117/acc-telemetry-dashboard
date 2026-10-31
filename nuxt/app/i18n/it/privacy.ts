@@ -1,20 +1,6 @@
-// Privacy choices, the Profile preferences, "Segnala problema" and account deletion.
+// The Profile preferences, "Segnala problema" and account deletion.
 export default {
   privacy: {
-    choices: {
-      eyebrow: 'Prima di iniziare',
-      title: 'I tuoi dati, le tue scelte',
-      lead: 'Come usiamo i tuoi dati in Racer Core. Le statistiche d\'uso puoi cambiarle quando vuoi dal Profilo.',
-      usageTitle: "Statistiche d'uso",
-      usageText: 'Quali funzioni usi e quanto spesso, senza contenuti. Ci aiuta a capire cosa migliorare. Restano 90 giorni.',
-      diagnosticsTitle: 'Diagnostica tecnica: sempre attiva',
-      diagnosticsText: 'Errori e blocchi del programma, necessari per farlo funzionare e correggerlo. Niente contenuti personali, conservati al massimo 30 giorni.',
-      lapsTitle: 'Giri e sessioni: visibili agli altri piloti',
-      lapsText: 'Con il tuo nickname, gli altri piloti possono confrontarsi con i tuoi giri e aprire le tue sessioni. Mai la tua email. Sono conservati senza scadenza finché hai l\'account.',
-      saveError: 'Salvataggio non riuscito. Controlla la connessione e riprova.',
-      saving: 'Salvo…',
-      confirm: 'Conferma',
-    },
     preference: {
       unavailableLater: 'Preferenza non disponibile. Riprova più tardi.',
       unavailable: 'Preferenza non disponibile. Riprova.',
