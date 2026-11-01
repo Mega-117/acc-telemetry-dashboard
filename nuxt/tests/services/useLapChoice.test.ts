@@ -120,6 +120,24 @@ describe('useLapChoice', () => {
     expect((await t2.c.source.listDriverLaps('u2'))[0]).toMatchObject({ ref: { kind: 'library' }, lapTimeMs: 99000 })
   })
 
+  // Codex 01/11: a lap still loading never lands on a pair changed meanwhile (swap, ✕).
+  it('a lap that finishes loading after a swap is dropped, the swapped pair stays', async () => {
+    let release!: (v: LapTraceView) => void
+    const readLapTrace = vi.fn(() => new Promise<LapTraceView>(r => { release = r }))
+    const bridge = { listLapTraces: vi.fn(async () => [{ id: 'spa__bmw/lap_20261030_100000_L004_99500ms.json.gz' }]), readLapTrace }
+    const s = setup({ bridge })
+    s.c.applyDefault()
+    const { laps } = await s.c.source.listMine()
+    const other = laps.find(l => l.sessionToken === '20261030_100000')!
+    const pending = s.c.apply('ref', other)
+    await Promise.resolve()
+    s.c.swap()
+    const pair = [s.lapId.value, s.refId.value]
+    release(trace({ valid: null }))
+    expect(await pending).toBeNull()
+    expect([s.lapId.value, s.refId.value]).toEqual(pair)
+  })
+
   it('swaps only two laps of mine', () => {
     const s = setup()
     s.c.applyDefault()

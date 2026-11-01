@@ -59,13 +59,13 @@ describe('sessionZones (PIP-645, Semplice on the whole session)', () => {
     expect(steady.leastConsistent).toBeNull()
     expect(steady.mostPotential).toBeNull()
   })
-  it('the composable reads complete laps of the session, valid and invalid apart, and opens the mistakes corner first', () => {
+  it('the composable reads complete laps of the session, valid and invalid apart, the mistakes corner is found', () => {
     const all = [...laps, ...invalid]
     const entries = ref(all.map((t, i) => ({ id: `l${i}`, valid: t.valid === true, complete: true })).concat({ id: 'partial', valid: true, complete: false }))
     const zones = useSessionZones(entries, ref(Object.fromEntries(all.map((t, i) => [`l${i}`, t]))), ref(corners))
     expect(zones.active.value).toBe(true)
     expect(zones.totalLaps.value).toBe(7)
-    expect(zones.firstCorner.value).toBe(3)
+    expect(zones.insight.value.mostMistakes?.corner.number).toBe(3)
     expect(zones.colors.value).toHaveLength(3)
     entries.value = entries.value.slice(0, 3)
     expect(zones.active.value).toBe(false)

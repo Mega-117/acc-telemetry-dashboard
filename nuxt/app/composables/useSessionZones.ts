@@ -17,6 +17,5 @@ export function useSessionZones(entries: Ref<{ id: string, valid: boolean, compl
   const colors = computed(() => active.value ? zoneMapColors(insight.value) : null)
   const totalLaps = computed(() => entries.value.filter(e => e.complete).length)
   /** The corner to open first: where laps get spoiled, else the least consistent, else the most potential. */
-  const firstCorner = computed(() => (insight.value.mostMistakes ?? insight.value.leastConsistent ?? insight.value.mostPotential)?.corner.number ?? null)
-  return { insight, active, colors, totalLaps, firstCorner }
+  return { insight, active, colors, totalLaps }
 }

@@ -320,6 +320,8 @@ const stretchLoss = computed(() => wholeView.value || !lap.value || !reference.v
       : comparison.value.find(c => c.corner.number === selectedCorner.value)?.timeLostS ?? null)
 function wholeLap() { selectedCorner.value = null; selectedSector.value = null; zoomRange.value = null }
 const lossScope = ref<'lap' | 'session'>('lap')
+// The whole-session colours on the map: the map stays whole (a picked zone highlights its corner, no zoom).
+const sessionColours = computed(() => lossScope.value === 'session' && zones.active.value)
 const selectedAdvice = computed(() => {
   const c = selectedCorner.value !== null && !zoomRange.value ? comparison.value.find(x => x.corner.number === selectedCorner.value) : null
   return c ? cornerAdvice(c) : ''
@@ -467,9 +469,9 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
         <!-- PIP-635: only the list here (Delta, Garage 61): a row selects and zooms; the way back is in the charts' bar. -->
         <!-- 01/11 (from Dove migliorare): this lap, or the whole session (where you are least consistent, the most
              potential, the most mistakes) when the session has enough laps. -->
-        <div v-if="zones.active.value" class="rc-switch loss-scope" role="tablist" :aria-label="t('telemetry.lossScopeAria')">
-          <button type="button" role="tab" :aria-selected="lossScope === 'lap'" :class="{ active: lossScope === 'lap' }" @click="lossScope = 'lap'">{{ t('telemetry.lossScopeLap') }}</button>
-          <button type="button" role="tab" :aria-selected="lossScope === 'session'" :class="{ active: lossScope === 'session' }" @click="lossScope = 'session'">{{ t('telemetry.lossScopeSession') }}</button>
+        <div v-if="zones.active.value" class="rc-switch loss-scope" role="group" :aria-label="t('telemetry.lossScopeAria')">
+          <button type="button" :aria-pressed="lossScope === 'lap'" :class="{ active: lossScope === 'lap' }" @click="lossScope = 'lap'">{{ t('telemetry.lossScopeLap') }}</button>
+          <button type="button" :aria-pressed="lossScope === 'session'" :class="{ active: lossScope === 'session' }" @click="lossScope = 'session'">{{ t('telemetry.lossScopeSession') }}</button>
         </div>
         <SessionZonesCard v-if="zones.active.value && lossScope === 'session'" compact :insight="zones.insight.value" :selected="selectedCorner" :total-laps="zones.totalLaps.value" @select="selectCorner($event)" />
         <section v-else-if="comparison.length" ref="cornersBox" class="side-box side-box--corners">
@@ -487,7 +489,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
       </aside>
       <div class="tracce-center">
         <div class="panel">
-          <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null" :focus="selectedSector !== null ? range : null" :color-mode="lossScope === 'session' && zones.active.value ? 'delta' : 'laps'" :zone-colors="lossScope === 'session' ? zones.colors.value : null" zoom-controls :size="deltaPlace === 'top' ? 420 : 320" :corner-deltas="cornerDeltas" @hover="cursor = $event" @select="selectCorner($event)" />
+          <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null && !sessionColours" :focus="selectedSector !== null ? range : null" :color-mode="sessionColours ? 'delta' : 'laps'" :zone-colors="sessionColours ? zones.colors.value : null" zoom-controls :size="deltaPlace === 'top' ? 420 : 320" :corner-deltas="cornerDeltas" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>
         <!-- 01/11 (from Dove migliorare): the opened corner's advice under the map, only when the delta is not there. -->
         <p v-if="selectedAdvice && deltaPlace === 'top'" class="corner-advice"><b>{{ t('telemetry.corner', { n: selectedCorner! }) }}</b> {{ selectedAdvice }}</p>

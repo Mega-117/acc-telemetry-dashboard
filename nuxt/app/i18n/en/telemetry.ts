@@ -43,12 +43,6 @@ export default {
     moreChannels: '+ More channels',
     sectorStripTitle: 'Sector {n}: click to zoom, again for the whole lap',
     carMismatch: 'Different car from yours: the comparison is indicative.',
-    layout: {
-      advanced: 'Advanced',
-      advancedHint: 'Every channel on the lap, sectors and corners: to understand why',
-      simple: 'Simple',
-      simpleHint: 'The coloured map and the three corners to improve, in plain words',
-    },
     errors: {
       noToken: 'This session has no laps recorded on the computer.',
       foreign: 'The laps of this session stay on the PC of whoever drove: to compare, ask for a link with "Share lap".',
@@ -99,11 +93,6 @@ export default {
       gain: 'gain',
       loss: 'lose',
       equal: 'equal',
-    },
-    improve: {
-      title: 'Against the reference',
-      pickRef: 'Pick a reference to see where to improve.',
-      none: 'No corner slower than the reference by more than 3 hundredths.',
     },
     advice: {
       faster: 'You are faster than the reference here',

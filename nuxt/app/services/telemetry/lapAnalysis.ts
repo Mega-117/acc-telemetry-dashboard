@@ -136,7 +136,7 @@ export function stretchDelta(lap: LapTraceView, reference: LapTraceView, [start,
 export interface FocusZone { zone: [number, number], effect: [number, number] | null, lossS: number }
 
 /** The recorded time only moves forward over [start, end]: a reset or a jump back makes the measure unusable. */
-function timeRuns(trace: LapTraceView, [start, end]: [number, number]): boolean {
+export function timeRuns(trace: LapTraceView, [start, end]: [number, number]): boolean {
   const time = trace.channels.time_s
   if (!time?.length) return false
   const last = time.length - 1
@@ -154,7 +154,7 @@ function timeRuns(trace: LapTraceView, [start, end]: [number, number]): boolean 
  * costing all the straight). Separate losses are never joined. Null when no run keeps `min` seconds, or when the
  * time of either lap jumps back (a reset) inside the stretch.
  */
-export function focusInStretch(lap: LapTraceView, reference: LapTraceView, [start, end]: [number, number], { min = 0.02, stepM = 5, zoneShare = 1 / 8 } = {}): FocusZone | null {
+export function focusInStretch(lap: LapTraceView, reference: LapTraceView, [start, end]: [number, number], { min = 0.02, stepM = 5, zoneShare = 1 / 8, pauseM = 40 } = {}): FocusZone | null {
   if (!(end > start) || !timeRuns(lap, [start, end]) || !timeRuns(reference, [start, end])) return null
   const metres = Math.max((lap.lengthM || 0) * (end - start), 1)
   const steps = Math.min(400, Math.max(24, Math.round(metres / stepM)))
@@ -167,8 +167,10 @@ export function focusInStretch(lap: LapTraceView, reference: LapTraceView, [star
   }
   const kept = gap.slice()
   for (let i = steps - 1; i >= 0; i--) kept[i] = Math.min(kept[i]!, kept[i + 1]!)
-  // Runs of growth; a pause shorter than 3 pieces does not split a run.
+  // Runs of growth. Only a pause of more than `pauseM` metres without growth splits a run: on real 2 m data the
+  // gap wiggles by a few thousandths, and the kept gap then grows in small steps with short flats between them.
   const eps = 1e-4
+  const pausePieces = Math.max(1, Math.round(pauseM / (metres / steps)))
   let best: { from: number, to: number, loss: number } | null = null
   let runFrom = -1, lastGrow = -1
   const close = () => {
@@ -179,7 +181,7 @@ export function focusInStretch(lap: LapTraceView, reference: LapTraceView, [star
   }
   for (let i = 0; i < steps; i++) {
     if (kept[i + 1]! - kept[i]! > eps) {
-      if (runFrom >= 0 && i - lastGrow > 3) close()
+      if (runFrom >= 0 && i - lastGrow - 1 > pausePieces) close()
       if (runFrom < 0) runFrom = i
       lastGrow = i
     }

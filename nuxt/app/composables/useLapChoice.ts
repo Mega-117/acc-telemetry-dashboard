@@ -132,14 +132,15 @@ export function useLapChoice(o: {
   function reset() { userChose.value = false; refReason.value = null; o.library.resetLibrary() }
   function swap() {
     if (!canSwap.value) return
+    pairEdit++
     const you = o.lapId.value
     o.lapId.value = o.refId.value
     setRef(you, { kind: 'picked' }, true)
   }
   /** A link or a compared session proposed a reference: it is the driver's own action. */
-  function propose(id: string, why: RefReason) { setRef(id, why, true) }
+  function propose(id: string, why: RefReason) { pairEdit++; setRef(id, why, true) }
   /** 01/11: ✕ on the reference: only your lap, and no suggestion comes back by itself. */
-  function removeRef() { o.refId.value = ''; refReason.value = null; userChose.value = true }
+  function removeRef() { pairEdit++; o.refId.value = ''; refReason.value = null; userChose.value = true }
 
   // ── Reading a lap picked in the dialog ─────────────────────────────────────────────
   async function materialize(choice: LapChoice): Promise<string> {
@@ -164,9 +165,13 @@ export function useLapChoice(o: {
     return id
   }
   /** Confirm a row for one side: null when done, else the sentence to show (the comparison stays as it was). */
+  // Bumped by every other change of the pair: a lap that finishes loading after it is dropped, not applied.
+  let pairEdit = 0
   async function apply(side: LapSide, choice: LapChoice): Promise<string | null> {
+    const edit = pairEdit
     try {
       const id = await materialize(choice)
+      if (edit !== pairEdit) return null
       if (side === 'you') { o.lapId.value = id; userChose.value = true }
       else setRef(id, choice.reason ?? { kind: 'picked' }, true)
       return null

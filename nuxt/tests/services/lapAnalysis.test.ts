@@ -252,7 +252,25 @@ describe('focus zone: the loss you keep (01/11, research)', () => {
     expect(f.zone[1] * 3000).toBeLessThan(500)
     expect(f.effect).toBeNull()
   })
-  it('a concentrated loss: zone on it, no effect', () => {
+  it('wiggles of a few thousandths on 2 m data never break a sustained loss (Codex 01/11)', () => {
+    const t = fast.channels.time_s!, n = t.length
+    const noisy = lap(() => 180)
+    noisy.channels.time_s = t.map((v, i) => {
+      const m = (i / (n - 1)) * 3000
+      const sustained = m <= 400 ? 0 : Math.min(0.134, ((m - 400) / 600) * 0.134)
+      return v + sustained + 0.002 * Math.sin((m / 30) * 2 * Math.PI)
+    })
+    const f = focusInStretch(noisy, fast, [400 / 3000, 1000 / 3000])!
+    expect(f).not.toBeNull()
+    expect(f.lossS).toBeGreaterThan(0.1)
+  })
+  it('a pause of 40 m without growth splits two losses; a shorter one does not', () => {
+    const near = gapLap([[0, 0], [500, 0], [520, 0.035], [550, 0.035], [570, 0.07], [3000, 0.07]])
+    expect(focusInStretch(near, fast, [400 / 3000, 1000 / 3000])!.lossS).toBeCloseTo(0.07, 2)
+    const far = gapLap([[0, 0], [500, 0], [520, 0.035], [620, 0.035], [640, 0.07], [3000, 0.07]])
+    expect(focusInStretch(far, fast, [400 / 3000, 1000 / 3000])!.lossS).toBeCloseTo(0.035, 2)
+  })
+  it('a concentrated loss: zone on it', () => {
     const slow = lap(m => (m >= 1500 && m < 1600 ? 120 : 180))
     const f = focusInStretch(slow, fast, [0.4, 0.6])!
     expect(f.zone[0]).toBeLessThan(1600 / 3000); expect(f.zone[1]).toBeGreaterThan(1500 / 3000)

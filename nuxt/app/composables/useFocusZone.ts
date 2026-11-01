@@ -4,7 +4,7 @@
 // lighter one where it keeps growing after (focusInStretch). The worst corner with no clear piece: the whole corner.
 // Nothing when you gain or are level, or on a free zoom.
 import { computed, type Ref } from 'vue'
-import { focusInStretch, type CornerComparison } from '~/services/telemetry/lapAnalysis'
+import { focusInStretch, timeRuns, type CornerComparison } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
 export function useFocusZone(o: {
@@ -30,7 +30,10 @@ export function useFocusZone(o: {
   const focus = computed(() => {
     const s = stretch.value
     if (!s || !o.lap.value || !o.reference.value) return null
-    return focusInStretch(o.lap.value, o.reference.value, s) ?? (focusCorner.value ? { zone: s, effect: null, lossS: focusCorner.value.timeLostS } : null)
+    const found = focusInStretch(o.lap.value, o.reference.value, s)
+    if (found) return found
+    // The whole corner only when the data hold there: a time reset gives no band at all, never a guessed one.
+    return focusCorner.value && timeRuns(o.lap.value, s) && timeRuns(o.reference.value, s) ? { zone: s, effect: null, lossS: focusCorner.value.timeLostS } : null
   })
   return { focusCorner, focusZone: computed(() => focus.value?.zone ?? null), focusEffect: computed(() => focus.value?.effect ?? null) }
 }

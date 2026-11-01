@@ -42,12 +42,6 @@ export default {
     moreChannels: '+ Altri canali',
     sectorStripTitle: 'Settore {n}: clic per ingrandire, di nuovo per il giro intero',
     carMismatch: 'Auto diversa dalla tua: il confronto è indicativo.',
-    layout: {
-      advanced: 'Avanzata',
-      advancedHint: 'Tutti i canali sul giro, settori e curve: per capire perché',
-      simple: 'Semplice',
-      simpleHint: 'La mappa colorata e le tre curve dove migliorare, in parole semplici',
-    },
     errors: {
       noToken: 'Questa sessione non ha giri registrati sul computer.',
       foreign: 'I giri di questa sessione restano sul PC di chi ha guidato: per confrontarti chiedi un link con "Condividi giro".',
@@ -98,11 +92,6 @@ export default {
       gain: 'guadagni',
       loss: 'perdi',
       equal: 'uguale',
-    },
-    improve: {
-      title: 'Contro il riferimento',
-      pickRef: 'Scegli un riferimento per vedere dove migliorare.',
-      none: 'Nessuna curva sotto il riferimento di oltre 3 centesimi.',
     },
     advice: {
       faster: 'Qui sei più veloce del riferimento',
