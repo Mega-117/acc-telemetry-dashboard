@@ -476,8 +476,6 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
           <div class="side-head">
             <h4>{{ t('telemetry.lossTitle') }}</h4>
           </div>
-          <!-- 01/11 (from Dove migliorare): the opened corner's advice, in plain words. -->
-          <p v-if="selectedAdvice" class="corner-advice"><b>{{ t('telemetry.corner', { n: selectedCorner! }) }}</b> {{ selectedAdvice }}</p>
           <!-- Column heads as in the Curve table: the rows are corners, the cell the time lost there. -->
           <div class="corner-row corner-row--head" aria-hidden="true"><span>{{ t('telemetry.cornerHead') }}</span><span>{{ t('telemetry.timeLost') }}</span></div>
           <div class="corner-list" :class="{ 'has-active': selectedCorner !== null && selectedSector === null && !zoomRange }">
@@ -491,6 +489,8 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
         <div class="panel">
           <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null" :focus="selectedSector !== null ? range : null" :color-mode="lossScope === 'session' && zones.active.value ? 'delta' : 'laps'" :zone-colors="lossScope === 'session' ? zones.colors.value : null" zoom-controls :size="deltaPlace === 'top' ? 420 : 320" :corner-deltas="cornerDeltas" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>
+        <!-- 01/11 (from Dove migliorare): the opened corner's advice under the map, only when the delta is not there. -->
+        <p v-if="selectedAdvice && deltaPlace === 'top'" class="corner-advice"><b>{{ t('telemetry.corner', { n: selectedCorner! }) }}</b> {{ selectedAdvice }}</p>
         <div v-if="reference && deltaPlace === 'centre'" ref="deltaWrap">
           <AnalysisCharts :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaHeight" :focus="focusZone" :focus-effect="focusEffect" zoomable @hover="cursor = $event" @zoom="onZoom" />
         </div>
@@ -532,7 +532,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 .bar-note { flex: 1 1 100%; } }
 // PIP-623: share and paste, square buttons as tall as the pickers.
 .loss-scope { display: flex; button { flex: 1; } }
-.corner-advice { margin: 0 0 6px; padding: 6px 8px; border-left: 2px solid #fbbf24; background: #fbbf240f; color: #e6e6ea; font: 500 12px/1.4 'Inter', sans-serif; b { color: #fde68a; } }
+.corner-advice { margin: 0; padding: 8px 10px; border-left: 2px solid #fbbf24; background: #fbbf240f; color: #e6e6ea; font: 500 12px/1.4 'Inter', sans-serif; b { color: #fde68a; } }
 .bar-note { color: #3ddc5a; font-size: 12px; &.failed { color: #ff5a6e; } }
 .analysis-note--warn { color: #fbbf24; }
 // PIP-635: the comparison block: Tu, the gap between the two laps, Riferimento.
