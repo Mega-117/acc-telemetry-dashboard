@@ -492,7 +492,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
       </aside>
       <div class="tracce-center">
         <div class="panel">
-          <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null && !sessionColours" :focus="selectedSector !== null ? range : null" :color-mode="sessionColours ? 'delta' : 'laps'" :zone-colors="sessionColours ? zones.colors.value : null" zoom-controls :size="deltaPlace === 'top' ? 420 : 320" :corner-deltas="cornerDeltas" @hover="cursor = $event" @select="selectCorner($event)" />
+          <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null && !sessionColours" :focus="selectedSector !== null ? range : null" :color-mode="sessionColours ? 'delta' : 'laps'" :zone-colors="sessionColours ? zones.colors.value : null" zoom-controls :size="deltaPlace === 'top' ? 340 : 320" :corner-deltas="cornerDeltas" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>
         <!-- 01/11 (from Dove migliorare): the opened corner's advice under the map, only when the delta is not there. -->
         <div v-if="reference && deltaPlace === 'centre'" ref="deltaWrap">
@@ -559,8 +559,9 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 
 // Garage 61 analyzer: left bar, map + delta in the middle, channels on the right, sector strip on top of the charts.
 .layout-tracce { display: grid; grid-template-columns: 210px 320px minmax(0, 1fr); grid-template-areas: 'left center right'; gap: 10px; align-items: stretch; overflow: hidden;
-  // 01/11: with the delta on top the map has the middle column to itself: wider, numbers and times readable.
-  &--wide { grid-template-columns: 210px 420px minmax(0, 1fr); } }
+  // 01/11: with the delta on top the map has the middle column to itself; it grows with the window (336 px at
+  // 1400 px, 420 at most) so the charts keep the rest of the width.
+  &--wide { grid-template-columns: 210px clamp(320px, 24vw, 420px) minmax(0, 1fr); } }
 // Left column: three boxes with air between them (Garage 61 Laps/Gaps, VRS corners).
 // Tracce fills the window: the page does not scroll, each column scrolls on its own.
 .tracce-left { grid-area: left; display: flex; flex-direction: column; gap: 10px; height: 100%; overflow-y: auto; overflow-x: hidden; }
