@@ -17,6 +17,7 @@ export default {
       unknown: 'SESSION',
     },
     filters: {
+      toggle: 'Filters',
       aria: 'Session filters',
       type: 'Session type',
       all: 'All',

@@ -230,6 +230,9 @@ const filterTrack = ref('all')
 const filterCarCategory = ref<'all' | CarCategory>('all')
 const filterCar = ref('all')
 const filterTimeRange = ref<'today' | '7d' | '30d' | 'all'>('all')
+// 01/11: on a phone the four selects fold behind a "Filtri" button (with how many are set), as usual on mobile.
+const filtersOpen = ref(false)
+const activeFilters = computed(() => [filterTrack.value, filterCarCategory.value, filterCar.value, filterTimeRange.value].filter(v => v !== 'all').length)
 let filterReloadTimer: ReturnType<typeof setTimeout> | null = null
 
 watch(
@@ -391,7 +394,11 @@ function goToSession(id: string) {
           {{ type === 'all' ? t('sessions.filters.all') : getTypeLabel(type) }}
         </button>
       </div>
-      <div class="racing-filter-selects">
+      <button type="button" class="filters-toggle rc-btn rc-btn--compact" :aria-expanded="filtersOpen" aria-controls="session-filter-selects" @click="filtersOpen = !filtersOpen">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4" /></svg>
+        {{ t('sessions.filters.toggle') }}<span v-if="activeFilters" class="filters-toggle__count">{{ activeFilters }}</span>
+      </button>
+      <div id="session-filter-selects" class="racing-filter-selects" :class="{ 'is-open': filtersOpen }">
         <select
           v-model="filterTrack"
           class="racing-select racing-select--compact"
@@ -527,6 +534,12 @@ function goToSession(id: string) {
 .session-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-bottom: 24px; flex: 0 0 auto; }
 // Tipo di sessione: switcher del tema con la selezione che scorre.
 .racing-filter-tabs { margin-bottom: 0; }
+.filters-toggle { display: none; }
+@media (max-width: 700px) {
+  .filters-toggle { display: inline-flex; align-items: center; gap: 6px; }
+  .filters-toggle__count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: var(--racing-accent, #ff0024); color: #fff; font: 700 11px 'Inter', sans-serif; }
+  .racing-filter-selects { display: none; flex: 1 1 100%; flex-direction: column; &.is-open { display: flex; } select { width: 100%; } }
+}
 .sessions-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
   overscroll-behavior-y: contain; scrollbar-gutter: stable;
   padding: var(--app-scroll-fade-size) 0 12px; mask-image: var(--app-scroll-fade-mask); }
