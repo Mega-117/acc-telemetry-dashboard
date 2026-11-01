@@ -92,6 +92,8 @@ export default {
       title: 'Confronta con…',
       eyebrow: 'Confronto',
       linkLabel: 'Link ricevuto',
+      kindLap: 'Link di un giro: diventa il riferimento nella Telemetria.',
+      kindSession: 'Link di una sessione: confronti le due sessioni.',
       linkHint: 'di una sessione o di un giro',
       linkPlaceholder: 'https://…/sessioni/… oppure https://…/giro#…',
       loadingLink: 'Carico…',

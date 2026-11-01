@@ -15,7 +15,7 @@ import { sessionGame, sessionFilterType } from '~/services/telemetry/gameIdentit
 import { sessionTiming } from '~/services/telemetry/fuelHistorySummary'
 import { X } from '@lucide/vue'
 import { parseLapShareLink } from '~/services/telemetry/lapShareLink'
-import { parseSessionLink } from '~/services/telemetry/lapChoice'
+import { classifyLink, parseSessionLink } from '~/services/telemetry/lapChoice'
 import { loadPublicNickname } from '~/repositories/publicProfileRepository'
 import { useI18n } from '~/i18n'
 
@@ -53,6 +53,8 @@ const parseSharedLink = parseSessionLink
 
 // PIP-652: a session link can also be opened (the desktop app has no address bar).
 const sessionLink = computed(() => parseSharedLink(sharedLink.value))
+// 01/11 (one "Confronta", user decision): as soon as a link is pasted, say what it will do.
+const linkKind = computed(() => classifyLink(sharedLink.value))
 // A new link clears the old error (it would also hide "oppure apri la sessione").
 watch(sharedLink, () => { linkError.value = '' })
 function openSharedSession() {
@@ -232,6 +234,7 @@ watch(
               </button>
             </div>
           </div>
+          <p v-if="!linkError && (linkKind === 'lap' || linkKind === 'session')" class="cmp-kind" role="status">{{ t(linkKind === 'lap' ? 'sessions.picker.kindLap' : 'sessions.picker.kindSession') }}</p>
           <p v-if="linkError" class="cmp-error" role="alert">{{ linkError }}</p>
           <!-- Only for a session link: open it instead of comparing (the desktop app has no address bar). -->
           <button v-if="sessionLink" type="button" class="cmp-open" @click="openSharedSession">{{ t('sessions.picker.openSession') }}</button>
@@ -287,6 +290,7 @@ watch(
   input { flex: 1; min-width: 0; height: 46px; padding: 0 14px; border: 1px solid #ffffff30; border-radius: 0; background: #ffffff04; color: #fff; font-size: 14px;
     &::placeholder { color: #888; } &:hover { border-color: #ffffff65; } &:focus { border-color: #ff0024; outline: 1px solid #ff0024; outline-offset: 1px; } }
   .rc-btn { min-height: 46px; min-width: 156px; } }
+.cmp-kind { margin: 6px 0 0; color: #b3b3b8; font-size: 13px; }
 .cmp-error { margin: 10px 0 0; padding: 8px 12px; border-left: 2px solid #ff0024; background: #ff00240a; color: #ff9aaa; font-size: 13px; }
 .cmp-open { margin-top: 8px; padding: 0; border: 0; background: none; color: #ccc; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
   &:hover { color: #fff; } &:focus-visible { outline: 2px solid #fff; outline-offset: 2px; } }

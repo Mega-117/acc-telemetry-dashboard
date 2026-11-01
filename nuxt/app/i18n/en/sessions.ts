@@ -93,6 +93,8 @@ export default {
       title: 'Compare with…',
       eyebrow: 'Comparison',
       linkLabel: 'Received link',
+      kindLap: 'A lap link: it becomes the reference in Telemetry.',
+      kindSession: 'A session link: you compare the two sessions.',
       linkHint: 'of a session or a lap',
       linkPlaceholder: 'https://…/sessioni/… or https://…/giro#…',
       loadingLink: 'Loading…',
