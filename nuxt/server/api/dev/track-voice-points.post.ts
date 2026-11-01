@@ -1,7 +1,9 @@
 import { readVoicePoints, writeVoicePoints } from '../../utils/devVoicePoints'
 import { pointScopedId } from '../../utils/trackVoicePointMerge'
 
-const SAFE_VOICE_IDS = new Set(['if_sara', 'im_nicola'])
+import { VOICE_IDS } from '~/config/voiceCatalog'
+
+const SAFE_VOICE_IDS = new Set<string>(VOICE_IDS)
 
 function cleanText(value: unknown, fallback = '') {
   return String(value ?? fallback).trim().slice(0, 280)
@@ -57,6 +59,8 @@ export default defineEventHandler(async (event) => {
     const next = { ...point }
     next.label = cleanText(update.label, point.label)
     next.text = cleanText(update.text, point.text)
+    // PIP-667: the English text of the point, written by the Voice Lab in English.
+    if (Object.prototype.hasOwnProperty.call(update, 'text_en')) next.text_en = cleanText(update.text_en)
 
     const incomingPaths = cleanAudioPaths(update.audio_paths)
     const mergedPaths = { ...(point.audio_paths || {}) }

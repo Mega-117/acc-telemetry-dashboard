@@ -9,8 +9,8 @@ testi corti — vincolo utente, coerente con PIP-144). Lo script FALLISCE se
 una frase e' troppo corta: nessuna traccia degradata puo' nascere.
 
 Output: public/voice/coach/<key>-<voice>.wav
-(consumati in release via acc-voice://coach/... — copiarli anche in
-training_data/voice_audio/coach/ per l'uso desktop immediato).
+(consumati da /voice/coach/... come gli altri avvisi: arrivano anche nel programma
+installato con i file della webapp, PIP-667).
 
 Uso (funziona anche con l'interprete embedded del runtime Kokoro):
     set ACC_KOKORO_ONNX_MODEL=<path kokoro-v1.0.onnx>
@@ -34,18 +34,22 @@ OUTPUT_DIR = NUXT_ROOT / "public" / "voice" / "coach"
 
 MIN_WORDS = 3
 SAMPLE_RATE = 24_000
-LANG_BY_PREFIX = {"i": "it", "a": "en-us"}
+sys.path.insert(0, str(THIS.parent))
+from voice_language import ALL_VOICES, kokoro_lang, text_for  # noqa: E402
 
 
 def validate_phrases(phrases: list[dict]) -> list[str]:
     errors = []
     for phrase in phrases:
-        words = [w for w in str(phrase.get("text", "")).replace(",", " ").split() if w]
-        if len(words) < MIN_WORDS:
-            errors.append(
-                f"  '{phrase.get('key')}': \"{phrase.get('text')}\" "
-                f"({len(words)} parole, minimo {MIN_WORDS})"
-            )
+        # PIP-667: the English text follows the same rule as the Italian one.
+        for field in ("text", "textEn"):
+            text = str(phrase.get(field, ""))
+            words = [w for w in text.replace(",", " ").split() if w]
+            if len(words) < MIN_WORDS:
+                errors.append(
+                    f"  '{phrase.get('key')}' {field}: \"{text}\" "
+                    f"({len(words)} parole, minimo {MIN_WORDS})"
+                )
     return errors
 
 
@@ -62,11 +66,13 @@ def write_wav(path: Path, samples, sample_rate: int) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Genera i WAV coach da coachVoiceScript.json")
     parser.add_argument("--force", action="store_true", help="rigenera anche i WAV esistenti")
+    parser.add_argument("--voices", default="", help="voci da generare, separate da virgola")
     args = parser.parse_args()
 
     data = json.loads(SCRIPT_JSON.read_text(encoding="utf-8"))
     phrases = data["phrases"]
-    voices = data.get("voices", ["if_sara", "im_nicola"])
+    parser_voices = [v for v in args.voices.split(",") if v]
+    voices = parser_voices or data.get("voices", ALL_VOICES)
     speed = float(data.get("defaultSpeed", 1.15))
 
     errors = validate_phrases(phrases)
@@ -94,9 +100,8 @@ def main() -> int:
             if out.exists() and not args.force:
                 skipped += 1
                 continue
-            lang = LANG_BY_PREFIX.get(voice[0].lower(), "en-us")
             samples, sample_rate = model.create(
-                phrase["text"], voice=voice, speed=float(phrase.get("speed", speed)), lang=lang,
+                text_for(phrase, voice), voice=voice, speed=float(phrase.get("speed", speed)), lang=kokoro_lang(voice),
             )
             write_wav(out, samples, int(sample_rate or SAMPLE_RATE))
             generated += 1

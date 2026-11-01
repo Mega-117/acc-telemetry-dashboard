@@ -1,4 +1,5 @@
 import type { SpotterVoiceId } from '~/composables/useSpotterVoiceSettings'
+import { VOICE_IDS, voiceForLanguage, voiceLanguage } from '~/config/voiceCatalog'
 
 export type TrackReferencePhase = 'garage' | 'outlap' | 'active' | 'pit_lane_active' | 'pit_lane_outlap'
 
@@ -11,6 +12,7 @@ export interface TrackVoiceReference {
   normalized_car_position: number
   label?: string
   text?: string
+  text_en?: string
   audio_path?: string
   audio_voice?: SpotterVoiceId | string
   audio_paths?: Partial<Record<SpotterVoiceId | string, string>>
@@ -262,6 +264,27 @@ export function resolveTrackVoiceReferenceAudioPath(
   return ''
 }
 
+/**
+ * PIP-667, user decision 31/10: a point recorded in one language only is never silent in the other one.
+ * Order (Codex review 01/11): the chosen voice, the other voice of the same language, the same kind of
+ * voice (woman/man) of the other language, then any voice it has.
+ */
+export function resolvePlayableReferenceAudioPath(point: TrackVoiceReference, voice: SpotterVoiceId) {
+  const language = voiceLanguage(voice)
+  const otherLanguage = language === 'it' ? 'en' : 'it'
+  const order: SpotterVoiceId[] = [
+    voice,
+    ...VOICE_IDS.filter(id => id !== voice && voiceLanguage(id) === language),
+    voiceForLanguage(voice, otherLanguage),
+    ...VOICE_IDS,
+  ]
+  for (const candidate of order) {
+    const path = resolveTrackVoiceReferenceAudioPath(point, candidate)
+    if (path) return path
+  }
+  return ''
+}
+
 // PIP-223: dizionario voce -> WAV completo di un punto, con la coppia legacy
 // (audio_path/audio_voice, default if_sara come nel resolve) migrata dentro.
 // audio_paths esplicito vince sul legacy, come in resolveTrackVoiceReferenceAudioPath.
@@ -301,7 +324,7 @@ export function filterPlayableTrackVoiceReferences(
   return points
     .map(point => ({
       ...point,
-      audio_path: resolveTrackVoiceReferenceAudioPath(point, voice),
+      audio_path: resolvePlayableReferenceAudioPath(point, voice),
       audio_voice: voice,
     }))
     .filter(point => point.enabled !== false && point.type === 'braking_reference' && !!point.audio_path)

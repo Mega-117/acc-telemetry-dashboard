@@ -10,6 +10,7 @@ import {
   normalizedSpeedPerSecond,
   normalizeTrackName,
   normalizeTrackVoiceSpeed,
+  resolvePlayableReferenceAudioPath,
   resolveTrackVoiceReferenceAudioPath,
   shouldArmTrackVoiceReferences,
   shouldDisarmTrackVoiceReferences,
@@ -40,8 +41,22 @@ describe('trackVoiceReferences', () => {
     expect(normalizeTrackVoiceSpeed(3)).toBe(2)
     expect(normalizeTrackVoiceSpeed(undefined)).toBe(1.25)
   })
-  it('keeps only playable braking references for the selected voice, sorted by position', () => {
-    expect(filterPlayableTrackVoiceReferences(points, 'if_sara').map(point => point.id)).toEqual(['early', 'multi-voice', 'late'])
+  it('keeps only playable braking references, sorted by position; a point of the other voice is not silent (PIP-667)', () => {
+    const playable = filterPlayableTrackVoiceReferences(points, 'if_sara')
+    expect(playable.map(point => point.id)).toEqual(['early', 'wrong-voice', 'multi-voice', 'late'])
+    expect(playable.find(point => point.id === 'wrong-voice')?.audio_path).toBe('/wrong.wav')
+  })
+
+  it('PIP-667: own voice, then the other voice of the same language, then the same kind of voice of the other language', () => {
+    const italianOnly: TrackVoiceReference = { id: 'it', track: 'Spa', normalized_car_position: 0.5, audio_paths: { if_sara: '/sara.wav', im_nicola: '/nicola.wav' } }
+    expect(resolvePlayableReferenceAudioPath(italianOnly, 'am_michael')).toBe('/nicola.wav')
+    expect(resolvePlayableReferenceAudioPath(italianOnly, 'af_heart')).toBe('/sara.wav')
+    const mixed: TrackVoiceReference = { id: 'mix', track: 'Spa', normalized_car_position: 0.5, audio_paths: { af_heart: '/heart.wav', im_nicola: '/nicola.wav' } }
+    expect(resolvePlayableReferenceAudioPath(mixed, 'am_michael')).toBe('/heart.wav')
+    expect(resolvePlayableReferenceAudioPath(mixed, 'if_sara')).toBe('/nicola.wav')
+    const englishOnly: TrackVoiceReference = { id: 'en', track: 'Spa', normalized_car_position: 0.5, audio_paths: { am_michael: '/michael.wav' } }
+    expect(resolvePlayableReferenceAudioPath(englishOnly, 'if_sara')).toBe('/michael.wav')
+    expect(resolvePlayableReferenceAudioPath({ id: 'none', track: 'Spa', normalized_car_position: 0.5 }, 'if_sara')).toBe('')
   })
   it('resolves per-voice paths before falling back to legacy audio fields', () => {
     expect(resolveTrackVoiceReferenceAudioPath(points[4]!, 'if_sara')).toBe('')

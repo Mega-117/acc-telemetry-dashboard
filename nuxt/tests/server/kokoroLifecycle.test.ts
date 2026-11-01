@@ -38,7 +38,7 @@ describe('kokoro VoiceLab lifecycle', () => {
 
   it('rende espliciti autosave, anteprima e azioni globali per il pilota', () => {
     expect(voiceLab).toContain('Voce anteprima')
-expect(voiceLab).toContain('Testo condiviso tra Sara e Nicola · salvataggio automatico')
+expect(voiceLab).toContain('Testo condiviso tra {{ labVoiceNames }} · salvataggio automatico')
     expect(voiceLab).toContain('reference-copy-field')
     expect(voiceLab).toContain('reference-switch')
     expect(voiceLab).toContain('reference-listen')
@@ -51,7 +51,7 @@ expect(voiceLab).toContain('Testo condiviso tra Sara e Nicola · salvataggio aut
     expect(voiceLab).toContain('Audio da aggiornare')
     expect(voiceLab).toContain('Azzera anticipi/ritardi')
     expect(voiceLab).toContain('window.confirm(')
-    expect(voiceLab).toContain("Vale per Sara e Nicola. I testi non cambiano.")
+    expect(voiceLab).toContain("Vale per tutte le voci. I testi non cambiano.")
     expect(voiceLab).toContain('referencesWithStaleAudio')
     expect(voiceLab).toContain('referencesNeedingAudioUpdate')
 expect(voiceLab).toContain('flushReferenceAutoSaves()')

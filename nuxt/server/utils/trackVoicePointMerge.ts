@@ -10,6 +10,8 @@ export interface TrackVoicePoint {
   normalized_car_position: number
   label?: string
   text?: string
+  /** PIP-667: English text of the point, heard with Heart/Michael. */
+  text_en?: string
   audio_path?: string
   audio_voice?: string
   audio_paths?: Record<string, string>
@@ -46,7 +48,20 @@ function groupPoints(points: TrackVoicePoint[]) {
   return { groups, order }
 }
 
-function mergeAudioPaths(defaultPoint: TrackVoicePoint, localPoint: TrackVoicePoint) {
+// PIP-667 (Codex review 01/11): a shipped point whose Italian text the user rewrote keeps no shipped English
+// text or English WAV: they would say something else. Same rule as dropStaleTranslation in desktop kokoroRuntime.js.
+const ENGLISH_VOICE_IDS = ['af_heart', 'am_michael']
+export function dropStaleTranslation(defaultPoint: TrackVoicePoint, localPoint: TrackVoicePoint): TrackVoicePoint {
+  const localText = String(localPoint.text ?? '').trim()
+  if (!localText || localText === String(defaultPoint.text ?? '').trim() || localPoint.text_en) return defaultPoint
+  const audioPaths = { ...(defaultPoint.audio_paths || {}) }
+  for (const voice of ENGLISH_VOICE_IDS) delete audioPaths[voice]
+  const { text_en: _staleText, ...rest } = defaultPoint
+  return { ...rest, audio_paths: audioPaths }
+}
+
+function mergeAudioPaths(shippedPoint: TrackVoicePoint, localPoint: TrackVoicePoint) {
+  const defaultPoint = dropStaleTranslation(shippedPoint, localPoint)
   const merged = { ...(defaultPoint.audio_paths || {}) }
   if (defaultPoint.audio_path && defaultPoint.audio_voice) merged[defaultPoint.audio_voice] = defaultPoint.audio_path
   Object.assign(merged, localPoint.audio_paths || {})
@@ -56,7 +71,7 @@ function mergeAudioPaths(defaultPoint: TrackVoicePoint, localPoint: TrackVoicePo
 
 function mergeCompatiblePoint(defaultPoint: TrackVoicePoint, localPoint: TrackVoicePoint) {
   return {
-    ...defaultPoint,
+    ...dropStaleTranslation(defaultPoint, localPoint),
     ...localPoint,
     audio_paths: mergeAudioPaths(defaultPoint, localPoint),
   }

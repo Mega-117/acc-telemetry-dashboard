@@ -8,13 +8,15 @@ import {
   toggleSpotterSessionMode,
   type SpotterSessionMode,
 } from '~/services/spotter/spotterSessionPolicy'
+import { DEFAULT_VOICE_ID, isVoiceId, voiceEntry, voiceForLanguage, voicesForLanguage, type VoiceId } from '~/config/voiceCatalog'
+import { useI18n } from '~/i18n'
 
-export type SpotterVoiceId = 'if_sara' | 'im_nicola'
+export type SpotterVoiceId = VoiceId
 
-export const spotterVoiceOptions: Array<{ id: SpotterVoiceId; label: string }> = [
-  { id: 'if_sara', label: 'Sara' },
-  { id: 'im_nicola', label: 'Nicola' },
-]
+const { locale } = useI18n()
+
+/** PIP-667: the two voices of the interface language (Sara/Nicola or Heart/Michael). */
+export const spotterVoiceOptions = computed(() => voicesForLanguage(locale.value).map(voice => ({ id: voice.id, label: voice.label, image: voice.image })))
 
 const STORAGE_KEYS = {
   voice: 'acc.spotter.voice',
@@ -37,7 +39,9 @@ export type AdaptiveCoachMode = 'focus' | 'all'
 
 const SETTINGS_CHANGED_EVENT = 'acc-spotter-voice-settings-change'
 
-const selectedVoice = ref<SpotterVoiceId>('if_sara')
+// The stored choice is a voice of either language; the one speaking is its twin in the interface language.
+const storedVoice = ref<SpotterVoiceId>(DEFAULT_VOICE_ID)
+const selectedVoice = computed<SpotterVoiceId>(() => voiceForLanguage(storedVoice.value, locale.value))
 const referencesEnabled = ref(false)
 const coachEnabled = ref(false)
 const referenceSessionModes = ref<SpotterSessionMode[]>([...DEFAULT_SPOTTER_SESSION_MODES])
@@ -67,7 +71,7 @@ function migrateMasterSwitches() {
 }
 
 function resolveVoiceId(value: unknown): SpotterVoiceId {
-  return value === 'im_nicola' ? 'im_nicola' : 'if_sara'
+  return isVoiceId(value) ? value : DEFAULT_VOICE_ID
 }
 
 function canUseStorage() {
@@ -77,7 +81,7 @@ function canUseStorage() {
 function readSettings() {
   if (!canUseStorage()) return
   migrateMasterSwitches()
-  selectedVoice.value = resolveVoiceId(window.localStorage.getItem(STORAGE_KEYS.voice))
+  storedVoice.value = resolveVoiceId(window.localStorage.getItem(STORAGE_KEYS.voice))
   targetLapVoiceEnabled.value = window.localStorage.getItem(STORAGE_KEYS.targetLapVoiceEnabled) !== '0'
   const targetModesRaw = window.localStorage.getItem(STORAGE_KEYS.targetLapSessionModes)
   // The target voice spoke in every session before it had session choices.
@@ -114,8 +118,8 @@ function writeSetting(key: string, value: string) {
 }
 
 function selectVoice(voice: SpotterVoiceId) {
-  selectedVoice.value = resolveVoiceId(voice)
-  writeSetting(STORAGE_KEYS.voice, selectedVoice.value)
+  storedVoice.value = resolveVoiceId(voice)
+  writeSetting(STORAGE_KEYS.voice, storedVoice.value)
 }
 
 function setReferencesEnabled(enabled: boolean) {
@@ -202,7 +206,7 @@ function setPressureWarningSessionModes(modes: SpotterSessionMode[]) {
 }
 
 export function useSpotterVoiceSettings() {
-  const voiceLabel = computed(() => spotterVoiceOptions.find(voice => voice.id === selectedVoice.value)?.label || 'Sara')
+  const voiceLabel = computed(() => voiceEntry(selectedVoice.value).label)
 
   let stopSync: (() => void) | null = null
 

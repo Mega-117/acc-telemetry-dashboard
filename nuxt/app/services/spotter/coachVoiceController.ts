@@ -164,7 +164,7 @@ export function resolveCoachOverrides(
   return byReference
 }
 
-// ── Catalogo frasi (contratto con PIP-257: WAV `acc-voice://coach/<key>-<voice>.wav`,
+// ── Catalogo frasi (contratto con PIP-257: WAV `/voice/coach/<key>-<voice>.wav`,
 //    ogni frase ≥3 parole per il vincolo Kokoro) ──────────────────────────────
 export type CoachPhraseKey =
   | 'brake_point_later_small' | 'brake_point_later_big'
@@ -188,7 +188,8 @@ export function coachPhraseKey(focus: CoachFocus): CoachPhraseKey {
 }
 
 export function coachPhrasePath(key: CoachPhraseKey, voice: string): string {
-  return `acc-voice://coach/${key}-${voice}.wav`
+  // PIP-667: from the app files like every other cue, so the installed program has them too (Codex review 01/11).
+  return `/voice/coach/${key}-${voice}.wav`
 }
 
 // ── Pre-curva: override del marker della curva-focus ─────────────────────────

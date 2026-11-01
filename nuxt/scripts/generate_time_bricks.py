@@ -27,8 +27,9 @@ OUTPUT_DIR = NUXT_ROOT / "public" / "voice" / "qualifying"
 
 sys.path.insert(0, str(SCRIPTS_DIR))
 from kokoro_tts_server import KokoroRuntime  # noqa: E402
+from voice_language import ALL_VOICES, is_english  # noqa: E402
 
-VOICES = ["if_sara", "im_nicola"]
+VOICES = ALL_VOICES
 SPEED = 1.15
 
 UNITS = ["zero", "uno", "due", "tre", "quattro", "cinque", "sei", "sette", "otto", "nove"]
@@ -54,7 +55,10 @@ def italian_number(n: int) -> str:
     return tens_word + UNITS[unit]
 
 
-def bricks() -> list[tuple[str, str]]:
+def bricks(voice: str = "if_sara") -> list[tuple[str, str]]:
+    # PIP-667: English voices only need the invalid-lap prefix; the number bricks are unused at runtime.
+    if is_english(voice):
+        return [("invalid", "that lap is invalid.")]
     out: list[tuple[str, str]] = [(f"num-{n}", italian_number(n)) for n in range(60)]
     out.append(("e", "e"))
     out.append(("invalid", "giro non valido."))
@@ -69,25 +73,24 @@ def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     runtime = KokoroRuntime()
 
-    items = bricks()
-    total = len(items) * len(VOICES)
+    items = [(brick_id, text, voice) for voice in VOICES for brick_id, text in bricks(voice)]
+    total = len(items)
     generated = skipped = errors = 0
     print(f"Output : {OUTPUT_DIR}")
     print(f"Total  : {total} files\n")
 
-    for brick_id, text in items:
-        for voice in VOICES:
-            out_path = OUTPUT_DIR / f"time-{brick_id}-{voice}.wav"
-            if out_path.exists() and not args.force:
-                skipped += 1
-                continue
-            try:
-                out_path.write_bytes(runtime.synthesize(text, voice, SPEED))
-                print(f"  [OK]   {out_path.name}  '{text}'")
-                generated += 1
-            except Exception as exc:
-                print(f"  [ERR]  {out_path.name}: {exc}", file=sys.stderr)
-                errors += 1
+    for brick_id, text, voice in items:
+        out_path = OUTPUT_DIR / f"time-{brick_id}-{voice}.wav"
+        if out_path.exists() and not args.force:
+            skipped += 1
+            continue
+        try:
+            out_path.write_bytes(runtime.synthesize(text, voice, SPEED))
+            print(f"  [OK]   {out_path.name}  '{text}'")
+            generated += 1
+        except Exception as exc:
+            print(f"  [ERR]  {out_path.name}: {exc}", file=sys.stderr)
+            errors += 1
 
     print(f"\nGenerated : {generated}")
     print(f"Skipped   : {skipped}")

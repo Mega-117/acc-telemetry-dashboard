@@ -168,6 +168,8 @@ export default defineConfig({
         'app/services/pitwall/pitwallSteadyDriving.ts',
         // 01/11: Telemetria laps in the program fall back to the online archive.
         'app/services/telemetry/sessionLapLoading.ts',
+        // PIP-667: the one list of spoken voices (Italian and English).
+        'app/config/voiceCatalog.ts',
         'app/composables/useControlKFriendRequests.ts',
         'app/components/overlay/ControlKFriendRequests.vue',
         'app/services/ui/pagePreparation.ts',

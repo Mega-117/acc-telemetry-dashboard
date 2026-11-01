@@ -3,16 +3,16 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useGameContext } from '~/composables/useGameContext'
 import { gameLabel, gameUiSupport } from '~/services/telemetry/gameCatalog'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { spotterVoiceOptions, useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
+import { spotterVoiceOptions, useSpotterVoiceSettings, type SpotterVoiceId } from '~/composables/useSpotterVoiceSettings'
 import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'
-import { referenceMatchesContext, resolveTrackVoiceReferenceAudioPath } from '~/services/spotter/trackVoiceReferences'
+import { referenceMatchesContext, resolvePlayableReferenceAudioPath } from '~/services/spotter/trackVoiceReferences'
 import { presentVoiceRuntimeMessage } from '~/services/spotter/voiceRuntimePresentation'
 import SessionModePicker from '~/components/spotter/SessionModePicker.vue'
 import { useI18n } from '~/i18n'
 
 definePageMeta({ layout: 'dashboard' })
 
-type VoiceId = 'if_sara' | 'im_nicola'
+type VoiceId = SpotterVoiceId
 type RuntimeState = 'checking' | 'online' | 'starting' | 'offline' | 'error'
 
 interface TrackVoicePoint {
@@ -85,7 +85,7 @@ const selectedTrackPoints = computed(() => catalog.value.points
   .filter(point => referenceMatchesContext(point, consultedGame.value, selectedTrack.value, selectedVariant.value || null) && point.type === 'braking_reference')
 )
 const activeReferences = computed(() => selectedTrackPoints.value.filter(point => point.enabled !== false))
-const readyReferences = computed(() => activeReferences.value.filter(point => resolveTrackVoiceReferenceAudioPath(point, selectedVoice.value)))
+const readyReferences = computed(() => activeReferences.value.filter(point => resolvePlayableReferenceAudioPath(point, selectedVoice.value)))
 const missingReferences = computed(() => Math.max(0, activeReferences.value.length - readyReferences.value.length))
 const disabledReferences = computed(() => selectedTrackPoints.value.filter(point => point.enabled === false).length)
 const referenceStatusLabel = computed(() => {
@@ -161,7 +161,7 @@ onMounted(() => {
               >
                 <UiResponsiveImage
                   sizes="(max-width: 800px) calc(50vw - 48px), 352px"
-                  :src="`/images/voices/${voice.id === 'if_sara' ? 'sara' : 'nicola'}.png`"
+                  :src="voice.image"
                   alt=""
                 />
                 <span class="voice-name">{{ voice.label }}</span>

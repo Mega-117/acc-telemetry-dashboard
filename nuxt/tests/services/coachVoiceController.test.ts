@@ -98,7 +98,7 @@ describe('frasi coach', () => {
     expect(coachPhraseKey(FOCUS)).toBe('brake_point_later_small')
     expect(coachPhraseKey({ ...FOCUS, magnitude: 60 })).toBe('brake_point_later_big')
     expect(coachPhrasePath('outcome_improved', 'im_nicola'))
-      .toBe('acc-voice://coach/outcome_improved-im_nicola.wav')
+      .toBe('/voice/coach/outcome_improved-im_nicola.wav')
   })
 
   it('bucket per metrica con soglie dedicate', () => {
@@ -141,7 +141,7 @@ describe('resolveCoachOverride', () => {
     ]
     const override = resolveCoachOverride(FOCUS, references, 'if_sara')
     expect(override?.referenceId).toBe('giusto')
-    expect(override?.correctionPath).toBe('acc-voice://coach/brake_point_later_small-if_sara.wav')
+    expect(override?.correctionPath).toBe('/voice/coach/brake_point_later_small-if_sara.wav')
     expect(override?.fallbackPath).toContain('giusto')
   })
 
@@ -191,7 +191,7 @@ describe('advancePostCorner', () => {
 
     step = advancePostCorner(state, { ...input, position: trigger + 0.005 })
     state = step.state
-    expect(step.path).toBe('acc-voice://coach/outcome_improved-im_nicola.wav')
+    expect(step.path).toBe('/voice/coach/outcome_improved-im_nicola.wav')
 
     // stesso giro: non risuona
     step = advancePostCorner(state, { ...input, position: trigger + 0.02 })

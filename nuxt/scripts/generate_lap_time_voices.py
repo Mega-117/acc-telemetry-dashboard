@@ -29,8 +29,9 @@ OUTPUT_DIR = NUXT_ROOT / "public" / "voice" / "qualifying"
 
 sys.path.insert(0, str(SCRIPTS_DIR))
 from kokoro_tts_server import KokoroRuntime  # noqa: E402
+from voice_language import ALL_VOICES, is_english  # noqa: E402
 
-VOICES = ["if_sara", "im_nicola"]
+VOICES = ALL_VOICES
 DEFAULT_SPEED = 1.2
 MIN_TENTHS = 800
 MAX_TENTHS = 1509
@@ -57,11 +58,29 @@ def italian_number(n: int) -> str:
     return tens_word + UNITS[unit]
 
 
-def lap_time_text(tenths: int) -> str:
+EN_UNITS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
+EN_TEENS = ["ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"]
+EN_TENS = {2: "twenty", 3: "thirty", 4: "forty", 5: "fifty"}
+
+
+def english_number(n: int) -> str:
+    if n < 10:
+        return EN_UNITS[n]
+    if n < 20:
+        return EN_TEENS[n - 10]
+    unit = n % 10
+    return EN_TENS[n // 10] if unit == 0 else f"{EN_TENS[n // 10]}-{EN_UNITS[unit]}"
+
+
+def lap_time_text(tenths: int, voice: str = "if_sara") -> str:
+    """Same text as lapTimeVoiceText in lapTimeAnnouncer.ts; English voices use the radio form (PIP-667)."""
     total_seconds = tenths // 10
     minutes = total_seconds // 60
     seconds = total_seconds % 60
     tenth = tenths % 10
+    if is_english(voice):
+        second_text = f"oh-{'oh' if seconds == 0 else EN_UNITS[seconds]}" if seconds < 10 else english_number(seconds)
+        return f"{english_number(minutes)} {second_text}, point {EN_UNITS[tenth]}."
     second_text = f"zero {italian_number(seconds)}" if seconds < 10 else italian_number(seconds)
     return f"{italian_number(minutes)}, {second_text}, punto {italian_number(tenth)}."
 
@@ -116,7 +135,7 @@ def main() -> None:  # noqa: C901
 
     if args.dry_run:
         for tenths, voice in items[:20]:
-            print(f"  [DRY] {lap_time_filename(tenths, voice)}  '{lap_time_text(tenths)}'")
+            print(f"  [DRY] {lap_time_filename(tenths, voice)}  '{lap_time_text(tenths, voice)}'")
         if len(items) > 20:
             print(f"  ... {len(items) - 20} more")
         return
@@ -126,7 +145,7 @@ def main() -> None:  # noqa: C901
     generated = skipped = errors = 0
 
     for tenths, voice in items:
-        text = lap_time_text(tenths)
+        text = lap_time_text(tenths, voice)
         out_path = OUTPUT_DIR / lap_time_filename(tenths, voice)
         if out_path.exists() and not args.force:
             skipped += 1

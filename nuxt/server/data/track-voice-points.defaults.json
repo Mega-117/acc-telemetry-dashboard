@@ -20,7 +20,8 @@
       "audio_paths": {
         "im_nicola": "/voice/references/spa/vp_20260623164547833_001-im_nicola.wav",
         "if_sara": "/voice/references/spa/vp_20260623164547833_001-if_sara.wav"
-      }
+      },
+      "text_en": "brake at the dark patch on the left."
     },
     {
       "id": "vp_20260623164609408_002",
@@ -40,7 +41,8 @@
       "audio_paths": {
         "im_nicola": "/voice/references/spa/vp_20260623164609408_002-im_nicola.wav",
         "if_sara": "/voice/references/spa/vp_20260623164609408_002-if_sara.wav"
-      }
+      },
+      "text_en": "adjust the traction control."
     },
     {
       "id": "vp_20260623164628462_003",
@@ -60,7 +62,8 @@
       "audio_paths": {
         "im_nicola": "/voice/references/spa/vp_20260623164628462_003-im_nicola.wav",
         "if_sara": "/voice/references/spa/vp_20260623164628462_003-if_sara.wav"
-      }
+      },
+      "text_en": "move all the way left and brake before the kerb."
     },
     {
       "id": "vp_20260623164652492_004",
@@ -80,7 +83,8 @@
       "audio_paths": {
         "im_nicola": "/voice/references/spa/vp_20260623164652492_004-im_nicola.wav",
         "if_sara": "/voice/references/spa/vp_20260623164652492_004-if_sara.wav"
-      }
+      },
+      "text_en": "all the way left, up to the start of the kerb."
     },
     {
       "id": "vp_20260623164704889_005",
@@ -100,7 +104,8 @@
       "audio_paths": {
         "im_nicola": "/voice/references/spa/vp_20260623164704889_005-im_nicola.wav",
         "if_sara": "/voice/references/spa/vp_20260623164704889_005-if_sara.wav"
-      }
+      },
+      "text_en": "all the way right, black mark on the ground."
     },
     {
       "id": "vp_20260623164716026_006",
@@ -120,7 +125,8 @@
       "audio_paths": {
         "im_nicola": "/voice/references/spa/vp_20260623164716026_006-im_nicola.wav",
         "if_sara": "/voice/references/spa/vp_20260623164716026_006-if_sara.wav"
-      }
+      },
+      "text_en": "all the way right, red window on the right. third gear."
     },
     {
       "id": "vp_20260623164734115_007",
@@ -140,7 +146,8 @@
       "audio_paths": {
         "im_nicola": "/voice/references/spa/vp_20260623164734115_007-im_nicola.wav",
         "if_sara": "/voice/references/spa/vp_20260623164734115_007-if_sara.wav"
-      }
+      },
+      "text_en": "all the way left, under the billboard."
     },
     {
       "id": "vp_20260623164751171_008",
@@ -160,7 +167,8 @@
       "audio_paths": {
         "im_nicola": "/voice/references/spa/vp_20260623164751171_008-im_nicola.wav",
         "if_sara": "/voice/references/spa/vp_20260623164751171_008-if_sara.wav"
-      }
+      },
+      "text_en": "all the way left, just before the kerb."
     },
     {
       "id": "vp_20260623164800938_009",
@@ -180,7 +188,8 @@
       "audio_paths": {
         "im_nicola": "/voice/references/spa/vp_20260623164800938_009-im_nicola.wav",
         "if_sara": "/voice/references/spa/vp_20260623164800938_009-if_sara.wav"
-      }
+      },
+      "text_en": "wide on the left, then turn in."
     },
     {
       "id": "vp_20260623164814999_010",
@@ -200,7 +209,8 @@
       "audio_paths": {
         "im_nicola": "/voice/references/spa/vp_20260623164814999_010-im_nicola.wav",
         "if_sara": "/voice/references/spa/vp_20260623164814999_010-if_sara.wav"
-      }
+      },
+      "text_en": "adjust the traction control."
     },
     {
       "id": "vp_20260623164829601_011",
@@ -220,7 +230,8 @@
       "audio_paths": {
         "im_nicola": "/voice/references/spa/vp_20260623164829601_011-im_nicola.wav",
         "if_sara": "/voice/references/spa/vp_20260623164829601_011-if_sara.wav"
-      }
+      },
+      "text_en": "all the way left, brake just after the line."
     }
   ]
 }

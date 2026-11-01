@@ -16,6 +16,8 @@ export interface VoiceScriptScenario {
   origin: VoicePhraseOrigin
   speed?: number
   text: string
+  /** PIP-667: English text read by Heart/Michael. */
+  textEn?: string
 }
 
 export interface VoiceScriptStep {
@@ -25,6 +27,8 @@ export interface VoiceScriptStep {
   origin: VoicePhraseOrigin
   speed?: number
   text: string
+  /** PIP-667: English text read by Heart/Michael. */
+  textEn?: string
 }
 
 export interface VoiceScript {

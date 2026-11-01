@@ -2,7 +2,9 @@
   "version": 1,
   "voices": [
     "if_sara",
-    "im_nicola"
+    "im_nicola",
+    "af_heart",
+    "am_michael"
   ],
   "defaultSpeed": 1.2,
   "scenarios": [
@@ -10,49 +12,57 @@
       "id": "pitStrategyApplied",
       "origin": "system",
       "text": "strategia, applicata.",
-      "speed": 1.2
+      "speed": 1.2,
+      "textEn": "strategy, applied."
     },
     {
       "id": "setupPressuresCompleted",
       "origin": "system",
       "text": "regolazioni pressioni completate.",
-      "speed": 1.2
+      "speed": 1.2,
+      "textEn": "pressure adjustments completed."
     },
     {
       "id": "setupFuelCompleted",
       "origin": "system",
       "text": "rifornimento completato.",
-      "speed": 1.2
+      "speed": 1.2,
+      "textEn": "refuelling, completed."
     },
     {
       "id": "lastMinute",
       "origin": "system",
       "text": "ultimo minuto. chiudilo bene.",
-      "speed": 1.3
+      "speed": 1.3,
+      "textEn": "last minute. finish it well."
     },
     {
       "id": "sessionComplete",
       "origin": "system",
       "text": "allenamento completato, ottimo lavoro. ora fatti un recap a mente: cosa e' andato bene e su cosa lavorare la prossima volta.",
-      "speed": 1.3
+      "speed": 1.3,
+      "textEn": "training complete, great work. now a quick recap in your head: what went well, and what to work on next time."
     },
     {
       "id": "pressureAdjustmentNeeded",
       "origin": "system",
       "text": "correzioni pressioni, pronta!",
-      "speed": 1.3
+      "speed": 1.3,
+      "textEn": "pressure corrections, ready!"
     },
     {
       "id": "targetInside",
       "origin": "system",
       "text": "giro nel targhet",
-      "speed": 1.35
+      "speed": 1.35,
+      "textEn": "lap inside the target."
     },
     {
       "id": "targetOutside",
       "origin": "system",
       "text": "giro fuori targhet.",
-      "speed": 1.35
+      "speed": 1.35,
+      "textEn": "lap outside the target."
     }
   ],
   "steps": [
@@ -61,140 +71,160 @@
       "modeId": "short30",
       "stepId": "initial-run",
       "origin": "system",
-      "text": "allenamento tracktitan. primo run. guida pulita e costante, mi servono dati buoni da confrontare."
+      "text": "allenamento tracktitan. primo run. guida pulita e costante, mi servono dati buoni da confrontare.",
+      "textEn": "track titan training. first run. drive clean and consistent, i need good data to compare."
     },
     {
       "trainingId": "tracktitan_input",
       "modeId": "short30",
       "stepId": "tracktitan-review",
       "origin": "system",
-      "text": "review. apri tracktitan e scegli un solo segmento, quello che ti costa di piu'."
+      "text": "review. apri tracktitan e scegli un solo segmento, quello che ti costa di piu'.",
+      "textEn": "review. open track titan and pick one segment only, the one costing you the most."
     },
     {
       "trainingId": "tracktitan_input",
       "modeId": "short30",
       "stepId": "segment-focus-run",
       "origin": "system",
-      "text": "run mirato. testa solo su quel segmento. frena e apri il gas esattamente come ti mostra il coach."
+      "text": "run mirato. testa solo su quel segmento. frena e apri il gas esattamente come ti mostra il coach.",
+      "textEn": "focused run. think only about that segment. brake and open the throttle exactly as the coach shows you."
     },
     {
       "trainingId": "tracktitan_input",
       "modeId": "short30",
       "stepId": "final-review",
       "origin": "system",
-      "text": "recap. guarda quanto hai recuperato. decidi: ripeti quel segmento o passi al prossimo."
+      "text": "recap. guarda quanto hai recuperato. decidi: ripeti quel segmento o passi al prossimo.",
+      "textEn": "recap. look at how much you gained. decide: repeat that segment or move on to the next one."
     },
     {
       "trainingId": "tracktitan_input",
       "modeId": "full60",
       "stepId": "initial-run",
       "origin": "system",
-      "text": "allenamento tracktitan. primo run. guida pulita e costante, mi servono dati buoni da confrontare."
+      "text": "allenamento tracktitan. primo run. guida pulita e costante, mi servono dati buoni da confrontare.",
+      "textEn": "track titan training. first run. drive clean and consistent, i need good data to compare."
     },
     {
       "trainingId": "tracktitan_input",
       "modeId": "full60",
       "stepId": "review-1",
       "origin": "system",
-      "text": "review. apri tracktitan e scegli il primo segmento su cui lavorare."
+      "text": "review. apri tracktitan e scegli il primo segmento su cui lavorare.",
+      "textEn": "review. open track titan and pick the first segment to work on."
     },
     {
       "trainingId": "tracktitan_input",
       "modeId": "full60",
       "stepId": "focus-run-1",
       "origin": "system",
-      "text": "run mirato. pensa solo a quel segmento. freno e gas come il coach, niente altro."
+      "text": "run mirato. pensa solo a quel segmento. freno e gas come il coach, niente altro.",
+      "textEn": "focused run. think only about that segment. brake and throttle like the coach, nothing else."
     },
     {
       "trainingId": "tracktitan_input",
       "modeId": "full60",
       "stepId": "review-2",
       "origin": "system",
-      "text": "seconda review. ricontrolla quel segmento e sistema il riferimento dove serve."
+      "text": "seconda review. ricontrolla quel segmento e sistema il riferimento dove serve.",
+      "textEn": "second review. check that segment again and adjust the reference where needed."
     },
     {
       "trainingId": "tracktitan_input",
       "modeId": "full60",
       "stepId": "focus-run-2",
       "origin": "system",
-      "text": "altro run mirato. ripeti il segmento finche' non ti viene automatico."
+      "text": "altro run mirato. ripeti il segmento finche' non ti viene automatico.",
+      "textEn": "another focused run. repeat the segment until it comes naturally."
     },
     {
       "trainingId": "tracktitan_input",
       "modeId": "full60",
       "stepId": "review-3",
       "origin": "system",
-      "text": "ultima review. scegli l'ultimo punto da limare."
+      "text": "ultima review. scegli l'ultimo punto da limare.",
+      "textEn": "last review. pick the last point to polish."
     },
     {
       "trainingId": "tracktitan_input",
       "modeId": "full60",
       "stepId": "final-focus-run",
       "origin": "system",
-      "text": "run finale. mettici tutto su quel punto. pulito e deciso."
+      "text": "run finale. mettici tutto su quel punto. pulito e deciso.",
+      "textEn": "final run. put everything into that point. clean and decisive."
     },
     {
       "trainingId": "tracktitan_input",
       "modeId": "full60",
       "stepId": "final-recap",
       "origin": "system",
-      "text": "recap. segna cosa hai guadagnato e su cosa tornare la prossima volta."
+      "text": "recap. segna cosa hai guadagnato e su cosa tornare la prossima volta.",
+      "textEn": "recap. note what you gained and what to come back to next time."
     },
     {
       "trainingId": "clean_laps",
       "modeId": "short30",
       "stepId": "warmup",
       "origin": "system",
-      "text": "allenamento pulizia. warm-up. scalda le gomme, fissa i riferimenti e trova il ritmo."
+      "text": "allenamento pulizia. warm-up. scalda le gomme, fissa i riferimenti e trova il ritmo.",
+      "textEn": "clean laps training. warm-up. warm the tyres, set your references and find your rhythm."
     },
     {
       "trainingId": "clean_laps",
       "modeId": "short30",
       "stepId": "clean-work",
       "origin": "system",
-      "text": "blocco giri validi. spingi ma lascia margine. voglio giri puliti, niente bandiere."
+      "text": "blocco giri validi. spingi ma lascia margine. voglio giri puliti, niente bandiere.",
+      "textEn": "valid laps block. push, but keep a margin. i want clean laps, no warnings."
     },
     {
       "trainingId": "clean_laps",
       "modeId": "short30",
       "stepId": "recap",
       "origin": "system",
-      "text": "recap. segnati gli invalidi, dove hai faticato e cosa e' andato bene."
+      "text": "recap. segnati gli invalidi, dove hai faticato e cosa e' andato bene.",
+      "textEn": "recap. note the invalid laps, where you struggled and what went well."
     },
     {
       "trainingId": "clean_laps",
       "modeId": "full60",
       "stepId": "warmup",
       "origin": "system",
-      "text": "allenamento pulizia. warm-up. scalda le gomme, fissa i riferimenti e trova il ritmo."
+      "text": "allenamento pulizia. warm-up. scalda le gomme, fissa i riferimenti e trova il ritmo.",
+      "textEn": "clean laps training. warm-up. warm the tyres, set your references and find your rhythm."
     },
     {
       "trainingId": "clean_laps",
       "modeId": "full60",
       "stepId": "clean-work-1",
       "origin": "system",
-      "text": "primo blocco validi. spingi con margine e proteggi ogni giro valido."
+      "text": "primo blocco validi. spingi con margine e proteggi ogni giro valido.",
+      "textEn": "first valid block. push with a margin and protect every valid lap."
     },
     {
       "trainingId": "clean_laps",
       "modeId": "full60",
       "stepId": "review",
       "origin": "system",
-      "text": "review veloce. guarda gli invalidi e scegli un solo punto da correggere."
+      "text": "review veloce. guarda gli invalidi e scegli un solo punto da correggere.",
+      "textEn": "quick review. look at the invalid laps and pick one point to fix."
     },
     {
       "trainingId": "clean_laps",
       "modeId": "full60",
       "stepId": "clean-work-2",
       "origin": "system",
-      "text": "secondo blocco. sistema quel punto. resta pulito, non alzare il rischio."
+      "text": "secondo blocco. sistema quel punto. resta pulito, non alzare il rischio.",
+      "textEn": "second block. fix that point. stay clean, do not raise the risk."
     },
     {
       "trainingId": "clean_laps",
       "modeId": "full60",
       "stepId": "recap",
       "origin": "system",
-      "text": "recap. segna il lavoro fatto e qual e' la prossima priorita'."
+      "text": "recap. segna il lavoro fatto e qual e' la prossima priorita'.",
+      "textEn": "recap. note the work done and what the next priority is."
     },
     {
       "trainingId": "qualifying",
@@ -202,7 +232,8 @@
       "stepId": "warmup",
       "origin": "system",
       "text": "allenamento qualifica. wormap. cinque minuti. scalda le gomme e fissa i riferimenti.",
-      "speed": 1.3
+      "speed": 1.3,
+      "textEn": "qualifying training. warm-up. five minutes. warm the tyres and set your references."
     },
     {
       "trainingId": "qualifying",
@@ -210,7 +241,8 @@
       "stepId": "qualy-1",
       "origin": "system",
       "text": "qualifica uno. dieci minuti. pochi tentativi, mettine subito uno valido e forte.",
-      "speed": 1.3
+      "speed": 1.3,
+      "textEn": "qualifying one. ten minutes. few attempts, put in a strong valid lap straight away."
     },
     {
       "trainingId": "qualifying",
@@ -218,7 +250,8 @@
       "stepId": "pause",
       "origin": "system",
       "text": "pausa. due minuti. respira e resetta. scegli una sola cosa da correggere.",
-      "speed": 1.3
+      "speed": 1.3,
+      "textEn": "pause. two minutes. breathe and reset. pick just one thing to fix."
     },
     {
       "trainingId": "qualifying",
@@ -226,7 +259,8 @@
       "stepId": "qualy-2",
       "origin": "system",
       "text": "qualifica due. dieci minuti. stesso giro, piu' pulito. portalo a casa valido.",
-      "speed": 1.3
+      "speed": 1.3,
+      "textEn": "qualifying two. ten minutes. same lap, cleaner. bring it home valid."
     },
     {
       "trainingId": "qualifying",
@@ -234,147 +268,168 @@
       "stepId": "recap",
       "origin": "system",
       "text": "recap. tre minuti. segna il tuo best valido e dove hai perso tempo.",
-      "speed": 1.3
+      "speed": 1.3,
+      "textEn": "recap. three minutes. note your best valid lap and where you lost time."
     },
     {
       "trainingId": "qualifying",
       "modeId": "full60",
       "stepId": "warmup",
       "origin": "system",
-      "text": "allenamento qualifica. warm-up. dieci minuti. scalda le gomme e fissa bene i riferimenti."
+      "text": "allenamento qualifica. warm-up. dieci minuti. scalda le gomme e fissa bene i riferimenti.",
+      "textEn": "qualifying training. warm-up. ten minutes. warm the tyres and set your references well."
     },
     {
       "trainingId": "qualifying",
       "modeId": "full60",
       "stepId": "pause-1",
       "origin": "system",
-      "text": "pausa. due minuti. reset. tieni in testa una sola priorita' tecnica."
+      "text": "pausa. due minuti. reset. tieni in testa una sola priorita' tecnica.",
+      "textEn": "pause. two minutes. reset. keep just one technical priority in mind."
     },
     {
       "trainingId": "qualifying",
       "modeId": "full60",
       "stepId": "qualy-1",
       "origin": "system",
-      "text": "qualifica uno. dieci minuti. giri validi in push. costruisci il primo riferimento."
+      "text": "qualifica uno. dieci minuti. giri validi in push. costruisci il primo riferimento.",
+      "textEn": "qualifying one. ten minutes. valid laps at full push. build your first reference."
     },
     {
       "trainingId": "qualifying",
       "modeId": "full60",
       "stepId": "pause-2",
       "origin": "system",
-      "text": "pausa. due minuti. scegli una correzione e basta."
+      "text": "pausa. due minuti. scegli una correzione e basta.",
+      "textEn": "pause. two minutes. pick one correction, and that is it."
     },
     {
       "trainingId": "qualifying",
       "modeId": "full60",
       "stepId": "qualy-2",
       "origin": "system",
-      "text": "qualifica due. dieci minuti. spingi sul giro buono e tienilo valido."
+      "text": "qualifica due. dieci minuti. spingi sul giro buono e tienilo valido.",
+      "textEn": "qualifying two. ten minutes. push on the good lap and keep it valid."
     },
     {
       "trainingId": "qualifying",
       "modeId": "full60",
       "stepId": "pause-3",
       "origin": "system",
-      "text": "pausa. due minuti. resta concentrato sul punto che ti costa di piu'."
+      "text": "pausa. due minuti. resta concentrato sul punto che ti costa di piu'.",
+      "textEn": "pause. two minutes. stay focused on the point costing you the most."
     },
     {
       "trainingId": "qualifying",
       "modeId": "full60",
       "stepId": "qualy-3",
       "origin": "system",
-      "text": "qualifica tre. dieci minuti. giro forte e valido, niente miracoli."
+      "text": "qualifica tre. dieci minuti. giro forte e valido, niente miracoli.",
+      "textEn": "qualifying three. ten minutes. a strong, valid lap, no miracles."
     },
     {
       "trainingId": "qualifying",
       "modeId": "full60",
       "stepId": "pause-4",
       "origin": "system",
-      "text": "pausa. due minuti. ultimo reset. obiettivo semplice e chiaro."
+      "text": "pausa. due minuti. ultimo reset. obiettivo semplice e chiaro.",
+      "textEn": "pause. two minutes. last reset. a simple, clear goal."
     },
     {
       "trainingId": "qualifying",
       "modeId": "full60",
       "stepId": "qualy-4",
       "origin": "system",
-      "text": "qualifica quattro. dieci minuti. esegui pulito e porta a casa il giro."
+      "text": "qualifica quattro. dieci minuti. esegui pulito e porta a casa il giro.",
+      "textEn": "qualifying four. ten minutes. execute clean and bring the lap home."
     },
     {
       "trainingId": "qualifying",
       "modeId": "full60",
       "stepId": "recap",
       "origin": "system",
-      "text": "recap. due minuti. segna il best valido e qual e' stata la run migliore."
+      "text": "recap. due minuti. segna il best valido e qual e' stata la run migliore.",
+      "textEn": "recap. two minutes. note your best valid lap and which run was the best."
     },
     {
       "trainingId": "consistency",
       "modeId": "short30",
       "stepId": "warmup",
       "origin": "system",
-      "text": "allenamento costanza. warm-up. trova un passo e dei riferimenti che puoi ripetere."
+      "text": "allenamento costanza. warm-up. trova un passo e dei riferimenti che puoi ripetere.",
+      "textEn": "consistency training. warm-up. find a pace and references you can repeat."
     },
     {
       "trainingId": "consistency",
       "modeId": "short30",
       "stepId": "stint",
       "origin": "system",
-      "text": "stint costante. tieni il passo gara. niente giri eroici, conta la regolarita'."
+      "text": "stint costante. tieni il passo gara. niente giri eroici, conta la regolarita'.",
+      "textEn": "consistent stint. hold race pace. no heroic laps, consistency is what counts."
     },
     {
       "trainingId": "consistency",
       "modeId": "short30",
       "stepId": "recap",
       "origin": "system",
-      "text": "recap. segna la media, il calo a fine stint e il punto piu' debole."
+      "text": "recap. segna la media, il calo a fine stint e il punto piu' debole.",
+      "textEn": "recap. note the average, the drop at the end of the stint and the weakest point."
     },
     {
       "trainingId": "consistency",
       "modeId": "full60",
       "stepId": "warmup",
       "origin": "system",
-      "text": "allenamento costanza. warm-up. prepara passo, consumo gomme e riferimenti."
+      "text": "allenamento costanza. warm-up. prepara passo, consumo gomme e riferimenti.",
+      "textEn": "consistency training. warm-up. prepare pace, tyre wear and references."
     },
     {
       "trainingId": "consistency",
       "modeId": "full60",
       "stepId": "stint-1",
       "origin": "system",
-      "text": "stint uno. passo gara. stesso margine, stesso giro, ogni volta."
+      "text": "stint uno. passo gara. stesso margine, stesso giro, ogni volta.",
+      "textEn": "stint one. race pace. same margin, same lap, every time."
     },
     {
       "trainingId": "consistency",
       "modeId": "full60",
       "stepId": "review",
       "origin": "system",
-      "text": "review. controlla la media, il calo e gli invalidi."
+      "text": "review. controlla la media, il calo e gli invalidi.",
+      "textEn": "review. check the average, the drop and the invalid laps."
     },
     {
       "trainingId": "consistency",
       "modeId": "full60",
       "stepId": "stint-2",
       "origin": "system",
-      "text": "stint due. ripeti lo stesso passo applicando una sola correzione."
+      "text": "stint due. ripeti lo stesso passo applicando una sola correzione.",
+      "textEn": "stint two. repeat the same pace, applying one correction only."
     },
     {
       "trainingId": "consistency",
       "modeId": "full60",
       "stepId": "recap",
       "origin": "system",
-      "text": "recap. segna quanto sei stato stabile e dov'e' il punto fragile."
+      "text": "recap. segna quanto sei stato stabile e dov'e' il punto fragile.",
+      "textEn": "recap. note how stable you were and where the weak point is."
     },
     {
       "trainingId": "race_real",
       "modeId": "short30",
       "stepId": "race-30",
       "origin": "system",
-      "text": "allenamento gara vera. traffico, linee sporche, pressione addosso. testa lucida, vai."
+      "text": "allenamento gara vera. traffico, linee sporche, pressione addosso. testa lucida, vai.",
+      "textEn": "real race training. traffic, dirty lines, pressure on you. clear head, go."
     },
     {
       "trainingId": "race_real",
       "modeId": "full60",
       "stepId": "race-60",
       "origin": "system",
-      "text": "allenamento gara vera. stint lungo. gruppo o lfm, gestisci gomme e gara. resta concentrato fino in fondo."
+      "text": "allenamento gara vera. stint lungo. gruppo o lfm, gestisci gomme e gara. resta concentrato fino in fondo.",
+      "textEn": "real race training. long stint. group or l f m, manage tyres and race. stay focused to the very end."
     }
   ]
 }

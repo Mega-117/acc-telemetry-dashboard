@@ -6,6 +6,8 @@ import { useAppNotifications } from '~/composables/useAppNotifications'
 import { useKokoroVoiceLabLifecycle } from '~/composables/useKokoroVoiceLabLifecycle'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import type { SpotterVoiceId } from '~/composables/useSpotterVoiceSettings'
+import { VOICE_IDS, isVoiceId, voiceEntry, voiceForLanguage, voicesForLanguage } from '~/config/voiceCatalog'
+import { useI18n } from '~/i18n'
 import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'
 import { trainingOverlayCatalog, trainingOverlayOrder, type TrainingOverlayId } from '~/config/trainingOverlayCatalog'
 import type { VoiceScript, VoiceScriptScenario, VoiceScriptStep } from '~/config/voiceScript'
@@ -61,6 +63,7 @@ interface TrackVoicePoint {
   normalized_car_position: number
   label?: string
   text?: string
+  text_en?: string
   audio_path?: string
   audio_voice?: string
   audio_paths?: Record<string, string>
@@ -76,7 +79,27 @@ interface TrackVoicePointCatalog {
 }
 
 const TTS_SERVER = 'http://localhost:5111'
-const KOKORO_ITALIAN_VOICE_IDS: SpotterVoiceId[] = ['if_sara', 'im_nicola']
+// PIP-667: the Voice Lab follows the interface language. Italian writes the Italian text and generates
+// Sara/Nicola; English the English text and Heart/Michael. Separate tracks: the other language is never touched.
+const { locale: labLanguage } = useI18n()
+const labVoices = computed(() => voicesForLanguage(labLanguage.value))
+const labVoiceIds = computed<SpotterVoiceId[]>(() => labVoices.value.map(voice => voice.id))
+const labVoiceNames = computed(() => labVoices.value.map(voice => voice.label).join(' e '))
+const isEnglishLab = computed(() => labLanguage.value === 'en')
+function voiceName(voice: string) {
+  return isVoiceId(voice) ? voiceEntry(voice).label : voice
+}
+/** Text of a script or coach line in the Voice Lab language. */
+function labText(entry: { text: string, textEn?: string }) {
+  return (isEnglishLab.value ? entry.textEn : entry.text) ?? ''
+}
+function setLabText(entry: { text: string, textEn?: string }, value: string) {
+  if (isEnglishLab.value) entry.textEn = value
+  else entry.text = value
+}
+function referenceText(entry: { text?: string, text_en?: string }) {
+  return (isEnglishLab.value ? entry.text_en : entry.text) ?? ''
+}
 const KOKORO_BOOT_POLL_MS = 3000
 const KOKORO_BOOT_MAX_MS = 120_000
 
@@ -84,7 +107,7 @@ const KOKORO_BOOT_MAX_MS = 120_000
 const serverVoices = ref<ServerVoice[]>([])
 const serverState = ref<'checking' | 'online' | 'starting' | 'offline' | 'error'>('checking')
 const serverMessage = ref('Controllo server locale...')
-const previewVoiceId = ref('if_sara')
+const previewVoiceId = ref<SpotterVoiceId>(voiceForLanguage('if_sara', labLanguage.value))
 let bootPollHandle: ReturnType<typeof setTimeout> | null = null
 let voiceLabMounted = false
 const appNotifications = useAppNotifications()
@@ -164,7 +187,7 @@ const previewAudioStatus = ref('')
 const previewAudioError = ref('')
 
 // ─── Libreria tempi giro (PIP-155) ───────────────────────────────────────────
-const lapTimeVoiceId = ref<LapTimeAudioVoice>('if_sara')
+const lapTimeVoiceId = ref<LapTimeAudioVoice>(voiceForLanguage('if_sara', labLanguage.value))
 const lapTimeSpeed = ref(LAP_TIME_AUDIO_DEFAULT_SPEED)
 const lapTimeFromTenths = ref(900) // 1:30.0, punto comodo per QA rapido.
 const lapTimeToTenths = ref(909) // 1:30.9
@@ -200,7 +223,7 @@ const lapTimePreviewEntry = computed(() => buildLapTimeVoiceEntry(lapTimeFromTen
 const selectedReferenceTrack = ref(typeof route.query.track === 'string' ? route.query.track : 'Spa')
 const selectedReferenceGame = ref(typeof route.query.game === 'string' ? route.query.game : 'acc')
 const selectedReferenceVariant = ref<string | null>(typeof route.query.variant === 'string' && route.query.variant ? route.query.variant : null)
-const referenceVoiceId = ref<SpotterVoiceId>('if_sara')
+const referenceVoiceId = ref<SpotterVoiceId>(voiceForLanguage('if_sara', labLanguage.value))
 const referenceCatalog = ref<TrackVoicePointCatalog>({ tracks: ['Spa'], points: [] })
 const referencesBusy = ref(false)
 const referencesStatus = ref('')
@@ -248,21 +271,26 @@ function referenceRowBusy(entry: TrackVoicePoint): boolean {
   return s === 'saving' || s === 'generating'
 }
 
-function markReferenceAudioStale(entryId: string) {
-  referencesWithStaleAudio.value = new Set([...referencesWithStaleAudio.value, entryId])
+// PIP-667: "audio to update" is per language: editing the Italian text never marks the English WAVs current.
+function staleKey(entryId: string, language = labLanguage.value) {
+  return `${language}:${entryId}`
 }
 
-function markReferenceAudioCurrent(entryId: string) {
+function markReferenceAudioStale(entryId: string) {
+  referencesWithStaleAudio.value = new Set([...referencesWithStaleAudio.value, staleKey(entryId)])
+}
+
+function markReferenceAudioCurrent(entryId: string, language = labLanguage.value) {
   const next = new Set(referencesWithStaleAudio.value)
-  next.delete(entryId)
+  next.delete(staleKey(entryId, language))
   referencesWithStaleAudio.value = next
 }
 
 function referenceNeedsAudioUpdate(entry: TrackVoicePoint): boolean {
   if (entry.enabled === false) return false
-  if (referencesWithStaleAudio.value.has(pointScopedId(entry))) return true
+  if (referencesWithStaleAudio.value.has(staleKey(pointScopedId(entry)))) return true
   const paths = collectReferenceAudioPaths(rawReferencePoint(pointScopedId(entry)) ?? entry)
-  return KOKORO_ITALIAN_VOICE_IDS.some(voice => !paths[voice])
+  return labVoiceIds.value.some(voice => !paths[voice])
 }
 
 const referencesNeedingAudioUpdate = computed(() => referenceRows.value.filter(referenceNeedsAudioUpdate))
@@ -316,7 +344,8 @@ function handleVoiceLabPageHide() {
   flushReferenceAutoSaves()
 }
 function updateReferenceText(entry: TrackVoicePoint, event: Event) {
-  patchReferenceRow(entry, { text: (event.target as HTMLTextAreaElement).value })
+  const value = (event.target as HTMLTextAreaElement).value
+  patchReferenceRow(entry, isEnglishLab.value ? { text_en: value } : { text: value })
   markReferenceAudioStale(pointScopedId(entry))
   scheduleReferenceAutoSave(pointScopedId(entry))
 }
@@ -354,16 +383,16 @@ function toggleReferenceEnabled(entry: TrackVoicePoint) {
 }
 
 function setReferenceVoice(voice: SpotterVoiceId) {
-  if (!KOKORO_ITALIAN_VOICE_IDS.includes(voice)) return
+  if (!labVoiceIds.value.includes(voice)) return
   referenceVoiceId.value = voice
-  referencesStatus.value = `Voce riferimenti: ${voice === 'im_nicola' ? 'Nicola' : 'Sara'}. Genera tutte crea comunque Sara e Nicola.`
+  referencesStatus.value = `Voce riferimenti: ${voiceName(voice)}. Genera tutte crea comunque ${labVoiceNames.value}.`
 }
 
 function syncReferenceVoiceFromTrack() {
   const voices = referenceCatalog.value.points
     .filter(point => matchesReferenceScope(point) && point.track === selectedReferenceTrack.value && point.type === 'braking_reference')
     .map(point => point.audio_voice)
-    .filter((voice): voice is SpotterVoiceId => Boolean(voice && KOKORO_ITALIAN_VOICE_IDS.includes(voice as SpotterVoiceId)))
+    .filter((voice): voice is SpotterVoiceId => Boolean(voice && labVoiceIds.value.includes(voice as SpotterVoiceId)))
   const uniqueVoices = Array.from(new Set(voices))
   if (uniqueVoices.length === 1) referenceVoiceId.value = uniqueVoices[0]!
 }
@@ -440,13 +469,14 @@ async function saveReference(entry: TrackVoicePoint, voice: SpotterVoiceId = ref
  */
 async function playReference(entry: TrackVoicePoint) {
   if (entry.enabled === false) return
-  const label = `${entry.label || entry.text || 'Riferimento'} - ${referenceVoiceId.value === 'im_nicola' ? 'Nicola' : 'Sara'}`
-  await playText(entry.text ?? '', entry.speed ?? 1.15, label, referenceVoiceId.value)
+  const label = `${entry.label || referenceText(entry) || 'Riferimento'} - ${voiceName(referenceVoiceId.value)}`
+  await playText(referenceText(entry), entry.speed ?? 1.15, label, referenceVoiceId.value)
 }
 
 async function generateReference(entry: TrackVoicePoint, voice: SpotterVoiceId = referenceVoiceId.value) {
   if (serverState.value !== 'online') return false
-  const text = (entry.text ?? '').trim()
+  // The text of the voice's language: an English voice never reads the Italian text.
+  const text = ((voiceEntry(voice).language === 'en' ? entry.text_en : entry.text) ?? '').trim()
   if (entry.enabled === false || !text) {
     const skippedEntry = withReferenceAudioPath({ ...entry, text: entry.text ?? '', enabled: entry.enabled !== false }, voice, '')
     patchReferenceRow(entry, skippedEntry)
@@ -468,8 +498,8 @@ async function generateReference(entry: TrackVoicePoint, voice: SpotterVoiceId =
     const savedEntry = withReferenceAudioPath({ ...entry, enabled: true }, voice, response.path)
     patchReferenceRow(entry, savedEntry)
     await saveReference(savedEntry, voice)
-    referenceTasks.value[pointScopedId(entry)] = { state: 'done', message: `WAV ${voice === 'im_nicola' ? 'Nicola' : 'Sara'} aggiornato` }
-    pushToast(`${entry.label || entry.text}: WAV ${voice === 'im_nicola' ? 'Nicola' : 'Sara'} generato`, 'success')
+    referenceTasks.value[pointScopedId(entry)] = { state: 'done', message: `WAV ${voiceName(voice)} aggiornato` }
+    pushToast(`${entry.label || text}: WAV ${voiceName(voice)} generato`, 'success')
     return true
   } catch (error: any) {
     referenceTasks.value[pointScopedId(entry)] = { state: 'error', message: error?.data?.statusMessage || error?.message || 'errore' }
@@ -489,7 +519,7 @@ async function resetAllReferenceTimingOffsets() {
   if (referencesBatchBusy.value || !referenceRows.value.length) return
   const confirmed = window.confirm(
     `Riportare tutti i ${referenceRows.value.length} riferimenti di ${selectedReferenceTrack.value} a “Sul punto”? `
-    + 'Vale per Sara e Nicola. I testi non cambiano.',
+    + 'Vale per tutte le voci. I testi non cambiano.',
   )
   if (!confirmed) return
   referencesBatchBusy.value = true
@@ -515,12 +545,16 @@ async function generateAllReferences() {
   referencesError.value = ''
   let ok = 0
   const rowsToGenerate = [...referencesNeedingAudioUpdate.value]
-  const total = rowsToGenerate.length * KOKORO_ITALIAN_VOICE_IDS.length
+  // Language and voices fixed at the start: switching language during the batch cannot mix them.
+  const language = labLanguage.value
+  const voices = [...labVoiceIds.value]
+  const names = labVoiceNames.value
+  const total = rowsToGenerate.length * voices.length
   try {
     for (let i = 0; i < rowsToGenerate.length; i += 1) {
       const rowId = pointScopedId(rowsToGenerate[i]!)
       let rowOk = 0
-      for (const voice of KOKORO_ITALIAN_VOICE_IDS) {
+      for (const voice of voices) {
         const current = latestReferenceRow(rowId) || rowsToGenerate[i]!
         referencesStatus.value = `Genero riferimenti ${ok + 1}/${total}...`
         if (await generateReference(current, voice)) {
@@ -528,10 +562,10 @@ async function generateAllReferences() {
           rowOk += 1
         }
       }
-      if (rowOk === KOKORO_ITALIAN_VOICE_IDS.length) markReferenceAudioCurrent(rowId)
+      if (rowOk === voices.length) markReferenceAudioCurrent(rowId, language)
     }
-    referencesStatus.value = `Generate ${ok}/${total} tracce Sara e Nicola per ${selectedReferenceTrack.value}.`
-    if (ok === total) pushToast(`Riferimenti ${selectedReferenceTrack.value}: WAV Sara e Nicola generati`, 'success')
+    referencesStatus.value = `Generate ${ok}/${total} tracce ${names} per ${selectedReferenceTrack.value}.`
+    if (ok === total) pushToast(`Riferimenti ${selectedReferenceTrack.value}: WAV ${names} generati`, 'success')
     else pushToast(`Generate ${ok}/${total}: controlla le righe in errore`, 'error')
   } finally {
     referencesBatchBusy.value = false
@@ -570,7 +604,7 @@ async function playLapTimeEntry(entry: LapTimeCatalogRow | LapTimeVoiceEntry) {
   isSpeaking.value = true
   kokoroLifecycle.beginWork()
   lapTimeCatalogError.value = ''
-  const label = `${lapTimeClockLabel(entry.tenths)} - ${lapTimeVoiceId.value === 'if_sara' ? 'Sara' : 'Nicola'}`
+  const label = `${lapTimeClockLabel(entry.tenths)} - ${voiceName(lapTimeVoiceId.value)}`
   try {
     if ('exists' in entry && entry.exists) {
       await playAudioSource(`${entry.path}?t=${Date.now()}`, label)
@@ -685,8 +719,10 @@ function scenarioWavName(entry: VoiceScriptScenario, voice: string) {
   return `${entry.id}-${voice}.wav`
 }
 
+// Per language (PIP-667): a phrase edited in Italian is "to regenerate" only for Sara/Nicola.
 function rowKey(entry: VoiceScriptStep | VoiceScriptScenario) {
-  return 'stepId' in entry ? `${entry.trainingId}/${entry.modeId}/${entry.stepId}` : `scenario/${entry.id}`
+  const id = 'stepId' in entry ? `${entry.trainingId}/${entry.modeId}/${entry.stepId}` : `scenario/${entry.id}`
+  return `${labLanguage.value}:${id}`
 }
 
 function markPendingRegen(entry: VoiceScriptStep | VoiceScriptScenario) {
@@ -713,7 +749,7 @@ async function probeServer(): Promise<'ready' | 'warming' | 'error' | 'offline'>
     serverMessage.value = data.message || serverMessage.value
     if (data.state === 'online') {
       const voices = Array.isArray(data.voices) ? data.voices : []
-      serverVoices.value = voices.filter((v: ServerVoice) => KOKORO_ITALIAN_VOICE_IDS.includes(v.id as SpotterVoiceId))
+      serverVoices.value = voices.filter((v: ServerVoice) => VOICE_IDS.includes(v.id as SpotterVoiceId))
       return serverVoices.value.length > 0 ? 'ready' : 'error'
     }
     serverVoices.value = []
@@ -731,7 +767,7 @@ async function ensureKokoro() {
   const initialProbe = await probeServer()
   if (initialProbe === 'ready') {
     serverState.value = 'online'
-    serverMessage.value = `Sara e Nicola pronte su ${TTS_SERVER}: sintesi verificata.`
+    serverMessage.value = `${labVoiceNames.value} pronte su ${TTS_SERVER}: sintesi verificata.`
     appNotifications.push('Motore vocale Kokoro online.', 'success')
     return
   }
@@ -762,7 +798,7 @@ async function ensureKokoro() {
     if (probe === 'ready') {
       stopBootTimer()
       serverState.value = 'online'
-      serverMessage.value = `Sara e Nicola pronte su ${TTS_SERVER}: sintesi verificata.`
+      serverMessage.value = `${labVoiceNames.value} pronte su ${TTS_SERVER}: sintesi verificata.`
       appNotifications.push('Motore vocale Kokoro online.', 'success')
       return
     }
@@ -824,7 +860,7 @@ async function synthesize(text: string, voice: string, speed: number): Promise<B
 // ─── Coach (PIP-259): frasi del coach adattivo ───────────────────────────────
 // Le chiavi sono un contratto col motore (PIP-255/256): da UI si modificano i
 // testi (minimo 3 parole, regola Kokoro/PIP-257), mai l'elenco delle chiavi.
-interface CoachLabPhrase { key: string; text: string; speed?: number; enabled?: boolean }
+interface CoachLabPhrase { key: string; text: string; textEn?: string; speed?: number; enabled?: boolean }
 interface CoachLabScript { defaultSpeed?: number; voices?: string[]; phrases: CoachLabPhrase[]; [extra: string]: unknown }
 
 const COACH_MIN_WORDS = 3
@@ -835,7 +871,15 @@ const coachDirty = ref(false)
 const coachRowTasks = ref<Record<string, { state: 'saving' | 'generating' | 'done' | 'error'; message: string }>>({})
 const coachBatchBusy = ref(false)
 const coachAudioBust = ref(0)
-const coachVoiceId = ref<SpotterVoiceId>('if_sara')
+const coachVoiceId = ref<SpotterVoiceId>(voiceForLanguage('if_sara', labLanguage.value))
+// Switching language keeps the same kind of voice (woman/man) in every tab of the Voice Lab.
+watch(labLanguage, (language) => {
+  previewVoiceId.value = voiceForLanguage(previewVoiceId.value, language)
+  referenceVoiceId.value = voiceForLanguage(referenceVoiceId.value, language)
+  coachVoiceId.value = voiceForLanguage(coachVoiceId.value, language)
+  lapTimeVoiceId.value = voiceForLanguage(lapTimeVoiceId.value, language)
+  if (lapTimeRows.value.length) void loadLapTimeCatalog()
+})
 let coachAudioEl: HTMLAudioElement | null = null
 
 function coachWordCount(text: string): number {
@@ -865,7 +909,10 @@ async function loadCoachScript() {
 async function saveAndRegenerateCoachPhrase(phrase: CoachLabPhrase, options: { toast?: boolean } = {}) {
   if (serverState.value !== 'online' || !coachScript.value) return false
   const shouldToast = options.toast ?? true
-  const words = coachWordCount(phrase.text)
+  // Voices and text of the Voice Lab language only (PIP-667): the other language's WAVs stay as they are.
+  const voices = [...labVoiceIds.value]
+  const text = labText(phrase).trim()
+  const words = coachWordCount(text)
   if (words < COACH_MIN_WORDS) {
     coachRowTasks.value[phrase.key] = { state: 'error', message: `${words} parole: minimo ${COACH_MIN_WORDS} (regola Kokoro)` }
     return false
@@ -876,10 +923,9 @@ async function saveAndRegenerateCoachPhrase(phrase: CoachLabPhrase, options: { t
     await $fetch('/api/dev/coach-voice-script', { method: 'POST', body: coachScript.value })
     coachDirty.value = false
     const speed = phrase.speed ?? coachScript.value.defaultSpeed ?? 1.15
-    const voices = coachScript.value.voices ?? KOKORO_ITALIAN_VOICE_IDS
     for (const voice of voices) {
-      coachRowTasks.value[phrase.key] = { state: 'generating', message: `Rigenero ${voice}...` }
-      const blob = await synthesize(phrase.text.trim(), voice, speed)
+      coachRowTasks.value[phrase.key] = { state: 'generating', message: `Rigenero ${voiceName(voice)}...` }
+      const blob = await synthesize(text, voice, speed)
       await $fetch('/api/dev/coach-voice-wav', {
         method: 'POST',
         body: { filename: `${phrase.key}-${voice}.wav`, dataBase64: await blobToBase64(blob) },
@@ -1031,13 +1077,13 @@ async function playText(text: string, speed: number, label = 'Anteprima', voice 
 
 async function playEntry(entry: VoiceScriptStep | VoiceScriptScenario) {
   const label = 'stepId' in entry
-    ? `${entry.trainingId} / ${entry.modeId} / ${entry.stepId} - ${previewVoiceId.value === 'if_sara' ? 'Sara' : 'Nicola'}`
-    : `${entry.id} - ${previewVoiceId.value === 'if_sara' ? 'Sara' : 'Nicola'}`
-  await playText(entry.text, entry.speed ?? script.value?.defaultSpeed ?? 1.15, label)
+    ? `${entry.trainingId} / ${entry.modeId} / ${entry.stepId} - ${voiceName(previewVoiceId.value)}`
+    : `${entry.id} - ${voiceName(previewVoiceId.value)}`
+  await playText(labText(entry), entry.speed ?? script.value?.defaultSpeed ?? 1.15, label)
 }
 
 async function playCustom() {
-  await playText(customText.value, speechSpeed.value, `Prova libera - ${previewVoiceId.value === 'if_sara' ? 'Sara' : 'Nicola'}`)
+  await playText(customText.value, speechSpeed.value, `Prova libera - ${voiceName(previewVoiceId.value)}`)
 }
 
 
@@ -1078,6 +1124,12 @@ async function saveAndRegenerate(
   const shouldToast = options.toast ?? true
   const key = rowKey(entry)
   const label = 'stepId' in entry ? entry.stepId : entry.id
+  const voices = [...labVoiceIds.value]
+  const text = labText(entry).trim()
+  if (!text) {
+    rowTasks.value[key] = { state: 'error', message: 'Testo vuoto in questa lingua' }
+    return false
+  }
   kokoroLifecycle.beginWork()
   try {
     if (scriptDirty.value) {
@@ -1087,11 +1139,10 @@ async function saveAndRegenerate(
       scriptStatus.value = ''
     }
     const speed = entry.speed ?? script.value?.defaultSpeed ?? 1.15
-    const voices = script.value?.voices ?? KOKORO_ITALIAN_VOICE_IDS
     for (const voice of voices) {
-      rowTasks.value[key] = { state: 'generating', message: `Rigenero ${voice}...` }
+      rowTasks.value[key] = { state: 'generating', message: `Rigenero ${voiceName(voice)}...` }
       const filename = 'stepId' in entry ? stepWavName(entry, voice) : scenarioWavName(entry, voice)
-      const blob = await synthesize(entry.text.trim(), voice, speed)
+      const blob = await synthesize(text, voice, speed)
       await $fetch('/api/dev/voice-wav', {
         method: 'POST',
         body: { filename, dataBase64: await blobToBase64(blob) },
@@ -1250,8 +1301,7 @@ onBeforeUnmount(() => {
           </div>
           <div class="voice-toggle">
             <span>Anteprima</span>
-            <button type="button" :class="{ 'is-active': previewVoiceId === 'if_sara' }" @click="previewVoiceId = 'if_sara'">Sara</button>
-            <button type="button" :class="{ 'is-active': previewVoiceId === 'im_nicola' }" @click="previewVoiceId = 'im_nicola'">Nicola</button>
+            <button v-for="voice in labVoices" :key="voice.id" type="button" :class="{ 'is-active': previewVoiceId === voice.id }" @click="previewVoiceId = voice.id">{{ voice.label }}</button>
           </div>
           <button type="button" class="primary save-btn" :disabled="mainSaveDisabled" @click="saveMainChanges">
             {{ mainSaveLabel }}
@@ -1287,7 +1337,7 @@ onBeforeUnmount(() => {
               <small>{{ row.step.durationMinutes }} min</small>
             </header>
             <template v-if="row.entry">
-              <textarea v-model="row.entry.text" rows="2" maxlength="280" @input="markDirty(row.entry)" />
+              <textarea :value="labText(row.entry)" rows="2" maxlength="280" @input="setLabText(row.entry, ($event.target as HTMLTextAreaElement).value); markDirty(row.entry)" />
               <footer>
                 <label>
                   Velocità
@@ -1311,8 +1361,8 @@ onBeforeUnmount(() => {
               <header>
                 <strong>{{ entry.id === 'pressureAdjustmentNeeded' ? 'Correzioni pressioni pronte' : entry.id }}</strong>
               </header>
-              <p v-if="entry.id === 'pressureAdjustmentNeeded'">Copione standard per tutti: salva e rigenera Sara e Nicola. La modifica sarà distribuita con la successiva pubblicazione.</p>
-              <textarea v-model="entry.text" rows="2" maxlength="280" @input="markDirty(entry)" />
+              <p v-if="entry.id === 'pressureAdjustmentNeeded'">Copione standard per tutti: salva e rigenera {{ labVoiceNames }}. La modifica sarà distribuita con la successiva pubblicazione.</p>
+              <textarea :value="labText(entry)" rows="2" maxlength="280" @input="setLabText(entry, ($event.target as HTMLTextAreaElement).value); markDirty(entry)" />
               <footer>
                 <label>
                   Velocità
@@ -1336,7 +1386,7 @@ onBeforeUnmount(() => {
           <div>
             <span class="voice-kicker">Riferimenti frenata</span>
             <h2>Riferimenti</h2>
-            <p>Seleziona la pista e genera le tracce audio Sara e Nicola dai punti registrati in allenamento.</p>
+            <p>Seleziona la pista e genera le tracce audio {{ labVoiceNames }} dai punti registrati in allenamento.</p>
           </div>
           <div class="reference-track-select">
             <label>
@@ -1359,8 +1409,7 @@ onBeforeUnmount(() => {
             </label>
             <div class="voice-toggle voice-toggle--compact">
               <span>Voce anteprima</span>
-              <button type="button" :class="{ 'is-active': referenceVoiceId === 'if_sara' }" :aria-pressed="referenceVoiceId === 'if_sara'" :disabled="referencesBatchBusy" @click="setReferenceVoice('if_sara')">Sara</button>
-              <button type="button" :class="{ 'is-active': referenceVoiceId === 'im_nicola' }" :aria-pressed="referenceVoiceId === 'im_nicola'" :disabled="referencesBatchBusy" @click="setReferenceVoice('im_nicola')">Nicola</button>
+              <button v-for="voice in labVoices" :key="voice.id" type="button" :class="{ 'is-active': referenceVoiceId === voice.id }" :aria-pressed="referenceVoiceId === voice.id" :disabled="referencesBatchBusy" @click="setReferenceVoice(voice.id)">{{ voice.label }}</button>
             </div>
 
           </div>
@@ -1369,7 +1418,7 @@ onBeforeUnmount(() => {
         <div class="reference-global-bar">
           <p class="reference-editor-note">
             <strong>{{ referenceRows.length }} riferimenti</strong>
-            <span>Testo condiviso tra Sara e Nicola · salvataggio automatico</span>
+            <span>Testo condiviso tra {{ labVoiceNames }} · salvataggio automatico</span>
           </p>
           <div class="reference-global-actions">
             <button type="button" class="secondary" :disabled="referencesBusy || referencesBatchBusy" @click="loadReferences">Ricarica</button>
@@ -1415,7 +1464,7 @@ onBeforeUnmount(() => {
             </header>
             <label class="reference-copy-field">
               <span>Frase pronunciata</span>
-              <textarea :value="entry.text" :aria-label="`Testo ${entry.label}`" rows="2" maxlength="280" @input="updateReferenceText(entry, $event)" />
+              <textarea :value="referenceText(entry)" :aria-label="`Testo ${entry.label}`" rows="2" maxlength="280" @input="updateReferenceText(entry, $event)" />
             </label>
             <footer>
               <label class="reference-setting">
@@ -1442,7 +1491,7 @@ onBeforeUnmount(() => {
               </button>
 
               <span class="row-status" :class="`row-status--${referenceRowState(entry)}`">{{ referenceTasks[pointScopedId(entry)]?.message || '' }}</span>
-              <button type="button" class="reference-listen" :disabled="entry.enabled === false || isSpeaking || !entry.text?.trim() || serverState !== 'online'" @click="playReference(entry)"><span aria-hidden="true">▶</span> Ascolta</button>
+              <button type="button" class="reference-listen" :disabled="entry.enabled === false || isSpeaking || !referenceText(entry).trim() || serverState !== 'online'" @click="playReference(entry)"><span aria-hidden="true">▶</span> Ascolta</button>
             </footer>
           </article>
         </div>
@@ -1456,24 +1505,23 @@ onBeforeUnmount(() => {
             <p>
               Le chiavi sono un contratto col motore: si modificano i testi
               (minimo {{ COACH_MIN_WORDS }} parole, regola Kokoro), non l'elenco.
-              "Salva + Rigenera" produce sia Sara che Nicola.
+              "Salva + Rigenera" produce {{ labVoiceNames }}.
             </p>
           </div>
           <div class="play-actions">
-            <button type="button" :class="{ 'is-active': coachVoiceId === 'if_sara' }" :aria-pressed="coachVoiceId === 'if_sara'" :disabled="coachBatchBusy" @click="coachVoiceId = 'if_sara'">Sara</button>
-            <button type="button" :class="{ 'is-active': coachVoiceId === 'im_nicola' }" :aria-pressed="coachVoiceId === 'im_nicola'" :disabled="coachBatchBusy" @click="coachVoiceId = 'im_nicola'">Nicola</button>
+            <button v-for="voice in labVoices" :key="voice.id" type="button" :class="{ 'is-active': coachVoiceId === voice.id }" :aria-pressed="coachVoiceId === voice.id" :disabled="coachBatchBusy" @click="coachVoiceId = voice.id">{{ voice.label }}</button>
           </div>
         </div>
 
         <div class="reference-global-bar">
           <p class="reference-editor-note">
             <strong>{{ coachScript?.phrases.length ?? 0 }} frasi</strong>
-            <span>Testo condiviso tra Sara e Nicola · rigenera dopo ogni modifica</span>
+            <span>Testo condiviso tra {{ labVoiceNames }} · rigenera dopo ogni modifica</span>
           </p>
           <div class="reference-global-actions">
             <button type="button" class="secondary" :disabled="coachBatchBusy" @click="loadCoachScript">Ricarica</button>
             <button type="button" class="primary" :disabled="coachBatchBusy || serverState !== 'online' || !coachScript" @click="regenerateAllCoachPhrases">
-              {{ coachBatchBusy ? 'Genero...' : 'Rigenera tutte (Sara + Nicola)' }}
+              {{ coachBatchBusy ? 'Genero...' : `Rigenera tutte (${labVoiceNames})` }}
             </button>
           </div>
         </div>
@@ -1490,15 +1538,15 @@ onBeforeUnmount(() => {
                 <strong>{{ phrase.key }}</strong>
                 <small>{{ phrase.enabled === false ? 'non usata in pista' : 'attiva in pista' }}</small>
               </div>
-              <span class="lap-time-state" :class="{ 'is-ready': coachWordCount(phrase.text) >= COACH_MIN_WORDS }">
-                {{ coachWordCount(phrase.text) < COACH_MIN_WORDS
-                  ? `${coachWordCount(phrase.text)} parole — minimo ${COACH_MIN_WORDS}`
-                  : `${coachWordCount(phrase.text)} parole` }}
+              <span class="lap-time-state" :class="{ 'is-ready': coachWordCount(labText(phrase)) >= COACH_MIN_WORDS }">
+                {{ coachWordCount(labText(phrase)) < COACH_MIN_WORDS
+                  ? `${coachWordCount(labText(phrase))} parole — minimo ${COACH_MIN_WORDS}`
+                  : `${coachWordCount(labText(phrase))} parole` }}
               </span>
             </header>
             <label class="reference-copy-field">
               <span>Frase pronunciata</span>
-              <textarea v-model="phrase.text" :aria-label="`Testo ${phrase.key}`" rows="2" maxlength="280" @input="coachDirty = true" />
+              <textarea :value="labText(phrase)" :aria-label="`Testo ${phrase.key}`" rows="2" maxlength="280" @input="setLabText(phrase, ($event.target as HTMLTextAreaElement).value); coachDirty = true" />
             </label>
             <footer>
               <label class="reference-setting">
@@ -1519,7 +1567,7 @@ onBeforeUnmount(() => {
               <button
                 type="button"
                 class="primary"
-                :disabled="serverState !== 'online' || coachBatchBusy || coachWordCount(phrase.text) < COACH_MIN_WORDS"
+                :disabled="serverState !== 'online' || coachBatchBusy || coachWordCount(labText(phrase)) < COACH_MIN_WORDS"
                 @click="saveAndRegenerateCoachPhrase(phrase)"
               >Salva + Rigenera</button>
               <span class="row-status">{{ coachRowTasks[phrase.key]?.message || '' }}</span>
@@ -1555,8 +1603,7 @@ onBeforeUnmount(() => {
         <div class="lap-time-controls">
           <div class="voice-toggle">
             <span>Voce</span>
-            <button type="button" :class="{ 'is-active': lapTimeVoiceId === 'if_sara' }" @click="lapTimeVoiceId = 'if_sara'; loadLapTimeCatalog()">Sara</button>
-            <button type="button" :class="{ 'is-active': lapTimeVoiceId === 'im_nicola' }" @click="lapTimeVoiceId = 'im_nicola'; loadLapTimeCatalog()">Nicola</button>
+            <button v-for="voice in labVoices" :key="voice.id" type="button" :class="{ 'is-active': lapTimeVoiceId === voice.id }" @click="lapTimeVoiceId = voice.id; loadLapTimeCatalog()">{{ voice.label }}</button>
           </div>
           <label>
             Da
@@ -1621,7 +1668,7 @@ onBeforeUnmount(() => {
         <div class="playground-head">
           <div>
             <span class="voice-kicker">Prova libera</span>
-            <h2>Testo libero con {{ previewVoiceId === 'if_sara' ? 'Sara' : 'Nicola' }}</h2>
+            <h2>Testo libero con {{ voiceName(previewVoiceId) }}</h2>
           </div>
           <div class="play-actions">
             <button type="button" class="secondary" :disabled="!isSpeaking" @click="stopVoice">Stop</button>

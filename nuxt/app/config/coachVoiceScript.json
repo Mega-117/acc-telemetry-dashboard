@@ -1,95 +1,114 @@
 {
-  "$schema_note": "Copione frasi coach adattivo (PIP-257). Fonte di verita' unica: le chiavi sono il contratto con coachVoiceController.ts (PIP-256). Regola: ogni testo ha ALMENO 3 parole (Kokoro distorce i testi corti, cfr. PIP-144). WAV: acc-voice://coach/<key>-<voice>.wav",
+  "$schema_note": "Copione frasi coach adattivo (PIP-257). Fonte di verita' unica: le chiavi sono il contratto con coachVoiceController.ts (PIP-256). Regola: ogni testo ha ALMENO 3 parole (Kokoro distorce i testi corti, cfr. PIP-144). WAV: /voice/coach/<key>-<voice>.wav (PIP-667: textEn per Heart/Michael)",
   "defaultSpeed": 1.15,
   "voices": [
     "if_sara",
-    "im_nicola"
+    "im_nicola",
+    "af_heart",
+    "am_michael"
   ],
   "phrases": [
     {
       "key": "brake_point_later_small",
       "text": "Frena un po' più tardi",
-      "enabled": true
+      "enabled": true,
+      "textEn": "Brake a bit later"
     },
     {
       "key": "brake_point_later_big",
       "text": "Frena molto più tardi",
-      "enabled": true
+      "enabled": true,
+      "textEn": "Brake much later"
     },
     {
       "key": "brake_point_earlier_small",
       "text": "Frena un po' prima",
-      "enabled": true
+      "enabled": true,
+      "textEn": "Brake a bit earlier"
     },
     {
       "key": "brake_point_earlier_big",
       "text": "Frena molto prima",
-      "enabled": true
+      "enabled": true,
+      "textEn": "Brake much earlier"
     },
     {
       "key": "vmin_faster_small",
       "text": "Porta più velocità in curva",
-      "enabled": true
+      "enabled": true,
+      "textEn": "Carry more corner speed"
     },
     {
       "key": "vmin_faster_big",
       "text": "Porta molta più velocità",
-      "enabled": true
+      "enabled": true,
+      "textEn": "Carry much more speed"
     },
     {
       "key": "vmin_slower_small",
       "text": "Entra un po' più piano",
-      "enabled": true
+      "enabled": true,
+      "textEn": "Enter a bit slower"
     },
     {
       "key": "vmin_slower_big",
       "text": "Entri troppo forte, più piano",
-      "enabled": true
+      "enabled": true,
+      "textEn": "Too fast in, slow down"
     },
     {
       "key": "throttle_earlier_small",
       "text": "Apri il gas prima",
-      "enabled": true
+      "enabled": true,
+      "textEn": "Get on throttle earlier"
     },
     {
       "key": "throttle_earlier_big",
       "text": "Apri il gas molto prima",
-      "enabled": true
+      "enabled": true,
+      "textEn": "Throttle on much earlier"
     },
     {
       "key": "throttle_later_small",
       "text": "Aspetta di più col gas",
-      "enabled": true
+      "enabled": true,
+      "textEn": "Wait longer on throttle"
     },
     {
       "key": "throttle_later_big",
       "text": "Più dolce col gas in uscita",
-      "enabled": true
+      "enabled": true,
+      "textEn": "Smoother throttle on exit"
     },
     {
       "key": "lift_flat_small",
       "text": "Questa si fa in pieno",
-      "enabled": true
+      "enabled": true,
+      "textEn": "Take this one flat"
     },
     {
       "key": "lift_flat_big",
       "text": "Resta in pieno, non alzare",
-      "enabled": true
+      "enabled": true,
+      "textEn": "Stay flat, do not lift"
     },
     {
       "key": "outcome_improved",
       "text": "Ottimo, continua così",
-      "enabled": true
+      "enabled": true,
+      "textEn": "Great, keep it up"
     },
     {
       "key": "outcome_ok",
       "text": "Perfetto, curva risolta",
-      "enabled": true
+      "enabled": true,
+      "textEn": "Perfect, corner sorted out"
     },
     {
       "key": "outcome_worse",
       "text": "Riprova al prossimo giro",
-      "enabled": true
+      "enabled": true,
+      "textEn": "Try again next lap"
     }
   ]
 }

@@ -11,6 +11,8 @@ export const COACH_PHRASE_MIN_WORDS = 3
 export interface CoachVoicePhrase {
   key: string
   text: string
+  /** PIP-667: English text read by Heart/Michael. */
+  textEn?: string
   speed?: number
   enabled?: boolean
 }
@@ -69,6 +71,14 @@ export function validateCoachVoiceScriptUpdate(
       errors.push(`"${key}": ${words} parole, minimo ${COACH_PHRASE_MIN_WORDS} ("${text}")`)
     }
     const normalized: CoachVoicePhrase = { key, text, enabled: phrase.enabled !== false }
+    // PIP-667: the English text is kept when a save does not send it (Voice Lab in Italian) and checked like the Italian one.
+    const previous = existing.phrases.find(p => p.key === key)
+    const textEn = String(phrase?.textEn ?? previous?.textEn ?? '').trim()
+    if (textEn) {
+      const enWords = coachPhraseWordCount(textEn)
+      if (enWords < COACH_PHRASE_MIN_WORDS) errors.push(`"${key}" (en): ${enWords} words, minimum ${COACH_PHRASE_MIN_WORDS} ("${textEn}")`)
+      normalized.textEn = textEn
+    }
     if (phrase.speed !== undefined) {
       const speed = Number(phrase.speed)
       if (!Number.isFinite(speed) || speed < 0.5 || speed > 2) {

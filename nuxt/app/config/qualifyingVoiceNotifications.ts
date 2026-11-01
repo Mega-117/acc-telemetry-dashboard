@@ -4,7 +4,9 @@
 // 'stepStart' identifica i WAV per-step.
 export type QualifyingVoiceScenario = 'sessionComplete' | 'lastMinute' | 'stepStart'
 
-export type QualifyingVoiceId = 'if_sara' | 'im_nicola'
+import { DEFAULT_VOICE_ID, isVoiceId, VOICE_CATALOG, type VoiceId } from './voiceCatalog'
+
+export type QualifyingVoiceId = VoiceId
 
 export interface QualifyingVoicePhrase {
   id: string
@@ -16,13 +18,10 @@ export interface QualifyingVoicePhrase {
 
 export const QUALIFYING_VOICE_AUDIO_DIR = '/voice/qualifying'
 
-export const qualifyingVoiceOptions: Array<{ id: QualifyingVoiceId; label: string }> = [
-  { id: 'if_sara', label: 'Sara' },
-  { id: 'im_nicola', label: 'Nicola' }
-]
+export const qualifyingVoiceOptions: Array<{ id: QualifyingVoiceId; label: string }> = VOICE_CATALOG.map(({ id, label }) => ({ id, label }))
 
 export function resolveQualifyingVoiceId(value: unknown): QualifyingVoiceId {
-  return value === 'im_nicola' ? 'im_nicola' : 'if_sara'
+  return isVoiceId(value) ? value : DEFAULT_VOICE_ID
 }
 
 export function getQualifyingVoiceAudioPath(scenario: QualifyingVoiceScenario, voice: QualifyingVoiceId) {

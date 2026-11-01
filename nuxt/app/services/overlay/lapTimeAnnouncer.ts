@@ -2,15 +2,17 @@
 // - frase intera pre-generata, zero TTS live mentre si guida;
 // - fuori dal range pre-generato il tempo non viene annunciato: nessun
 //   ripiego sui vecchi mattoncini PIP-101.
+// - PIP-667: le voci inglesi leggono il tempo in forma radio ("one forty-five, point seven").
+import { VOICE_IDS, voiceLanguage, type VoiceId } from '~/config/voiceCatalog'
 
 export const TIME_BRICK_DIR = '/voice/qualifying'
 export const LAP_TIME_AUDIO_DIR = '/voice/qualifying'
 export const LAP_TIME_AUDIO_MIN_TENTHS = 800 // 1:20.0
 export const LAP_TIME_AUDIO_MAX_TENTHS = 1509 // 2:30.9
 export const LAP_TIME_AUDIO_DEFAULT_SPEED = 1.2
-export const LAP_TIME_AUDIO_VOICES = ['if_sara', 'im_nicola'] as const
+export const LAP_TIME_AUDIO_VOICES = VOICE_IDS
 
-export type LapTimeAudioVoice = typeof LAP_TIME_AUDIO_VOICES[number]
+export type LapTimeAudioVoice = VoiceId
 
 export interface LapTimeVoiceEntry {
   key: string
@@ -85,7 +87,25 @@ export function italianNumber0To59(n: number): string {
   return `${tensWord}${UNITS[unit]}`
 }
 
-export function lapTimeVoiceText(tenths: number): string {
+const EN_UNITS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine']
+const EN_TEENS = ['ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen']
+const EN_TENS: Record<number, string> = { 2: 'twenty', 3: 'thirty', 4: 'forty', 5: 'fifty' }
+
+export function englishNumber0To59(n: number): string {
+  if (!Number.isInteger(n) || n < 0 || n > 59) throw new Error(`Number out of range: ${n}`)
+  if (n < 10) return EN_UNITS[n]!
+  if (n < 20) return EN_TEENS[n - 10]!
+  const unit = n % 10
+  return unit === 0 ? EN_TENS[Math.floor(n / 10)]! : `${EN_TENS[Math.floor(n / 10)]}-${EN_UNITS[unit]}`
+}
+
+/** Radio form, user decision 31/10: "one forty-five, point seven"; seconds under ten: "two oh-four, point three". */
+function englishLapTimeText(minutes: number, seconds: number, tenth: number): string {
+  const secondText = seconds < 10 ? `oh-${seconds === 0 ? 'oh' : EN_UNITS[seconds]}` : englishNumber0To59(seconds)
+  return `${englishNumber0To59(minutes)} ${secondText}, point ${EN_UNITS[tenth]}.`
+}
+
+export function lapTimeVoiceText(tenths: number, language: 'it' | 'en' = 'it'): string {
   if (!isLapTimeVoiceTenthsInRange(tenths)) {
     throw new Error(`Tempo fuori range audio: ${tenths}`)
   }
@@ -93,6 +113,7 @@ export function lapTimeVoiceText(tenths: number): string {
   const minutes = Math.floor(totalSeconds / 60)
   const seconds = totalSeconds % 60
   const tenth = tenths % 10
+  if (language === 'en') return englishLapTimeText(minutes, seconds, tenth)
   const minuteText = italianNumber0To59(minutes)
   const secondText = seconds < 10
     ? `zero ${italianNumber0To59(seconds)}`
@@ -108,7 +129,7 @@ export function buildLapTimeVoiceEntry(
   return {
     key: lapTimeVoiceKey(tenths),
     tenths,
-    text: lapTimeVoiceText(tenths),
+    text: lapTimeVoiceText(tenths, voiceLanguage(voice)),
     path: lapTimeVoicePath(tenths, voice),
     filename: lapTimeVoiceFilename(tenths, voice),
     voice,
@@ -140,7 +161,7 @@ export function resolveLapTimeVoiceEntry(
     return {
       key: 'lap-invalid',
       tenths: 0,
-      text: 'Giro invalidato.',
+      text: voiceLanguage(voice) === 'en' ? 'That lap is invalid.' : 'Giro invalidato.',
       path: timeBrickPath('invalid', voice),
       filename: `time-invalid-${voice}.wav`,
       voice,

@@ -35,6 +35,7 @@ VOICE_SCRIPT = NUXT_ROOT / "app" / "config" / "voiceScript.json"
 
 sys.path.insert(0, str(SCRIPTS_DIR))
 from kokoro_tts_server import KokoroRuntime  # noqa: E402
+from voice_language import ALL_VOICES, text_for  # noqa: E402
 
 
 def wav_filename(training_id: str, mode_id: str, step_id: str, voice: str) -> str:
@@ -44,15 +45,16 @@ def wav_filename(training_id: str, mode_id: str, step_id: str, voice: str) -> st
     return f"step-{training_id}-{mode_id}-{step_id}-{voice}.wav"
 
 
-def load_phrases() -> tuple[list[tuple[str, str, str, str, float | None]], dict]:
+def load_phrases() -> tuple[list[tuple[str, str, str, dict, float | None]], dict]:
+    """Each phrase keeps its whole entry: the voice picks the Italian or the English text (PIP-667)."""
     data = json.loads(VOICE_SCRIPT.read_text(encoding="utf-8"))
-    phrases: list[tuple[str, str, str, str, float | None]] = []
+    phrases: list[tuple[str, str, str, dict, float | None]] = []
     for scenario in data.get("scenarios", []):
-        phrases.append(("", "", scenario["id"], scenario["text"], scenario.get("speed")))
+        phrases.append(("", "", scenario["id"], scenario, scenario.get("speed")))
     for step in data.get("steps", []):
         phrases.append((
             step["trainingId"], step["modeId"], step["stepId"],
-            step["text"], step.get("speed"),
+            step, step.get("speed"),
         ))
     return phrases, data
 
@@ -65,10 +67,14 @@ def main() -> None:
         "--force", action="store_true",
         help="Re-generate WAV files even if they already exist."
     )
+    parser.add_argument(
+        "--voices", default="",
+        help="Comma-separated voices to generate (default: the script's voices)."
+    )
     args = parser.parse_args()
 
     phrases, data = load_phrases()
-    voices = data.get("voices", ["if_sara", "im_nicola"])
+    voices = [v for v in args.voices.split(",") if v] or data.get("voices", ALL_VOICES)
     default_speed = float(data.get("defaultSpeed", 1.15))
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -82,7 +88,7 @@ def main() -> None:
     print(f"Voices       : {', '.join(voices)}")
     print(f"Total        : {total} files\n")
 
-    for training_id, mode_id, step_id, text, speed in phrases:
+    for training_id, mode_id, step_id, entry, speed in phrases:
         for voice in voices:
             filename = wav_filename(training_id, mode_id, step_id, voice)
             out_path = OUTPUT_DIR / filename
@@ -93,6 +99,7 @@ def main() -> None:
                 continue
 
             try:
+                text = text_for(entry, voice)
                 wav_bytes = runtime.synthesize(text, voice, speed or default_speed)
                 out_path.write_bytes(wav_bytes)
                 label = f"{training_id}/{mode_id}/{step_id}" if training_id else step_id
