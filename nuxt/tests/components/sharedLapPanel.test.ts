@@ -157,6 +157,24 @@ describe('SessionAnalysisPanel sharing and coach view', () => {
     view.unmount()
   })
 
+  // 01/11: with a target the bar lives in the page's title row; it leaves with the panel.
+  it('puts Tu and Riferimento in the page title row and takes them away on unmount', async () => {
+    ;(window as any).electronAPI = {
+      listLapTraces: vi.fn(async (f: { sessionToken?: string }) => f?.sessionToken ? [{ id: 'h__c/lap_20261025_175240_L005_104310ms.json.gz' }] : []),
+      readLapTrace: vi.fn(async () => rawLap({ lapNumber: 5, lapTime: 104.31 })),
+    }
+    const head = document.createElement('div')
+    head.id = 'head-test'
+    document.body.appendChild(head)
+    const view = mount(SessionAnalysisPanel, { props: { sessionToken: '20261025_175240', laps, sessionType: 'race', headTarget: '#head-test' }, attachTo: document.body, global: { stubs: { AnalysisMap: true, AnalysisCharts: true, AnalysisCar: true } } })
+    await flushPromises()
+    expect(head.querySelector('.analysis-bar--head .lap-pill--you')).not.toBeNull()
+    expect(view.element.querySelector('.analysis-bar')).toBeNull()
+    view.unmount()
+    expect(head.querySelector('.analysis-bar')).toBeNull()
+    head.remove()
+  })
+
   it('someone else\'s session opened by link never reads this PC\'s laps', async () => {
     ;(window as any).electronAPI = { listLapTraces: vi.fn(async () => []), readLapTrace: vi.fn() }
     const view = mount(SessionAnalysisPanel, { props: { sessionToken: '20261025_175240', laps, foreign: true }, global: { stubs: { AnalysisMap: true, AnalysisCharts: true, AnalysisCar: true } } })

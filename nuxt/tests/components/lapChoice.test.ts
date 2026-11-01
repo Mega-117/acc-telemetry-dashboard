@@ -64,6 +64,24 @@ describe('LapChoiceCard', () => {
     expect(wrapper.text()).not.toContain('TU')
     expect(wrapper.get('.lap-pill__why').attributes('aria-label')).not.toContain('Perché questo')
   })
+  // Codex 01/11: Esc closes the box and is marked handled (the charts keep their corner); a click elsewhere closes it too.
+  it('ⓘ: Esc closes the box without reaching the page shortcuts; a click outside closes it', async () => {
+    wrapper = mount(LapChoiceCard, { props: { side: 'ref', choice: ref, reason: { kind: 'myBest' } }, attachTo: document.body })
+    await wrapper.get('.lap-pill__why').trigger('click')
+    expect(wrapper.find('.lap-pill__info').exists()).toBe(true)
+    let reachedPage = false
+    const page = (e: KeyboardEvent) => { reachedPage = !e.defaultPrevented }
+    window.addEventListener('keydown', page)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', cancelable: true }))
+    window.removeEventListener('keydown', page)
+    await flushPromises()
+    expect(wrapper.find('.lap-pill__info').exists()).toBe(false)
+    expect(reachedPage).toBe(false)
+    await wrapper.get('.lap-pill__why').trigger('click')
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+    await flushPromises()
+    expect(wrapper.find('.lap-pill__info').exists()).toBe(false)
+  })
   it('shows what the lap was driven with: fuel, tyres, air and track (01/11)', () => {
     wrapper = mount(LapChoiceCard, { props: { side: 'you', choice: { ...you, conditions: { fuelL: 43.73, tyre: 'dry', airC: 15.2, roadC: 18.4 } } } })
     // 01/11: short tags on the pill, the full words in the tooltip.

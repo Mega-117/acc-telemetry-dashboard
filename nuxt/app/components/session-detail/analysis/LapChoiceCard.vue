@@ -3,7 +3,7 @@
 // 01/11 (Track Titan's lap pills): a low pill that fits the page's title row. Line 1: side, driver, lap, status,
 // the time large; line 2, small: fuel, air, track, grip and the weather icon. ⓘ opens a box over the page (it never
 // makes the pill taller) with the reason of the reference, when the lap was driven and the conditions in words.
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { LapChoice, LapSide, RefReason } from '~/services/telemetry/lapChoice'
 import { useLapChoiceText } from '~/composables/useLapChoiceText'
 import { formatLapTime } from '~/utils/telemetryFormat'
@@ -36,12 +36,32 @@ const lapLabel = computed(() => props.choice?.ideal ? t('telemetry.choice.idealS
 const reasonText = computed(() => props.side === 'ref' && props.reason ? text.reason(props.reason, { pilotName: props.pilotName }) : '')
 const infoLines = computed(() => [reasonText.value, props.choice?.ideal ? text.idealNote(props.idealScope) : when.value, text.conditions(props.choice?.conditions)].filter(Boolean))
 const tooltip = computed(() => infoLines.value.join('\n'))
-// ⓘ opens on a click, a tap or Enter, not only on hover; Esc or a second click closes it.
+// ⓘ opens on a click, a tap or Enter, not only on hover; a second click, Esc or a click elsewhere closes it.
+// Esc is taken first (capture) and marked handled: closing the box never also sends the charts back to the whole lap.
 const infoOpen = ref(false)
+const root = ref<HTMLElement | null>(null)
+function onKey(event: KeyboardEvent) {
+  if (event.key !== 'Escape') return
+  event.preventDefault()
+  event.stopPropagation()
+  infoOpen.value = false
+}
+function onPointer(event: PointerEvent) { if (!root.value?.contains(event.target as Node)) infoOpen.value = false }
+function listen(on: boolean) {
+  if (on) {
+    window.addEventListener('keydown', onKey, true)
+    window.addEventListener('pointerdown', onPointer, true)
+  } else {
+    window.removeEventListener('keydown', onKey, true)
+    window.removeEventListener('pointerdown', onPointer, true)
+  }
+}
+watch(infoOpen, open => listen(open))
+onBeforeUnmount(() => listen(false))
 </script>
 
 <template>
-  <div class="lap-pill" :class="[`lap-pill--${side}`, { 'is-ideal': choice?.ideal }]" :style="{ '--c': color }">
+  <div ref="root" class="lap-pill" :class="[`lap-pill--${side}`, { 'is-ideal': choice?.ideal }]" :style="{ '--c': color }">
     <span class="lap-pill__side" :title="t(side === 'you' ? 'telemetry.youHint' : 'telemetry.referenceHint')">{{ text.side(side) }}</span>
     <div class="lap-pill__body" :title="tooltip">
       <template v-if="choice">
@@ -49,7 +69,7 @@ const infoOpen = ref(false)
           <span class="lap-pill__driver">{{ text.driver(choice) }}</span>
           <span v-if="lapLabel" class="lap-pill__lap">{{ lapLabel }}</span>
           <span v-if="!choice.ideal" class="lap-pill__status" :class="`is-${choice.status}`" :title="status!.text"><span aria-hidden="true">{{ status!.icon }}</span><span class="sr-only">{{ status!.text }}</span></span>
-          <button v-if="infoLines.length" type="button" class="lap-pill__why" :aria-expanded="infoOpen" :aria-label="infoLines.join('. ')" :title="tooltip" @click="infoOpen = !infoOpen" @keydown.esc="infoOpen = false">ⓘ</button>
+          <button v-if="infoLines.length" type="button" class="lap-pill__why" :aria-expanded="infoOpen" :aria-label="infoLines.join('. ')" :title="tooltip" @click="infoOpen = !infoOpen">ⓘ</button>
         </p>
         <p v-if="tags.length || weather" class="lap-pill__tags">
           <span v-for="tag in tags" :key="tag">{{ tag }}</span>

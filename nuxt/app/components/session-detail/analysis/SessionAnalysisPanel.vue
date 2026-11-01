@@ -552,6 +552,8 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
   &--head { position: static; flex: 1 1 auto; min-width: 0; padding: 0; background: none; box-shadow: none; } }
 // PIP-635: sugli schermi larghi una riga sola: i selettori dei giri si stringono, lo switcher non va a capo.
 @media (min-width: 1200px) { .analysis-bar { flex-wrap: nowrap; } .analysis-bar > * { flex-shrink: 0; } .analysis-bar > .compare { flex-shrink: 1; } }
+// 01/11: in the title row the share message takes a line of its own: it never pushes the pills into the buttons.
+.analysis-bar--head { flex-wrap: wrap; > .compare { flex: 1 1 0; } > .bar-note { flex: 1 1 100%; } }
 // PIP-623: share and paste, square buttons as tall as the pickers.
 .bar-note { color: #3ddc5a; font-size: 12px; &.failed { color: #ff5a6e; } }
 .analysis-note--warn { color: #fbbf24; }
