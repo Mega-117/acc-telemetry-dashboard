@@ -492,7 +492,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
       </aside>
       <div class="tracce-center">
         <div class="panel">
-          <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null && !sessionColours" :focus="selectedSector !== null ? range : null" :color-mode="sessionColours ? 'delta' : 'laps'" :zone-colors="sessionColours ? zones.colors.value : null" zoom-controls :size="deltaPlace === 'top' ? 340 : 320" :corner-deltas="cornerDeltas" @hover="cursor = $event" @select="selectCorner($event)" />
+          <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null && !sessionColours" :focus="selectedSector !== null ? range : null" :color-mode="sessionColours ? 'delta' : 'laps'" :zone-colors="sessionColours ? zones.colors.value : null" zoom-controls :size="deltaPlace === 'top' ? 420 : 320" :corner-deltas="cornerDeltas" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>
         <!-- 01/11 (from Dove migliorare): the opened corner's advice under the map, only when the delta is not there. -->
         <div v-if="reference && deltaPlace === 'centre'" ref="deltaWrap">
@@ -559,9 +559,8 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 
 // Garage 61 analyzer: left bar, map + delta in the middle, channels on the right, sector strip on top of the charts.
 .layout-tracce { display: grid; grid-template-columns: 210px 320px minmax(0, 1fr); grid-template-areas: 'left center right'; gap: 10px; align-items: stretch; overflow: hidden;
-  // 01/11: with the delta on top the map has the middle column to itself; it grows with the window (336 px at
-  // 1400 px, 420 at most) so the charts keep the rest of the width.
-  &--wide { grid-template-columns: 210px clamp(320px, 24vw, 420px) minmax(0, 1fr); } }
+  // 01/11: with the delta on top the map has the middle column to itself: wider, numbers and times readable.
+  &--wide { grid-template-columns: 210px 420px minmax(0, 1fr); } }
 // Left column: three boxes with air between them (Garage 61 Laps/Gaps, VRS corners).
 // Tracce fills the window: the page does not scroll, each column scrolls on its own.
 .tracce-left { grid-area: left; display: flex; flex-direction: column; gap: 10px; height: 100%; overflow-y: auto; overflow-x: hidden; }
@@ -592,7 +591,9 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 .corner-num { position: relative; display: grid; place-items: center; padding: 4px 0; background: #ffffff0d; color: #e6e6ea; font: italic 700 15px 'Racer Display', 'Arial Narrow', sans-serif; }
 .corner-cell { display: grid; place-items: center; color: #fff; font: 700 13px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
 .tracce-center { grid-area: center; display: grid; gap: 8px; align-content: start; height: 100%; overflow-y: auto; overflow-x: hidden; }
-.tracce-right { grid-area: right; min-width: 0; height: 100%; overflow-y: auto; overflow-x: hidden; }
+// 01/11: the charts reach the right edge: the column still scrolls (wheel, touch), without the 15 px scrollbar
+// that left a gap beside the pills.
+.tracce-right { grid-area: right; min-width: 0; height: 100%; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; &::-webkit-scrollbar { display: none; } }
 // 01/11: the bar and (when on top) the delta stay fixed together while the charts scroll.
 .tracce-top { position: sticky; top: 0; z-index: 4; display: grid; gap: 4px; margin-bottom: 6px; padding-bottom: 2px; background: #0b0b10f2; box-shadow: 0 8px 10px -10px #000; }
 .tracce-strip { display: grid; gap: 1px; padding: 2px 9px 2px 43px; }
