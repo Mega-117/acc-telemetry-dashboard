@@ -21,7 +21,7 @@ import { useReferenceLibrary, type Entry } from '~/composables/useReferenceLibra
 import { LapsArchiveError } from '~/services/telemetry/lapsArchiveClient'
 import { lapShareErrorMessage } from '~/services/telemetry/lapShareLink'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { compareCorners, cornerAdvice, detectCorners, formatDelta, stretchDelta } from '~/services/telemetry/lapAnalysis'
+import { compareCorners, cornerAdvice, detectCorners, focusAdvice, formatDelta, stretchDelta } from '~/services/telemetry/lapAnalysis'
 import { useFocusZone } from '~/composables/useFocusZone'
 import { useCornerStepper } from '~/composables/useCornerStepper'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
@@ -324,7 +324,8 @@ const lossScope = ref<'lap' | 'session'>('lap')
 const sessionColours = computed(() => lossScope.value === 'session' && zones.active.value)
 const selectedAdvice = computed(() => {
   const c = selectedCorner.value !== null && !zoomRange.value ? comparison.value.find(x => x.corner.number === selectedCorner.value) : null
-  return c ? cornerAdvice(c) : ''
+  // 01/11: when the yellow zone comes from a pedal difference, the advice says that same thing.
+  return c ? (focus.value ? focusAdvice(focus.value, c.timeLostS) : null) ?? cornerAdvice(c) : ''
 })
 const gapWord = computed(() => totalDelta.value === null ? '' : totalDelta.value < 0 ? t('telemetry.faster') : totalDelta.value > 0 ? t('telemetry.slower') : t('telemetry.even'))
 const gapTitle = computed(() => totalDelta.value === null ? t('telemetry.gapTitle')
@@ -349,7 +350,7 @@ const range = computed<[number, number]>(() => {
   const corner = selectedCorner.value !== null ? corners.value[selectedCorner.value - 1] : null
   return corner ? [corner.start, corner.end] : [0, 1]
 })
-const { focusCorner, focusZone } = useFocusZone({ lap, reference, comparison, worst, range, wholeView, selectedSector, selectedCorner, zoomRange })
+const { focusCorner, focus, focusZone } = useFocusZone({ lap, reference, comparison, worst, range, wholeView, selectedSector, selectedCorner, zoomRange })
 function selectSector(index: number) {
   selectedCorner.value = null
   selectedSector.value = selectedSector.value === index ? null : index

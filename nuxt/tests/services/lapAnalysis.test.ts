@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { analysisSessionToken, bodySlipDeg, channelAt, compareCorners, cornerAt, focusInStretch, glideFrame, stepCorner, stretchDelta, finishLine, timeSyncedFraction, cornerAdvice, deltaTrend, detectCorners, formatDelta, fractions, lapDelta, mapPoints } from '~/services/telemetry/lapAnalysis'
+import { analysisSessionToken, bodySlipDeg, channelAt, compareCorners, cornerAt, focusAdvice, focusInStretch, glideFrame, stepCorner, stretchDelta, finishLine, timeSyncedFraction, cornerAdvice, deltaTrend, detectCorners, formatDelta, fractions, lapDelta, mapPoints } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
 const STEP = 2
@@ -45,6 +45,13 @@ describe('lap analysis (our Track Titan)', () => {
     expect(c1!.brakeDeltaM).toBeCloseTo(-160, 6)
   })
 
+  it('a light real braking (35%) is still the braking, never the corner before it (Codex 01/11)', () => {
+    const reference = lap(profile(), [800, 2000])
+    const light = lap(profile(), [800, 2000])
+    light.channels.brake_pct = light.channels.brake_pct!.map(v => (v > 0 ? 35 : 0))
+    const [c1] = compareCorners(light, reference, detectCorners(reference))
+    expect(c1!.brakeDeltaM).toBeCloseTo(0, 6)
+  })
   // 01/11 (Hungaroring T1): a light touch of brake near the apex is not where the braking starts.
   it('a light touch near the apex is not the braking; a short release does not split one braking', () => {
     const reference = lap(profile(), [800, 2000])
@@ -283,6 +290,27 @@ describe('focus zone: the loss you keep (01/11, research)', () => {
     const blip = gapLap([[0, 0], [550, 0], [600, 0.10], [650, 0.03], [1000, 0.134], [3000, 0.134]])
     blip.channels.throttle_pct = blip.channels.throttle_pct!.map((v, i) => (i * 2 >= 600 && i * 2 < 604 ? 0 : v))
     expect(focusInStretch(blip, fast, [400 / 3000, 1000 / 3000])!.zone[0] * 3000).toBeGreaterThanOrEqual(645)
+  })
+  it('the advice of a pedal zone says the pedal (T1: you hold the brake less)', () => {
+    const c1 = gapLap([[0, 0], [550, 0], [600, 0.10], [650, 0.03], [1000, 0.134], [3000, 0.134]])
+    const ref = lap(() => 180)
+    c1.channels.brake_pct = c1.channels.brake_pct!.map((_, i) => (i * 2 >= 480 && i * 2 < 590 ? 100 : 0))
+    ref.channels.brake_pct = ref.channels.brake_pct!.map((_, i) => (i * 2 >= 480 && i * 2 < 630 ? 100 : 0))
+    const f = focusInStretch(c1, ref, [400 / 3000, 1000 / 3000])!
+    expect(f.cause).toMatchObject({ pedal: 'brake', lapMore: false })
+    expect(focusAdvice(f)).toContain('freni meno del riferimento')
+  })
+  it('a pedal difference after the loss never moves the zone; every band is 30-150 m (Codex 01/11)', () => {
+    const late = gapLap([[0, 0], [600, 0], [620, 0.05], [3000, 0.05]])
+    late.channels.throttle_pct = late.channels.throttle_pct!.map((v, i) => (i * 2 >= 660 && i * 2 < 720 ? 0 : v))
+    const f = focusInStretch(late, fast, [400 / 3000, 1000 / 3000])!
+    expect(f.zone[0] * 3000).toBeGreaterThanOrEqual(598)
+    expect(f.zone[1] * 3000).toBeLessThan(640)
+    expect(f.cause).toBeNull()
+    expect((f.zone[1] - f.zone[0]) * 3000).toBeGreaterThanOrEqual(29.9)
+    const long = gapLap([[0, 0], [100, 0], [2100, 1.0], [3000, 1.0]])
+    const g = focusInStretch(long, fast, [0, 1])!
+    expect((g.zone[1] - g.zone[0]) * 3000).toBeLessThanOrEqual(150.1)
   })
   it('a uniform loss over a long corner still gives a zone (opening the corner keeps its band)', () => {
     const even = gapLap([[0, 0], [400, 0], [1000, 0.134], [3000, 0.134]])

@@ -33,7 +33,7 @@ export function useFocusZone(o: {
     const found = focusInStretch(o.lap.value, o.reference.value, s)
     if (found) return found
     // The whole corner only when the data hold there: a time reset gives no band at all, never a guessed one.
-    return focusCorner.value && timeRuns(o.lap.value, s) && timeRuns(o.reference.value, s) ? { zone: s, lossS: focusCorner.value.timeLostS } : null
+    return focusCorner.value && timeRuns(o.lap.value, s) && timeRuns(o.reference.value, s) ? { zone: s, lossS: focusCorner.value.timeLostS, cause: null } : null
   })
-  return { focusCorner, focusZone: computed(() => focus.value?.zone ?? null) }
+  return { focusCorner, focus, focusZone: computed(() => focus.value?.zone ?? null) }
 }

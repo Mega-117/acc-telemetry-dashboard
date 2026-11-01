@@ -96,9 +96,10 @@ function minIn(trace: LapTraceView, channel: string, start: number, end: number)
 const BRAKE_ON = 10
 const BRAKE_LOOKBACK_M = 300
 
-// 01/11: a braking that never reaches this pressure is a touch (trail or balance), not where the braking starts;
-// two pressings closer than BRAKE_JOIN_M are one braking released for a moment.
-const BRAKE_MAIN = 40
+// 01/11: a braking that never reaches this pressure is a touch (trail or balance, 11% at Hungaroring T1), not
+// where the braking starts; a light real braking (30-40%) still is. Two pressings closer than BRAKE_JOIN_M are one
+// braking released for a moment.
+const BRAKE_MAIN = 25
 const BRAKE_JOIN_M = 20
 
 /**
@@ -151,8 +152,10 @@ export function stretchDelta(lap: LapTraceView, reference: LapTraceView, [start,
   return la === null || lb === null || ra === null || rb === null ? null : (lb - la) - (rb - ra)
 }
 
-/** 01/11: the focus zone of a stretch: where to work, and the seconds of the loss it starts. */
-export interface FocusZone { zone: [number, number], lossS: number }
+/** 01/11: what the pedals did in the zone: which one, and whether you pressed it more or less than the reference. */
+export interface FocusCause { pedal: 'brake' | 'throttle', lapMore: boolean, metres: number }
+/** 01/11: the focus zone of a stretch: where to work, the seconds of the loss it starts, the pedal difference there. */
+export interface FocusZone { zone: [number, number], lossS: number, cause: FocusCause | null }
 
 /** The recorded time only moves forward over [start, end]: a reset or a jump back makes the measure unusable. */
 export function timeRuns(trace: LapTraceView, [start, end]: [number, number]): boolean {
@@ -180,25 +183,31 @@ export function timeRuns(trace: LapTraceView, [start, end]: [number, number]): b
  * throttle differ by `minPct` or more, with the largest total difference, within `lookM` metres before the loss
  * starts (and up to it). Short blips (downshift throttle) never make a piece on their own. Null without pedals.
  */
-function inputCause(lap: LapTraceView, reference: LapTraceView, [from, to]: [number, number], { minPct = 25, minM = 10 } = {}): [number, number] | null {
+function inputCause(lap: LapTraceView, reference: LapTraceView, [from, to]: [number, number], { minPct = 25, minM = 10 } = {}): { range: [number, number], cause: FocusCause } | null {
   const lb = lap.channels.brake_pct, rb = reference.channels.brake_pct, lt = lap.channels.throttle_pct, rt = reference.channels.throttle_pct
   if (!lb?.length || !rb?.length || !lt?.length || !rt?.length || !(to > from)) return null
   const stepF = 2 / Math.max(lap.lengthM || 0, 1)
   const steps = Math.max(1, Math.round((to - from) / stepF))
-  const diff = (f: number) => Math.max(Math.abs((channelAt(lap, 'brake_pct', f) ?? 0) - (channelAt(reference, 'brake_pct', f) ?? 0)),
-    Math.abs((channelAt(lap, 'throttle_pct', f) ?? 0) - (channelAt(reference, 'throttle_pct', f) ?? 0)))
-  let best: { a: number, b: number, sum: number } | null = null
-  let a = -1, sum = 0
+  const pedals = (f: number) => {
+    const brake = (channelAt(lap, 'brake_pct', f) ?? 0) - (channelAt(reference, 'brake_pct', f) ?? 0)
+    const throttle = (channelAt(lap, 'throttle_pct', f) ?? 0) - (channelAt(reference, 'throttle_pct', f) ?? 0)
+    return Math.abs(brake) >= Math.abs(throttle) ? { d: Math.abs(brake), brake, throttle: 0 } : { d: Math.abs(throttle), brake: 0, throttle }
+  }
+  let best: { a: number, b: number, sum: number, brake: number, throttle: number } | null = null
+  let a = -1, sum = 0, brake = 0, throttle = 0
   for (let i = 0; i <= steps + 1; i++) {
-    const d = i <= steps ? diff(from + i * stepF) : 0
-    if (d >= minPct) { if (a < 0) { a = i; sum = 0 } sum += d; continue }
+    const p = i <= steps ? pedals(from + i * stepF) : { d: 0, brake: 0, throttle: 0 }
+    if (p.d >= minPct) { if (a < 0) { a = i; sum = 0; brake = 0; throttle = 0 } sum += p.d; brake += p.brake; throttle += p.throttle; continue }
     if (a >= 0) {
       const b = i - 1
-      if ((b - a) * 2 >= minM && (!best || sum > best.sum)) best = { a, b, sum }
+      if ((b - a) * 2 >= minM && (!best || sum > best.sum)) best = { a, b, sum, brake, throttle }
       a = -1
     }
   }
-  return best ? [from + best.a * stepF, from + best.b * stepF] : null
+  if (!best) return null
+  const onBrake = Math.abs(best.brake) >= Math.abs(best.throttle)
+  return { range: [from + best.a * stepF, from + best.b * stepF],
+    cause: { pedal: onBrake ? 'brake' : 'throttle', lapMore: (onBrake ? best.brake : best.throttle) > 0, metres: Math.round((best.b - best.a) * 2) } }
 }
 
 export function focusInStretch(lap: LapTraceView, reference: LapTraceView, [start, end]: [number, number], { min = 0.02, stepM = 5, zoneShare = 1 / 8, pauseM = 40, lookM = 100, maxM = 150, minM = 30 } = {}): FocusZone | null {
@@ -239,17 +248,31 @@ export function focusInStretch(lap: LapTraceView, reference: LapTraceView, [star
   const width = Math.max(1, Math.round(steps * zoneShare))
   const zoneTo = Math.min(run.to, run.from + width)
   const at = (i: number) => start + i * piece
-  // Where you act: the pedal difference just before (or at) the start of the loss, joined to that start.
+  // Where you act: the pedal difference just before the start of the loss (searched before it only, plus 10 m for
+  // a difference that starts with it), joined to that start.
   const lossFrom = at(run.from)
   const fracM = 1 / Math.max(lap.lengthM || 0, 1)
-  const cause = inputCause(lap, reference, [Math.max(start, lossFrom - lookM * fracM), Math.min(end, lossFrom + width * piece)])
-  if (cause) {
-    const from = Math.min(cause[0], lossFrom)
-    // At least `minM` metres, so the band is seen; never past the stretch.
-    const to = Math.min(Math.max(cause[1], lossFrom, from + minM * fracM), from + maxM * fracM, end)
-    if (to > from) return { zone: [from, to], lossS: run.loss }
+  // Every band is 30-150 m (shorter only when the stretch itself is), always inside the stretch.
+  const bounded = (from: number, to: number): [number, number] => {
+    const lo = Math.max(start, from)
+    return [lo, Math.min(Math.max(to, lo + minM * fracM), lo + maxM * fracM, end)]
   }
-  return { zone: [lossFrom, at(zoneTo)], lossS: run.loss }
+  const found = inputCause(lap, reference, [Math.max(start, lossFrom - lookM * fracM), Math.min(end, lossFrom + 10 * fracM)])
+  if (found) {
+    const zone = bounded(Math.min(found.range[0], lossFrom), Math.max(found.range[1], lossFrom))
+    if (zone[1] > zone[0]) return { zone, lossS: run.loss, cause: found.cause }
+  }
+  return { zone: bounded(lossFrom, at(zoneTo)), lossS: run.loss, cause: null }
+}
+
+/** 01/11: the advice of a focus zone born from the pedals: what you do differently there, and what it costs after. */
+export function focusAdvice(f: FocusZone, cornerLossS?: number): string | null {
+  if (!f.cause) return null
+  const { t } = useI18n()
+  const key = f.cause.pedal === 'brake' ? (f.cause.lapMore ? 'brakeMore' : 'brakeLess') : (f.cause.lapMore ? 'gasMore' : 'gasLess')
+  // Never more than the corner's own loss (the list on the left says that number).
+  const seconds = cornerLossS !== undefined && cornerLossS > 0 ? Math.min(f.lossS, cornerLossS) : f.lossS
+  return t(`telemetry.advice.focus.${key}`, { m: f.cause.metres, s: seconds.toFixed(2) })
 }
 
 /** PIP-635: the previous or next corner, round the lap: after the last comes the first, before the first the last. */
@@ -330,8 +353,10 @@ export function cornerAdvice(c: CornerComparison): string {
   if (c.timeLostS < 0.03) return c.timeLostS <= -0.03 ? t('telemetry.advice.faster') : t('telemetry.advice.same')
   const loss = c.phaseLossS
   const main = (['entry', 'mid', 'exit'] as const).reduce((best, phase) => loss[phase] > loss[best] + 0.005 ? phase : best, 'entry' as 'entry' | 'mid' | 'exit')
-  // No part holds even 40% of the loss: the time goes everywhere, not in one place.
-  if (loss[main] < c.timeLostS * 0.4) return t('telemetry.advice.everywhere')
+  // No part holds even 40% of the loss: the time goes everywhere, not in one place. Measured against the kept
+  // losses of the three parts themselves (they can add up to more than the net loss after an early gain).
+  const parts = Math.max(loss.entry, 0) + Math.max(loss.mid, 0) + Math.max(loss.exit, 0)
+  if (loss[main] < parts * 0.4) return t('telemetry.advice.everywhere')
   const seconds = loss[main].toFixed(2)
   if (main === 'entry') {
     if (c.brakeDeltaM !== null && c.brakeDeltaM <= -10) return t('telemetry.advice.brakeEarly', { m: Math.round(-c.brakeDeltaM) })

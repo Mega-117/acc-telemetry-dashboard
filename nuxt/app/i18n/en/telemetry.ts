@@ -95,6 +95,12 @@ export default {
       equal: 'equal',
     },
     advice: {
+      focus: {
+        brakeLess: 'Here you brake less than the reference for {m} m and lose {s} s from here: try holding the brake longer',
+        brakeMore: 'Here you brake more than the reference for {m} m and lose {s} s from here: try releasing the brake earlier',
+        gasLess: 'Here you use less throttle than the reference for {m} m and lose {s} s from here: try opening it earlier',
+        gasMore: 'Here you use more throttle than the reference for {m} m and lose {s} s from here: try opening it more smoothly',
+      },
       faster: 'You are faster than the reference here',
       same: 'Same as the reference',
       everywhere: 'You lose a little through the whole corner: compare the two racing lines on the map',

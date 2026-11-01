@@ -94,6 +94,12 @@ export default {
       equal: 'uguale',
     },
     advice: {
+      focus: {
+        brakeLess: 'Qui freni meno del riferimento per {m} m e da qui perdi {s} s: prova a tenere il freno più a lungo',
+        brakeMore: 'Qui freni più del riferimento per {m} m e da qui perdi {s} s: prova a rilasciare il freno prima',
+        gasLess: 'Qui dai meno gas del riferimento per {m} m e da qui perdi {s} s: prova a riaprire prima',
+        gasMore: 'Qui dai più gas del riferimento per {m} m e da qui perdi {s} s: prova a riaprire più dolcemente',
+      },
       faster: 'Qui sei più veloce del riferimento',
       same: 'Come il riferimento',
       everywhere: "Perdi un po' in tutta la curva: confronta le due traiettorie sulla mappa",
