@@ -497,11 +497,14 @@ function add(personId: string) {
   --pwc-line: var(--rc-line);
   --pwc-surface: transparent;
   --pwc-raised: transparent;
-  width: 100%;
-  max-width: var(--app-content-max-width, 1400px);
+  // 02/11: the column of the top bar (centred on the whole window, its 28 px sides), although this page scrolls in
+  // a box that leaves out the scrollbar: one scrollbar wider than the box, shifted by half of it, so the content
+  // ends where the menu ends at every width.
+  box-sizing: border-box;
+  width: min(var(--app-content-max-width, 1400px), calc(100% + var(--app-page-scrollbar, 15px)));
   min-height: 0;
-  margin: 0 auto;
-  padding: var(--app-content-top-space, 40px) 24px 32px;
+  margin: 0 0 0 max(0px, calc((100% + var(--app-page-scrollbar, 15px) - var(--app-content-max-width, 1400px)) / 2));
+  padding: var(--app-content-top-space, 40px) var(--app-page-x, 28px) 32px;
   font-size: 13px;
 
   .pwc-home { width: 100%; height: clamp(440px, calc(100dvh - 250px), 680px); grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: minmax(0, 1fr) 56px; gap: 16px 24px; align-items: stretch; padding: 24px 24px 0; border: 1px solid var(--rc-line); background: #00000018; }

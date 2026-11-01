@@ -140,6 +140,11 @@ const handleGoToSettings = () => {
   flex: none;
   pointer-events: none;
 }
+// 02/11: the centre column of every page lines up with the menu above (same sides as the top bar).
+.dashboard-viewport > :deep(.page-container) {
+  padding-left: var(--app-page-x);
+  padding-right: calc(var(--app-page-x) - var(--app-page-scrollbar));
+}
 .dashboard-viewport > :deep(.sessions-page) {
   overflow: hidden;
   --page-bottom-space: 0px;
@@ -149,7 +154,8 @@ const handleGoToSettings = () => {
 }
 .dashboard-viewport > :deep(.page-container:has(.racing-overview)) {
   --page-bottom-space: 22px;
-  padding: var(--app-content-top-space) 24px 22px;
+  padding-top: var(--app-content-top-space);
+  padding-bottom: 22px;
   display: flex;
   flex-direction: column;
 }
@@ -165,6 +171,8 @@ const handleGoToSettings = () => {
   }
 }
 @media (max-width: 700px) {
+  // The top bar has 16 px sides on a phone; phone scrollbars take no room.
+  .dashboard-viewport > :deep(.page-container) { padding-left: 16px; padding-right: 16px; }
   .dashboard-viewport > :deep(.page-container:has(.racing-overview)) { padding: var(--app-content-top-space) 16px 14px; }
 }
 </style>

@@ -2,6 +2,10 @@
 
 :root {
   --app-content-max-width: 1400px;
+  // 02/11: one rule for the centre column of every page: its sides are the top bar's (28 px), the page scrollbar
+  // (15 px, reserved by the viewport) taken off the right side so the content ends where the menu ends.
+  --app-page-x: 28px;
+  --app-page-scrollbar: 15px;
   --app-content-top-space: 40px;
   // Overview section borders and inner rows: lighter than the old 40% white, still clearly visible.
   --rc-section-line: #ffffff40;
