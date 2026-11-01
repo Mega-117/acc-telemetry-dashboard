@@ -148,15 +148,17 @@ export function matchesDriver(nickname: string | null | undefined, query: string
 
 /** Best lap per driver here, fastest first, with the gap to my best (positive = slower than me). */
 export function leaderboard(entries: { libId: string, uid: string, lapTimeMs: number, recordedAt: string | null }[], nicknames: Record<string, string | null>,
-  myUid: string | null, myBestMs: number | null): DriverRow[] {
+  myUid: string | null, myBestMs: number | null, ownView = false): DriverRow[] {
   const best = new Map<string, (typeof entries)[number]>()
   for (const e of entries) { const prev = best.get(e.uid); if (!prev || e.lapTimeMs < prev.lapTimeMs) best.set(e.uid, e) }
-  // 01/11: my row shows my true best here. The online library can hold an older, slower lap of mine
-  // (a lap not uploaded yet): the row keeps that library lap to open, but ranks with the real time.
-  const mineRow = myUid ? best.get(myUid) : undefined
+  // 01/11: in your own view (never a coach looking at a pilot: those laps are not the coach's) your row
+  // shows your true best here. The library can hold an older, slower lap of yours (a lap not uploaded
+  // yet): the row keeps that library lap to open, but ranks with the real time. Gaps use the same best.
+  const mineRow = ownView && myUid ? best.get(myUid) : undefined
   if (mineRow && myBestMs && myBestMs < mineRow.lapTimeMs) best.set(myUid!, { ...mineRow, lapTimeMs: myBestMs })
+  const base = mineRow ? Math.min(best.get(myUid!)!.lapTimeMs, myBestMs ?? Infinity) : myBestMs
   return [...best.values()].sort((a, b) => a.lapTimeMs - b.lapTimeMs).map((e, i) => ({ uid: e.uid, nickname: nicknames[e.uid] ?? null, lapTimeMs: e.lapTimeMs, rank: i + 1,
-    gapMs: myBestMs ? e.lapTimeMs - myBestMs : null, mine: !!myUid && e.uid === myUid, libId: e.libId, recordedAt: e.recordedAt }))
+    gapMs: base ? e.lapTimeMs - base : null, mine: !!myUid && e.uid === myUid, libId: e.libId, recordedAt: e.recordedAt }))
 }
 
 /** How much quicker `faster` is than `slower`, in % with one decimal. */

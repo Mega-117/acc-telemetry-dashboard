@@ -86,11 +86,16 @@ describe('lapChoice: search and leaderboard', () => {
     const rows = leaderboard([
       { libId: 'old', uid: 'me', lapTimeMs: 103585, recordedAt: null },
       { libId: 'r', uid: 'rico', lapTimeMs: 102635, recordedAt: null },
-    ], {}, 'me', 102842)
+    ], {}, 'me', 102842, true)
     expect(rows.map(r => [r.rank, r.uid, r.lapTimeMs, r.libId])).toEqual([[1, 'rico', 102635, 'r'], [2, 'me', 102842, 'old']])
     expect(rows[1]!.gapMs).toBe(0)
-    // A faster library lap of mine stays as it is.
-    expect(leaderboard([{ libId: 'x', uid: 'me', lapTimeMs: 100000, recordedAt: null }], {}, 'me', 102842)[0]!.lapTimeMs).toBe(100000)
+    // A faster library lap of mine stays as it is, and the gaps use it too.
+    const faster = leaderboard([{ libId: 'x', uid: 'me', lapTimeMs: 100000, recordedAt: null }, { libId: 'y', uid: 'b', lapTimeMs: 102000, recordedAt: null }], {}, 'me', 103000, true)
+    expect(faster.map(r => [r.uid, r.lapTimeMs, r.gapMs])).toEqual([['me', 100000, 0], ['b', 102000, 2000]])
+  })
+  it('a coach looking at a pilot never gets the pilot best on the coach row (01/11)', () => {
+    const rows = leaderboard([{ libId: 'c', uid: 'coach', lapTimeMs: 105000, recordedAt: null }], {}, 'coach', 100000, false)
+    expect(rows[0]!.lapTimeMs).toBe(105000)
   })
 })
 

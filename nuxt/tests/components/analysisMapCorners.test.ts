@@ -42,3 +42,17 @@ describe('AnalysisMap corner numbers', () => {
     view.unmount()
   })
 })
+
+describe('AnalysisMap corner times stay inside the map (01/11, Codex)', () => {
+  it('every time label lies inside the drawn area, even for a bend on the edge', () => {
+    const edge = [{ number: 1, start: 0.2, apex: 0.25, end: 0.3, minSpeedKmh: 90 }, { number: 2, start: 0.7, apex: 0.75, end: 0.8, minSpeedKmh: 80 }]
+    const view = mount(AnalysisMap, { props: { lap: trace(), reference: trace(), corners: edge, cursor: null, cornerDeltas: { 1: 0.12, 2: -0.2 } } })
+    const [x0, y0, w, h] = view.get('svg.map').attributes('viewBox')!.split(' ').map(Number) as [number, number, number, number]
+    for (const label of view.findAll('.map-corner__gap')) {
+      const x = Number(label.attributes('x')), y = Number(label.attributes('y'))
+      expect(x).toBeGreaterThanOrEqual(x0); expect(x).toBeLessThanOrEqual(x0 + w)
+      expect(y).toBeGreaterThanOrEqual(y0); expect(y).toBeLessThanOrEqual(y0 + h)
+    }
+    view.unmount()
+  })
+})

@@ -239,7 +239,7 @@ export function useLapChoice(o: {
   }
 
   const myBestMs = () => fastestValid(realLaps(YOU_ORIGINS))?.lapTimeMs ?? null
-  const drivers = () => leaderboard(o.library.libraryList.value, nicknames.value, o.myUid(), myBestMs())
+  const drivers = () => leaderboard(o.library.libraryList.value, nicknames.value, o.myUid(), myBestMs(), !o.pilotUid())
   const driversState = (): LoadState => { const s = o.library.libraryState.value; return s === 'error' ? 'error' : s === 'ready' ? 'ready' : 'loading' }
   /** The nicknames of the whole leaderboard, for the search: a few at a time (it can list hundreds of drivers). */
   async function loadDriverNames() {
@@ -270,7 +270,8 @@ export function useLapChoice(o: {
       if (result.error || !result.lap) return { state: 'error', message: result.error ?? t('telemetry.sharedLap.loadError') }
       const entry = sharedLapEntry(result.lap)
       const choice = entryChoice(entry, { kind: 'link', driver: result.lap.driver ?? null })
-      return { state: 'lap', choice: { ...choice, ref: { kind: 'loaded', id: entry.id, trace: result.lap.trace, entry }, driver: result.lap.driver ?? null, ownerUid: result.lap.ownerUid ?? null, mine: false } }
+      return { state: 'lap', choice: { ...choice, ref: { kind: 'loaded', id: entry.id, trace: result.lap.trace, entry }, driver: result.lap.driver ?? null, ownerUid: result.lap.ownerUid ?? null, mine: false,
+        conditions: runConditions(result.lap.trace) } }
     }
     if (kind !== 'session') return { state: 'error', message: t('telemetry.choice.link.unknown') }
     const parsed = parseSessionLink(text)

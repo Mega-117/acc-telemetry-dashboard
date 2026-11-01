@@ -132,8 +132,15 @@ const labels = computed(() => {
     const d = props.cornerDeltas?.[c.number]
     const gap = typeof d === 'number' && Number.isFinite(d) && Math.abs(d) >= 0.01 ? d : null
     const far = 34 * zoomScale.value
+    // Kept inside the drawing: a bend near the edge would push the time out of the map.
+    const margin = 14 * zoomScale.value
+    const { cx, cy, span } = frameNow.value
+    const box = { x: cx - span / 2, y: cy - span * 0.4, w: span, h: span * 0.8 }
+    const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), Math.max(lo, hi))
+    const gx = clamp(p.x + nx * far, box.x + margin * 1.6, box.x + box.w - margin * 1.6)
+    const gy = clamp(p.y + ny * far, box.y + margin, box.y + box.h - margin * 0.6)
     return { number: c.number, point: { x: p.x + nx * offset, y: p.y + ny * offset },
-      gap: gap === null ? null : { text: `${gap > 0 ? '+' : '−'}${Math.abs(gap).toFixed(2)}`, loss: gap > 0, x: p.x + nx * far, y: p.y + ny * far } }
+      gap: gap === null ? null : { text: `${gap > 0 ? '+' : '−'}${Math.abs(gap).toFixed(2)}`, loss: gap > 0, x: gx, y: gy } }
   })
 })
 const finish = computed(() => base.value ? finishLine(base.value, 10) : null)
