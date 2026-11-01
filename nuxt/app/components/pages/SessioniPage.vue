@@ -551,6 +551,12 @@ function goToSession(id: string) {
 .sessions-status { padding: 40px 0; color: var(--racing-data-muted); }
 .sessions-notice { padding: 12px 0; color: var(--racing-qualify); font-size: var(--racing-data-text-size); }
 .sessions-notice--error { color: #ff8999; }
+// 02/11: the list lines up with the menu above (28 px sides, as the top bar): the page reserves no scrollbar room
+// (it does not scroll), the list's own scrollbar sits in the side margin instead of narrowing the rows.
+@media (min-width: 701px) {
+  .sessions-page { padding-left: 28px; padding-right: 28px; scrollbar-gutter: auto; }
+  .sessions-scroll { margin-right: -10px; }
+}
 @media (max-width: 700px) { .sessions-page { padding: var(--app-content-top-space) 16px 0; } }
 .sessions-page { @include controls.tokens; }
 </style>
