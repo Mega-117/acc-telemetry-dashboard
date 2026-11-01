@@ -211,7 +211,8 @@ let shareTimer: ReturnType<typeof setTimeout> | null = null
 function localLapFile(e: Entry | null | undefined): string | null {
   if (!e) return null
   if (e.origin === 'local') return e.id
-  if (e.origin === 'history' || e.origin === 'best') { const id = e.id.replace(/^(history|best):/, ''); return id.includes('/') ? id : null }
+  // Only a file of this PC (folder/lap_….json.gz): an archive key is not a file here.
+  if (e.origin === 'history' || e.origin === 'best' || e.origin === 'compare') { const id = e.id.replace(/^(history|best|compare):/, ''); return /\/[^/]+\.json\.gz$/.test(id) ? id : null }
   return null
 }
 const canShare = computed(() => !props.pilotUid && typeof api()?.shareLapTrace === 'function'
@@ -241,6 +242,11 @@ onBeforeUnmount(() => { if (shareTimer) clearTimeout(shareTimer); loadGeneration
 // PIP-647: the browser reads your laps with your account: load again once it is known.
 watch(() => [props.sessionToken, props.pilotUid, currentUser.value?.uid], () => { void load() })
 onMounted(() => { void load() })
+// 01/11 (Codex): the panel stays mounted; a new lap clicked in the Sessione table is the new "Tu".
+watch(() => props.initialLap, n => {
+  const e = n ? entries.value.find(x => (x.origin === 'local' || x.origin === 'pilot') && x.lapNumber === n) : undefined
+  if (e && e.id !== lapId.value) { lapId.value = e.id; choice.applyDefault() }
+})
 
 const lap = computed(() => traces.value[lapId.value] ?? null)
 // Track edges for the maps: desktop app or, in the browser, the site's files (PIP-636).

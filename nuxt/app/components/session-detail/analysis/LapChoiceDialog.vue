@@ -56,7 +56,10 @@ async function confirm(choice: LapChoice | null = selected.value) {
   if (choice!.key === currentKey.value) { close(); return }
   busy.value = true
   message.value = ''
+  const run = ++confirmRun
   const error = await props.apply(props.side, choice!)
+  // Closed (or closed and reopened) meanwhile: this answer belongs to a window that is gone (Codex 01/11).
+  if (run !== confirmRun) return
   busy.value = false
   if (error) message.value = error
   else close()
@@ -83,7 +86,9 @@ function onTabKey(event: KeyboardEvent) {
   tab.value = next
   void nextTick(() => root.value?.querySelector<HTMLElement>(`#${uid}-tab-${next}`)?.focus())
 }
+let confirmRun = 0
 watch(() => props.open, open => {
+  confirmRun++
   if (typeof document === 'undefined') return
   if (open) {
     opener = document.activeElement as HTMLElement | null

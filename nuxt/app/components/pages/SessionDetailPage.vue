@@ -2564,8 +2564,9 @@ const gripZones = computed(() => {
     <!-- ========================================== -->
     <!-- MASTER / DETAIL LAYOUT -->
     <!-- ========================================== -->
+    <!-- 01/11: its own condition: the Telemetria panel above stays mounted (hidden) once opened. -->
     <div
-      v-else
+      v-if="!lapView || isEvoSession"
       class="master-detail"
       :class="{ 'master-detail--comparing': comparisonOpen }"
     >

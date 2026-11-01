@@ -55,6 +55,7 @@ export function useCompareTargets(o: {
   let run = 0
   watch([o.compareWith, () => o.entries.value.some(e => e.origin === 'local' || e.origin === 'pilot')], async ([target, ready]) => {
     const mineRun = ++run
+    linkError.value = ''
     if (!target) { o.library.clearCompareSession(); return }
     if (!ready) return
     const sameView = o.isCurrent(), bridge = o.bridge()

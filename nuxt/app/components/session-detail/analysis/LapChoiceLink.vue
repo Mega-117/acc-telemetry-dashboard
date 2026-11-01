@@ -17,7 +17,7 @@ const busy = ref(false)
 const result = ref<LinkResult | null>(null)
 let attempt = 0
 // 01/11 (Codex): a new text forgets the lap of the old one, so "Usa" never applies a link no longer written.
-watch(text, () => { result.value = null; if (props.selectedKey) emit('select', null) })
+watch(text, () => { attempt++; busy.value = false; result.value = null; if (props.selectedKey) emit('select', null) })
 
 async function check() {
   if (busy.value || !text.value.trim()) return
