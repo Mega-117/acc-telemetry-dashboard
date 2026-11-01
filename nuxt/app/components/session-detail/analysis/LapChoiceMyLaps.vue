@@ -8,7 +8,7 @@ import type { LapChoiceSource } from '~/composables/useLapChoice'
 import { useLapChoiceText } from '~/composables/useLapChoiceText'
 import { useI18n } from '~/i18n'
 
-const props = defineProps<{ source: LapChoiceSource, selectedKey: string | null, currentKey: string | null, otherKey: string | null, otherSide: string }>()
+const props = defineProps<{ source: LapChoiceSource, selectedKey: string | null, currentKey: string | null, otherKey: string | null, otherSide: string , /** 01/11: the other side's row swaps the laps. */ canSwap?: boolean }>()
 const emit = defineEmits<{ select: [choice: LapChoice], confirm: [choice: LapChoice] }>()
 const { t } = useI18n()
 const text = useLapChoiceText()
@@ -66,7 +66,7 @@ const bucketLabel =(b: string) => t(`telemetry.choice.mine.${b as 'current' | 't
         </p>
         <div v-if="isOpen(s.token, s.current)" class="choice-list">
           <LapChoiceRow v-for="lap in s.laps" :key="lap.key" :choice="lap" :selected="lap.key === selectedKey" :current="lap.key === currentKey"
-            :other-side="lap.key === otherKey ? otherSide : null" hide-when hide-driver @select="emit('select', $event)" @confirm="emit('confirm', $event)" />
+            :other-side="lap.key === otherKey ? otherSide : null" :swappable="!!canSwap && lap.key === otherKey" hide-when hide-driver @select="emit('select', $event)" @confirm="emit('confirm', $event)" />
         </div>
       </div>
     </section>

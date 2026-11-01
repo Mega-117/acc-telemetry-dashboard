@@ -128,7 +128,9 @@ describe('SessionAnalysisPanel sharing and coach view', () => {
     // 01/11: the ✕ left the pill: "Togli il riferimento" is in Cambia.
     await again.get('.lap-pill--ref .lap-pill__change').trigger('click')
     await flushPromises()
-    const remove = [...document.body.querySelectorAll<HTMLButtonElement>('.choice-dialog__swap')].find(b => b.textContent?.includes('Togli il riferimento'))!
+    // 01/11: "Nessun riferimento" is the first suggestion.
+    const remove = document.body.querySelector<HTMLButtonElement>('.choice-none')!
+    expect(remove.textContent).toContain('Nessun riferimento')
     remove.click()
     await flushPromises()
     expect(again.emitted('removeCompare')).toHaveLength(1)
@@ -157,7 +159,10 @@ describe('SessionAnalysisPanel sharing and coach view', () => {
     expect(view.find('.compare-swap').exists()).toBe(false)
     await view.get('.lap-pill--ref .lap-pill__change').trigger('click')
     await flushPromises()
-    ;(document.body.querySelector('.choice-dialog__swap') as HTMLButtonElement).click()
+    // Tu's row in "I miei giri" says "Scambia con Tu" and swaps.
+    ;[...document.body.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(b => b.textContent?.includes('I miei giri'))!.click()
+    await flushPromises()
+    ;[...document.body.querySelectorAll<HTMLButtonElement>('.choice-row')].find(r => r.textContent?.includes('Scambia con'))!.click()
     await flushPromises()
     expect(document.body.querySelector('[role="dialog"]')).toBeNull()
     expect(view.get('.lap-pill--you .lap-pill__lap').text()).toBe('G6')

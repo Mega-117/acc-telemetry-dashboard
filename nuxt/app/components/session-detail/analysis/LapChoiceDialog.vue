@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // PIP-695: "Cambia il tuo giro" / "Cambia il riferimento". A wide modal by default (W3C APG dialog: focus in,
-// Tab kept inside, Esc and Annulla keep the comparison, focus back to "Cambia"); a click selects a row,
-// "Usa questo giro" (or double click / Enter) uses it. Dev builds can try the same content in a side panel.
+// Tab kept inside, focus back to "Cambia"). 01/11 (user, simpler): a click (or Enter) on a row uses it at once;
+// no Annulla / Usa / Scambia / Togli buttons: ✕, Esc or a click outside close; the row of the other side swaps
+// the two laps; "Nessun riferimento" is the first suggestion. Dev builds can try the same content in a side panel.
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 import LapChoiceRow from './LapChoiceRow.vue'
 import LapChoiceMyLaps from './LapChoiceMyLaps.vue'
@@ -33,7 +34,7 @@ const { t } = useI18n()
 const text = useLapChoiceText()
 const uid = useId()
 
-const tabs = computed<Tab[]>(() => props.side === 'you' ? ['mine'] : ['suggested', 'mine', 'drivers'])
+const tabs = computed<Tab[]>(() => props.side === 'you' ? ['mine'] : ['suggested', 'mine', 'drivers', 'link'])
 const tab = ref<Tab>('mine')
 const selected = ref<LapChoice | null>(null)
 const message = ref('')
@@ -52,6 +53,8 @@ function select(choice: LapChoice | null) { selected.value = choice; message.val
 async function confirm(choice: LapChoice | null = selected.value) {
   if (busy.value) return
   if (choice) selected.value = choice
+  // The lap of the other side: the two trade places (01/11: the "Scambia" button left the header).
+  if (choice && choice.key === otherKey.value && props.canSwap) { emit('swap'); close(); return }
   if (block.value) { message.value = block.value === 'none' ? t('telemetry.choice.dialog.pickFirst') : blockText.value; return }
   if (choice!.key === currentKey.value) { close(); return }
   busy.value = true
@@ -103,7 +106,8 @@ watch(() => props.open, open => {
   }
 }, { immediate: true })
 onBeforeUnmount(() => { opener?.focus?.() })
-const rowProps = (c: LapChoice) => ({ choice: c, selected: c.key === selected.value?.key, current: c.key === currentKey.value, otherSide: c.key === otherKey.value ? otherSideName.value : null, idealScope: props.idealScope })
+const rowProps = (c: LapChoice) => ({ choice: c, selected: c.key === selected.value?.key, current: c.key === currentKey.value, otherSide: c.key === otherKey.value ? otherSideName.value : null,
+  swappable: !!props.canSwap && c.key === otherKey.value, idealScope: props.idealScope })
 </script>
 
 <template>
@@ -113,39 +117,36 @@ const rowProps = (c: LapChoice) => ({ choice: c, selected: c.key === selected.va
         :aria-labelledby="`${uid}-title`" tabindex="-1" @keydown="onKeydown">
         <header class="choice-dialog__head">
           <h2 :id="`${uid}-title`"><span class="choice-dialog__swatch" aria-hidden="true" />{{ t(side === 'you' ? 'telemetry.choice.dialog.titleYou' : 'telemetry.choice.dialog.titleRef') }}</h2>
-          <button v-if="canSwap" type="button" class="choice-dialog__swap" :disabled="busy" @click="emit('swap')"><span aria-hidden="true">⇄</span> {{ t('telemetry.choice.swap') }}</button>
-          <button v-if="canRemove && side === 'ref'" type="button" class="choice-dialog__swap" :disabled="busy" :title="t('telemetry.choice.removeRef')" @click="emit('remove')">{{ t('telemetry.choice.removeRefShort') }}</button>
           <button type="button" class="choice-dialog__x" :aria-label="t('telemetry.choice.dialog.close')" @click="close">✕</button>
         </header>
         <p v-if="variant === 'panel'" class="choice-empty">{{ t('telemetry.choice.dialog.panelNote') }}</p>
         <div class="choice-dialog__tabs">
           <div v-if="tabs.length > 1" role="tablist" :aria-label="t('telemetry.choice.dialog.tabsAria')" @keydown="onTabKey">
-            <button v-for="id in tabs" :id="`${uid}-tab-${id}`" :key="id" type="button" role="tab" :data-tab="id" :aria-selected="tab === id" :aria-controls="`${uid}-panel`" :tabindex="tab === id || (tab === 'link' && id === tabs[0]) ? 0 : -1" @click="tab = id">{{ tabLabel(id) }}</button>
+            <button v-for="id in tabs" :id="`${uid}-tab-${id}`" :key="id" type="button" role="tab" :data-tab="id" :aria-selected="tab === id" :aria-controls="`${uid}-panel`" :tabindex="tab === id ? 0 : -1" @click="tab = id">{{ tabLabel(id) }}</button>
           </div>
           <h3 v-else class="choice-dialog__single">{{ tabLabel('mine') }}</h3>
-          <button v-if="side === 'ref'" type="button" class="choice-dialog__link" :aria-pressed="tab === 'link'" @click="tab = 'link'">{{ t('telemetry.choice.dialog.link') }}</button>
         </div>
-        <div :id="`${uid}-panel`" class="choice-dialog__body" :role="tabs.length > 1 && tab !== 'link' ? 'tabpanel' : undefined" :aria-labelledby="tabs.length > 1 && tab !== 'link' ? `${uid}-tab-${tab}` : undefined">
+        <p v-if="busy || message" class="choice-dialog__msg" role="status">{{ busy ? t('telemetry.choice.dialog.loadingLap') : message }}</p>
+        <div :id="`${uid}-panel`" class="choice-dialog__body" :role="tabs.length > 1 ? 'tabpanel' : undefined" :aria-labelledby="tabs.length > 1 ? `${uid}-tab-${tab}` : undefined">
           <template v-if="tab === 'suggested'">
-            <p v-if="!suggested.length" class="choice-empty">{{ t('telemetry.choice.suggested.empty') }}</p>
-            <div v-else class="choice-list">
+            <div class="choice-list">
+              <!-- 01/11: taking the reference away is the first choice (the button left the header). -->
+              <button v-if="canRemove && side === 'ref'" type="button" class="choice-none" @click="emit('remove'); close()">
+                <span class="choice-none__title">{{ t('telemetry.choice.dialog.noRef') }}</span><span class="choice-none__hint">{{ t('telemetry.choice.dialog.noRefHint') }}</span>
+              </button>
+              <p v-if="!suggested.length" class="choice-empty">{{ t('telemetry.choice.suggested.empty') }}</p>
               <template v-for="c in suggested" :key="c.key">
-                <LapChoiceRow v-bind="rowProps(c)" @select="select" @confirm="confirm" />
+                <LapChoiceRow v-bind="rowProps(c)" @confirm="confirm" />
                 <p v-if="c.reason?.kind === 'fastest'" class="choice-empty">{{ t('telemetry.choice.suggested.fastestNote') }}</p>
               </template>
             </div>
             <p v-if="source.idealSame?.()" class="choice-empty">{{ t('telemetry.choice.suggested.idealSame') }}</p>
           </template>
-          <LapChoiceMyLaps v-else-if="tab === 'mine'" :source="source" :selected-key="selected?.key ?? null" :current-key="currentKey" :other-key="otherKey" :other-side="otherSideName" @select="select" @confirm="confirm" />
-          <LapChoiceDrivers v-else-if="tab === 'drivers'" :source="source" :selected-key="selected?.key ?? null" :current-key="currentKey" :other-key="otherKey" :other-side="otherSideName" @select="select" @confirm="confirm" />
+          <LapChoiceMyLaps v-else-if="tab === 'mine'" :source="source" :selected-key="selected?.key ?? null" :current-key="currentKey" :other-key="otherKey" :other-side="otherSideName" :can-swap="!!canSwap" @select="select" @confirm="confirm" />
+          <LapChoiceDrivers v-else-if="tab === 'drivers'" :source="source" :selected-key="selected?.key ?? null" :current-key="currentKey" :other-key="otherKey" :other-side="otherSideName" :can-swap="!!canSwap" @select="select" @confirm="confirm" />
           <LapChoiceLink v-else :source="source" :selected-key="selected?.key ?? null" :current-key="currentKey" :other-key="otherKey" :other-side="otherSideName"
             @select="select" @confirm="confirm" @whole-session="emit('wholeSession')" />
         </div>
-        <footer class="choice-dialog__foot">
-          <p class="choice-dialog__msg" role="status">{{ busy ? t('telemetry.choice.dialog.loadingLap') : message || blockText || (selected ? '' : t('telemetry.choice.dialog.hint')) }}</p>
-          <button type="button" class="choice-btn choice-btn--ghost" @click="close">{{ t('telemetry.choice.dialog.cancel') }}</button>
-          <button type="button" class="choice-btn" :disabled="busy || !!block" @click="confirm()">{{ t('telemetry.choice.dialog.use') }}</button>
-        </footer>
       </div>
     </div>
   </Teleport>
@@ -155,7 +156,7 @@ const rowProps = (c: LapChoice) => ({ choice: c, selected: c.key === selected.va
 .choice-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px; background: #000000a6; backdrop-filter: blur(8px); }
 .choice-panel-wrap { position: fixed; top: 0; right: 0; bottom: 0; z-index: 1000; width: min(520px, 100vw); pointer-events: none; > * { pointer-events: auto; } }
 :global(body:has(.electron-titlebar)) .choice-backdrop, :global(body:has(.electron-titlebar)) .choice-panel-wrap { top: 36px; }
-.choice-dialog { --c: #38bdf8; display: flex; flex-direction: column; gap: 14px; width: min(920px, 100%); max-height: calc(100dvh - 84px); padding: 22px 24px; overflow: hidden;
+.choice-dialog { --c: #38bdf8; display: flex; flex-direction: column; gap: 18px; width: min(960px, 100%); max-height: calc(100dvh - 84px); padding: 28px 32px; overflow: hidden;
   border: 1px solid var(--rc-section-line, #ffffff2e); border-top: 3px solid var(--c); background: #0a0a0df2; color: #fff; outline: none;
   &--ref { --c: #fbbf24; }
   &--panel { height: 100%; max-height: none; width: 100%; box-shadow: -16px 0 30px #000a; } }
@@ -167,7 +168,7 @@ const rowProps = (c: LapChoice) => ({ choice: c, selected: c.key === selected.va
 .choice-dialog__x { width: 38px; height: 38px; border: 1px solid #ffffff40; background: transparent; color: #fff; cursor: pointer; &:focus-visible { outline: 2px solid #fff; outline-offset: 1px; } }
 .choice-dialog__tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border-bottom: 1px solid #ffffff1f; padding-bottom: 8px;
   [role='tablist'] { display: flex; gap: 4px; }
-  [role='tab'] { height: 36px; padding: 0 14px; border: 1px solid #ffffff26; background: transparent; color: #cfcfd4; font: 700 13px 'Inter', sans-serif; cursor: pointer;
+  [role='tab'] { height: 40px; padding: 0 18px; border: 1px solid #ffffff26; background: transparent; color: #cfcfd4; font: 700 14px 'Inter', sans-serif; cursor: pointer;
     &[aria-selected='true'] { border-color: var(--c); background: color-mix(in srgb, var(--c) 16%, transparent); color: #fff; box-shadow: inset 0 -3px var(--c); }
     &:focus-visible { outline: 2px solid #fff; outline-offset: 1px; } } }
 .choice-dialog__single { margin: 0; font: italic 700 15px 'Racer Display', sans-serif; text-transform: uppercase; }
@@ -175,10 +176,14 @@ const rowProps = (c: LapChoice) => ({ choice: c, selected: c.key === selected.va
   &[aria-pressed='true'] { border-style: solid; border-color: var(--c); } &:focus-visible { outline: 2px solid #fff; outline-offset: 1px; } }
 .choice-dialog__body { min-height: 220px; overflow-y: auto; padding-right: 4px; }
 .choice-dialog__foot { display: flex; align-items: center; gap: 10px; padding-top: 10px; border-top: 1px solid #ffffff1f; }
-.choice-dialog__msg { flex: 1; margin: 0; color: #d0d0d5; font: 500 13px 'Inter', sans-serif; }
-.choice-dialog :deep(.choice-list) { display: grid; gap: 4px; }
-.choice-dialog :deep(.choice-order) { margin: 0; color: #9a9aa0; font: 600 11px 'Inter', sans-serif; letter-spacing: .04em; text-transform: uppercase; }
-.choice-dialog :deep(.choice-empty) { margin: 6px 0; color: #b3b3b8; font: 500 13px 'Inter', sans-serif; }
+.choice-dialog__msg { margin: 0; padding: 8px 12px; border-left: 2px solid var(--c); background: #ffffff08; color: #e6e6ea; font: 500 14px 'Inter', sans-serif; }
+.choice-none { display: flex; align-items: baseline; gap: 12px; width: 100%; min-height: 48px; padding: 10px 16px; border: 1px dashed #ffffff40; background: transparent; color: #e6e6ea; text-align: left; cursor: pointer;
+  &:hover { border-color: #fff; background: #ffffff0a; } &:focus-visible { outline: 2px solid #fff; outline-offset: -2px; } }
+.choice-none__title { font: 700 15px 'Inter', sans-serif; }
+.choice-none__hint { color: #9a9aa0; font: 500 13px 'Inter', sans-serif; }
+.choice-dialog :deep(.choice-list) { display: grid; gap: 6px; }
+.choice-dialog :deep(.choice-order) { margin: 0; color: #9a9aa0; font: 600 12px 'Inter', sans-serif; letter-spacing: .04em; text-transform: uppercase; }
+.choice-dialog :deep(.choice-empty) { margin: 6px 0; color: #b3b3b8; font: 500 14px 'Inter', sans-serif; }
 .choice-dialog :deep(.choice-error) { margin: 0; padding: 8px 12px; border-left: 2px solid #ff0024; background: #ff00240a; color: #ff9aaa; font-size: 13px; }
 .choice-dialog :deep(.choice-link) { padding: 0; border: 0; background: none; color: #e6e6ea; font: 600 13px 'Inter', sans-serif; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
   &:focus-visible { outline: 2px solid #fff; outline-offset: 2px; } }

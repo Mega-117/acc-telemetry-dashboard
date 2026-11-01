@@ -122,7 +122,7 @@ const rows = () => [...document.body.querySelectorAll<HTMLButtonElement>('.choic
 const button = (label: string) => [...document.body.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent?.trim() === label)!
 
 describe('LapChoiceDialog', () => {
-  it('Riferimento opens on Suggeriti; a selected row is used with "Usa questo giro"', async () => {
+  it('Riferimento opens on Suggeriti; one click on a row uses it (01/11: no Usa / Annulla buttons)', async () => {
     const { apply } = openDialog('ref')
     const opener = document.createElement('button'); document.body.appendChild(opener); opener.focus()
     await wrapper!.setProps({ open: true }); await flushPromises()
@@ -135,9 +135,9 @@ describe('LapChoiceDialog', () => {
     expect(rows()[0]!.getAttribute('aria-current')).toBe('true')
     expect(rows()[1]!.hasAttribute('aria-current')).toBe(false)
     expect(document.body.querySelector('.choice-dialog__x')?.getAttribute('aria-label')).toBe('Chiudi')
+    expect(button('Usa questo giro')).toBeUndefined()
+    expect(button('Annulla')).toBeUndefined()
     rows()[1]!.click(); await flushPromises()
-    expect(rows()[1]!.getAttribute('aria-pressed')).toBe('true')
-    button('Usa questo giro').click(); await flushPromises()
     expect(apply).toHaveBeenCalledWith('ref', expect.objectContaining({ key: 'library:x' }))
     expect(wrapper!.emitted('close')).toHaveLength(1)
   })
@@ -152,7 +152,7 @@ describe('LapChoiceDialog', () => {
     expect(document.body.querySelector('[role="tablist"]')).toBeNull()
     expect(dialog()?.textContent).toContain('I miei giri')
     expect(dialog()?.textContent).toContain('Questa sessione')
-    expect(dialog()?.textContent).toContain('★ Migliore della sessione')
+    expect(dialog()?.textContent).toContain('Migliore della sessione')
     expect(dialog()?.textContent).toContain('Prima')
     const show = document.body.querySelector<HTMLButtonElement>('.my-laps__head[aria-expanded]')!
     expect(show.textContent).toContain('Mostra')
@@ -162,20 +162,25 @@ describe('LapChoiceDialog', () => {
     // All these laps are mine: the rows do not repeat my name and TU.
     expect(rows().some(r => r.textContent?.includes('Bob117') || r.querySelector('.choice-row__tag'))).toBe(false)
     show.click(); await flushPromises()
-    expect(dialog()?.textContent).toContain('? Validità non disponibile')
+    expect(dialog()?.textContent).toContain('Validità non disponibile')
+    // 01/11: short tags, never "Benzina" or "Gomme".
+    expect(dialog()?.textContent).not.toContain('Benzina')
   })
-  it('Esc and Annulla keep the comparison; the same lap on both sides is refused', async () => {
+  it('Esc keeps the comparison; the lap of the other side is refused, or swapped when it can be (01/11)', async () => {
     const { apply } = openDialog('you')
     await wrapper!.setProps({ open: true }); await flushPromises()
     const refRow = rows().find(r => r.dataset.key === ref.key)!
     expect(refRow.textContent).toContain('Già usato come Riferimento')
     refRow.click(); await flushPromises()
     expect(dialog()?.textContent).toContain('Questo giro è già Riferimento')
-    expect(button('Usa questo giro').disabled).toBe(true)
     dialog()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await flushPromises()
     expect(wrapper!.emitted('close')).toHaveLength(1)
-    button('Annulla').click()
-    expect(wrapper!.emitted('close')).toHaveLength(2)
+    expect(apply).not.toHaveBeenCalled()
+    await wrapper!.setProps({ open: false, canSwap: true }); await wrapper!.setProps({ open: true }); await flushPromises()
+    const swapRow = rows().find(r => r.dataset.key === ref.key)!
+    expect(swapRow.textContent).toContain('Scambia con Riferimento')
+    swapRow.click(); await flushPromises()
+    expect(wrapper!.emitted('swap')).toHaveLength(1)
     expect(apply).not.toHaveBeenCalled()
   })
   it('an error while loading the lap is shown and the dialog stays open; Enter on a row confirms', async () => {
@@ -191,7 +196,7 @@ describe('LapChoiceDialog', () => {
   it('an incomplete lap cannot be used', async () => {
     const { apply } = openDialog('you')
     await wrapper!.setProps({ open: true }); await flushPromises()
-    rows().find(r => r.dataset.key === lapKey('me', today, 2))!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); await flushPromises()
+    rows().find(r => r.dataset.key === lapKey('me', today, 2))!.click(); await flushPromises()
     expect(apply).not.toHaveBeenCalled()
     expect(dialog()?.textContent).toContain('Questo giro è incompleto')
   })

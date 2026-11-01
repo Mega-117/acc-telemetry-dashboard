@@ -8,7 +8,7 @@ import type { LapChoiceSource } from '~/composables/useLapChoice'
 import { formatLapTime } from '~/utils/telemetryFormat'
 import { useI18n } from '~/i18n'
 
-const props = defineProps<{ source: LapChoiceSource, selectedKey: string | null, currentKey: string | null, otherKey: string | null, otherSide: string }>()
+const props = defineProps<{ source: LapChoiceSource, selectedKey: string | null, currentKey: string | null, otherKey: string | null, otherSide: string , /** 01/11: the other side's row swaps the laps. */ canSwap?: boolean }>()
 const emit = defineEmits<{ select: [choice: LapChoice], confirm: [choice: LapChoice] }>()
 const { t, locale } = useI18n()
 
@@ -86,7 +86,7 @@ function back() {
       <p v-else-if="!laps.length" class="choice-empty">{{ t('telemetry.choice.drivers.lapsNone', { driver: name(driver) }) }}</p>
       <div v-else class="choice-list">
         <LapChoiceRow v-for="lap in laps" :key="lap.key" :choice="lap" :selected="lap.key === selectedKey" :current="lap.key === currentKey"
-          :other-side="lap.key === otherKey ? otherSide : null" @select="emit('select', $event)" @confirm="emit('confirm', $event)" />
+          :other-side="lap.key === otherKey ? otherSide : null" :swappable="!!canSwap && lap.key === otherKey" @select="emit('select', $event)" @confirm="emit('confirm', $event)" />
       </div>
     </template>
   </div>
