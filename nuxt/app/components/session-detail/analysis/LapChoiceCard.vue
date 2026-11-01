@@ -1,14 +1,12 @@
 <script setup lang="ts">
 // PIP-695: "Tu" and "Riferimento", always in sight. The colour names the side (azzurro / ambra), always with its word.
 // 01/11 (Track Titan's lap pills): a low pill that fits the page's title row. Line 1: side, driver, lap, status,
-// the time large; line 2, small: fuel, air, track, grip and the weather icon. ⓘ opens a box over the page (it never
+// the time large; line 2, small: fuel, air, track and grip. ⓘ opens a box over the page (it never
 // makes the pill taller) with the reason of the reference, when the lap was driven and the conditions in words.
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { LapChoice, LapSide, RefReason } from '~/services/telemetry/lapChoice'
 import { useLapChoiceText } from '~/composables/useLapChoiceText'
 import { formatLapTime } from '~/utils/telemetryFormat'
-import { raceWeatherItem } from '~/utils/raceWeatherPresentation'
-import RaceWeatherIcon from '~/components/overlay/RaceWeatherIcon.vue'
 import { useI18n } from '~/i18n'
 
 const props = defineProps<{
@@ -29,9 +27,6 @@ const color = computed(() => props.side === 'you' ? '#38bdf8' : '#fbbf24')
 const status = computed(() => props.choice ? text.status(props.choice.status) : null)
 const when = computed(() => props.choice ? text.when(props.choice) : '')
 const tags = computed(() => text.conditionsShort(props.choice?.conditions))
-const rain = computed(() => props.choice?.conditions?.rain ?? null)
-const weather = computed(() => rain.value !== null ? raceWeatherItem(rain.value, 0, true) : null)
-const weatherLabel = computed(() => rain.value !== null ? t(`overlays.weather.rain${rain.value}` as 'overlays.weather.rain0') : '')
 const lapLabel = computed(() => props.choice?.ideal ? t('telemetry.choice.idealShort') : props.choice?.lapNumber ? t('telemetry.choice.lapShort', { n: props.choice.lapNumber }) : '')
 const reasonText = computed(() => props.side === 'ref' && props.reason ? text.reason(props.reason, { pilotName: props.pilotName }) : '')
 const infoLines = computed(() => [reasonText.value, props.choice?.ideal ? text.idealNote(props.idealScope) : when.value, text.conditions(props.choice?.conditions)].filter(Boolean))
@@ -71,9 +66,8 @@ onBeforeUnmount(() => listen(false))
           <span v-if="!choice.ideal" class="lap-pill__status" :class="`is-${choice.status}`" :title="status!.text"><span aria-hidden="true">{{ status!.icon }}</span><span class="sr-only">{{ status!.text }}</span></span>
           <button v-if="infoLines.length" type="button" class="lap-pill__why" :aria-expanded="infoOpen" :aria-label="infoLines.join('. ')" :title="tooltip" @click="infoOpen = !infoOpen">ⓘ</button>
         </p>
-        <p v-if="tags.length || weather" class="lap-pill__tags">
+        <p v-if="tags.length" class="lap-pill__tags">
           <span v-for="tag in tags" :key="tag">{{ tag }}</span>
-          <span v-if="weather" class="lap-pill__wx" :title="weatherLabel"><RaceWeatherIcon :item="weather" /><span class="sr-only">{{ weatherLabel }}</span></span>
         </p>
       </template>
       <p v-else class="lap-pill__main">{{ t('telemetry.choice.noLap') }}</p>
@@ -101,7 +95,6 @@ onBeforeUnmount(() => listen(false))
 .lap-pill__status { font: 700 13px 'Inter', sans-serif; &.is-valid { color: #3ddc5a; } &.is-invalid { color: #ff8a98; } &.is-incomplete, &.is-unknown { color: #b3b3b8; } }
 .lap-pill__why { padding: 0 2px; border: 0; background: none; color: #fde68a; font: 700 13px 'Inter', sans-serif; cursor: help; &:focus-visible { outline: 2px solid #fff; } }
 .lap-pill__tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; > span { padding: 0 5px; border: 1px solid #ffffff24; color: #c8c8cc; font: 600 11px/15px 'Inter', sans-serif; font-variant-numeric: tabular-nums; } }
-.lap-pill__tags > .lap-pill__wx { display: inline-block; width: 15px; height: 15px; padding: 0; border: 0; }
 .lap-pill__time { margin-left: auto; color: #fff; font: italic 700 18px 'Racer Display', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; &.is-best { color: #c084fc; } }
 .lap-pill__actions { display: flex; align-items: center; gap: 3px; }
 .lap-pill__change, .lap-pill__remove, .lap-pill__actions :slotted(button) { min-width: 28px; min-height: 28px; padding: 0 7px; border: 1px solid #ffffff40; background: #ffffff0d; color: #fff; font: 700 12px 'Inter', sans-serif; cursor: pointer;

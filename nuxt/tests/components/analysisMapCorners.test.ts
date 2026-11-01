@@ -23,15 +23,22 @@ const corners = [
 ]
 
 describe('AnalysisMap corner numbers', () => {
-  it('writes the time beside each corner (loss red, gain green, level hidden) and keeps a large click area', async () => {
+  it('writes the time beside every corner in thousandths, as the list (loss red, gain green) and keeps a large click area', async () => {
     const view = mount(AnalysisMap, { props: { lap: trace(), reference: trace(), corners, cursor: null, cornerDeltas: { 1: 0.069, 2: -0.031, 3: 0.004 } } })
     const gaps = view.findAll('.map-corner__gap')
-    expect(gaps.map(g => [g.text(), g.classes().includes('loss') ? 'loss' : 'gain'])).toEqual([['+0.07', 'loss'], ['−0.03', 'gain']])
+    expect(gaps.map(g => [g.text(), g.classes().includes('loss') ? 'loss' : 'gain'])).toEqual([['+0.069', 'loss'], ['−0.031', 'gain'], ['+0.004', 'loss']])
     const hit = view.findAll('.map-corner__hit')
     expect(hit).toHaveLength(3)
     expect(Number(hit[0]!.attributes('r'))).toBeGreaterThan(Number(view.findAll('.map-corner circle:not(.map-corner__hit)')[0]!.attributes('r')))
     await view.findAll('.map-corner')[1]!.trigger('click')
     expect(view.emitted('select')).toEqual([[2]])
+    view.unmount()
+  })
+
+  it('on a zoomed corner writes neither numbers nor times (they belonged to corners out of sight)', () => {
+    const view = mount(AnalysisMap, { props: { lap: trace(), reference: trace(), corners, cursor: null, selected: 2, zoom: true, cornerDeltas: { 1: 0.069, 2: -0.031, 3: 0.004 } } })
+    expect(view.findAll('.map-corner')).toHaveLength(0)
+    expect(view.findAll('.map-corner__gap')).toHaveLength(0)
     view.unmount()
   })
 

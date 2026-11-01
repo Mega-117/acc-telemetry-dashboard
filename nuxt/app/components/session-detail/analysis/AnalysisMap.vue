@@ -128,9 +128,9 @@ const labels = computed(() => {
     const turn = Math.sign(tx * (p.y - a.y) - ty * (p.x - a.x)) || 1
     const nx = (ty / length) * turn, ny = (-tx / length) * turn
     const offset = 16 * zoomScale.value
-    // The time beside the number, further out on the same side (under a hundredth: level, not written, as in the corner list).
+    // The time beside the number, further out on the same side: every corner, in thousandths as in the corner list (01/11).
     const d = props.cornerDeltas?.[c.number]
-    const gap = typeof d === 'number' && Number.isFinite(d) && Math.abs(d) >= 0.01 ? d : null
+    const gap = typeof d === 'number' && Number.isFinite(d) ? d : null
     const far = 34 * zoomScale.value
     // Kept inside the drawing: a bend near the edge would push the time out of the map.
     const margin = 14 * zoomScale.value
@@ -140,7 +140,7 @@ const labels = computed(() => {
     const gx = clamp(p.x + nx * far, box.x + margin * 1.6, box.x + box.w - margin * 1.6)
     const gy = clamp(p.y + ny * far, box.y + margin, box.y + box.h - margin * 0.6)
     return { number: c.number, point: { x: p.x + nx * offset, y: p.y + ny * offset },
-      gap: gap === null ? null : { text: `${gap > 0 ? '+' : '−'}${Math.abs(gap).toFixed(2)}`, loss: gap > 0, x: gx, y: gy } }
+      gap: gap === null ? null : { text: `${gap > 0 ? '+' : gap < 0 ? '−' : '±'}${Math.abs(gap).toFixed(3)}`, loss: gap > 0, x: gx, y: gy } }
   })
 })
 const finish = computed(() => base.value ? finishLine(base.value, 10) : null)
@@ -301,7 +301,8 @@ function onMove(event: PointerEvent) {
       <line v-bind="sector.start" class="map-sector-mark" />
       <line v-bind="sector.end" class="map-sector-mark" />
     </template>
-    <g v-for="l in labels" :key="l.number" class="map-corner" :class="{ active: selected === l.number }" @click="!dragged && emit('select', l.number)">
+    <!-- 01/11: on a zoomed corner no numbers and no times: those around the edge belonged to corners out of sight. -->
+    <g v-for="l in zoomed ? [] : labels" :key="l.number" class="map-corner" :class="{ active: selected === l.number }" @click="!dragged && emit('select', l.number)">
       <!-- 01/11: a click area twice the drawn circle (the numbers were hard to hit), invisible. -->
       <circle :cx="l.point.x" :cy="l.point.y" :r="17 * zoomScale" class="map-corner__hit" />
       <circle :cx="l.point.x" :cy="l.point.y" :r="9 * zoomScale" />

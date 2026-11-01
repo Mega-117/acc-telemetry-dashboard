@@ -22,7 +22,7 @@ import { useReferenceLibrary, type Entry } from '~/composables/useReferenceLibra
 import { LapsArchiveError } from '~/services/telemetry/lapsArchiveClient'
 import { lapShareErrorMessage } from '~/services/telemetry/lapShareLink'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { compareCorners, cornerAdvice, detectCorners, formatDelta, stretchDelta } from '~/services/telemetry/lapAnalysis'
+import { compareCorners, cornerAdvice, detectCorners, formatDelta, steepestLoss, stretchDelta } from '~/services/telemetry/lapAnalysis'
 import { useCornerStepper } from '~/composables/useCornerStepper'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { readSessionLaps, withArchiveFallback } from '~/services/telemetry/sessionLapLoading'
@@ -31,7 +31,7 @@ import { useI18n } from '~/i18n'
 
 const props = defineProps<{
   sessionToken: string | null
-  laps: { lap_number: number, lap_time_ms: number | null, is_valid: boolean | null, sector_times_ms?: (number | null)[] | null, air_temp?: number | null, road_temp?: number | null, track_grip_status?: string | null, rain_intensity?: string | null }[]
+  laps: { lap_number: number, lap_time_ms: number | null, is_valid: boolean | null, sector_times_ms?: (number | null)[] | null, air_temp?: number | null, road_temp?: number | null, track_grip_status?: string | null }[]
   /** Lap to open as "Tu", when the driver picked it in the Sessione table. */
   initialLap?: number | null
   /** PIP-623: coach view of a linked pilot: the laps come from the online archive. */
@@ -320,10 +320,20 @@ const stretchLoss = computed(() => wholeView.value || !lap.value || !reference.v
     : selectedSector.value !== null ? (sectorGaps.value[selectedSector.value] ? sectorGaps.value[selectedSector.value]!.gap / 1000 : stretchDelta(lap.value, reference.value, range.value))
       : comparison.value.find(c => c.corner.number === selectedCorner.value)?.timeLostS ?? null)
 function wholeLap() { selectedCorner.value = null; selectedSector.value = null; zoomRange.value = null }
-// 01/11 (the focus zone of Track Titan): on the whole lap, the corner where you lose most is highlighted at the
-// same place on every chart and named in the bar; a click there opens it. Nothing when you gain or are level.
-const focusCorner = computed(() => wholeView.value ? worst.value[0] ?? null : null)
-const focusZone = computed<[number, number] | null>(() => focusCorner.value ? [focusCorner.value.corner.start, focusCorner.value.corner.end] : null)
+// 01/11 (the focus zone of Track Titan): on the whole lap the corner where you lose most, in a sector the worst
+// corner of that sector, highlighted at the same place on every chart and named in the bar (a click opens it).
+// On one corner, the stretch inside it where the gap grows most. Nothing when you gain or are level.
+const focusCorner = computed(() => {
+  if (wholeView.value) return worst.value[0] ?? null
+  if (selectedSector.value === null || zoomRange.value) return null
+  const [from, to] = range.value
+  return [...comparison.value].filter(c => c.corner.start >= from && c.corner.end <= to && c.timeLostS >= 0.03).sort((a, b) => b.timeLostS - a.timeLostS)[0] ?? null
+})
+const focusZone = computed<[number, number] | null>(() => {
+  if (focusCorner.value) return [focusCorner.value.corner.start, focusCorner.value.corner.end]
+  if (selectedCorner.value === null || zoomRange.value || !lap.value || !reference.value) return null
+  return steepestLoss(lap.value, reference.value, range.value)
+})
 // PIP-645: the double click (and zooming all the way out) goes back to the whole lap, as the chart hint says.
 function onZoom(next: [number, number] | null) { if (next) zoomRange.value = next; else if (layout.value === 'tracce') wholeLap(); else zoomRange.value = null }
 // Garage 61 sectors: the official sector times of the reference, placed on its trace.

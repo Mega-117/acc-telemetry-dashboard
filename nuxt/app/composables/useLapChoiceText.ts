@@ -46,10 +46,9 @@ export function useLapChoiceText() {
       c.airC !== null ? t('telemetry.choice.cond.air', { n: Math.round(c.airC) }) : '',
       c.roadC !== null ? t('telemetry.choice.cond.road', { n: Math.round(c.roadC) }) : '',
       c.grip ? t('telemetry.choice.cond.grip', { g: t(`data.grip.${c.grip}`) }) : '',
-      c.rain !== null ? t(`overlays.weather.rain${c.rain}` as 'overlays.weather.rain0') : '',
     ].filter(Boolean).join(' · ')
   }
-  /** 01/11 (Track Titan's pills): short tags "115 L", "AIR 15°", "TRK 18°", "OPT"; no tyres; the weather is an icon. */
+  /** 01/11 (Track Titan's pills): short tags "115 L", "AIR 15°", "TRK 18°", "OPT"; no tyres, no weather. */
   function conditionsShort(c: LapRunConditions | null | undefined): string[] {
     if (!c) return []
     return [

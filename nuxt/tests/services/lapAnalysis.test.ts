@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { analysisSessionToken, bodySlipDeg, channelAt, compareCorners, cornerAt, glideFrame, stepCorner, stretchDelta, finishLine, timeSyncedFraction, cornerAdvice, deltaTrend, detectCorners, formatDelta, fractions, lapDelta, mapPoints } from '~/services/telemetry/lapAnalysis'
+import { analysisSessionToken, bodySlipDeg, channelAt, compareCorners, cornerAt, glideFrame, stepCorner, steepestLoss, stretchDelta, finishLine, timeSyncedFraction, cornerAdvice, deltaTrend, detectCorners, formatDelta, fractions, lapDelta, mapPoints } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
 const STEP = 2
@@ -212,6 +212,19 @@ describe('map follows the cursor (PIP-635)', () => {
     let f = frame, steps = 0
     for (let r = glideFrame(f, { x: 180, y: 40 }); !r.done && steps < 100; r = glideFrame(f, { x: 180, y: 40 })) { f = r.frame; steps++ }
     expect(steps).toBeLessThan(30)
+  })
+})
+
+describe('focus zone inside a corner (01/11, Track Titan)', () => {
+  it('is the piece of the stretch where the gap grows most; none when you are level or faster', () => {
+    const fast = lap(() => 180), slow = lap(m => (m >= 1500 && m < 1600 ? 120 : 180))
+    const zone = steepestLoss(slow, fast, [0.4, 0.6])!
+    // The window covers the slow 100 m (0.5 to 0.533 of the lap), inside the stretch looked at.
+    expect(zone[0]).toBeGreaterThanOrEqual(0.4); expect(zone[1]).toBeLessThanOrEqual(0.6)
+    expect(zone[0]).toBeLessThan(1600 / 3000); expect(zone[1]).toBeGreaterThan(1500 / 3000)
+    expect(steepestLoss(fast, fast, [0.4, 0.6])).toBeNull()
+    expect(steepestLoss(fast, slow, [0.4, 0.6])).toBeNull()
+    expect(steepestLoss(slow, fast, [0.6, 0.4])).toBeNull()
   })
 })
 

@@ -132,6 +132,22 @@ export function stretchDelta(lap: LapTraceView, reference: LapTraceView, [start,
   return la === null || lb === null || ra === null || rb === null ? null : (lb - la) - (rb - ra)
 }
 
+/**
+ * 01/11 (Track Titan's focus zone inside a segment): the part of [start, end] where the gap to the reference grows
+ * most, a window of `width` of `steps` equal pieces. Null when nowhere you lose at least `min` seconds.
+ */
+export function steepestLoss(lap: LapTraceView, reference: LapTraceView, [start, end]: [number, number], { steps = 24, width = 4, min = 0.01 } = {}): [number, number] | null {
+  if (!(end > start) || width < 1 || steps < width) return null
+  const piece = (end - start) / steps
+  let best: { from: number, loss: number } | null = null
+  for (let i = 0; i + width <= steps; i++) {
+    const from = start + i * piece
+    const loss = stretchDelta(lap, reference, [from, from + width * piece])
+    if (loss !== null && loss >= min && (!best || loss > best.loss)) best = { from, loss }
+  }
+  return best ? [best.from, best.from + width * piece] : null
+}
+
 /** PIP-635: the previous or next corner, round the lap: after the last comes the first, before the first the last. */
 export function stepCorner(current: number, count: number, step: 1 | -1): number | null {
   if (count < 1) return null

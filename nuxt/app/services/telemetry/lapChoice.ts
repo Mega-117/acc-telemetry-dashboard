@@ -35,24 +35,19 @@ export interface LapEntryLike {
   note?: string, driver?: string | null, ownerUid?: string | null, recordedAt?: string | null
 }
 
-/** 01/11: what the lap was driven with: fuel at the start, tyres, air and track, grip, weather (ACC rain 0..5). */
-export interface LapRunConditions { fuelL: number | null, tyre: 'dry' | 'wet' | null, airC: number | null, roadC: number | null, grip: LapGrip | null, rain: number | null }
+/** 01/11: what the lap was driven with: fuel at the start, tyres, air and track, grip. No weather: the grip already
+ *  says what the track was like (wet, damp), and in the dry a sun beside OPT said the same thing twice. */
+export interface LapRunConditions { fuelL: number | null, tyre: 'dry' | 'wet' | null, airC: number | null, roadC: number | null, grip: LapGrip | null }
 export type LapGrip = 'green' | 'fast' | 'optimum' | 'greasy' | 'damp' | 'wet' | 'flooded'
 const GRIPS: readonly LapGrip[] = ['green', 'fast', 'optimum', 'greasy', 'damp', 'wet', 'flooded']
-// The logger's words for ACC rain (shared_memory.RAIN_INTENSITY_MAP), in order 0..5.
-const RAIN_WORDS = ['no rain', 'drizzle', 'light rain', 'medium rain', 'heavy rain', 'thunderstorm']
 function gripOf(value: unknown): LapGrip | null {
   if (typeof value !== 'string') return null
   const word = value.trim().toLowerCase()
   const key = word === 'opt' ? 'optimum' : word === 'flood' ? 'flooded' : word
   return (GRIPS as readonly string[]).includes(key) ? key as LapGrip : null
 }
-function rainOf(value: unknown): number | null {
-  const at = typeof value === 'string' ? RAIN_WORDS.indexOf(value.trim().toLowerCase()) : -1
-  return at >= 0 ? at : null
-}
 /** This session's row of the lap (the table): fills what the lap file does not carry. */
-export interface LapSessionRow { air_temp?: number | null, road_temp?: number | null, track_grip_status?: string | null, rain_intensity?: string | null }
+export interface LapSessionRow { air_temp?: number | null, road_temp?: number | null, track_grip_status?: string | null }
 
 /** The conditions of a lap trace (and its session row), or null when nothing is known. */
 export function runConditions(trace: { fuelL: number | null, tyreCompound?: 'dry' | 'wet' | null, conditions: { airC: number | null, roadC: number | null, grip?: string | null } | null } | null | undefined,
@@ -60,7 +55,7 @@ export function runConditions(trace: { fuelL: number | null, tyreCompound?: 'dry
   if (!trace) return null
   const temp = (v: unknown) => typeof v === 'number' && Number.isFinite(v) ? v : null
   const out = { fuelL: trace.fuelL, tyre: trace.tyreCompound ?? null, airC: trace.conditions?.airC ?? temp(row?.air_temp), roadC: trace.conditions?.roadC ?? temp(row?.road_temp),
-    grip: gripOf(trace.conditions?.grip) ?? gripOf(row?.track_grip_status), rain: rainOf(row?.rain_intensity) }
+    grip: gripOf(trace.conditions?.grip) ?? gripOf(row?.track_grip_status) }
   return Object.values(out).every(v => v === null) ? null : out
 }
 
