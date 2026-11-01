@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { vRcSwitch } from '~/directives/rcSwitch'
 // PIP-618: the session "Avanzata" tab, our Track Titan. One lap ("Tu") against a
 // reference from the logger's lap files (laps of this session only, read through
 // Electron), in two layouts: Tracce (MoTeC / Garage 61, default) to see why, Pilota
@@ -28,7 +27,7 @@ import { useCornerStepper } from '~/composables/useCornerStepper'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { readSessionLaps, withArchiveFallback } from '~/services/telemetry/sessionLapLoading'
 import { useTrackEdges } from '~/composables/useTrackEdges'
-import { useI18n, type TranslationKey } from '~/i18n'
+import { useI18n } from '~/i18n'
 
 const props = defineProps<{
   sessionToken: string | null
@@ -48,13 +47,11 @@ const props = defineProps<{
   sessionType?: string | null
   /** PIP-695: a session link pasted in "Cambia il riferimento" → its lap token and track (the page reads it). */
   readSession?: (sessionId: string, userId: string) => Promise<{ sessionToken: string | null, track: string } | null>
+  /** 01/11: the page's view: 'pilota' = Dove migliorare, 'tracce' = Telemetria (no switch inside any more). */
+  view?: 'pilota' | 'tracce'
 }>()
 
 type Layout = 'pilota' | 'tracce'
-const LAYOUTS: { id: Layout, label: TranslationKey, hint: TranslationKey }[] = [
-  { id: 'tracce', label: 'telemetry.layout.advanced', hint: 'telemetry.layout.advancedHint' },
-  { id: 'pilota', label: 'telemetry.layout.simple', hint: 'telemetry.layout.simpleHint' },
-]
 // Per-viewer preferences: remembered, never required.
 function remembered<T extends string>(key: string, values: readonly T[], fallback: T) {
   const value = ref<T>(fallback)
@@ -62,8 +59,8 @@ function remembered<T extends string>(key: string, values: readonly T[], fallbac
   watch(value, v => { try { localStorage.setItem(key, v) } catch { /* Storage can be disabled. */ } })
   return value
 }
-// Tracce is the main view (Garage 61 + Track Titan + VRS); Pilota and Curve stay as alternatives.
-const layout = remembered<Layout>('rc:analysis:layout', ['pilota', 'tracce'], 'tracce')
+// The page chooses the view: Telemetria = Tracce (Garage 61 + Track Titan + VRS), Dove migliorare = Pilota.
+const layout = computed<Layout>(() => props.view ?? 'tracce')
 // 01/11 (user decision, a trial): the delta as the first chart on the right, fixed while the charts scroll,
 // or under the map as before. The switch stays until the drivers have tried both.
 const deltaPlace = remembered<DeltaPlace>('rc:analysis:delta', ['top', 'centre'], 'top')
@@ -430,9 +427,6 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
       <LapChoiceDialog :open="chooser !== null" :side="chooser ?? 'ref'" :source="choice.source" :apply="choice.apply" :variant="chooserVariant" :ideal-scope="idealScope"
         @close="chooser = null" @whole-session="wholeSession" />
       <span v-if="shareMessage" class="bar-note" :class="{ failed: shareState === 'error' }" role="status">{{ shareMessage }}</span>
-      <div v-rc-switch class="rc-switch views-switch" role="tablist" :aria-label="t('telemetry.viewAria')">
-        <button v-for="l in LAYOUTS" :key="l.id" type="button" role="tab" :aria-selected="layout === l.id" :class="{ active: layout === l.id }" :title="t(l.hint)" @click="layout = l.id">{{ t(l.label) }}</button>
-      </div>
     </div>
     <p v-if="linkError" class="analysis-note analysis-note--warn" role="alert">{{ linkError }}</p>
     <p v-if="refEntry?.note" class="analysis-note analysis-note--warn">{{ refEntry.note }}</p>
@@ -543,7 +537,6 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 .analysis-bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 6px 0; background: #0b0b10f2; box-shadow: 0 8px 12px -10px #000; }
 // PIP-635: sugli schermi larghi una riga sola: i selettori dei giri si stringono, lo switcher non va a capo.
 @media (min-width: 1200px) { .analysis-bar { flex-wrap: nowrap; } .analysis-bar > * { flex-shrink: 0; } .analysis-bar > .compare { flex-shrink: 1; } }
-.views-switch { margin-left: auto; }
 // PIP-623: share and paste, square buttons as tall as the pickers.
 .bar-note { color: #3ddc5a; font-size: 12px; &.failed { color: #ff5a6e; } }
 .analysis-note--warn { color: #fbbf24; }

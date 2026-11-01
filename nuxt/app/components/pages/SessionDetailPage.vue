@@ -197,11 +197,22 @@ const fullSession = ref<FullSession | null>(null)
 const isEvoSession = computed(() => recordingGame(originalSession.value) === 'evo')
 // PIP-618: "Avanzata" tab, the lap analysis (our Track Titan) from the logger's lap files.
 // Lap files carry the session id of the logger (YYYYMMDD_HHMMSS); other sessions have none.
-const detailTab = ref<'sessione' | 'avanzata'>('sessione')
+// 01/11 (user decision): three views on one level, each named by its question: Passo e costanza (the
+// session), Dove migliorare (the two laps, corner by corner), Telemetria (every channel). They replace
+// Sessione | Telemetria and the Semplice / Avanzata switch inside Telemetria.
+type DetailTab = 'sessione' | 'migliorare' | 'avanzata'
+const DETAIL_TABS: { id: DetailTab, label: 'sessionDetail.header.tabPace' | 'sessionDetail.header.tabImprove' | 'sessionDetail.header.tabTelemetry', title: 'sessionDetail.header.tabPaceTitle' | 'sessionDetail.header.tabImproveTitle' | 'sessionDetail.header.tabTelemetryTitle' }[] = [
+  { id: 'sessione', label: 'sessionDetail.header.tabPace', title: 'sessionDetail.header.tabPaceTitle' },
+  { id: 'migliorare', label: 'sessionDetail.header.tabImprove', title: 'sessionDetail.header.tabImproveTitle' },
+  { id: 'avanzata', label: 'sessionDetail.header.tabTelemetry', title: 'sessionDetail.header.tabTelemetryTitle' },
+]
+const detailTab = ref<DetailTab>('sessione')
+/** The two views of the lap comparison share one panel: switching between them keeps the laps and the reference. */
+const lapView = computed(() => detailTab.value === 'migliorare' || detailTab.value === 'avanzata')
 // PIP-635: si apre sulla Telemetria quando i giri possono esserci (programma desktop, o archivio online
 // del pilota visto dal coach); altrimenti, o se poi non ci sono giri, resta Sessione. Una scelta dell'utente vince sempre.
 const tabChosen = ref(false)
-function chooseTab(tab: 'sessione' | 'avanzata') { tabChosen.value = true; detailTab.value = tab }
+function chooseTab(tab: DetailTab) { tabChosen.value = true; detailTab.value = tab }
 // A lap clicked in the Sessione table opens Telemetria with that lap as "Tu" (Garage 61's lap list).
 const analysisLap = ref<number | null>(null)
 function openLapTelemetry(lap: { lap?: number, lapNumber?: number }) {
@@ -219,7 +230,7 @@ const analysisLaps = computed(() => (fullSession.value?.stints ?? []).flatMap(st
   .map(lap => ({ lap_number: lap.lap_number, lap_time_ms: lap.lap_time_ms ?? null, is_valid: lap.is_valid ?? null, sector_times_ms: lap.sectors_reliable ? lap.sector_times_ms ?? null : null,
     air_temp: lap.air_temp ?? null, road_temp: lap.road_temp ?? null, track_grip_status: lap.track_grip_status ?? null })))
 // PIP-632: traccia d'uso nel diario quando si apre la Telemetria (solo il numero di giri).
-watch(detailTab, tab => { if (tab === 'avanzata' && !isEvoSession.value) noteFeatureUse({ event: 'telemetry.opened', laps: analysisLaps.value.length }) })
+watch(detailTab, (tab, before) => { if (tab !== 'sessione' && before === 'sessione' && !isEvoSession.value) noteFeatureUse({ event: 'telemetry.opened', laps: analysisLaps.value.length }) })
 
 const isLoading = ref(true)
 const loadError = ref<string | null>(null)
@@ -242,7 +253,7 @@ async function shareSession() {
     // PIP-651: one link for the whole session (Sessione and Telemetria); it opens on the tab you share from.
     const link = await shareSessionLink({
       sessionId: props.sessionId,
-      generateShareLink: (id) => generateShareLink(id, { tab: detailTab.value === 'avanzata' ? 'telemetria' : 'sessione' })
+      generateShareLink: (id) => generateShareLink(id, { tab: detailTab.value === 'avanzata' ? 'telemetria' : detailTab.value === 'migliorare' ? 'migliorare' : 'sessione' })
     })
     // PIP-653: the outcome in the site's notification column, never beside the buttons.
     pushNotice(t('sessionDetail.share.copied'), 'success')
@@ -266,8 +277,9 @@ watch(originalSession, (session) => {
     evo: isEvoSession.value, foreign: !!props.externalUserId, hasLapToken: !!analysisToken.value, viewingPilot: !!targetUserId.value,
     desktop: typeof window !== 'undefined' && typeof (window as Window & { electronAPI?: { listLapTraces?: unknown } }).electronAPI?.listLapTraces === 'function',
     inArchive: lapTokenInArchive(analysisToken.value),
-    requested: sharedTab === 'telemetria' ? 'avanzata' : sharedTab === 'sessione' ? 'sessione' : undefined,
+    requested: sharedTab === 'telemetria' || sharedTab === 'migliorare' ? 'avanzata' : sharedTab === 'sessione' ? 'sessione' : undefined,
   })
+  if (detailTab.value === 'avanzata' && sharedTab === 'migliorare') detailTab.value = 'migliorare'
 }, { immediate: true })
 
 onMounted(async () => {
@@ -2486,28 +2498,23 @@ const gripZones = computed(() => {
          the Sessione / Telemetria switch on the right. -->
     <header class="session-header session-header--compact">
       <div class="header-id">
-        <div class="header-row">
-          <!-- The track name opens the track page (the old "Apri pista" button). -->
-          <h1 class="track-name"><button type="button" class="track-link" :title="t('sessionDetail.header.openTrack')" @click="emit('go-to-track', session.trackId)">{{ session.track.toUpperCase() }}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button></h1>
-          <span :class="['type-badge', `type-badge--${session.type}`]">{{ getTypeLabel(session.type) }}</span>
-        </div>
-        <!-- When and with what, readable at a glance: date and time, then the car with its maker's badge. -->
-        <div class="header-meta">
-          <span class="meta-when">{{ session.date }} <span class="sep">•</span> {{ session.time }}</span>
-          <span class="meta-car"><img v-if="carLogo" :src="carLogo.src" :alt="carLogo.name" class="car-logo">{{ session.car }}</span>
-        </div>
+        <!-- 01/11: one line: track, type, when, car (more height for the views below). -->
+        <!-- The track name opens the track page (the old "Apri pista" button). -->
+        <h1 class="track-name"><button type="button" class="track-link" :title="t('sessionDetail.header.openTrack')" @click="emit('go-to-track', session.trackId)">{{ session.track.toUpperCase() }}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button></h1>
+        <span :class="['type-badge', `type-badge--${session.type}`]">{{ getTypeLabel(session.type) }}</span>
+        <span class="meta-when">{{ session.date }} <span class="sep">•</span> {{ session.time }}</span>
+        <span class="meta-car"><img v-if="carLogo" :src="carLogo.src" :alt="carLogo.name" class="car-logo">{{ session.car }}</span>
       </div>
       <div class="header-actions">
         <button v-if="!isEvoSession" type="button" class="rc-btn rc-btn--compact" :title="t('sessionDetail.header.compareTitle')" @click="openSessionPicker"><UiRacingIcon name="compare" :size="16" />{{ t('sessions.picker.compare') }}</button>
         <SessionFileActions :can-share="canShare" :sharing="isSharing" @share="shareSession" />
         <div v-if="!isEvoSession" v-rc-switch class="detail-tabs rc-switch" role="tablist" :aria-label="t('sessionDetail.header.viewAria')">
-          <button type="button" role="tab" :aria-selected="detailTab === 'sessione'" :class="{ active: detailTab === 'sessione' }" @click="chooseTab('sessione')">{{ t('sessionDetail.header.tabSession') }}</button>
-          <button type="button" role="tab" :aria-selected="detailTab === 'avanzata'" :class="{ active: detailTab === 'avanzata' }" :title="t('sessionDetail.header.tabTelemetryTitle')" @click="chooseTab('avanzata')">{{ t('sessionDetail.header.tabTelemetry') }}</button>
+          <button v-for="tab in DETAIL_TABS" :key="tab.id" type="button" role="tab" :aria-selected="detailTab === tab.id" :class="{ active: detailTab === tab.id }" :title="t(tab.title)" @click="chooseTab(tab.id)">{{ t(tab.label) }}</button>
         </div>
       </div>
     </header>
 
-    <SessionAnalysisPanel v-if="detailTab === 'avanzata' && !isEvoSession" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" :compare-with="compareTarget" :pending-lap-link="pendingLapLink" :session-type="session?.type ?? null" :read-session="readLinkedSession" @unavailable="onTelemetryUnavailable" @compare="openSessionPicker" @lap-link-handled="pendingLapLink = null" />
+    <SessionAnalysisPanel v-if="lapView && !isEvoSession" :view="detailTab === 'migliorare' ? 'pilota' : 'tracce'" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" :compare-with="compareTarget" :pending-lap-link="pendingLapLink" :session-type="session?.type ?? null" :read-session="readLinkedSession" @unavailable="onTelemetryUnavailable" @compare="openSessionPicker" @lap-link-handled="pendingLapLink = null" />
 
     <!-- ========================================== -->
     <!-- MASTER / DETAIL LAYOUT -->
@@ -3280,7 +3287,7 @@ const gripZones = computed(() => {
 // Breathing room under the navbar and before the content; two short lines on the left
 // (track, then date and car), actions and the switch on the right.
 .session-header--compact { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin: 4px 0 16px;
-  .header-id { display: grid; gap: 8px; min-width: 0; }
+  .header-id { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-width: 0; font-size: 14px; }
   .header-row { margin-bottom: 0; } .track-name { font-size: 24px; letter-spacing: 1px; } .header-meta { margin-bottom: 0; align-items: center; gap: 14px; font-size: 14px; }
   // PIP-666: on a phone the actions wrap under each other instead of pushing the switch off screen.
   .header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-width: 0; }
