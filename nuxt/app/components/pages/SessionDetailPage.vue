@@ -2534,7 +2534,8 @@ const gripZones = computed(() => {
         <!-- 01/11: in the lap views Confronta and Condividi are icons, the tabs short: everything on the pills' row. -->
         <!-- 01/11: one Condividi per view: in Telemetria the lap (blue button in Tu), in Sessione the session.
              Confronta keeps its word: its icon alone looked like "swap the laps". -->
-        <button v-if="!isEvoSession" type="button" class="rc-btn rc-btn--compact" :title="t('sessionDetail.header.compareTitle')" @click="openSessionPicker"><UiRacingIcon name="compare" :size="16" />{{ t('sessions.picker.compare') }}</button>
+        <!-- 01/11: not in Telemetria: the Riferimento arrow (Cambia) already picks any lap, session or link. -->
+        <button v-if="!isEvoSession && !lapView" type="button" class="rc-btn rc-btn--compact" :title="t('sessionDetail.header.compareTitle')" @click="openSessionPicker"><UiRacingIcon name="compare" :size="16" />{{ t('sessions.picker.compare') }}</button>
         <SessionFileActions v-if="!lapView" :can-share="canShare" :sharing="isSharing" @share="shareSession" />
         <span v-if="lapView && !isEvoSession" id="session-head-share" class="head-share" />
         <div v-if="!isEvoSession" v-rc-switch class="detail-tabs rc-switch" role="tablist" :aria-label="t('sessionDetail.header.viewAria')" @keydown="onTabKey">
