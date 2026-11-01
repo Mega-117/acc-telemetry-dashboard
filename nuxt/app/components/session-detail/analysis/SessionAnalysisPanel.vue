@@ -63,6 +63,11 @@ function remembered<T extends string>(key: string, values: readonly T[], fallbac
 }
 // Tracce is the main view (Garage 61 + Track Titan + VRS); Pilota and Curve stay as alternatives.
 const layout = remembered<Layout>('rc:analysis:layout', ['pilota', 'tracce'], 'tracce')
+// 01/11 (user decision, a trial): the delta as the first chart on the right, fixed while the charts scroll,
+// or under the map as before. The switch stays until the drivers have tried both.
+type DeltaPlace = 'top' | 'centre'
+const deltaPlace = remembered<DeltaPlace>('rc:analysis:delta', ['top', 'centre'], 'top')
+const DELTA_PLACES: DeltaPlace[] = ['top', 'centre']
 const allChannels = ref(false)
 
 // PIP-623: every lap carries its origin. Only laps of the shown session ("local" on the PC,
@@ -249,6 +254,7 @@ const cornersBox = ref<HTMLElement | null>(null)
 const deltaWrap = ref<HTMLElement | null>(null)
 const deltaHeight = ref(200)
 function measureDelta() {
+  if (deltaPlace.value !== 'centre') return
   const wrap = deltaWrap.value, root = traceRoot.value
   if (!wrap || !root) return
   const bottom = cornersBox.value?.getBoundingClientRect().bottom ?? root.getBoundingClientRect().top + traceHeight.value
@@ -293,8 +299,10 @@ onMounted(() => window.addEventListener("resize", measureTrace))
 onBeforeUnmount(() => window.removeEventListener("resize", measureTrace))
 // Same tall plots as before the window fit (user choice): the charts column scrolls on its own.
 const traceRowHeight = computed(() => Math.max(80, Math.floor((viewportHeight.value - 170) / ESSENTIAL_ROWS) - 30))
+// The fixed delta on top: a little shorter than a channel row, so the charts under it keep their room.
+const deltaTopHeight = computed(() => Math.max(70, Math.round(traceRowHeight.value * 0.8)))
 // Garage 61 keeps the lap bar on the left, always open: sectors and corners say where to look.
-watch([traceRoot, layout, reference], () => nextTick(measureTrace))
+watch([traceRoot, layout, reference, deltaPlace], () => nextTick(measureTrace))
 // What the charts show now, and the way back to the whole lap (Garage 61 reset, Esc, double click).
 const viewLabel = computed(() => zoomRange.value ? "Zoom" : selectedSector.value !== null ? t('telemetry.sector', { n: selectedSector.value + 1 }) : selectedCorner.value !== null ? t('telemetry.corner', { n: selectedCorner.value }) : t('telemetry.wholeLap'))
 const wholeView = computed(() => !zoomRange.value && selectedSector.value === null && selectedCorner.value === null)
@@ -305,6 +313,10 @@ const stretchLoss = computed(() => wholeView.value || !lap.value || !reference.v
     : selectedSector.value !== null ? (sectorGaps.value[selectedSector.value] ? sectorGaps.value[selectedSector.value]!.gap / 1000 : stretchDelta(lap.value, reference.value, range.value))
       : comparison.value.find(c => c.corner.number === selectedCorner.value)?.timeLostS ?? null)
 function wholeLap() { selectedCorner.value = null; selectedSector.value = null; zoomRange.value = null }
+// 01/11 (the focus zone of Track Titan): on the whole lap, the corner where you lose most is highlighted at the
+// same place on every chart and named in the bar; a click there opens it. Nothing when you gain or are level.
+const focusCorner = computed(() => wholeView.value ? worst.value[0] ?? null : null)
+const focusZone = computed<[number, number] | null>(() => focusCorner.value ? [focusCorner.value.corner.start, focusCorner.value.corner.end] : null)
 // PIP-645: the double click (and zooming all the way out) goes back to the whole lap, as the chart hint says.
 function onZoom(next: [number, number] | null) { if (next) zoomRange.value = next; else if (layout.value === 'tracce') wholeLap(); else zoomRange.value = null }
 // Garage 61 sectors: the official sector times of the reference, placed on its trace.
@@ -493,15 +505,16 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
       </aside>
       <div class="tracce-center">
         <div class="panel">
-          <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null" :focus="selectedSector !== null ? range : null" color-mode="laps" zoom-controls :size="320" @hover="cursor = $event" @select="selectCorner($event)" />
+          <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null" :focus="selectedSector !== null ? range : null" color-mode="laps" zoom-controls :size="deltaPlace === 'top' ? 380 : 320" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>
-        <div v-if="reference" ref="deltaWrap">
-          <AnalysisCharts :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaHeight" zoomable @hover="cursor = $event" @zoom="onZoom" />
+        <div v-if="reference && deltaPlace === 'centre'" ref="deltaWrap">
+          <AnalysisCharts :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaHeight" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
         </div>
       </div>
       <div class="tracce-right">
         <!-- Sectors and corners on top of the charts, aligned to their distance axis and
              sticky under the lap bar (Track Titan's segment strip, MoTeC's section bar). -->
+        <div class="tracce-top">
         <div class="tracce-strip">
           <!-- PIP-635 (Garage 61, Delta, MoTeC): one context control on the left (what you are looking at, ‹ › for
                corners, ✕ back to the whole lap, also Esc / double click), the channels on the right. -->
@@ -512,6 +525,10 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
               <button v-if="selectedCorner !== null && !zoomRange" type="button" class="strip-context__step" :aria-label="t('telemetry.nextCorner')" :title="`${t('telemetry.nextCorner')} (→)`" @click="goCorner(1)">›</button>
               <button v-if="!wholeView" type="button" class="strip-context__close" :aria-label="t('telemetry.backWhole')" :title="t('telemetry.backWholeTitle')" @click="wholeLap">✕</button>
             </span>
+            <button v-if="focusCorner" type="button" class="strip-focus" :title="t('telemetry.focusTitle')" @click="selectCorner(focusCorner.corner.number)">{{ t('telemetry.focus', { n: focusCorner.corner.number, gap: formatDelta(focusCorner.timeLostS) }) }}</button>
+            <span v-if="reference" class="delta-switch" role="group" :aria-label="t('telemetry.deltaPlace.label')">
+              <button v-for="p in DELTA_PLACES" :key="p" type="button" :aria-pressed="deltaPlace === p" :class="{ active: deltaPlace === p }" @click="deltaPlace = p">{{ t(`telemetry.deltaPlace.${p}`) }}</button>
+            </span>
             <button type="button" class="strip-channels" :class="{ active: allChannels }" @click="allChannels = !allChannels">{{ allChannels ? t('telemetry.essential') : t('telemetry.moreChannels') }}</button>
           </div>
           <div v-if="sectorList.length" class="strip-row">
@@ -521,7 +538,10 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
             <button v-for="c in visibleCorners" :key="c.number" type="button" :class="{ active: selectedCorner === c.number, gain: c.lost <= -0.01, loss: c.lost >= 0.01 }" :style="{ left: `${c.left}%`, width: `${c.width}%` }" :title="`${t('telemetry.corner', { n: c.number })}: ${formatDelta(c.lost)} s`" @click="selectCorner(c.number)">{{ c.number }}</button>
           </div>
         </div>
-        <AnalysisCharts :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="traceRowHeight" :cursor-tag="cursorCorner" zoomable @hover="cursor = $event" @zoom="onZoom" />
+        <!-- 01/11: the delta first, fixed with the bar while the other charts scroll under it. -->
+        <AnalysisCharts v-if="reference && deltaPlace === 'top'" class="tracce-delta" :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaTopHeight" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
+        </div>
+        <AnalysisCharts :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="traceRowHeight" :cursor-tag="cursorCorner" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
       </div>
     </div>
   </section>
@@ -611,7 +631,14 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
     &:hover { background: #ffffff1a; color: #fff; } &:focus-visible { outline: 2px solid #fff; outline-offset: -2px; } }
   &__step:first-child { border-left: 0; border-right: 1px solid #ffffff1f; }
   &__close:hover { background: #ff002433; } }
-.tracce-strip { position: sticky; top: 0; z-index: 4; display: grid; gap: 2px; margin-bottom: 6px; padding: 4px 9px 4px 43px; background: #0b0b10f2; box-shadow: 0 8px 10px -10px #000; }
+// 01/11: the bar and (when on top) the delta stay fixed together while the charts scroll.
+.tracce-top { position: sticky; top: 0; z-index: 4; display: grid; gap: 6px; margin-bottom: 6px; padding-bottom: 4px; background: #0b0b10f2; box-shadow: 0 8px 10px -10px #000; }
+.tracce-strip { display: grid; gap: 2px; padding: 4px 9px 4px 43px; }
+.strip-focus { padding: 3px 9px; border: 1px solid #fbbf2466; background: #fbbf2414; color: #fde68a; font: 700 12px 'Inter', sans-serif; cursor: pointer; white-space: nowrap;
+  &:hover { background: #fbbf2426; } &:focus-visible { outline: 2px solid #fff; outline-offset: 2px; } }
+.delta-switch { margin-left: auto; display: inline-flex; border: 1px solid #ffffff24;
+  button { padding: 3px 9px; border: 0; background: transparent; color: #8a8a90; font: 600 12px 'Inter', sans-serif; cursor: pointer;
+    &.active { background: #ffffff1f; color: #fff; } &:hover:not(.active) { color: #e6e6ea; } &:focus-visible { outline: 2px solid #fff; outline-offset: -2px; } } }
 .strip-row { position: relative; height: 24px;
   button { position: absolute; top: 0; height: 100%; padding: 0; border: 1px solid #0b0b10; background: #ffffff14; color: #e6e6ea; font: 700 12px 'Inter', sans-serif; cursor: pointer; overflow: hidden;
     &:hover { background: #ffffff26; }
