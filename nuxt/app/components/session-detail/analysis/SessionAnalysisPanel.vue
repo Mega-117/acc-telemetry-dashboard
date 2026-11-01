@@ -21,7 +21,7 @@ import { useReferenceLibrary, type Entry } from '~/composables/useReferenceLibra
 import { LapsArchiveError } from '~/services/telemetry/lapsArchiveClient'
 import { lapShareErrorMessage } from '~/services/telemetry/lapShareLink'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { compareCorners, cornerAdvice, detectCorners, focusAdvice, formatDelta, stretchDelta } from '~/services/telemetry/lapAnalysis'
+import { compareCorners, detectCorners, formatDelta, stretchDelta } from '~/services/telemetry/lapAnalysis'
 import { useFocusZone } from '~/composables/useFocusZone'
 import { useCornerStepper } from '~/composables/useCornerStepper'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
@@ -322,11 +322,6 @@ function wholeLap() { selectedCorner.value = null; selectedSector.value = null; 
 const lossScope = ref<'lap' | 'session'>('lap')
 // The whole-session colours on the map: the map stays whole (a picked zone highlights its corner, no zoom).
 const sessionColours = computed(() => lossScope.value === 'session' && zones.active.value)
-const selectedAdvice = computed(() => {
-  const c = selectedCorner.value !== null && !zoomRange.value ? comparison.value.find(x => x.corner.number === selectedCorner.value) : null
-  // 01/11: when the yellow zone comes from a pedal difference, the advice says that same thing.
-  return c ? (focus.value && c.timeLostS >= 0.03 ? focusAdvice(focus.value, c.timeLostS) : null) ?? cornerAdvice(c) : ''
-})
 const gapWord = computed(() => totalDelta.value === null ? '' : totalDelta.value < 0 ? t('telemetry.faster') : totalDelta.value > 0 ? t('telemetry.slower') : t('telemetry.even'))
 const gapTitle = computed(() => totalDelta.value === null ? t('telemetry.gapTitle')
   : `${t('telemetry.gapTitle')}: ${formatDelta(totalDelta.value)} s, ${gapWord.value}`)
@@ -425,7 +420,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
            when, its status and why the reference; "Cambia" opens the chooser. The view sits apart, on the right. -->
       <div class="compare" role="group" :aria-label="t('telemetry.compareAria')">
         <LapChoiceCard side="you" :choice="choice.youCard.value" :ideal-scope="idealScope" :disabled="!sessionEntries.length" @change="openChooser('you')">
-          <button v-if="shareAvailable" type="button" class="share-lap" :disabled="!canShare || shareState === 'busy'" :title="shareHint" :aria-busy="shareState === 'busy'" :aria-label="shareState === 'busy' ? t('telemetry.share.busy') : t('telemetry.share.action')" @click="shareLap">{{ shareState === 'busy' ? '…' : '↗' }}</button>
+          <button v-if="shareAvailable" type="button" class="share-lap" :disabled="!canShare || shareState === 'busy'" :title="shareHint" :aria-busy="shareState === 'busy'" :aria-label="shareState === 'busy' ? t('telemetry.share.busy') : t('telemetry.share.action')" @click="shareLap"><UiRacingIcon v-if="shareState !== 'busy'" name="share" :size="16" /><template v-else>…</template></button>
         </LapChoiceCard>
         <div class="compare-mid">
           <!-- 01/11: only the number (the colour says faster or slower; the words stay in the tooltip). -->
@@ -482,7 +477,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
           <!-- Column heads as in the Curve table: the rows are corners, the cell the time lost there. -->
           <div class="corner-row corner-row--head" aria-hidden="true"><span>{{ t('telemetry.cornerHead') }}</span><span>{{ t('telemetry.timeLost') }}</span></div>
           <div class="corner-list" :class="{ 'has-active': selectedCorner !== null && selectedSector === null && !zoomRange }">
-            <button v-for="c in cornersByLoss" :key="c.corner.number" type="button" class="corner-row" :class="{ active: selectedCorner === c.corner.number }" :title="t('telemetry.cornerTitle', { n: c.corner.number, lap: c.lapMinKmh?.toFixed(0) ?? '--', ref: c.refMinKmh?.toFixed(0) ?? '--', advice: cornerAdvice(c) })" @click="selectCorner(c.corner.number)">
+            <button v-for="c in cornersByLoss" :key="c.corner.number" type="button" class="corner-row" :class="{ active: selectedCorner === c.corner.number }" :title="t('telemetry.cornerTitle', { n: c.corner.number, lap: c.lapMinKmh?.toFixed(0) ?? '--', ref: c.refMinKmh?.toFixed(0) ?? '--' })" @click="selectCorner(c.corner.number)">
               <span class="corner-num">{{ c.corner.number }}</span><span class="corner-cell" :style="{ background: heat(c.timeLostS) }">{{ formatDelta(c.timeLostS) }}</span>
             </button>
           </div>
@@ -493,7 +488,6 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
           <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null && !sessionColours" :focus="selectedSector !== null ? range : null" :color-mode="sessionColours ? 'delta' : 'laps'" :zone-colors="sessionColours ? zones.colors.value : null" zoom-controls :size="deltaPlace === 'top' ? 420 : 320" :corner-deltas="cornerDeltas" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>
         <!-- 01/11 (from Dove migliorare): the opened corner's advice under the map, only when the delta is not there. -->
-        <p v-if="selectedAdvice && deltaPlace === 'top'" class="corner-advice"><b>{{ t('telemetry.corner', { n: selectedCorner! }) }}</b> {{ selectedAdvice }}</p>
         <div v-if="reference && deltaPlace === 'centre'" ref="deltaWrap">
           <AnalysisCharts :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaHeight" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
         </div>
@@ -534,8 +528,10 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 .analysis-bar--head { flex-wrap: wrap; > .compare { flex: 1 1 0; } > .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .bar-note { flex: 1 1 100%; } }
 // PIP-623: share and paste, square buttons as tall as the pickers.
+// 01/11: Condividi in the Tu pill: blue, the share icon white and bold.
+.compare :deep(.share-lap) { display: grid; place-items: center; border-color: #38bdf8 !important; background: #0284c7 !important; color: #fff !important;
+  &:hover:not(:disabled) { background: #0ea5e9 !important; } }
 .loss-scope { display: flex; button { flex: 1; } }
-.corner-advice { margin: 0; padding: 8px 10px; border-left: 2px solid #fbbf24; background: #fbbf240f; color: #e6e6ea; font: 500 12px/1.4 'Inter', sans-serif; b { color: #fde68a; } }
 .bar-note { color: #3ddc5a; font-size: 12px; &.failed { color: #ff5a6e; } }
 .analysis-note--warn { color: #fbbf24; }
 // PIP-635: the comparison block: Tu, the gap between the two laps, Riferimento.

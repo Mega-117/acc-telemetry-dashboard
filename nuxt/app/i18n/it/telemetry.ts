@@ -33,7 +33,7 @@ export default {
     lossTitle: 'Dove perdi di più',
     cornerHead: 'Curva',
     timeLost: 'Tempo perso',
-    cornerTitle: 'Curva {n} · velocità minima {lap} / {ref} km/h (tu / rif.) · {advice}',
+    cornerTitle: 'Curva {n} · velocità minima {lap} / {ref} km/h (tu / rif.)',
     prevCorner: 'Curva precedente',
     nextCorner: 'Curva successiva',
     backWhole: 'Torna al giro intero',

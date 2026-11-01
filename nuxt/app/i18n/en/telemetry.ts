@@ -34,7 +34,7 @@ export default {
     lossTitle: 'Where you lose most',
     cornerHead: 'Corner',
     timeLost: 'Time lost',
-    cornerTitle: 'Corner {n} · minimum speed {lap} / {ref} km/h (you / ref.) · {advice}',
+    cornerTitle: 'Corner {n} · minimum speed {lap} / {ref} km/h (you / ref.)',
     prevCorner: 'Previous corner',
     nextCorner: 'Next corner',
     backWhole: 'Back to the whole lap',
