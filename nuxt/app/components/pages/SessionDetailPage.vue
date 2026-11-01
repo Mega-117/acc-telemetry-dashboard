@@ -2491,7 +2491,8 @@ const gripZones = computed(() => {
       </div>
     </Transition>
   </Teleport>
-  <LayoutPageContainer class="session-detail-page">
+  <!-- 01/11: in Telemetria the page also takes the free space right of the centred column (wider charts). -->
+  <LayoutPageContainer class="session-detail-page" :class="{ 'session-detail-page--wide': lapView && !isEvoSession }">
     <!-- NAV -->
     <div v-if="!headerBack" class="nav-bar">
       <button v-if="!headerBack" class="nav-btn" @click="emit('back')">
@@ -3273,6 +3274,9 @@ const gripZones = computed(() => {
 @use '@/assets/scss/racing-settings' as racing;
 
 .session-detail-page { display: flex; flex-direction: column; height: 100%; }
+// The left edge stays with the menu; the right edge goes to the window edge (minus a small margin) when the window
+// is wider than the centred column.
+.session-detail-page--wide { max-width: none; margin-left: 0; margin-right: min(0px, calc((100% - 100vw) / 2 + 8px)); width: auto; }
 
 // NAV
 .nav-bar { display: flex; justify-content: space-between; margin-bottom: 20px; }
@@ -3320,7 +3324,8 @@ const gripZones = computed(() => {
   .header-laps { display: flex; flex: 1 1 560px; min-width: 0; }
   .head-share { display: contents; }
   // 01/11: the lap views keep the title row on one line on a desktop window (1100 px and up).
-  &.session-header--laps { gap: 10px 16px; margin-bottom: 10px; .header-actions { gap: 8px; order: -1; } .header-laps { justify-content: flex-end; } }
+  // 01/11: tabs, then Condividi, then the two laps aligned right.
+  &.session-header--laps { gap: 10px 16px; margin-bottom: 10px; .header-actions { gap: 8px; order: -1; } .detail-tabs { order: -1; } .header-laps { justify-content: flex-end; } }
   @media (min-width: 1100px) { &.session-header--laps { flex-wrap: nowrap; .header-actions { flex-wrap: nowrap; flex-shrink: 0; } } }
   .header-id { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-width: 0; font-size: 14px; }
   .header-row { margin-bottom: 0; } .track-name { font-size: 24px; letter-spacing: 1px; } .header-meta { margin-bottom: 0; align-items: center; gap: 14px; font-size: 14px; }
