@@ -30,7 +30,9 @@ const props = withDefaults(defineProps<{
   edges?: { left: [number, number][], right: [number, number][] } | null
   /** PIP-645: Semplice on the whole session: each stretch in its own colour (no reference needed), the rest grey. */
   zoneColors?: { start: number, end: number, color: string }[] | null
-}>(), { refCursor: null, selected: null, size: 320, zoom: false, colorMode: 'delta', focus: null, zoomControls: false, edges: null, zoneColors: null })
+  /** 01/11 (Track Titan): seconds lost (+) or gained (−) in each corner, written beside its number. */
+  cornerDeltas?: Record<number, number> | null
+}>(), { refCursor: null, selected: null, size: 320, zoom: false, colorMode: 'delta', focus: null, zoomControls: false, edges: null, zoneColors: null, cornerDeltas: null })
 const emit = defineEmits<{ hover: [fraction: number | null], select: [corner: number] }>()
 
 const POINTS = 600
@@ -126,7 +128,12 @@ const labels = computed(() => {
     const turn = Math.sign(tx * (p.y - a.y) - ty * (p.x - a.x)) || 1
     const nx = (ty / length) * turn, ny = (-tx / length) * turn
     const offset = 16 * zoomScale.value
-    return { number: c.number, point: { x: p.x + nx * offset, y: p.y + ny * offset } }
+    // The time beside the number, further out on the same side (under a hundredth: level, not written, as in the corner list).
+    const d = props.cornerDeltas?.[c.number]
+    const gap = typeof d === 'number' && Number.isFinite(d) && Math.abs(d) >= 0.01 ? d : null
+    const far = 34 * zoomScale.value
+    return { number: c.number, point: { x: p.x + nx * offset, y: p.y + ny * offset },
+      gap: gap === null ? null : { text: `${gap > 0 ? '+' : '−'}${Math.abs(gap).toFixed(2)}`, loss: gap > 0, x: p.x + nx * far, y: p.y + ny * far } }
   })
 })
 const finish = computed(() => base.value ? finishLine(base.value, 10) : null)
@@ -288,8 +295,11 @@ function onMove(event: PointerEvent) {
       <line v-bind="sector.end" class="map-sector-mark" />
     </template>
     <g v-for="l in labels" :key="l.number" class="map-corner" :class="{ active: selected === l.number }" @click="!dragged && emit('select', l.number)">
-      <circle :cx="l.point.x" :cy="l.point.y" :r="8 * zoomScale" />
-      <text :x="l.point.x" :y="l.point.y + 3.5 * zoomScale" :font-size="9 * zoomScale">{{ l.number }}</text>
+      <!-- 01/11: a click area twice the drawn circle (the numbers were hard to hit), invisible. -->
+      <circle :cx="l.point.x" :cy="l.point.y" :r="17 * zoomScale" class="map-corner__hit" />
+      <circle :cx="l.point.x" :cy="l.point.y" :r="9 * zoomScale" />
+      <text :x="l.point.x" :y="l.point.y + 3.5 * zoomScale" :font-size="10 * zoomScale">{{ l.number }}</text>
+      <text v-if="l.gap" :x="l.gap.x" :y="l.gap.y + 3.5 * zoomScale" :font-size="10 * zoomScale" class="map-corner__gap" :class="l.gap.loss ? 'loss' : 'gain'">{{ l.gap.text }}</text>
     </g>
     <circle v-if="refDot" :cx="refDot.x" :cy="refDot.y" :r="5 * zoomScale" class="map-dot-ref" />
     <path v-if="lapArrow" :transform="`translate(${lapArrow.x} ${lapArrow.y}) rotate(${lapArrow.angle}) scale(${zoomScale})`" d="M8 0 L-6 -6 L-3 0 L-6 6 Z" class="map-arrow" />
@@ -322,6 +332,11 @@ html.map-grabbing, html.map-grabbing * { cursor: grabbing !important; user-selec
 .map-finish-black { stroke: #000; stroke-width: calc(4px * var(--z, 1)); stroke-dasharray: calc(2px * var(--z, 1)) calc(2px * var(--z, 1)); }
 .map-corner { cursor: pointer;
   circle { fill: #0a0a0f; stroke: #ffffff59; stroke-width: calc(1px * var(--z, 1)); }
+  .map-corner__hit { fill: transparent; stroke: none; }
+  // Readable on the track and the dark background: a dark outline around the digits.
+  .map-corner__gap { paint-order: stroke; stroke: #0a0a0f; stroke-width: calc(3px * var(--z, 1)); stroke-linejoin: round;
+    &.loss { fill: #ff8a98; } &.gain { fill: #7ee79a; } }
+  &:hover circle:not(.map-corner__hit) { stroke: #fff; }
   text { fill: #e6e6ea; font-family: 'Inter', sans-serif; font-weight: 700; text-anchor: middle; }
   &.active circle { stroke: #ff0024; stroke-width: calc(2px * var(--z, 1)); } }
 .map-arrow { fill: #38bdf8; stroke: #fff; stroke-width: 1.2px; vector-effect: non-scaling-stroke; }

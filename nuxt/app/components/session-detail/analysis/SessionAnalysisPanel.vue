@@ -361,6 +361,8 @@ const visibleCorners = computed(() => corners.value.flatMap(c => {
 }))
 // VRS: corners from the costliest; heat from green (gaining) through yellow to red (losing).
 const cornersByLoss = computed(() => [...comparison.value].sort((a, b) => b.timeLostS - a.timeLostS))
+// 01/11: the same seconds as the corner list, beside each number on the map.
+const cornerDeltas = computed(() => Object.fromEntries(comparison.value.map(c => [c.corner.number, c.timeLostS])))
 // Red where you lose, green where you gain (VRS). PIP-635: full colours, so a loss reads as a loss at a
 // glance; the seconds only shade it a little (full at 0.15 s). Under a hundredth it is even (grey).
 function heat(seconds: number) {
@@ -473,7 +475,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 
     <!-- TRACCE, as the Garage 61 analyzer: laps and gaps on the left, the map with the
          lap lines and the delta in the middle, the channels on the right, sectors and corners on top of the charts. -->
-    <div v-else-if="lap && layout === 'tracce'" ref="traceRoot" class="layout-tracce" :style="{ height: `${traceHeight}px` }">
+    <div v-else-if="lap && layout === 'tracce'" ref="traceRoot" class="layout-tracce" :class="{ 'layout-tracce--wide': deltaPlace === 'top' }" :style="{ height: `${traceHeight}px` }">
       <aside class="tracce-left">
         <!-- Who is faster is already in the coloured pickers above: here only where. -->
         <section class="side-box">
@@ -504,7 +506,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
       </aside>
       <div class="tracce-center">
         <div class="panel">
-          <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null" :focus="selectedSector !== null ? range : null" color-mode="laps" zoom-controls :size="deltaPlace === 'top' ? 380 : 320" @hover="cursor = $event" @select="selectCorner($event)" />
+          <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null" :focus="selectedSector !== null ? range : null" color-mode="laps" zoom-controls :size="deltaPlace === 'top' ? 420 : 320" :corner-deltas="cornerDeltas" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>
         <div v-if="reference && deltaPlace === 'centre'" ref="deltaWrap">
           <AnalysisCharts :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaHeight" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
@@ -576,7 +578,9 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 .tip-text { display: flex; align-items: center; padding: 4px 10px; background: #ffffff08; font-size: 13px; }
 
 // Garage 61 analyzer: left bar, map + delta in the middle, channels on the right, sector strip on top of the charts.
-.layout-tracce { display: grid; grid-template-columns: 210px 320px minmax(0, 1fr); grid-template-areas: 'left center right'; gap: 10px; align-items: stretch; overflow: hidden; }
+.layout-tracce { display: grid; grid-template-columns: 210px 320px minmax(0, 1fr); grid-template-areas: 'left center right'; gap: 10px; align-items: stretch; overflow: hidden;
+  // 01/11: with the delta on top the map has the middle column to itself: wider, numbers and times readable.
+  &--wide { grid-template-columns: 210px 420px minmax(0, 1fr); } }
 // Left column: three boxes with air between them (Garage 61 Laps/Gaps, VRS corners).
 // Tracce fills the window: the page does not scroll, each column scrolls on its own.
 .tracce-left { grid-area: left; display: flex; flex-direction: column; gap: 10px; height: 100%; overflow-y: auto; overflow-x: hidden; }
