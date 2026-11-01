@@ -2532,8 +2532,10 @@ const gripZones = computed(() => {
       </div>
       <div class="header-actions">
         <!-- 01/11: in the lap views Confronta and Condividi are icons, the tabs short: everything on the pills' row. -->
-        <button v-if="!isEvoSession" type="button" class="rc-btn rc-btn--compact" :class="{ 'rc-btn--icon': lapView }" :title="t('sessionDetail.header.compareTitle')" :aria-label="lapView ? t('sessions.picker.compare') : undefined" @click="openSessionPicker"><UiRacingIcon name="compare" :size="16" /><template v-if="!lapView">{{ t('sessions.picker.compare') }}</template></button>
-        <SessionFileActions :can-share="canShare" :sharing="isSharing" :icon-only="lapView" @share="shareSession" />
+        <!-- 01/11: one Condividi per view: in Telemetria the lap (blue button in Tu), in Sessione the session.
+             Confronta keeps its word: its icon alone looked like "swap the laps". -->
+        <button v-if="!isEvoSession" type="button" class="rc-btn rc-btn--compact" :title="t('sessionDetail.header.compareTitle')" @click="openSessionPicker"><UiRacingIcon name="compare" :size="16" />{{ t('sessions.picker.compare') }}</button>
+        <SessionFileActions v-if="!lapView" :can-share="canShare" :sharing="isSharing" @share="shareSession" />
         <div v-if="!isEvoSession" v-rc-switch class="detail-tabs rc-switch" role="tablist" :aria-label="t('sessionDetail.header.viewAria')" @keydown="onTabKey">
           <button v-for="tab in DETAIL_TABS" :key="tab.id" type="button" role="tab" :aria-selected="detailTab === tab.id" :tabindex="detailTab === tab.id ? 0 : -1" :class="{ active: detailTab === tab.id }" :title="t(tab.title)" @click="chooseTab(tab.id)">{{ t(tab.label) }}</button>
         </div>
@@ -3315,9 +3317,8 @@ const gripZones = computed(() => {
 .session-header--compact { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin: 4px 0 16px;
   .header-laps { display: flex; flex: 1 1 560px; min-width: 0; }
   // 01/11: the lap views keep the title row on one line on a desktop window (1100 px and up).
-  &.session-header--laps { gap: 10px 16px; margin-bottom: 10px; .header-actions { gap: 8px; } }
+  &.session-header--laps { gap: 10px 16px; margin-bottom: 10px; .header-actions { gap: 8px; order: -1; } .header-laps { justify-content: flex-end; } }
   @media (min-width: 1100px) { &.session-header--laps { flex-wrap: nowrap; .header-actions { flex-wrap: nowrap; flex-shrink: 0; } } }
-  .rc-btn--icon { padding-left: 9px; padding-right: 9px; }
   .header-id { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-width: 0; font-size: 14px; }
   .header-row { margin-bottom: 0; } .track-name { font-size: 24px; letter-spacing: 1px; } .header-meta { margin-bottom: 0; align-items: center; gap: 14px; font-size: 14px; }
   // PIP-666: on a phone the actions wrap under each other instead of pushing the switch off screen.

@@ -87,7 +87,7 @@ onBeforeUnmount(() => listen(false))
 </template>
 
 <style scoped lang="scss">
-.lap-pill { --c: #38bdf8; position: relative; display: flex; align-items: center; gap: 8px; flex: 0 1 auto; min-width: 0; padding-right: 3px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 12%, #0a0a0f);
+.lap-pill { --c: #38bdf8; position: relative; display: flex; align-items: center; gap: 8px; flex: none; padding-right: 3px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 12%, #0a0a0f);
   &.is-ideal { border-style: dashed; } }
 // The side label keeps its own width (TU stays square); 01/11: what follows it has the same width on both pills
 // (body and time fixed), so the two laps line up.

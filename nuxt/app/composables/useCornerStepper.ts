@@ -32,6 +32,6 @@ export function useCornerStepper(o: {
   onMounted(() => window.addEventListener('keydown', onKey))
   onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   // "C6 · 1,2 km" sotto il cursore: niente sui rettilinei.
-  const cursorCorner = computed(() => { const c = cornerAt(o.corners.value, o.cursor.value); return c ? `C${c.number}` : null })
+  const cursorCorner = computed(() => { const c = cornerAt(o.corners.value, o.cursor.value); return c ? `Seg ${c.number}` : null })
   return { goCorner, cursorCorner }
 }

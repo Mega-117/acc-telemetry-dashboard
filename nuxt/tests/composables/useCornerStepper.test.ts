@@ -43,7 +43,7 @@ describe('useCornerStepper', () => {
 
   it('names the corner under the cursor, nothing on the straights', () => {
     const { state, api, wrapper } = setup()
-    expect(api().cursorCorner.value).toBe('C2')
+    expect(api().cursorCorner.value).toBe('Seg 2')
     state.cursor.value = 0.5
     expect(api().cursorCorner.value).toBeNull()
     wrapper.unmount()
