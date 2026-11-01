@@ -33,12 +33,14 @@ function onKey(event: KeyboardEvent) {
       <span class="choice-row__l1">
         <span v-if="!hideDriver" class="choice-row__driver">{{ text.driver(choice) }}</span>
         <span v-if="choice.mine && !hideDriver" class="choice-row__tag">{{ t('telemetry.choice.tagYou') }}</span>
-        <span class="choice-row__time" :class="{ 'is-best': choice.best }">{{ formatLapTime(choice.lapTimeMs) }}</span>
+        <span class="choice-row__time" :class="{ 'is-best': choice.best, 'is-invalid': choice.status === 'invalid' }">{{ formatLapTime(choice.lapTimeMs) }}</span>
       </span>
       <span v-if="second" class="choice-row__l2">{{ second }}</span>
       <span v-if="conditions" class="choice-row__cond">{{ conditions }}</span>
       <span class="choice-row__l3">
-        <span v-if="!choice.ideal" class="choice-row__status" :class="`is-${choice.status}`"><span aria-hidden="true">{{ status.icon }}</span> {{ status.text }}</span>
+        <!-- 01/11: valid says nothing; invalid is the red time (the word for screen readers only). -->
+        <span v-if="!choice.ideal && choice.status === 'invalid'" class="sr-only">{{ status.text }}</span>
+        <span v-else-if="!choice.ideal && choice.status !== 'valid'" class="choice-row__status" :class="`is-${choice.status}`"><span aria-hidden="true">{{ status.icon }}</span> {{ status.text }}</span>
         <span v-if="choice.best" class="choice-row__best"><span aria-hidden="true">★</span> {{ t('telemetry.choice.status.best') }}</span>
         <span v-if="choice.reason" class="choice-row__reason">{{ text.reason(choice.reason) }}</span>
         <span v-if="choice.note" class="choice-row__note">{{ choice.note }}</span>
@@ -62,7 +64,8 @@ function onKey(event: KeyboardEvent) {
 .choice-row__l1 { display: flex; align-items: baseline; gap: 8px; font: 700 13px 'Inter', sans-serif; }
 .choice-row__driver { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .choice-row__tag { padding: 0 5px; border: 1px solid currentColor; color: #38bdf8; font: 700 10px/15px 'Inter', sans-serif; letter-spacing: .05em; }
-.choice-row__time { margin-left: auto; font: italic 700 14px 'Racer Display', sans-serif; letter-spacing: .02em; &.is-best { color: #c084fc; } }
+.choice-row__time { margin-left: auto; font: italic 700 14px 'Racer Display', sans-serif; letter-spacing: .02em; &.is-best { color: #c084fc; } &.is-invalid { color: #ff5a6e; } }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .choice-row__l2 { color: #b3b3b8; font: 500 12px 'Inter', sans-serif; }
 .choice-row__l3 { display: flex; flex-wrap: wrap; gap: 4px 10px; font: 500 11px 'Inter', sans-serif; color: #9a9aa0; }
 .choice-row__status { &.is-valid { color: #3ddc5a; } &.is-invalid { color: #ff8a98; } }

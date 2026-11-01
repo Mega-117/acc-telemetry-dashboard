@@ -201,10 +201,10 @@ const isEvoSession = computed(() => recordingGame(originalSession.value) === 'ev
 // session), Dove migliorare (the two laps, corner by corner), Telemetria (every channel). They replace
 // Sessione | Telemetria and the Semplice / Avanzata switch inside Telemetria.
 type DetailTab = 'sessione' | 'migliorare' | 'avanzata'
-const DETAIL_TABS: { id: DetailTab, label: 'sessionDetail.header.tabPace' | 'sessionDetail.header.tabImprove' | 'sessionDetail.header.tabTelemetry', title: 'sessionDetail.header.tabPaceTitle' | 'sessionDetail.header.tabImproveTitle' | 'sessionDetail.header.tabTelemetryTitle' }[] = [
-  { id: 'sessione', label: 'sessionDetail.header.tabPace', title: 'sessionDetail.header.tabPaceTitle' },
-  { id: 'migliorare', label: 'sessionDetail.header.tabImprove', title: 'sessionDetail.header.tabImproveTitle' },
-  { id: 'avanzata', label: 'sessionDetail.header.tabTelemetry', title: 'sessionDetail.header.tabTelemetryTitle' },
+const DETAIL_TABS: { id: DetailTab, label: 'sessionDetail.header.tabPace' | 'sessionDetail.header.tabImprove' | 'sessionDetail.header.tabTelemetry', short: 'sessionDetail.header.tabPaceShort' | 'sessionDetail.header.tabImproveShort' | 'sessionDetail.header.tabTelemetry', title: 'sessionDetail.header.tabPaceTitle' | 'sessionDetail.header.tabImproveTitle' | 'sessionDetail.header.tabTelemetryTitle' }[] = [
+  { id: 'sessione', label: 'sessionDetail.header.tabPace', short: 'sessionDetail.header.tabPaceShort', title: 'sessionDetail.header.tabPaceTitle' },
+  { id: 'migliorare', label: 'sessionDetail.header.tabImprove', short: 'sessionDetail.header.tabImproveShort', title: 'sessionDetail.header.tabImproveTitle' },
+  { id: 'avanzata', label: 'sessionDetail.header.tabTelemetry', short: 'sessionDetail.header.tabTelemetry', title: 'sessionDetail.header.tabTelemetryTitle' },
 ]
 const detailTab = ref<DetailTab>('sessione')
 /** The two views of the lap comparison share one panel: switching between them keeps the laps and the reference. */
@@ -2519,7 +2519,7 @@ const gripZones = computed(() => {
     <!-- HEADER SESSIONE -->
     <!-- Identity on the left (what: track and type, then when and with what), actions and
          the Sessione / Telemetria switch on the right. -->
-    <header class="session-header session-header--compact">
+    <header class="session-header session-header--compact" :class="{ 'session-header--laps': lapView && !isEvoSession }">
       <!-- 01/11: in the lap views the two laps take this place (Track Titan shows no track, date or car there). -->
       <div v-if="lapView && !isEvoSession" id="session-head-laps" class="header-laps" />
       <div v-else class="header-id">
@@ -2531,10 +2531,11 @@ const gripZones = computed(() => {
         <span class="meta-car"><img v-if="carLogo" :src="carLogo.src" :alt="carLogo.name" class="car-logo">{{ session.car }}</span>
       </div>
       <div class="header-actions">
-        <button v-if="!isEvoSession" type="button" class="rc-btn rc-btn--compact" :title="t('sessionDetail.header.compareTitle')" @click="openSessionPicker"><UiRacingIcon name="compare" :size="16" />{{ t('sessions.picker.compare') }}</button>
-        <SessionFileActions :can-share="canShare" :sharing="isSharing" @share="shareSession" />
+        <!-- 01/11: in the lap views Confronta and Condividi are icons, the tabs short: everything on the pills' row. -->
+        <button v-if="!isEvoSession" type="button" class="rc-btn rc-btn--compact" :class="{ 'rc-btn--icon': lapView }" :title="t('sessionDetail.header.compareTitle')" :aria-label="lapView ? t('sessions.picker.compare') : undefined" @click="openSessionPicker"><UiRacingIcon name="compare" :size="16" /><template v-if="!lapView">{{ t('sessions.picker.compare') }}</template></button>
+        <SessionFileActions :can-share="canShare" :sharing="isSharing" :icon-only="lapView" @share="shareSession" />
         <div v-if="!isEvoSession" v-rc-switch class="detail-tabs rc-switch" role="tablist" :aria-label="t('sessionDetail.header.viewAria')" @keydown="onTabKey">
-          <button v-for="tab in DETAIL_TABS" :key="tab.id" type="button" role="tab" :aria-selected="detailTab === tab.id" :tabindex="detailTab === tab.id ? 0 : -1" :class="{ active: detailTab === tab.id }" :title="t(tab.title)" @click="chooseTab(tab.id)">{{ t(tab.label) }}</button>
+          <button v-for="tab in DETAIL_TABS" :key="tab.id" type="button" role="tab" :aria-selected="detailTab === tab.id" :tabindex="detailTab === tab.id ? 0 : -1" :class="{ active: detailTab === tab.id }" :title="t(tab.title)" @click="chooseTab(tab.id)">{{ t(lapView ? tab.short : tab.label) }}</button>
         </div>
       </div>
     </header>
@@ -3312,7 +3313,11 @@ const gripZones = computed(() => {
 // Breathing room under the navbar and before the content; two short lines on the left
 // (track, then date and car), actions and the switch on the right.
 .session-header--compact { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin: 4px 0 16px;
-  .header-laps { display: flex; flex: 1 1 640px; min-width: 0; }
+  .header-laps { display: flex; flex: 1 1 560px; min-width: 0; }
+  // 01/11: the lap views keep the title row on one line on a desktop window (1100 px and up).
+  &.session-header--laps { gap: 10px 16px; margin-bottom: 10px; .header-actions { gap: 8px; } }
+  @media (min-width: 1100px) { &.session-header--laps { flex-wrap: nowrap; .header-actions { flex-wrap: nowrap; flex-shrink: 0; } } }
+  .rc-btn--icon { padding-left: 9px; padding-right: 9px; }
   .header-id { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-width: 0; font-size: 14px; }
   .header-row { margin-bottom: 0; } .track-name { font-size: 24px; letter-spacing: 1px; } .header-meta { margin-bottom: 0; align-items: center; gap: 14px; font-size: 14px; }
   // PIP-666: on a phone the actions wrap under each other instead of pushing the switch off screen.

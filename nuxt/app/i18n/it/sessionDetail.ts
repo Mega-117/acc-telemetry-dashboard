@@ -36,6 +36,8 @@ export default {
       tabPaceTitle: "Com'è andata la sessione: tempi, passo, costanza, stint e condizioni",
       tabImprove: 'Dove migliorare',
       tabImproveTitle: 'Dove perdi rispetto al riferimento, curva per curva',
+      tabPaceShort: 'Passo',
+      tabImproveShort: 'Migliorare',
       tabTelemetry: 'Telemetria',
       tabTelemetryTitle: 'Il giro contro un riferimento: delta, curve, traiettorie e telemetria',
     },

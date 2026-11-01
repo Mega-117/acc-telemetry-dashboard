@@ -22,7 +22,8 @@ import { useReferenceLibrary, type Entry } from '~/composables/useReferenceLibra
 import { LapsArchiveError } from '~/services/telemetry/lapsArchiveClient'
 import { lapShareErrorMessage } from '~/services/telemetry/lapShareLink'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { compareCorners, cornerAdvice, detectCorners, formatDelta, steepestLoss, stretchDelta } from '~/services/telemetry/lapAnalysis'
+import { compareCorners, cornerAdvice, detectCorners, formatDelta, stretchDelta } from '~/services/telemetry/lapAnalysis'
+import { useFocusZone } from '~/composables/useFocusZone'
 import { useCornerStepper } from '~/composables/useCornerStepper'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { readSessionLaps, withArchiveFallback } from '~/services/telemetry/sessionLapLoading'
@@ -320,21 +321,8 @@ const stretchLoss = computed(() => wholeView.value || !lap.value || !reference.v
     : selectedSector.value !== null ? (sectorGaps.value[selectedSector.value] ? sectorGaps.value[selectedSector.value]!.gap / 1000 : stretchDelta(lap.value, reference.value, range.value))
       : comparison.value.find(c => c.corner.number === selectedCorner.value)?.timeLostS ?? null)
 function wholeLap() { selectedCorner.value = null; selectedSector.value = null; zoomRange.value = null }
-// 01/11 (the focus zone of Track Titan): on the whole lap the corner where you lose most, in a sector the worst
-// corner of that sector, highlighted at the same place on every chart and named in the bar (a click opens it).
-// On one corner, the stretch inside it where the gap grows most. Nothing when you gain or are level.
-const focusCorner = computed(() => {
-  if (wholeView.value) return worst.value[0] ?? null
-  if (selectedSector.value === null || zoomRange.value) return null
-  const [from, to] = range.value
-  // A corner belongs to the sector its apex is in: corners run peak to peak and can cross a sector line.
-  return [...comparison.value].filter(c => c.corner.apex >= from && c.corner.apex < to && c.timeLostS >= 0.03).sort((a, b) => b.timeLostS - a.timeLostS)[0] ?? null
-})
-const focusZone = computed<[number, number] | null>(() => {
-  if (focusCorner.value) return [focusCorner.value.corner.start, focusCorner.value.corner.end]
-  if (selectedCorner.value === null || zoomRange.value || !lap.value || !reference.value) return null
-  return steepestLoss(lap.value, reference.value, range.value)
-})
+const gapWord = computed(() => totalDelta.value === null ? '' : totalDelta.value < 0 ? t('telemetry.faster') : totalDelta.value > 0 ? t('telemetry.slower') : t('telemetry.even'))
+const gapTitle = computed(() => [t('telemetry.gapTitle'), gapWord.value].filter(Boolean).join(': '))
 // PIP-645: the double click (and zooming all the way out) goes back to the whole lap, as the chart hint says.
 function onZoom(next: [number, number] | null) { if (next) zoomRange.value = next; else if (layout.value === 'tracce') wholeLap(); else zoomRange.value = null }
 // Garage 61 sectors: the official sector times of the reference, placed on its trace.
@@ -355,6 +343,7 @@ const range = computed<[number, number]>(() => {
   const corner = selectedCorner.value !== null ? corners.value[selectedCorner.value - 1] : null
   return corner ? [corner.start, corner.end] : [0, 1]
 })
+const { focusCorner, focusZone, focusEffect } = useFocusZone({ lap, reference, comparison, worst, range, wholeView, selectedSector, selectedCorner, zoomRange })
 function selectSector(index: number) {
   selectedCorner.value = null
   selectedSector.value = selectedSector.value === index ? null : index
@@ -441,14 +430,15 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
           <button v-if="shareAvailable" type="button" class="share-lap" :disabled="!canShare || shareState === 'busy'" :title="shareHint" :aria-busy="shareState === 'busy'" :aria-label="shareState === 'busy' ? t('telemetry.share.busy') : t('telemetry.share.action')" @click="shareLap">{{ shareState === 'busy' ? '…' : '↗' }}</button>
         </LapChoiceCard>
         <div class="compare-mid">
-          <p class="compare-gap" :class="{ gain: (totalDelta ?? 0) < 0, loss: (totalDelta ?? 0) > 0 }" :title="t('telemetry.gapTitle')">
-            <template v-if="totalDelta !== null"><strong>{{ formatDelta(totalDelta).replace('.', locale === 'it' ? ',' : '.') }} s</strong><em>{{ totalDelta < 0 ? t('telemetry.faster') : totalDelta > 0 ? t('telemetry.slower') : t('telemetry.even') }}<template v-if="invalidPair"> · {{ t('telemetry.choice.invalidQualifier') }}</template></em></template><em v-else>{{ t('telemetry.versus') }}</em>
+          <!-- 01/11: only the number (the colour says faster or slower; the words stay in the tooltip). -->
+          <p class="compare-gap" :class="{ gain: (totalDelta ?? 0) < 0, loss: (totalDelta ?? 0) > 0 }" :title="gapTitle">
+            <template v-if="totalDelta !== null"><strong>{{ formatDelta(totalDelta).replace('.', locale === 'it' ? ',' : '.') }}</strong><span class="sr-only">{{ gapWord }}</span><em v-if="invalidPair">{{ t('telemetry.choice.invalidQualifier') }}</em></template><em v-else>{{ t('telemetry.versus') }}</em>
           </p>
-          <button v-if="choice.canSwap.value" type="button" class="compare-swap" :title="t('telemetry.choice.swap')" :aria-label="t('telemetry.choice.swap')" @click="choice.swap()"><span aria-hidden="true">⇄</span></button>
         </div>
         <LapChoiceCard side="ref" removable @remove="choice.removeRef(); emit('removeCompare')" :choice="choice.refCard.value" :reason="choice.reason.value" :ideal-scope="idealScope" :pilot-name="pilotName" :disabled="!entries.length" @change="openChooser('ref')" />
       </div>
       <LapChoiceDialog :open="chooser !== null" :side="chooser ?? 'ref'" :source="choice.source" :apply="applyChoice" :variant="chooserVariant" :ideal-scope="idealScope"
+        :can-swap="choice.canSwap.value" @swap="choice.swap(); chooser = null"
         @close="chooser = null" @whole-session="wholeSession" />
       <span v-if="shareMessage" class="bar-note" :class="{ failed: shareState === 'error' }" role="status">{{ shareMessage }}</span>
     </div>
@@ -488,7 +478,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
             </button>
           </div>
         </section>
-        <AnalysisCharts v-if="selectedCorner !== null" :lap="lap" :reference="reference" :rows="pilotRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="pilotRowHeight" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
+        <AnalysisCharts v-if="selectedCorner !== null" :lap="lap" :reference="reference" :rows="pilotRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="pilotRowHeight" :focus="focusZone" :focus-effect="focusEffect" zoomable @hover="cursor = $event" @zoom="onZoom" />
       </div>
     </div>
 
@@ -528,7 +518,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
           <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null" :focus="selectedSector !== null ? range : null" color-mode="laps" zoom-controls :size="deltaPlace === 'top' ? 420 : 320" :corner-deltas="cornerDeltas" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>
         <div v-if="reference && deltaPlace === 'centre'" ref="deltaWrap">
-          <AnalysisCharts :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaHeight" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
+          <AnalysisCharts :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaHeight" :focus="focusZone" :focus-effect="focusEffect" zoomable @hover="cursor = $event" @zoom="onZoom" />
         </div>
       </div>
       <div class="tracce-right">
@@ -547,9 +537,9 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
           </div>
         </div>
         <!-- 01/11: the delta first, fixed with the bar while the other charts scroll under it. -->
-        <AnalysisCharts v-if="reference && deltaPlace === 'top'" class="tracce-delta" :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaTopHeight" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
+        <AnalysisCharts v-if="reference && deltaPlace === 'top'" class="tracce-delta" :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaTopHeight" :focus="focusZone" :focus-effect="focusEffect" zoomable @hover="cursor = $event" @zoom="onZoom" />
         </div>
-        <AnalysisCharts :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="traceRowHeight" :cursor-tag="cursorCorner" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
+        <AnalysisCharts :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="traceRowHeight" :cursor-tag="cursorCorner" :focus="focusZone" :focus-effect="focusEffect" zoomable @hover="cursor = $event" @zoom="onZoom" />
       </div>
     </div>
   </section>
@@ -564,7 +554,8 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 // PIP-635: sugli schermi larghi una riga sola: i selettori dei giri si stringono, lo switcher non va a capo.
 @media (min-width: 1200px) { .analysis-bar { flex-wrap: nowrap; } .analysis-bar > * { flex-shrink: 0; } .analysis-bar > .compare { flex-shrink: 1; } }
 // 01/11: in the title row the share message takes a line of its own: it never pushes the pills into the buttons.
-.analysis-bar--head { flex-wrap: wrap; > .compare { flex: 1 1 0; } > .bar-note { flex: 1 1 100%; } }
+.analysis-bar--head { flex-wrap: wrap; > .compare { flex: 1 1 0; } > .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.bar-note { flex: 1 1 100%; } }
 // PIP-623: share and paste, square buttons as tall as the pickers.
 .bar-note { color: #3ddc5a; font-size: 12px; &.failed { color: #ff5a6e; } }
 .analysis-note--warn { color: #fbbf24; }

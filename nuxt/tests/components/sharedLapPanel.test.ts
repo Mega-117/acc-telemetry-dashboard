@@ -147,8 +147,13 @@ describe('SessionAnalysisPanel sharing and coach view', () => {
     expect(view.get('.lap-pill--ref .lap-pill__time').text()).toBe('1:44.900')
     expect(view.get('.lap-pill--ref .lap-pill__why').attributes('aria-label')).toContain('Perché questo: il tuo giro valido più veloce dopo questo')
     expect(view.get('.lap-pill--ref .lap-pill__body').attributes('title')).toContain('Gara')
-    // Both laps are mine: they can be swapped.
-    await view.get('.compare-swap').trigger('click')
+    // Both laps are mine: they can be swapped, from Cambia (01/11: the button left the bar).
+    expect(view.find('.compare-swap').exists()).toBe(false)
+    await view.get('.lap-pill--ref .lap-pill__change').trigger('click')
+    await flushPromises()
+    ;(document.body.querySelector('.choice-dialog__swap') as HTMLButtonElement).click()
+    await flushPromises()
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull()
     expect(view.get('.lap-pill--you .lap-pill__lap').text()).toBe('G6')
     expect(view.get('.lap-pill--ref .lap-pill__why').attributes('aria-label')).toContain('giro scelto da te')
     await view.get('.lap-pill--ref .lap-pill__change').trigger('click')

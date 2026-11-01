@@ -45,7 +45,9 @@ describe('LapChoiceCard', () => {
     expect(wrapper.get('.lap-pill__lap').text()).toBe('G5')
     expect(wrapper.get('.lap-pill__time').text()).toBe('1:40.000')
     expect(wrapper.get('.lap-pill__body').attributes('title')).toContain('Oggi 10:15 · Gara')
-    expect(wrapper.get('.lap-pill__status').text()).toContain('Valido')
+    // 01/11: a valid lap shows no tick; an invalid one is its red time, the word for screen readers only.
+    expect(wrapper.find('.lap-pill__status').exists()).toBe(false)
+    expect(wrapper.get('.lap-pill__time').classes()).not.toContain('is-invalid')
     const why = wrapper.get('.lap-pill__why')
     expect(why.attributes('aria-label')).toContain('Perché questo: il tuo giro valido più veloce con questa auto')
     expect(text).not.toContain('Perché questo')
@@ -81,6 +83,12 @@ describe('LapChoiceCard', () => {
     document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
     await flushPromises()
     expect(wrapper.find('.lap-pill__info').exists()).toBe(false)
+  })
+  it('an invalid lap: red time, no sign, the word kept for screen readers (01/11)', () => {
+    wrapper = mount(LapChoiceCard, { props: { side: 'you', choice: { ...you, status: 'invalid' } } })
+    expect(wrapper.get('.lap-pill__time').classes()).toContain('is-invalid')
+    expect(wrapper.findAll('.lap-pill__status [aria-hidden="true"]')).toHaveLength(0)
+    expect(wrapper.get('.lap-pill__status .sr-only').text()).not.toBe('')
   })
   it('shows what the lap was driven with: fuel, tyres, air and track (01/11)', () => {
     wrapper = mount(LapChoiceCard, { props: { side: 'you', choice: { ...you, conditions: { fuelL: 43.73, tyre: 'dry', airC: 15.2, roadC: 18.4 } } } })

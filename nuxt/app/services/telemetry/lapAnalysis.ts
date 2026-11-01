@@ -132,20 +132,37 @@ export function stretchDelta(lap: LapTraceView, reference: LapTraceView, [start,
   return la === null || lb === null || ra === null || rb === null ? null : (lb - la) - (rb - ra)
 }
 
+/** 01/11: the focus zone of a stretch: where to work, and (lighter) where the same loss keeps growing after it. */
+export interface FocusZone { zone: [number, number], effect: [number, number] | null, lossS: number }
+
 /**
- * 01/11 (Track Titan's focus zone inside a segment): the part of [start, end] where the gap to the reference grows
- * most, a window of `width` of `steps` equal pieces. Null when nowhere you lose at least `min` seconds.
+ * 01/11 (research docs/wiki/research/2026-11-01-telemetria-focus-zone-metodo-fonti.md): the focus zone inside a
+ * stretch. Loss over a piece = D(b) - D(a), with D the gap to the reference along the stretch; only the gap you
+ * keep counts: at each point the smallest gap still ahead (a bump given back is no loss: often a line or an
+ * alignment difference). The zone is the piece of `width`/`steps` of the stretch where the kept gap grows most;
+ * among similar pieces (within 15%) the first, where the loss starts. When the loss keeps growing after it (a slow
+ * exit costing all the straight) that part is the effect, shown apart. Null when you keep less than `min` seconds.
  */
-export function steepestLoss(lap: LapTraceView, reference: LapTraceView, [start, end]: [number, number], { steps = 24, width = 4, min = 0.01 } = {}): [number, number] | null {
+export function focusInStretch(lap: LapTraceView, reference: LapTraceView, [start, end]: [number, number], { steps = 48, width = 6, min = 0.02 } = {}): FocusZone | null {
   if (!(end > start) || width < 1 || steps < width) return null
   const piece = (end - start) / steps
-  let best: { from: number, loss: number } | null = null
-  for (let i = 0; i + width <= steps; i++) {
-    const from = start + i * piece
-    const loss = stretchDelta(lap, reference, [from, from + width * piece])
-    if (loss !== null && loss >= min && (!best || loss > best.loss)) best = { from, loss }
+  const gap: number[] = []
+  for (let i = 0; i <= steps; i++) {
+    const d = i === 0 ? 0 : stretchDelta(lap, reference, [start, start + i * piece])
+    if (d === null) return null // a hole in the data: no measure, never an invented one
+    gap.push(d)
   }
-  return best ? [best.from, best.from + width * piece] : null
+  const kept = gap.slice()
+  for (let i = steps - 1; i >= 0; i--) kept[i] = Math.min(kept[i]!, kept[i + 1]!)
+  let best: { at: number, loss: number } | null = null
+  for (let i = 0; i + width <= steps; i++) {
+    const loss = kept[i + width]! - kept[i]!
+    if (loss >= min && (!best || loss > best.loss * 1.15)) best = { at: i, loss }
+  }
+  if (!best) return null
+  const zoneEnd = start + (best.at + width) * piece
+  const after = kept[steps]! - kept[best.at + width]!
+  return { zone: [start + best.at * piece, zoneEnd], effect: after >= Math.max(min, best.loss * 0.5) ? [zoneEnd, end] : null, lossS: best.loss }
 }
 
 /** PIP-635: the previous or next corner, round the lap: after the last comes the first, before the first the last. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { analysisSessionToken, bodySlipDeg, channelAt, compareCorners, cornerAt, glideFrame, stepCorner, steepestLoss, stretchDelta, finishLine, timeSyncedFraction, cornerAdvice, deltaTrend, detectCorners, formatDelta, fractions, lapDelta, mapPoints } from '~/services/telemetry/lapAnalysis'
+import { analysisSessionToken, bodySlipDeg, channelAt, compareCorners, cornerAt, focusInStretch, glideFrame, stepCorner, stretchDelta, finishLine, timeSyncedFraction, cornerAdvice, deltaTrend, detectCorners, formatDelta, fractions, lapDelta, mapPoints } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
 const STEP = 2
@@ -215,24 +215,36 @@ describe('map follows the cursor (PIP-635)', () => {
   })
 })
 
-describe('focus zone inside a corner (01/11, Track Titan)', () => {
-  it('is the piece of the stretch where the gap grows most; none when you are level or faster', () => {
-    const fast = lap(() => 180), slow = lap(m => (m >= 1500 && m < 1600 ? 120 : 180))
-    const zone = steepestLoss(slow, fast, [0.4, 0.6])!
-    // The window covers the slow 100 m (0.5 to 0.533 of the lap), inside the stretch looked at.
-    expect(zone[0]).toBeGreaterThanOrEqual(0.4); expect(zone[1]).toBeLessThanOrEqual(0.6)
-    expect(zone[0]).toBeLessThan(1600 / 3000); expect(zone[1]).toBeGreaterThan(1500 / 3000)
-    // One sixth of the stretch, not the whole of it.
-    expect(zone[1] - zone[0]).toBeCloseTo(0.2 / 6, 6)
-    // Two slow pieces: the window goes to the one that costs more.
-    const two = lap(m => (m >= 1250 && m < 1300 ? 150 : m >= 1650 && m < 1750 ? 110 : 180))
-    const bigger = steepestLoss(two, fast, [0.4, 0.6])!
-    expect(bigger[0]).toBeLessThan(1750 / 3000); expect(bigger[1]).toBeGreaterThan(1650 / 3000)
-    // Under the threshold: no zone.
-    expect(steepestLoss(slow, fast, [0.4, 0.6], { min: 60 })).toBeNull()
-    expect(steepestLoss(fast, fast, [0.4, 0.6])).toBeNull()
-    expect(steepestLoss(fast, slow, [0.4, 0.6])).toBeNull()
-    expect(steepestLoss(slow, fast, [0.6, 0.4])).toBeNull()
+describe('focus zone: the loss you keep (01/11, research)', () => {
+  const fast = lap(() => 180)
+  it('is the piece where the kept gap grows most, one eighth of the stretch, inside it', () => {
+    const slow = lap(m => (m >= 1500 && m < 1600 ? 120 : 180))
+    const f = focusInStretch(slow, fast, [0.4, 0.6])!
+    expect(f.zone[1] - f.zone[0]).toBeCloseTo(0.2 / 8, 6)
+    expect(f.zone[0]).toBeLessThan(1600 / 3000); expect(f.zone[1]).toBeGreaterThan(1500 / 3000)
+    expect(f.effect).toBeNull()
+    expect(f.lossS).toBeGreaterThan(0.5)
+  })
+  it('a bump given back is no zone; the loss that stays is (curva 1, 01/11)', () => {
+    // Slower at 1300-1350 m, then faster at 1350-1400 m (all given back); the real loss at 1650-1750 m.
+    const bump = lap(m => (m >= 1300 && m < 1350 ? 140 : m >= 1350 && m < 1400 ? 240 : m >= 1650 && m < 1750 ? 150 : 180))
+    const f = focusInStretch(bump, fast, [0.4, 0.6])!
+    expect(f.zone[0]).toBeGreaterThan(1450 / 3000)
+    expect(f.zone[1]).toBeGreaterThan(1650 / 3000)
+  })
+  it('a loss that keeps growing to the end of the stretch: the zone where it starts, the rest as effect', () => {
+    const exit = lap(m => (m >= 1400 ? 170 : 180))
+    const f = focusInStretch(exit, fast, [0.4, 0.6])!
+    expect(f.zone[0]).toBeLessThan(1500 / 3000)
+    expect(f.effect).not.toBeNull()
+    expect(f.effect![1]).toBeCloseTo(0.6, 6)
+  })
+  it('nothing when level, faster, under the threshold or with no stretch', () => {
+    const slow = lap(m => (m >= 1500 && m < 1600 ? 120 : 180))
+    expect(focusInStretch(fast, fast, [0.4, 0.6])).toBeNull()
+    expect(focusInStretch(fast, slow, [0.4, 0.6])).toBeNull()
+    expect(focusInStretch(slow, fast, [0.4, 0.6], { min: 60 })).toBeNull()
+    expect(focusInStretch(slow, fast, [0.6, 0.4])).toBeNull()
   })
 })
 

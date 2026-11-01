@@ -37,6 +37,8 @@ export default {
       tabPaceTitle: "How the session went: times, pace, consistency, stints and conditions",
       tabImprove: 'Where to improve',
       tabImproveTitle: 'Where you lose against the reference, corner by corner',
+      tabPaceShort: 'Pace',
+      tabImproveShort: 'Improve',
       tabTelemetry: 'Telemetry',
       tabTelemetryTitle: 'The lap against a reference: delta, corners, racing lines and telemetry',
     },

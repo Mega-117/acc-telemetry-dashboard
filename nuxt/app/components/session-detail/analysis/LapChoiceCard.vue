@@ -63,7 +63,8 @@ onBeforeUnmount(() => listen(false))
         <p class="lap-pill__main">
           <span class="lap-pill__driver">{{ text.driver(choice) }}</span>
           <span v-if="lapLabel" class="lap-pill__lap">{{ lapLabel }}</span>
-          <span v-if="!choice.ideal" class="lap-pill__status" :class="`is-${choice.status}`" :title="status!.text"><span aria-hidden="true">{{ status!.icon }}</span><span class="sr-only">{{ status!.text }}</span></span>
+          <!-- 01/11: valid says nothing (no tick); invalid is the red time; unknown or incomplete keep their sign. -->
+          <span v-if="!choice.ideal && choice.status !== 'valid'" class="lap-pill__status" :class="`is-${choice.status}`" :title="status!.text"><span v-if="choice.status !== 'invalid'" aria-hidden="true">{{ status!.icon }}</span><span class="sr-only">{{ status!.text }}</span></span>
           <button v-if="infoLines.length" type="button" class="lap-pill__why" :aria-expanded="infoOpen" :aria-label="infoLines.join('. ')" :title="tooltip" @click="infoOpen = !infoOpen">ⓘ</button>
         </p>
         <p v-if="tags.length" class="lap-pill__tags">
@@ -72,7 +73,7 @@ onBeforeUnmount(() => listen(false))
       </template>
       <p v-else class="lap-pill__main">{{ t('telemetry.choice.noLap') }}</p>
     </div>
-    <strong v-if="choice" class="lap-pill__time" :class="{ 'is-best': choice.best }">{{ formatLapTime(choice.lapTimeMs) }}</strong>
+    <strong v-if="choice" class="lap-pill__time" :class="{ 'is-best': choice.best, 'is-invalid': choice.status === 'invalid' }">{{ formatLapTime(choice.lapTimeMs) }}</strong>
     <div class="lap-pill__actions">
       <slot />
       <button type="button" class="lap-pill__change" :disabled="disabled" :aria-label="t(side === 'you' ? 'telemetry.choice.changeYouAria' : 'telemetry.choice.changeRefAria')" :title="t('telemetry.choice.change')" aria-haspopup="dialog" @click="emit('change')">▾</button>
@@ -85,7 +86,7 @@ onBeforeUnmount(() => listen(false))
 </template>
 
 <style scoped lang="scss">
-.lap-pill { --c: #38bdf8; position: relative; display: flex; align-items: center; gap: 8px; flex: 1 1 300px; min-width: 230px; max-width: 480px; padding-right: 3px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 12%, #0a0a0f);
+.lap-pill { --c: #38bdf8; position: relative; display: flex; align-items: center; gap: 8px; flex: 1 1 280px; min-width: 220px; max-width: 440px; padding-right: 3px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 12%, #0a0a0f);
   &.is-ideal { border-style: dashed; } }
 .lap-pill__side { align-self: stretch; display: grid; place-items: center; padding: 0 7px; background: var(--c); color: #0a0a0f; font: italic 700 12px 'Racer Display', sans-serif; text-transform: uppercase; }
 .lap-pill__body { display: grid; gap: 1px; flex: 1; min-width: 0; padding: 3px 0; p { margin: 0; } }
@@ -95,7 +96,7 @@ onBeforeUnmount(() => listen(false))
 .lap-pill__status { font: 700 13px 'Inter', sans-serif; &.is-valid { color: #3ddc5a; } &.is-invalid { color: #ff8a98; } &.is-incomplete, &.is-unknown { color: #b3b3b8; } }
 .lap-pill__why { padding: 0 2px; border: 0; background: none; color: #fde68a; font: 700 13px 'Inter', sans-serif; cursor: help; &:focus-visible { outline: 2px solid #fff; } }
 .lap-pill__tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; > span { padding: 0 5px; border: 1px solid #ffffff24; color: #c8c8cc; font: 600 11px/15px 'Inter', sans-serif; font-variant-numeric: tabular-nums; } }
-.lap-pill__time { margin-left: auto; color: #fff; font: italic 700 18px 'Racer Display', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; &.is-best { color: #c084fc; } }
+.lap-pill__time { margin-left: auto; color: #fff; font: italic 700 18px 'Racer Display', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; &.is-best { color: #c084fc; } &.is-invalid { color: #ff5a6e; } }
 .lap-pill__actions { display: flex; align-items: center; gap: 3px; }
 .lap-pill__change, .lap-pill__remove, .lap-pill__actions :slotted(button) { min-width: 28px; min-height: 28px; padding: 0 7px; border: 1px solid #ffffff40; background: #ffffff0d; color: #fff; font: 700 12px 'Inter', sans-serif; cursor: pointer;
   &:hover:not(:disabled) { border-color: var(--c); background: color-mix(in srgb, var(--c) 18%, transparent); }

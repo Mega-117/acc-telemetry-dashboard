@@ -78,6 +78,7 @@ export default defineConfig({
         'app/utils/raceCalendarForm.ts',
         'app/utils/floatingPlacement.ts',
         'app/composables/useCornerStepper.ts',
+        'app/composables/useFocusZone.ts',
         'app/composables/useSessionZones.ts',
         'app/composables/useSectorCompare.ts',
         'app/composables/useReferenceLibrary.ts',

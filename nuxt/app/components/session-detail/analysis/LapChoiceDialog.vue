@@ -23,8 +23,10 @@ const props = defineProps<{
   idealScope?: 'session' | 'history'
   /** Open on this tab (the page's "Confronta" opens on the link). */
   initialTab?: Tab | null
+  /** 01/11: Tu and Riferimento can trade places (the button left the bar between the pills). */
+  canSwap?: boolean
 }>()
-const emit = defineEmits<{ close: [], wholeSession: [] }>()
+const emit = defineEmits<{ close: [], wholeSession: [], swap: [] }>()
 const { t } = useI18n()
 const text = useLapChoiceText()
 const uid = useId()
@@ -104,6 +106,7 @@ const rowProps = (c: LapChoice) => ({ choice: c, selected: c.key === selected.va
         :aria-labelledby="`${uid}-title`" tabindex="-1" @keydown="onKeydown">
         <header class="choice-dialog__head">
           <h2 :id="`${uid}-title`"><span class="choice-dialog__swatch" aria-hidden="true" />{{ t(side === 'you' ? 'telemetry.choice.dialog.titleYou' : 'telemetry.choice.dialog.titleRef') }}</h2>
+          <button v-if="canSwap" type="button" class="choice-dialog__swap" @click="emit('swap')"><span aria-hidden="true">⇄</span> {{ t('telemetry.choice.swap') }}</button>
           <button type="button" class="choice-dialog__x" :aria-label="t('telemetry.choice.dialog.close')" @click="close">✕</button>
         </header>
         <p v-if="variant === 'panel'" class="choice-empty">{{ t('telemetry.choice.dialog.panelNote') }}</p>
@@ -148,6 +151,8 @@ const rowProps = (c: LapChoice) => ({ choice: c, selected: c.key === selected.va
   border: 1px solid var(--rc-section-line, #ffffff2e); border-top: 3px solid var(--c); background: #0a0a0df2; color: #fff; outline: none;
   &--ref { --c: #fbbf24; }
   &--panel { height: 100%; max-height: none; width: 100%; box-shadow: -16px 0 30px #000a; } }
+.choice-dialog__swap { margin-left: auto; padding: 4px 10px; border: 1px solid #ffffff40; background: #ffffff0d; color: #fff; font: 700 12px 'Inter', sans-serif; cursor: pointer;
+  &:hover { border-color: #fff; } &:focus-visible { outline: 2px solid #fff; outline-offset: 1px; } }
 .choice-dialog__head { display: flex; justify-content: space-between; align-items: center; gap: 12px;
   h2 { display: flex; align-items: center; gap: 10px; margin: 0; font: italic 700 24px/1.2 'Racer Display', sans-serif; text-transform: uppercase; } }
 .choice-dialog__swatch { width: 14px; height: 14px; background: var(--c); }
