@@ -210,6 +210,14 @@ const DETAIL_TABS: { id: DetailTab, label: 'sessionDetail.header.tabPace' | 'ses
 const detailTab = ref<DetailTab>('sessione')
 /** The two views of the lap comparison share one panel: switching between them keeps the laps and the reference. */
 const lapView = computed(() => detailTab.value === 'avanzata')
+// 01/11: while Telemetria is shown the main column opens to the whole window (menus unchanged).
+function setWideMain(on: boolean) {
+  if (typeof document === 'undefined') return
+  if (on) document.documentElement.style.setProperty('--app-main-max-width', 'none')
+  else document.documentElement.style.removeProperty('--app-main-max-width')
+}
+watch(() => lapView.value && !isEvoSession.value, setWideMain, { immediate: true })
+onBeforeUnmount(() => setWideMain(false))
 // PIP-635: si apre sulla Telemetria quando i giri possono esserci (programma desktop, o archivio online
 // del pilota visto dal coach); altrimenti, o se poi non ci sono giri, resta Sessione. Una scelta dell'utente vince sempre.
 const tabChosen = ref(false)
@@ -3276,9 +3284,10 @@ const gripZones = computed(() => {
 .session-detail-page { display: flex; flex-direction: column; height: 100%; }
 // The left edge stays with the menu; the right edge goes to the window edge (minus a small margin) when the window
 // is wider than the centred column.
-.session-detail-page--wide { max-width: none; margin-left: 0; margin-right: min(0px, calc((100% - 100vw) / 2 + 8px)); width: auto;
-  // The right edge lines up with the user menu above (its 28 px less the scrollbar), not 24 px further in.
-  padding-right: 12px; }
+// 01/11: Telemetria uses the whole window in every view (pilot, coach, admin): the main column opens
+// (--app-main-max-width, set while the view is shown), the page keeps 24 px sides (0 inside the coach column,
+// which has its own).
+.session-detail-page--wide { padding-left: var(--app-wide-page-pad, 24px); padding-right: var(--app-wide-page-pad, 24px); }
 
 // NAV
 .nav-bar { display: flex; justify-content: space-between; margin-bottom: 20px; }

@@ -49,6 +49,7 @@ const emit = defineEmits<{
 
 .main-content {
   flex: 1;
-  width: 100%; max-width: var(--app-content-max-width); margin-inline: auto; box-sizing: border-box;
+  // 01/11: --app-main-max-width lets one page (Telemetria) take the whole window; the menus keep their width.
+  width: 100%; max-width: var(--app-main-max-width, var(--app-content-max-width)); margin-inline: auto; box-sizing: border-box;
 }
 </style>

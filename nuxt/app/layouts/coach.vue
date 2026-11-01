@@ -231,7 +231,10 @@ const isAdminRouteActive = (path: string) => route.path === path || route.path.s
 }
 
 .coach-main {
-  max-width: var(--app-content-max-width);
+  // 01/11: Telemetria may open the main column to the whole window (--app-main-max-width); this column already
+  // has its 24 px sides, so the page inside adds none (--app-wide-page-pad).
+  --app-wide-page-pad: 0px;
+  max-width: var(--app-main-max-width, var(--app-content-max-width));
   margin: 0 auto;
   padding: var(--app-content-top-space) 24px 32px;
 }
