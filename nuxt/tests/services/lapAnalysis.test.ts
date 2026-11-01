@@ -222,6 +222,14 @@ describe('focus zone inside a corner (01/11, Track Titan)', () => {
     // The window covers the slow 100 m (0.5 to 0.533 of the lap), inside the stretch looked at.
     expect(zone[0]).toBeGreaterThanOrEqual(0.4); expect(zone[1]).toBeLessThanOrEqual(0.6)
     expect(zone[0]).toBeLessThan(1600 / 3000); expect(zone[1]).toBeGreaterThan(1500 / 3000)
+    // One sixth of the stretch, not the whole of it.
+    expect(zone[1] - zone[0]).toBeCloseTo(0.2 / 6, 6)
+    // Two slow pieces: the window goes to the one that costs more.
+    const two = lap(m => (m >= 1250 && m < 1300 ? 150 : m >= 1650 && m < 1750 ? 110 : 180))
+    const bigger = steepestLoss(two, fast, [0.4, 0.6])!
+    expect(bigger[0]).toBeLessThan(1750 / 3000); expect(bigger[1]).toBeGreaterThan(1650 / 3000)
+    // Under the threshold: no zone.
+    expect(steepestLoss(slow, fast, [0.4, 0.6], { min: 60 })).toBeNull()
     expect(steepestLoss(fast, fast, [0.4, 0.6])).toBeNull()
     expect(steepestLoss(fast, slow, [0.4, 0.6])).toBeNull()
     expect(steepestLoss(slow, fast, [0.6, 0.4])).toBeNull()

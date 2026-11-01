@@ -327,7 +327,8 @@ const focusCorner = computed(() => {
   if (wholeView.value) return worst.value[0] ?? null
   if (selectedSector.value === null || zoomRange.value) return null
   const [from, to] = range.value
-  return [...comparison.value].filter(c => c.corner.start >= from && c.corner.end <= to && c.timeLostS >= 0.03).sort((a, b) => b.timeLostS - a.timeLostS)[0] ?? null
+  // A corner belongs to the sector its apex is in: corners run peak to peak and can cross a sector line.
+  return [...comparison.value].filter(c => c.corner.apex >= from && c.corner.apex < to && c.timeLostS >= 0.03).sort((a, b) => b.timeLostS - a.timeLostS)[0] ?? null
 })
 const focusZone = computed<[number, number] | null>(() => {
   if (focusCorner.value) return [focusCorner.value.corner.start, focusCorner.value.corner.end]
@@ -487,7 +488,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
             </button>
           </div>
         </section>
-        <AnalysisCharts v-if="selectedCorner !== null" :lap="lap" :reference="reference" :rows="pilotRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="pilotRowHeight" zoomable @hover="cursor = $event" @zoom="onZoom" />
+        <AnalysisCharts v-if="selectedCorner !== null" :lap="lap" :reference="reference" :rows="pilotRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="pilotRowHeight" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
       </div>
     </div>
 
