@@ -154,12 +154,14 @@ async function load() {
         : entries.value.length ? t('telemetry.errors.partialOnly') : t('telemetry.errors.noLaps')
       return
     }
-    // Default as Track Titan: your best valid lap is the reference, the last lap the one to study.
-    const best = [...usable].filter(e => e.valid).sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0] ?? usable[0]!
-    const other = [...usable].reverse().find(e => e.id !== best.id) ?? best
-    // A lap picked in the Sessione table is "Tu"; the reference stays the best (or the next one).
+    // 01/11 (user decision): "Tu" opens on your fastest valid lap of the session (an invalid lap, even
+    // faster, is never the one to study); without valid laps, the last whole lap. The reference is then
+    // the step above (your better lap elsewhere, else the driver a step ahead), always with its reason.
+    const best = [...usable].filter(e => e.valid).sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0] ?? null
+    const last = [...usable].reverse()[0]!
+    // A lap picked in the Sessione table is "Tu".
     const picked = props.initialLap ? usable.find(e => e.lapNumber === props.initialLap) : undefined
-    lapId.value = (picked ?? other).id
+    lapId.value = (picked ?? best ?? last).id
     // PIP-695: the reference on open, with its reason; suggestions arriving later move it only until you choose.
     choice.applyDefault()
     // Coach view: the coach's own laps here as references; your own view: your best laps here from every session (PIP-646).
@@ -168,9 +170,9 @@ async function load() {
     if (bridge && first) void (pilot ? library.loadOwnLaps(isCurrent, bridge, first.track, first.car) : library.loadBestLaps(isCurrent, bridge, first.track, first.car))
     else if (!pilot && first) void choice.loadArchiveBest(isCurrent)
     // PIP-650: other drivers' laps here, a step above this session's best in the closest conditions.
-    const bestTrace = traces.value[best.id]
+    const bestTrace = traces.value[(best ?? last).id]
     if (first) void library.loadOtherDrivers(isCurrent, archiveDeps, { game: first.gameId, track: first.track, car: first.car, variant: first.variant },
-      { myUid: pilot ?? currentUser.value?.uid ?? null, myBestMs: best.valid ? best.lapTimeMs : null,
+      { myUid: pilot ?? currentUser.value?.uid ?? null, myBestMs: best ? best.lapTimeMs : null,
         mine: { grip: bestTrace?.conditions?.grip ?? null, airC: bestTrace?.conditions?.airC ?? null, roadC: bestTrace?.conditions?.roadC ?? null, fuelL: bestTrace?.fuelL ?? null } })
   } catch (e) {
     if (isCurrent()) error.value = e instanceof LapsArchiveError ? e.message : t('telemetry.errors.read')

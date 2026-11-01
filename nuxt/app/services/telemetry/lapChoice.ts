@@ -139,6 +139,10 @@ export function leaderboard(entries: { libId: string, uid: string, lapTimeMs: nu
   myUid: string | null, myBestMs: number | null): DriverRow[] {
   const best = new Map<string, (typeof entries)[number]>()
   for (const e of entries) { const prev = best.get(e.uid); if (!prev || e.lapTimeMs < prev.lapTimeMs) best.set(e.uid, e) }
+  // 01/11: my row shows my true best here. The online library can hold an older, slower lap of mine
+  // (a lap not uploaded yet): the row keeps that library lap to open, but ranks with the real time.
+  const mineRow = myUid ? best.get(myUid) : undefined
+  if (mineRow && myBestMs && myBestMs < mineRow.lapTimeMs) best.set(myUid!, { ...mineRow, lapTimeMs: myBestMs })
   return [...best.values()].sort((a, b) => a.lapTimeMs - b.lapTimeMs).map((e, i) => ({ uid: e.uid, nickname: nicknames[e.uid] ?? null, lapTimeMs: e.lapTimeMs, rank: i + 1,
     gapMs: myBestMs ? e.lapTimeMs - myBestMs : null, mine: !!myUid && e.uid === myUid, libId: e.libId, recordedAt: e.recordedAt }))
 }

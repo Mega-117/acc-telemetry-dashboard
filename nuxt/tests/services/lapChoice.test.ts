@@ -82,6 +82,16 @@ describe('lapChoice: search and leaderboard', () => {
     expect(rows[2]!.nickname).toBe('Mike')
     expect(leaderboard([{ libId: 'a', uid: 'u1', lapTimeMs: 1, recordedAt: null }], {}, null, null)[0]!.gapMs).toBeNull()
   })
+  it('my row shows my real best when the library only has an older, slower lap of mine (01/11)', () => {
+    const rows = leaderboard([
+      { libId: 'old', uid: 'me', lapTimeMs: 103585, recordedAt: null },
+      { libId: 'r', uid: 'rico', lapTimeMs: 102635, recordedAt: null },
+    ], {}, 'me', 102842)
+    expect(rows.map(r => [r.rank, r.uid, r.lapTimeMs, r.libId])).toEqual([[1, 'rico', 102635, 'r'], [2, 'me', 102842, 'old']])
+    expect(rows[1]!.gapMs).toBe(0)
+    // A faster library lap of mine stays as it is.
+    expect(leaderboard([{ libId: 'x', uid: 'me', lapTimeMs: 100000, recordedAt: null }], {}, 'me', 102842)[0]!.lapTimeMs).toBe(100000)
+  })
 })
 
 describe('lapChoice: default reference', () => {

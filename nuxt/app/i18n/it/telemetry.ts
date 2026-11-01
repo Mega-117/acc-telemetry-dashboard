@@ -211,6 +211,7 @@ export default {
       suggested: {
         empty: 'Nessun suggerimento per ora: scegli tra i tuoi giri o tra quelli degli altri piloti.',
         fastestNote: 'Solo come ultima scelta: può essere molto più veloce di te.',
+        idealSame: 'Giro ideale: è il tuo giro migliore, già il più veloce in tutti e tre i settori.',
       },
       mine: {
         current: 'Questa sessione',

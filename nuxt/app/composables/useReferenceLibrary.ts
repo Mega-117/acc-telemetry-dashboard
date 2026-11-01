@@ -45,6 +45,8 @@ export function useReferenceLibrary(o: {
   const libraryList = ref<LibraryEntry[]>([])
   const libraryState = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const suggestedId = ref<string | null>(null), fastestId = ref<string | null>(null)
+  /** 01/11: the ideal lap was built but is your best lap itself (already the fastest in every sector). */
+  const idealSameAsBest = ref(false)
   function add(loaded: Loaded[]) {
     o.traces.value = { ...o.traces.value, ...Object.fromEntries(loaded.map(r => [r.entry.id, r.trace])) }
     o.entries.value = [...o.entries.value.filter(e => !loaded.some(r => r.entry.id === e.id)), ...loaded.map(r => r.entry)]
@@ -105,7 +107,8 @@ export function useReferenceLibrary(o: {
     const fastestMs = Math.min(...pool.map(e => e.lapTimeMs), ...o.entries.value.filter(e => e.origin === 'best' && !e.note).map(e => e.lapTimeMs))
     const wasIdeal = o.refId?.value === IDEAL_ID
     o.entries.value = o.entries.value.filter(e => e.id !== IDEAL_ID)
-    // Worth showing only when it beats your best lap.
+    // Worth showing only when it beats your best lap; when it is the best lap itself, the dialog says so.
+    idealSameAsBest.value = !!ideal && potentialS > -0.001
     if (!ideal || potentialS > -0.001) {
       o.traces.value = Object.fromEntries(Object.entries(o.traces.value).filter(([id]) => id !== IDEAL_ID))
       if (wasIdeal && o.refId && best) o.refId.value = best.id
@@ -195,8 +198,8 @@ export function useReferenceLibrary(o: {
 
   /** PIP-695: one lap read on demand (a lap of another session or driver picked in "Cambia"). */
   function addLoaded(entry: Entry, trace: LapTraceView) { add([{ entry, trace }]) }
-  function resetLibrary() { libraryList.value = []; libraryState.value = 'idle'; suggestedId.value = null; fastestId.value = null }
+  function resetLibrary() { libraryList.value = []; libraryState.value = 'idle'; suggestedId.value = null; fastestId.value = null; idealSameAsBest.value = false }
 
   return { loadOwnLaps, loadBestLaps, refreshIdeal, loadOtherDrivers, loadCompareSession, clearCompareSession, addLoaded, resetLibrary,
-    libraryList, libraryState, suggestedId, fastestId }
+    libraryList, libraryState, suggestedId, fastestId, idealSameAsBest }
 }

@@ -123,6 +123,7 @@ const rowProps = (c: LapChoice) => ({ choice: c, selected: c.key === selected.va
                 <p v-if="c.reason?.kind === 'fastest'" class="choice-empty">{{ t('telemetry.choice.suggested.fastestNote') }}</p>
               </template>
             </div>
+            <p v-if="source.idealSame?.()" class="choice-empty">{{ t('telemetry.choice.suggested.idealSame') }}</p>
           </template>
           <LapChoiceMyLaps v-else-if="tab === 'mine'" :source="source" :selected-key="selected?.key ?? null" :current-key="currentKey" :other-key="otherKey" :other-side="otherSideName" @select="select" @confirm="confirm" />
           <LapChoiceDrivers v-else-if="tab === 'drivers'" :source="source" :selected-key="selected?.key ?? null" :current-key="currentKey" :other-key="otherKey" :other-side="otherSideName" @select="select" @confirm="confirm" />

@@ -211,6 +211,7 @@ export default {
       suggested: {
         empty: 'No suggestions yet: choose among your laps or the other drivers’ laps.',
         fastestNote: 'Only as a last choice: it can be much faster than you.',
+        idealSame: 'Ideal lap: it is your best lap, already the fastest in all three sectors.',
       },
       mine: {
         current: 'This session',

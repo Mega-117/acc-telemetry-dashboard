@@ -91,6 +91,11 @@ describe('LapChoiceDialog', () => {
     expect(apply).toHaveBeenCalledWith('ref', expect.objectContaining({ key: 'library:x' }))
     expect(wrapper!.emitted('close')).toHaveLength(1)
   })
+  it('says why there is no ideal lap when it is the best lap itself (01/11)', async () => {
+    openDialog('ref', undefined, { idealSame: () => true })
+    await wrapper!.setProps({ open: true }); await flushPromises()
+    expect(dialog()?.textContent).toContain('Giro ideale: è il tuo giro migliore, già il più veloce in tutti e tre i settori.')
+  })
   it('Tu opens on its laps only, the session open with the star, others behind "Mostra"', async () => {
     openDialog('you')
     await wrapper!.setProps({ open: true }); await flushPromises()

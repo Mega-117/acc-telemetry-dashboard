@@ -27,6 +27,8 @@ export interface LapChoiceSource {
   subjectName: () => string | null
   currentKey: (side: LapSide) => string | null
   suggested: () => LapChoice[]
+  /** The ideal lap is your best lap itself: nothing to suggest, one line to say why. */
+  idealSame?: () => boolean
   sessionLaps: () => LapChoice[]
   listMine: () => Promise<{ laps: LapChoice[], truncated: boolean }>
   drivers: () => DriverRow[]
@@ -291,7 +293,7 @@ export function useLapChoice(o: {
   const source: LapChoiceSource = {
     subjectName: () => o.pilotUid() ? nick(o.pilotUid()) ?? t('sessions.picker.driver') : null,
     currentKey: side => (side === 'you' ? youCard.value : refCard.value)?.key ?? null,
-    suggested, sessionLaps, listMine, drivers, driversState, loadDriverNames, listDriverLaps, resolveLink,
+    suggested, idealSame: () => o.library.idealSameAsBest.value, sessionLaps, listMine, drivers, driversState, loadDriverNames, listDriverLaps, resolveLink,
   }
   return { youCard, refCard, reason, canSwap, swap, apply, applyDefault, propose, reset, userChose, source, nick, loadArchiveBest }
 }
