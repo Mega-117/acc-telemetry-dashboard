@@ -1,10 +1,10 @@
 // 01/11 (the focus zone of Track Titan; research docs/wiki/research/2026-11-01-telemetria-focus-zone-metodo-fonti.md).
 // On the whole lap the corner where you lose most, in a sector the worst corner of that sector: named in the bar
 // (a click opens it). Inside that corner, or the one opened, the band marks where the loss you keep starts
-// (focusInStretch). The worst corner with no clear piece: the whole corner.
+// (focusInStretch). No clear piece: no band.
 // Nothing when you gain or are level, or on a free zoom.
 import { computed, type Ref } from 'vue'
-import { focusInStretch, timeRuns, type CornerComparison } from '~/services/telemetry/lapAnalysis'
+import { focusInStretch, type CornerComparison } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
 export function useFocusZone(o: {
@@ -30,10 +30,9 @@ export function useFocusZone(o: {
   const focus = computed(() => {
     const s = stretch.value
     if (!s || !o.lap.value || !o.reference.value) return null
-    const found = focusInStretch(o.lap.value, o.reference.value, s)
-    if (found) return found
-    // The whole corner only when the data hold there: a time reset gives no band at all, never a guessed one.
-    return focusCorner.value && timeRuns(o.lap.value, s) && timeRuns(o.reference.value, s) ? { zone: s, lossS: focusCorner.value.timeLostS, cause: null } : null
+    // No clear piece (or a time reset): no band. The worst corner is still named in the bar (Codex 01/11: a
+    // whole-corner band of 600 m pointed at nothing).
+    return focusInStretch(o.lap.value, o.reference.value, s)
   })
   return { focusCorner, focus, focusZone: computed(() => focus.value?.zone ?? null) }
 }

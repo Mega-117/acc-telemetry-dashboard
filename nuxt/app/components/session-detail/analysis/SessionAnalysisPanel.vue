@@ -325,7 +325,7 @@ const sessionColours = computed(() => lossScope.value === 'session' && zones.act
 const selectedAdvice = computed(() => {
   const c = selectedCorner.value !== null && !zoomRange.value ? comparison.value.find(x => x.corner.number === selectedCorner.value) : null
   // 01/11: when the yellow zone comes from a pedal difference, the advice says that same thing.
-  return c ? (focus.value ? focusAdvice(focus.value, c.timeLostS) : null) ?? cornerAdvice(c) : ''
+  return c ? (focus.value && c.timeLostS >= 0.03 ? focusAdvice(focus.value, c.timeLostS) : null) ?? cornerAdvice(c) : ''
 })
 const gapWord = computed(() => totalDelta.value === null ? '' : totalDelta.value < 0 ? t('telemetry.faster') : totalDelta.value > 0 ? t('telemetry.slower') : t('telemetry.even'))
 const gapTitle = computed(() => totalDelta.value === null ? t('telemetry.gapTitle')

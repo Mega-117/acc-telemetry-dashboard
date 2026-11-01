@@ -95,10 +95,14 @@ export default {
     },
     advice: {
       focus: {
-        brakeLess: 'Qui freni meno del riferimento per {m} m e da qui perdi {s} s: prova a tenere il freno più a lungo',
-        brakeMore: 'Qui freni più del riferimento per {m} m e da qui perdi {s} s: prova a rilasciare il freno prima',
-        gasLess: 'Qui dai meno gas del riferimento per {m} m e da qui perdi {s} s: prova a riaprire prima',
-        gasMore: 'Qui dai più gas del riferimento per {m} m e da qui perdi {s} s: prova a riaprire più dolcemente',
+        brakeLessWhen: 'Qui molli il freno mentre il riferimento frena ancora, per {m} m, e da qui perdi {s} s: prova a tenere il freno più a lungo',
+        brakeMoreWhen: 'Qui freni ancora mentre il riferimento ha già mollato, per {m} m, e da qui perdi {s} s: prova a rilasciare prima',
+        brakeLessAmount: 'Qui freni più piano del riferimento per {m} m e da qui perdi {s} s: confronta quanta forza metti sul freno',
+        brakeMoreAmount: 'Qui freni più forte del riferimento per {m} m e da qui perdi {s} s: confronta quanta forza metti sul freno',
+        gasLessWhen: 'Qui sei ancora senza gas mentre il riferimento ha già riaperto, per {m} m, e da qui perdi {s} s: prova a riaprire prima',
+        gasMoreWhen: 'Qui hai già riaperto il gas mentre il riferimento aspetta, per {m} m, e da qui perdi {s} s: prova ad aspettare un attimo',
+        gasLessAmount: 'Qui dai meno gas del riferimento per {m} m e da qui perdi {s} s: confronta quanto gas dai',
+        gasMoreAmount: 'Qui dai più gas del riferimento per {m} m e da qui perdi {s} s: prova a riaprire più dolcemente',
       },
       faster: 'Qui sei più veloce del riferimento',
       same: 'Come il riferimento',

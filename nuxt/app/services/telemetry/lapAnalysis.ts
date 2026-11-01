@@ -153,7 +153,7 @@ export function stretchDelta(lap: LapTraceView, reference: LapTraceView, [start,
 }
 
 /** 01/11: what the pedals did in the zone: which one, and whether you pressed it more or less than the reference. */
-export interface FocusCause { pedal: 'brake' | 'throttle', lapMore: boolean, metres: number }
+export interface FocusCause { pedal: 'brake' | 'throttle', lapMore: boolean, metres: number, /** One driver off the pedal: a when, not a how much. */ timing: boolean }
 /** 01/11: the focus zone of a stretch: where to work, the seconds of the loss it starts, the pedal difference there. */
 export interface FocusZone { zone: [number, number], lossS: number, cause: FocusCause | null }
 
@@ -188,26 +188,51 @@ function inputCause(lap: LapTraceView, reference: LapTraceView, [from, to]: [num
   if (!lb?.length || !rb?.length || !lt?.length || !rt?.length || !(to > from)) return null
   const stepF = 2 / Math.max(lap.lengthM || 0, 1)
   const steps = Math.max(1, Math.round((to - from) / stepF))
-  const pedals = (f: number) => {
-    const brake = (channelAt(lap, 'brake_pct', f) ?? 0) - (channelAt(reference, 'brake_pct', f) ?? 0)
-    const throttle = (channelAt(lap, 'throttle_pct', f) ?? 0) - (channelAt(reference, 'throttle_pct', f) ?? 0)
-    return Math.abs(brake) >= Math.abs(throttle) ? { d: Math.abs(brake), brake, throttle: 0 } : { d: Math.abs(throttle), brake: 0, throttle }
+  type Sample = { key: string, d: number, lapOff: boolean, refOff: boolean, full: boolean }
+  // The bigger of the two pedal differences at a point, with which pedal, its sign, and who is off that pedal.
+  const sample = (f: number): Sample => {
+    const l = { b: channelAt(lap, 'brake_pct', f) ?? 0, t: channelAt(lap, 'throttle_pct', f) ?? 0 }
+    const r = { b: channelAt(reference, 'brake_pct', f) ?? 0, t: channelAt(reference, 'throttle_pct', f) ?? 0 }
+    const db = l.b - r.b, dt = l.t - r.t
+    const onBrake = Math.abs(db) >= Math.abs(dt)
+    const d = onBrake ? db : dt
+    const off = (v: number) => v <= BRAKE_ON
+    // The one pressing more is still fully on it (>= 90%): the other has started letting go (or not yet pressed).
+    const full = Math.max(onBrake ? l.b : l.t, onBrake ? r.b : r.t) >= 90
+    return { key: `${onBrake ? 'brake' : 'throttle'}:${d > 0 ? '+' : '-'}`, d: Math.abs(d), lapOff: off(onBrake ? l.b : l.t), refOff: off(onBrake ? r.b : r.t), full }
   }
-  let best: { a: number, b: number, sum: number, brake: number, throttle: number } | null = null
-  let a = -1, sum = 0, brake = 0, throttle = 0
-  for (let i = 0; i <= steps + 1; i++) {
-    const p = i <= steps ? pedals(from + i * stepF) : { d: 0, brake: 0, throttle: 0 }
-    if (p.d >= minPct) { if (a < 0) { a = i; sum = 0; brake = 0; throttle = 0 } sum += p.d; brake += p.brake; throttle += p.throttle; continue }
-    if (a >= 0) {
-      const b = i - 1
-      if ((b - a) * 2 >= minM && (!best || sum > best.sum)) best = { a, b, sum, brake, throttle }
-      a = -1
-    }
+  // A piece is one pedal in one direction: a change of pedal or of sign starts a new piece (Codex 01/11).
+  let best: { a: number, b: number, sum: number, key: string, lapOff: number, refOff: number, full: number } | null = null
+  let run: { a: number, sum: number, key: string, lapOff: number, refOff: number, full: number } | null = null
+  const close = (b: number) => {
+    if (run && (b - run.a + 1) * 2 >= minM && (!best || run.sum > best.sum)) best = { ...run, b }
+    run = null
   }
+  for (let i = 0; i <= steps; i++) {
+    const p = sample(from + i * stepF)
+    if (p.d < minPct) { close(i - 1); continue }
+    if (run && run.key !== p.key) close(i - 1)
+    if (!run) run = { a: i, sum: 0, key: p.key, lapOff: 0, refOff: 0, full: 0 }
+    run.sum += p.d
+    if (p.lapOff) run.lapOff++
+    if (p.refOff) run.refOff++
+    if (p.full) run.full++
+  }
+  close(steps)
   if (!best) return null
-  const onBrake = Math.abs(best.brake) >= Math.abs(best.throttle)
-  return { range: [from + best.a * stepF, from + best.b * stepF],
-    cause: { pedal: onBrake ? 'brake' : 'throttle', lapMore: (onBrake ? best.brake : best.throttle) > 0, metres: Math.round((best.b - best.a) * 2) } }
+  const found = best as { a: number, b: number, sum: number, key: string, lapOff: number, refOff: number, full: number }
+  const count = found.b - found.a + 1
+  const [pedal, sign] = found.key.split(':') as ['brake' | 'throttle', '+' | '-']
+  // Timing when one driver is off the pedal, or still fully on it while the other lets go, for a good part of the
+  // piece (Hungaroring T1: you release from 594 m, the reference holds 100% to 604 m); otherwise how much.
+  // "Still fully on it" counts as timing only when the other really lets go across the piece (its pedal moves by
+  // 30 points or more): steady half pressure against full pressure is how much, not when.
+  const channel = pedal === 'brake' ? 'brake_pct' : 'throttle_pct'
+  const lower = sign === '+' ? reference : lap
+  const moves = Math.abs((channelAt(lower, channel, from + found.a * stepF) ?? 0) - (channelAt(lower, channel, from + found.b * stepF) ?? 0)) >= 30
+  const timing = found.lapOff >= count * 0.4 || found.refOff >= count * 0.4 || (found.full >= count * 0.4 && moves)
+  return { range: [from + found.a * stepF, from + found.b * stepF],
+    cause: { pedal, lapMore: sign === '+', metres: Math.round(count * 2), timing } }
 }
 
 export function focusInStretch(lap: LapTraceView, reference: LapTraceView, [start, end]: [number, number], { min = 0.02, stepM = 5, zoneShare = 1 / 8, pauseM = 40, lookM = 100, maxM = 150, minM = 30 } = {}): FocusZone | null {
@@ -254,7 +279,8 @@ export function focusInStretch(lap: LapTraceView, reference: LapTraceView, [star
   const fracM = 1 / Math.max(lap.lengthM || 0, 1)
   // Every band is 30-150 m (shorter only when the stretch itself is), always inside the stretch.
   const bounded = (from: number, to: number): [number, number] => {
-    const lo = Math.max(start, from)
+    // Near the end of the stretch the band grows backwards, so it is still 30 m when the stretch allows it.
+    const lo = Math.max(start, Math.min(from, end - minM * fracM))
     return [lo, Math.min(Math.max(to, lo + minM * fracM), lo + maxM * fracM, end)]
   }
   const found = inputCause(lap, reference, [Math.max(start, lossFrom - lookM * fracM), Math.min(end, lossFrom + 10 * fracM)])
@@ -269,7 +295,10 @@ export function focusInStretch(lap: LapTraceView, reference: LapTraceView, [star
 export function focusAdvice(f: FocusZone, cornerLossS?: number): string | null {
   if (!f.cause) return null
   const { t } = useI18n()
-  const key = f.cause.pedal === 'brake' ? (f.cause.lapMore ? 'brakeMore' : 'brakeLess') : (f.cause.lapMore ? 'gasMore' : 'gasLess')
+  // A "when" only when one driver is off the pedal for most of the piece; otherwise "how much" (Codex 01/11).
+  const how = f.cause.timing ? 'When' : 'Amount'
+  const key = `${f.cause.pedal === 'brake' ? 'brake' : 'gas'}${f.cause.lapMore ? 'More' : 'Less'}${how}` as
+    'brakeMoreWhen' | 'brakeLessWhen' | 'brakeMoreAmount' | 'brakeLessAmount' | 'gasMoreWhen' | 'gasLessWhen' | 'gasMoreAmount' | 'gasLessAmount'
   // Never more than the corner's own loss (the list on the left says that number).
   const seconds = cornerLossS !== undefined && cornerLossS > 0 ? Math.min(f.lossS, cornerLossS) : f.lossS
   return t(`telemetry.advice.focus.${key}`, { m: f.cause.metres, s: seconds.toFixed(2) })

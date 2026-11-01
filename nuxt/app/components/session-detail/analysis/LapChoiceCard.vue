@@ -92,7 +92,7 @@ onBeforeUnmount(() => listen(false))
 // The side label keeps its own width (TU stays square); 01/11: what follows it has the same width on both pills
 // (body and time fixed), so the two laps line up.
 .lap-pill__side { align-self: stretch; display: grid; place-items: center; flex: none; padding: 0 7px; background: var(--c); color: #0a0a0f; font: italic 700 12px 'Racer Display', sans-serif; text-transform: uppercase; }
-.lap-pill__body { display: grid; gap: 1px; flex: 0 1 clamp(170px, 15vw, 240px); width: clamp(170px, 15vw, 240px); min-width: 0; padding: 3px 0; p { margin: 0; } }
+.lap-pill__body { display: grid; gap: 1px; flex: none; width: clamp(170px, 15vw, 240px); min-width: 0; padding: 3px 0; p { margin: 0; } }
 .lap-pill__main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 7px; color: #fff; font: 700 13px 'Inter', sans-serif; }
 .lap-pill__driver { min-width: 0; overflow-wrap: anywhere; }
 .lap-pill__lap { color: #d4d4da; font: 600 12px 'Inter', sans-serif; }

@@ -43,9 +43,10 @@ describe('useFocusZone', () => {
     expect(f.focusCorner.value).toBeNull()
     expect(f.focusZone.value).not.toBeNull()
   })
-  it('the worst corner with no clear piece inside: the whole corner', () => {
+  it('the worst corner with no clear piece inside: named, but no band (a whole-corner band points at nothing)', () => {
     const f = setup({ comparison: corners })
-    expect(f.focusZone.value).toEqual([0.45, 0.6])
+    expect(f.focusCorner.value?.corner.number).toBe(2)
+    expect(f.focusZone.value).toBeNull()
   })
   it('a time reset in the corner: no band at all, not even the whole corner (Codex 01/11)', () => {
     const f = setup({ comparison: corners })
@@ -53,7 +54,7 @@ describe('useFocusZone', () => {
     broken.channels.time_s = broken.channels.time_s!.map((v, i) => (i === 750 ? 0 : v))
     const g = useFocusZone({ lap: { value: broken } as never, reference: { value: trace() } as never, comparison: { value: corners } as never, worst: { value: [corners[1]!] } as never,
       range: { value: [0, 1] } as never, wholeView: { value: true } as never, selectedSector: { value: null } as never, selectedCorner: { value: null } as never, zoomRange: { value: null } as never })
-    expect(f.focusZone.value).toEqual([0.45, 0.6])
+    expect(f.focusZone.value).toBeNull()
     expect(g.focusZone.value).toBeNull()
   })
   it('a free zoom or a level corner: nothing', () => {

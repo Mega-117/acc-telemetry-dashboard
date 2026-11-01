@@ -297,8 +297,8 @@ describe('focus zone: the loss you keep (01/11, research)', () => {
     c1.channels.brake_pct = c1.channels.brake_pct!.map((_, i) => (i * 2 >= 480 && i * 2 < 590 ? 100 : 0))
     ref.channels.brake_pct = ref.channels.brake_pct!.map((_, i) => (i * 2 >= 480 && i * 2 < 630 ? 100 : 0))
     const f = focusInStretch(c1, ref, [400 / 3000, 1000 / 3000])!
-    expect(f.cause).toMatchObject({ pedal: 'brake', lapMore: false })
-    expect(focusAdvice(f)).toContain('freni meno del riferimento')
+    expect(f.cause).toMatchObject({ pedal: 'brake', lapMore: false, timing: true })
+    expect(focusAdvice(f)).toContain('molli il freno mentre il riferimento frena ancora')
   })
   it('a pedal difference after the loss never moves the zone; every band is 30-150 m (Codex 01/11)', () => {
     const late = gapLap([[0, 0], [600, 0], [620, 0.05], [3000, 0.05]])
@@ -311,6 +311,28 @@ describe('focus zone: the loss you keep (01/11, research)', () => {
     const long = gapLap([[0, 0], [100, 0], [2100, 1.0], [3000, 1.0]])
     const g = focusInStretch(long, fast, [0, 1])!
     expect((g.zone[1] - g.zone[0]) * 3000).toBeLessThanOrEqual(150.1)
+  })
+  it('pressure is not timing; a change of pedal starts a new piece; 30 m even at the end (Codex 01/11)', () => {
+    const c1 = gapLap([[0, 0], [550, 0], [600, 0.10], [650, 0.03], [1000, 0.134], [3000, 0.134]])
+    const ref = lap(() => 180)
+    // Same braking points, half the pressure: "lighter", never "hold it longer".
+    c1.channels.brake_pct = c1.channels.brake_pct!.map((_, i) => (i * 2 >= 560 && i * 2 < 640 ? 50 : 0))
+    ref.channels.brake_pct = ref.channels.brake_pct!.map((_, i) => (i * 2 >= 560 && i * 2 < 640 ? 100 : 0))
+    const f = focusInStretch(c1, ref, [400 / 3000, 1000 / 3000])!
+    expect(f.cause).toMatchObject({ pedal: 'brake', lapMore: false, timing: false })
+    expect(focusAdvice(f)).toContain('più piano')
+    // 20 m more brake then 20 m more throttle: two pieces, the claim covers one of them only.
+    const mixed = gapLap([[0, 0], [550, 0], [600, 0.10], [650, 0.03], [1000, 0.134], [3000, 0.134]])
+    const ref2 = lap(() => 180)
+    mixed.channels.brake_pct = mixed.channels.brake_pct!.map((_, i) => (i * 2 >= 600 && i * 2 < 620 ? 80 : 0))
+    mixed.channels.throttle_pct = mixed.channels.throttle_pct!.map((v, i) => (i * 2 >= 600 && i * 2 < 620 ? 0 : v))
+    ref2.channels.throttle_pct = ref2.channels.throttle_pct!.map((v, i) => (i * 2 >= 620 && i * 2 < 640 ? 0 : v))
+    const g = focusInStretch(mixed, ref2, [400 / 3000, 1000 / 3000])!
+    expect(g.cause!.metres).toBeLessThanOrEqual(22)
+    // A loss in the last 10 m of the stretch still gives a 30 m band.
+    const tail = gapLap([[0, 0], [990, 0], [1000, 0.05], [3000, 0.05]])
+    const h = focusInStretch(tail, fast, [400 / 3000, 1000 / 3000])!
+    expect((h.zone[1] - h.zone[0]) * 3000).toBeGreaterThanOrEqual(29.9)
   })
   it('a uniform loss over a long corner still gives a zone (opening the corner keeps its band)', () => {
     const even = gapLap([[0, 0], [400, 0], [1000, 0.134], [3000, 0.134]])

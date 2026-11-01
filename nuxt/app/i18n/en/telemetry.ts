@@ -96,10 +96,14 @@ export default {
     },
     advice: {
       focus: {
-        brakeLess: 'Here you brake less than the reference for {m} m and lose {s} s from here: try holding the brake longer',
-        brakeMore: 'Here you brake more than the reference for {m} m and lose {s} s from here: try releasing the brake earlier',
-        gasLess: 'Here you use less throttle than the reference for {m} m and lose {s} s from here: try opening it earlier',
-        gasMore: 'Here you use more throttle than the reference for {m} m and lose {s} s from here: try opening it more smoothly',
+        brakeLessWhen: 'Here you are off the brake while the reference still brakes, for {m} m, and lose {s} s from here: try holding the brake longer',
+        brakeMoreWhen: 'Here you still brake while the reference has released, for {m} m, and lose {s} s from here: try releasing earlier',
+        brakeLessAmount: 'Here you brake lighter than the reference for {m} m and lose {s} s from here: compare how hard you press the brake',
+        brakeMoreAmount: 'Here you brake harder than the reference for {m} m and lose {s} s from here: compare how hard you press the brake',
+        gasLessWhen: 'Here you are still off the throttle while the reference has opened it, for {m} m, and lose {s} s from here: try opening earlier',
+        gasMoreWhen: 'Here you are already on the throttle while the reference waits, for {m} m, and lose {s} s from here: try waiting a moment',
+        gasLessAmount: 'Here you use less throttle than the reference for {m} m and lose {s} s from here: compare how much throttle you use',
+        gasMoreAmount: 'Here you use more throttle than the reference for {m} m and lose {s} s from here: try opening it more smoothly',
       },
       faster: 'You are faster than the reference here',
       same: 'Same as the reference',
