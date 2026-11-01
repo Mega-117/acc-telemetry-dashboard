@@ -25,8 +25,10 @@ const props = defineProps<{
   initialTab?: Tab | null
   /** 01/11: Tu and Riferimento can trade places (the button left the bar between the pills). */
   canSwap?: boolean
+  /** 01/11: the reference can be taken away from here (the ✕ left the pill). */
+  canRemove?: boolean
 }>()
-const emit = defineEmits<{ close: [], wholeSession: [], swap: [] }>()
+const emit = defineEmits<{ close: [], wholeSession: [], swap: [], remove: [] }>()
 const { t } = useI18n()
 const text = useLapChoiceText()
 const uid = useId()
@@ -107,6 +109,7 @@ const rowProps = (c: LapChoice) => ({ choice: c, selected: c.key === selected.va
         <header class="choice-dialog__head">
           <h2 :id="`${uid}-title`"><span class="choice-dialog__swatch" aria-hidden="true" />{{ t(side === 'you' ? 'telemetry.choice.dialog.titleYou' : 'telemetry.choice.dialog.titleRef') }}</h2>
           <button v-if="canSwap" type="button" class="choice-dialog__swap" :disabled="busy" @click="emit('swap')"><span aria-hidden="true">⇄</span> {{ t('telemetry.choice.swap') }}</button>
+          <button v-if="canRemove && side === 'ref'" type="button" class="choice-dialog__swap" :disabled="busy" @click="emit('remove')">{{ t('telemetry.choice.removeRef') }}</button>
           <button type="button" class="choice-dialog__x" :aria-label="t('telemetry.choice.dialog.close')" @click="close">✕</button>
         </header>
         <p v-if="variant === 'panel'" class="choice-empty">{{ t('telemetry.choice.dialog.panelNote') }}</p>

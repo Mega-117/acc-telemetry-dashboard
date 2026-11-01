@@ -2536,13 +2536,14 @@ const gripZones = computed(() => {
              Confronta keeps its word: its icon alone looked like "swap the laps". -->
         <button v-if="!isEvoSession" type="button" class="rc-btn rc-btn--compact" :title="t('sessionDetail.header.compareTitle')" @click="openSessionPicker"><UiRacingIcon name="compare" :size="16" />{{ t('sessions.picker.compare') }}</button>
         <SessionFileActions v-if="!lapView" :can-share="canShare" :sharing="isSharing" @share="shareSession" />
+        <span v-if="lapView && !isEvoSession" id="session-head-share" class="head-share" />
         <div v-if="!isEvoSession" v-rc-switch class="detail-tabs rc-switch" role="tablist" :aria-label="t('sessionDetail.header.viewAria')" @keydown="onTabKey">
           <button v-for="tab in DETAIL_TABS" :key="tab.id" type="button" role="tab" :aria-selected="detailTab === tab.id" :tabindex="detailTab === tab.id ? 0 : -1" :class="{ active: detailTab === tab.id }" :title="t(tab.title)" @click="chooseTab(tab.id)">{{ t(tab.label) }}</button>
         </div>
       </div>
     </header>
 
-    <SessionAnalysisPanel v-if="lapView && !isEvoSession" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" :compare-with="compareTarget" :pending-lap-link="pendingLapLink" :session-type="session?.type ?? null" :read-session="readLinkedSession" @unavailable="onTelemetryUnavailable" @compare="openSessionPicker" @lap-link-handled="pendingLapLink = null" @remove-compare="removeCompare" :reference-removed="referenceRemoved" @reference-chosen="referenceRemoved = false" head-target="#session-head-laps" />
+    <SessionAnalysisPanel v-if="lapView && !isEvoSession" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" :compare-with="compareTarget" :pending-lap-link="pendingLapLink" :session-type="session?.type ?? null" :read-session="readLinkedSession" @unavailable="onTelemetryUnavailable" @compare="openSessionPicker" @lap-link-handled="pendingLapLink = null" @remove-compare="removeCompare" :reference-removed="referenceRemoved" @reference-chosen="referenceRemoved = false" head-target="#session-head-laps" share-target="#session-head-share" />
 
     <!-- ========================================== -->
     <!-- MASTER / DETAIL LAYOUT -->
@@ -3316,6 +3317,7 @@ const gripZones = computed(() => {
 // (track, then date and car), actions and the switch on the right.
 .session-header--compact { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin: 4px 0 16px;
   .header-laps { display: flex; flex: 1 1 560px; min-width: 0; }
+  .head-share { display: contents; }
   // 01/11: the lap views keep the title row on one line on a desktop window (1100 px and up).
   &.session-header--laps { gap: 10px 16px; margin-bottom: 10px; .header-actions { gap: 8px; order: -1; } .header-laps { justify-content: flex-end; } }
   @media (min-width: 1100px) { &.session-header--laps { flex-wrap: nowrap; .header-actions { flex-wrap: nowrap; flex-shrink: 0; } } }

@@ -17,10 +17,8 @@ const props = defineProps<{
   /** Coach view: the reasons speak of this driver, not of "you". */
   pilotName?: string | null
   disabled?: boolean
-  /** 01/11: the reference can be taken away (✕): the page then shows only your lap. */
-  removable?: boolean
 }>()
-const emit = defineEmits<{ change: [], remove: [] }>()
+const emit = defineEmits<{ change: [] }>()
 const { t } = useI18n()
 const text = useLapChoiceText()
 const color = computed(() => props.side === 'you' ? '#38bdf8' : '#fbbf24')
@@ -77,8 +75,7 @@ onBeforeUnmount(() => listen(false))
     <strong v-if="choice" class="lap-pill__time" :class="{ 'is-best': choice.best, 'is-invalid': choice.status === 'invalid' }">{{ formatLapTime(choice.lapTimeMs) }}</strong>
     <div class="lap-pill__actions">
       <slot />
-      <button type="button" class="lap-pill__change" :disabled="disabled" :aria-label="t(side === 'you' ? 'telemetry.choice.changeYouAria' : 'telemetry.choice.changeRefAria')" :title="t('telemetry.choice.change')" aria-haspopup="dialog" @click="emit('change')">▾</button>
-      <button v-if="removable && choice" type="button" class="lap-pill__remove" :aria-label="t('telemetry.choice.removeRef')" :title="t('telemetry.choice.removeRef')" @click="emit('remove')">✕</button>
+      <button type="button" class="lap-pill__change" :disabled="disabled" :aria-label="t(side === 'you' ? 'telemetry.choice.changeYouAria' : 'telemetry.choice.changeRefAria')" :title="t('telemetry.choice.change')" aria-haspopup="dialog" @click="emit('change')"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></button>
     </div>
     <div v-if="infoOpen && choice" class="lap-pill__info" role="note" :aria-label="t('telemetry.choice.infoAria')">
       <p v-for="line in infoLines" :key="line" class="lap-pill__reason">{{ line }}</p>
@@ -101,7 +98,7 @@ onBeforeUnmount(() => listen(false))
 .lap-pill__tags { display: flex; flex-wrap: nowrap; overflow: hidden; align-items: center; gap: 3px; > span { flex: none; padding: 0 4px; border: 1px solid #ffffff24; color: #c8c8cc; font: 600 11px/15px 'Inter', sans-serif; font-variant-numeric: tabular-nums; } }
 .lap-pill__time { margin-left: auto; color: #fff; font: italic 700 18px 'Racer Display', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 82px; text-align: right; &.is-best { color: #c084fc; } &.is-invalid { color: #ff5a6e; } }
 .lap-pill__actions { display: flex; align-items: center; gap: 3px; }
-.lap-pill__change, .lap-pill__remove, .lap-pill__actions :slotted(button) { min-width: 28px; min-height: 28px; padding: 0 7px; border: 1px solid #ffffff40; background: #ffffff0d; color: #fff; font: 700 12px 'Inter', sans-serif; cursor: pointer;
+.lap-pill__change, .lap-pill__actions :slotted(button) { display: grid; place-items: center; min-width: 28px; min-height: 28px; padding: 0 7px; border: 1px solid #ffffff40; background: #ffffff0d; color: #fff; font: 700 12px 'Inter', sans-serif; cursor: pointer;
   &:hover:not(:disabled) { border-color: var(--c); background: color-mix(in srgb, var(--c) 18%, transparent); }
   &:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
   &:disabled { opacity: .5; cursor: default; } }

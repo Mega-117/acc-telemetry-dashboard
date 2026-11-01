@@ -101,14 +101,10 @@ describe('LapChoiceCard', () => {
     expect(wrapper.findAll('.lap-pill__tags span').map(s => s.text())).toEqual(['TRK 12°'])
     expect(wrapper.text()).not.toContain(' L')
   })
-  it('the reference can be taken away with ✕; the Tu row has no ✕ (01/11)', async () => {
-    wrapper = mount(LapChoiceCard, { props: { side: 'ref', choice: ref, removable: true } })
-    await wrapper.get('.lap-pill__remove').trigger('click')
-    expect(wrapper.emitted('remove')).toHaveLength(1)
-    expect(wrapper.get('.lap-pill__remove').attributes('aria-label')).toBe('Togli il riferimento: resta solo il tuo giro')
-    wrapper.unmount()
-    wrapper = mount(LapChoiceCard, { props: { side: 'you', choice: you } })
+  it('no ✕ on the pills any more: taking the reference away is in Cambia (01/11)', () => {
+    wrapper = mount(LapChoiceCard, { props: { side: 'ref', choice: ref } })
     expect(wrapper.find('.lap-pill__remove').exists()).toBe(false)
+    expect(wrapper.get('.lap-pill__change svg').exists()).toBe(true)
   })
   it('"Cambia" asks to open the chooser', async () => {
     wrapper = mount(LapChoiceCard, { props: { side: 'you', choice: you } })

@@ -51,6 +51,8 @@ const props = defineProps<{
   referenceRemoved?: boolean
   /** 01/11: where the Tu / Riferimento bar goes (the page's title row); none = in place. */
   headTarget?: string | null
+  /** 01/11: where Condividi giro goes (the page's buttons); none = in place. */
+  shareTarget?: string | null
 }>()
 
 // 01/11: one layout left (Dove migliorare's 'pilota' view was removed); the name stays for the checks below.
@@ -419,22 +421,27 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
       <!-- PIP-695: two cards always in sight, "Tu  +1.733 s  Riferimento" (Track Titan colours): whose lap, which one,
            when, its status and why the reference; "Cambia" opens the chooser. The view sits apart, on the right. -->
       <div class="compare" role="group" :aria-label="t('telemetry.compareAria')">
-        <LapChoiceCard side="you" :choice="choice.youCard.value" :ideal-scope="idealScope" :disabled="!sessionEntries.length" @change="openChooser('you')">
-          <button v-if="shareAvailable" type="button" class="share-lap" :disabled="!canShare || shareState === 'busy'" :title="shareHint" :aria-busy="shareState === 'busy'" :aria-label="shareState === 'busy' ? t('telemetry.share.busy') : t('telemetry.share.action')" @click="shareLap"><UiRacingIcon v-if="shareState !== 'busy'" name="share" :size="16" /><template v-else>…</template></button>
-        </LapChoiceCard>
+        <LapChoiceCard side="you" :choice="choice.youCard.value" :ideal-scope="idealScope" :disabled="!sessionEntries.length" @change="openChooser('you')" />
         <div class="compare-mid">
           <!-- 01/11: only the number (the colour says faster or slower; the words stay in the tooltip). -->
           <p class="compare-gap" :class="{ gain: (totalDelta ?? 0) < 0, loss: (totalDelta ?? 0) > 0 }" :title="gapTitle">
             <template v-if="totalDelta !== null"><strong>{{ formatDelta(totalDelta).replace('.', locale === 'it' ? ',' : '.') }}</strong><span class="sr-only"> s, {{ gapWord }}</span><em v-if="invalidPair">{{ t('telemetry.choice.invalidQualifier') }}</em></template><em v-else>{{ t('telemetry.versus') }}</em>
           </p>
         </div>
-        <LapChoiceCard side="ref" removable @remove="choice.removeRef(); emit('removeCompare')" :choice="choice.refCard.value" :reason="choice.reason.value" :ideal-scope="idealScope" :pilot-name="pilotName" :disabled="!entries.length" @change="openChooser('ref')" />
+        <LapChoiceCard side="ref" :choice="choice.refCard.value" :reason="choice.reason.value" :ideal-scope="idealScope" :pilot-name="pilotName" :disabled="!entries.length" @change="openChooser('ref')" />
       </div>
       <LapChoiceDialog :open="chooser !== null" :side="chooser ?? 'ref'" :source="choice.source" :apply="applyChoice" :variant="chooserVariant" :ideal-scope="idealScope"
-        :can-swap="choice.canSwap.value" @swap="choice.swap(); chooser = null"
+        :can-swap="choice.canSwap.value" :can-remove="!!choice.refCard.value" @swap="choice.swap(); chooser = null"
+        @remove="choice.removeRef(); emit('removeCompare'); chooser = null"
         @close="chooser = null" @whole-session="wholeSession" />
       <span v-if="shareMessage" class="bar-note" :class="{ failed: shareState === 'error' }" role="status">{{ shareMessage }}</span>
     </div>
+    </Teleport>
+    <!-- 01/11: Condividi giro among the page's buttons (where Sessione has Condividi), not inside the Tu pill. -->
+    <Teleport v-if="shareAvailable" defer :to="shareTarget || 'body'" :disabled="!shareTarget">
+      <button type="button" class="rc-btn rc-btn--compact share-lap" :disabled="!canShare || shareState === 'busy'" :title="shareHint" :aria-busy="shareState === 'busy'" @click="shareLap">
+        <UiRacingIcon name="share" :size="16" />{{ shareState === 'busy' ? t('telemetry.share.busy') : t('telemetry.choice.share') }}
+      </button>
     </Teleport>
     <p v-if="linkError" class="analysis-note analysis-note--warn" role="alert">{{ linkError }}</p>
     <p v-if="refEntry?.note" class="analysis-note analysis-note--warn">{{ refEntry.note }}</p>
@@ -528,9 +535,6 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 .analysis-bar--head { flex-wrap: wrap; > .compare { flex: 1 1 0; } > .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .bar-note { flex: 1 1 100%; } }
 // PIP-623: share and paste, square buttons as tall as the pickers.
-// 01/11: Condividi in the Tu pill: blue, the share icon white and bold.
-.compare :deep(.share-lap) { display: grid; place-items: center; border-color: #38bdf8 !important; background: #0284c7 !important; color: #fff !important;
-  &:hover:not(:disabled) { background: #0ea5e9 !important; } }
 .loss-scope { display: flex; button { flex: 1; } }
 .bar-note { color: #3ddc5a; font-size: 12px; &.failed { color: #ff5a6e; } }
 .analysis-note--warn { color: #fbbf24; }

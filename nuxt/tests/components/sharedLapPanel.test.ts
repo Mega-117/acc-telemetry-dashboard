@@ -95,8 +95,9 @@ describe('SessionAnalysisPanel sharing and coach view', () => {
     }
     const view = mount(SessionAnalysisPanel, { props: { sessionToken: '20261025_175240', laps }, global: { stubs: { AnalysisMap: true, AnalysisCharts: true, AnalysisCar: true } } })
     await flushPromises()
-    // PIP-695: "Condividi" sits on the "Tu" card.
-    const button = view.get('.lap-pill--you .share-lap')
+    // 01/11: "Condividi" left the Tu pill: it is a page button (here, without a target, in the panel).
+    expect(view.find('.lap-pill--you .share-lap').exists()).toBe(false)
+    const button = view.get('.share-lap')
     await button.trigger('click')
     await flushPromises()
     // 01/11: "Tu" opens on the fastest valid lap of the session (lap 5).
@@ -124,7 +125,12 @@ describe('SessionAnalysisPanel sharing and coach view', () => {
     view.unmount()
     const again = mount(SessionAnalysisPanel, { props: { sessionToken: '20261025_175240', laps }, global: { stubs: { AnalysisMap: true, AnalysisCharts: true, AnalysisCar: true } } })
     await flushPromises()
-    await again.get('.lap-pill--ref .lap-pill__remove').trigger('click')
+    // 01/11: the ✕ left the pill: "Togli il riferimento" is in Cambia.
+    await again.get('.lap-pill--ref .lap-pill__change').trigger('click')
+    await flushPromises()
+    const remove = [...document.body.querySelectorAll<HTMLButtonElement>('.choice-dialog__swap')].find(b => b.textContent?.includes('Togli il riferimento'))!
+    remove.click()
+    await flushPromises()
     expect(again.emitted('removeCompare')).toHaveLength(1)
     expect(again.get('.lap-pill--ref').text()).not.toContain('G6')
     again.unmount()
