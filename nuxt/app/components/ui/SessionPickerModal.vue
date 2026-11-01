@@ -14,9 +14,6 @@ import { onHistoryTrack } from '~/services/projections/vehicleHistory'
 import { sessionGame, sessionFilterType } from '~/services/telemetry/gameIdentity'
 import { sessionTiming } from '~/services/telemetry/fuelHistorySummary'
 import { X } from '@lucide/vue'
-import { parseLapShareLink } from '~/services/telemetry/lapShareLink'
-import { classifyLink, parseSessionLink } from '~/services/telemetry/lapChoice'
-import { loadPublicNickname } from '~/repositories/publicProfileRepository'
 import { useI18n } from '~/i18n'
 
 const { t, intlLocale } = useI18n()
@@ -32,8 +29,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'select', sessionId: string, userId?: string, nickname?: string): void
-  /** PIP-652: one field for every link: a lap link goes to the Telemetria as a reference. */
-  (e: 'lap', link: string): void
 }>()
 
 const telemetryGateway = useTelemetryGateway()
@@ -42,83 +37,6 @@ const pages = useSessionPickerPages(
   () => props.isOpen,
 )
 const { sessions: modalSessions, loading: isLoadingSessions, hasMore: hasMoreSessions, loadError: sessionsLoadError } = pages
-
-// === SHARED LINK INPUT ===
-const sharedLink = ref('')
-const linkError = ref('')
-const isLoadingLink = ref(false)
-
-// Parse shared link to extract sessionId and userId (one parser with the Telemetria, PIP-695).
-const parseSharedLink = parseSessionLink
-
-// PIP-652: a session link can also be opened (the desktop app has no address bar).
-const sessionLink = computed(() => parseSharedLink(sharedLink.value))
-// 01/11 (one "Confronta", user decision): as soon as a link is pasted, say what it will do.
-const linkKind = computed(() => classifyLink(sharedLink.value))
-// A new link clears the old error (it would also hide "oppure apri la sessione").
-watch(sharedLink, () => { linkError.value = '' })
-function openSharedSession() {
-  const parsed = sessionLink.value
-  if (!parsed) return
-  emit('close')
-  void navigateTo(`/sessioni/${encodeURIComponent(parsed.sessionId)}?userId=${encodeURIComponent(parsed.userId)}`)
-}
-
-async function loadSharedLink() {
-  linkError.value = ''
-  // A lap link: the Telemetria loads it as the reference (it checks track and validity there).
-  if (parseLapShareLink(sharedLink.value)) {
-    emit('lap', sharedLink.value.trim())
-    sharedLink.value = ''
-    emit('close')
-    return
-  }
-
-  const parsed = parseSharedLink(sharedLink.value)
-  if (!parsed) {
-    linkError.value = t('sessions.picker.linkUnknown')
-    return
-  }
-  
-  isLoadingLink.value = true
-  
-  try {
-    // 1. Fetch session from external user
-    const data = await telemetryGateway.getSessionDetail(parsed.sessionId, parsed.userId, {
-      warmupSessions: false
-    })
-    
-    if (!data) {
-      linkError.value = t('sessions.picker.notFound')
-      return
-    }
-    
-    // 2. Check track match
-    const sessionTrack = (data.session_info?.track || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
-    const currentTrackNorm = props.currentTrack.toLowerCase().replace(/[^a-z0-9]/g, '_')
-    
-    if (!sessionTrack.includes(currentTrackNorm) && !currentTrackNorm.includes(sessionTrack)) {
-      linkError.value = t('sessions.picker.trackMismatch', { track: data.session_info?.track || t('sessions.picker.unknown'), current: props.currentTrack })
-      return
-    }
-    
-    // 3. Fetch nickname
-    // PIP-652: the public nickname (readable by everyone signed in): another driver's profile is private.
-    const nickname = (await loadPublicNickname(parsed.userId)) || t('sessions.picker.driver')
-    
-    // 4. Emit with userId and nickname
-    emit('select', parsed.sessionId, parsed.userId, nickname)
-    emit('close')
-    
-  } catch (e: any) {
-    console.error('[SHARE] Error loading shared session:', e)
-    linkError.value = e?.code === 'permission-denied' 
-      ? t('sessions.picker.denied')
-      : t('sessions.picker.loadError')
-  } finally {
-    isLoadingLink.value = false
-  }
-}
 
 // Filter sessions by same track, exclude current session
 function isComparable(s: SessionDocument): boolean {
@@ -177,10 +95,9 @@ function closeModal() {
   emit('close')
 }
 
-// A real dialog: focus goes into the link field on open, Tab stays inside, Escape closes, and focus goes back
+// A real dialog: focus goes to the first session on open, Tab stays inside, Escape closes, and focus goes back
 // to the button that opened it.
 const modalEl = ref<HTMLElement | null>(null)
-const linkInput = ref<HTMLInputElement | null>(null)
 let openedFrom: HTMLElement | null = null
 function onModalKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') { event.preventDefault(); closeModal(); return }
@@ -198,7 +115,7 @@ watch(
     if (typeof window === 'undefined') return
     if (isOpen) {
       openedFrom = document.activeElement as HTMLElement | null
-      void nextTick(() => (linkInput.value ?? modalEl.value)?.focus())
+      void nextTick(() => (modalEl.value?.querySelector<HTMLElement>('.session-row') ?? modalEl.value)?.focus())
       await pages.loadFirst()
     } else {
       pages.reset()
@@ -223,22 +140,6 @@ watch(
           </div>
           <button type="button" class="modal-close" :aria-label="t('common.close')" @click="closeModal"><X :size="20" aria-hidden="true" /></button>
         </header>
-
-        <section class="cmp-link">
-          <div class="cmp-field">
-            <label for="cmp-link-input">{{ t('sessions.picker.linkLabel') }} <small>{{ t('sessions.picker.linkHint') }}</small></label>
-            <div class="cmp-link-row">
-              <input id="cmp-link-input" ref="linkInput" v-model="sharedLink" type="text" :placeholder="t('sessions.picker.linkPlaceholder')" spellcheck="false" autocomplete="off" @keyup.enter="loadSharedLink" />
-              <button type="button" class="rc-btn rc-btn--primary" :disabled="isLoadingLink || !sharedLink" @click="loadSharedLink">
-                <UiRacingIcon name="compare" :size="16" />{{ isLoadingLink ? t('sessions.picker.loadingLink') : t('sessions.picker.compare') }}
-              </button>
-            </div>
-          </div>
-          <p v-if="!linkError && (linkKind === 'lap' || linkKind === 'session')" class="cmp-kind" role="status">{{ t(linkKind === 'lap' ? 'sessions.picker.kindLap' : 'sessions.picker.kindSession') }}</p>
-          <p v-if="linkError" class="cmp-error" role="alert">{{ linkError }}</p>
-          <!-- Only for a session link: open it instead of comparing (the desktop app has no address bar). -->
-          <button v-if="sessionLink" type="button" class="cmp-open" @click="openSharedSession">{{ t('sessions.picker.openSession') }}</button>
-        </section>
 
         <section class="cmp-sessions">
           <h3>{{ t('sessions.picker.yours') }} <small>{{ isLoadingSessions ? t('sessions.picker.loadingLower') : t('sessions.picker.onTrack', { count: filteredSessions.length }) }}</small></h3>
@@ -284,17 +185,7 @@ watch(
     transition: color 140ms ease, border-color 140ms ease, background-color 140ms ease;
     &:hover { color: #fff; border-color: #ffffffa6; background: #ffffff12; } &:focus-visible { outline: 2px solid #fff; outline-offset: -4px; } }
 }
-.cmp-field { display: grid; gap: 8px; min-width: 0;
-  > label { color: #ccc; font-size: 12px; font-weight: 500; letter-spacing: .3px; small { margin-left: 8px; color: #888; font-size: 11px; font-weight: 400; } } }
-.cmp-link-row { display: flex; gap: 12px; align-items: stretch;
-  input { flex: 1; min-width: 0; height: 46px; padding: 0 14px; border: 1px solid #ffffff30; border-radius: 0; background: #ffffff04; color: #fff; font-size: 14px;
-    &::placeholder { color: #888; } &:hover { border-color: #ffffff65; } &:focus { border-color: #ff0024; outline: 1px solid #ff0024; outline-offset: 1px; } }
-  .rc-btn { min-height: 46px; min-width: 156px; } }
-.cmp-kind { margin: 6px 0 0; color: #b3b3b8; font-size: 13px; }
-.cmp-error { margin: 10px 0 0; padding: 8px 12px; border-left: 2px solid #ff0024; background: #ff00240a; color: #ff9aaa; font-size: 13px; }
-.cmp-open { margin-top: 8px; padding: 0; border: 0; background: none; color: #ccc; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
-  &:hover { color: #fff; } &:focus-visible { outline: 2px solid #fff; outline-offset: 2px; } }
-.cmp-sessions { display: flex; flex-direction: column; gap: 12px; min-height: 0; padding-top: 20px; border-top: 1px solid var(--rc-section-line);
+.cmp-sessions { display: flex; flex-direction: column; gap: 12px; min-height: 0;
   h3 { margin: 0; font: italic 700 16px/1.2 'Racer Display', sans-serif; text-transform: uppercase; small { margin-left: 8px; color: #888; font: 400 12px 'Inter', sans-serif; text-transform: none; } } }
 .cmp-list { display: grid; gap: 4px; min-height: 0; overflow-y: auto; padding-right: 2px; }
 .session-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 12px 14px; border: 1px solid #ffffff14; background: #ffffff05; color: #e6e6ea; text-align: left; cursor: pointer;

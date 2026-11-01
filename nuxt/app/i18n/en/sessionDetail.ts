@@ -53,7 +53,7 @@ export default {
       external: 'External user',
       other: 'other',
       removeSource: 'Remove this source',
-      otherSession: 'Other session or link',
+      otherSession: "Put another session beside",
       alreadyA: 'Already in Strategy A',
       alreadyB: 'Already in Strategy B',
       addA: 'Add to Strategy A',

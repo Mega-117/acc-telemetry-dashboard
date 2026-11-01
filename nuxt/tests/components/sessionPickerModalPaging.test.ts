@@ -69,17 +69,12 @@ describe('session picker paging (PIP-591)', () => {
   })
 })
 
-describe('one Confronta for every link (01/11)', () => {
-  it('says what a pasted link will do: a lap becomes the reference, a session is compared', async () => {
+describe('only your sessions (02/11)', () => {
+  it('has no link field: a lap link belongs to the Telemetria, sessions are not shared any more', async () => {
     mocks.page.mockResolvedValue({ sessions: [], state: { hasNext: false, currentPage: 1 } })
     const view = mountPicker()
     await flushPromises()
-    expect(view.find('.cmp-kind').exists()).toBe(false)
-    await view.get('#cmp-link-input').setValue(`https://racercore.app/giro#${'a'.repeat(32)}.${'b'.repeat(32)}`)
-    expect(view.get('.cmp-kind').text()).toBe('Link di un giro: diventa il riferimento nella Telemetria.')
-    await view.get('#cmp-link-input').setValue('https://racercore.app/sessioni/2026_10_24T16_39_56_Hungaroring?userId=abc')
-    expect(view.get('.cmp-kind').text()).toBe('Link di una sessione: confronti le due sessioni.')
-    await view.get('#cmp-link-input').setValue('ciao')
-    expect(view.find('.cmp-kind').exists()).toBe(false)
+    expect(view.find('#cmp-link-input').exists()).toBe(false)
+    expect(view.text()).toContain("Affianca un'altra sessione")
   })
 })

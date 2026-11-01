@@ -29,7 +29,6 @@ import {
 } from 'chart.js'
 import zoomPlugin from 'chartjs-plugin-zoom'
 import { useTelemetryData } from '~/composables/useTelemetryData'
-import { useAppNotifications } from '~/composables/useAppNotifications'
 import {
   formatLapTime,
   formatCarName,
@@ -45,9 +44,6 @@ import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { runSessionValidation } from '~/composables/useDebugValidator'
 import { usePilotContext } from '~/composables/usePilotContext'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { shareSessionLink } from '~/services/session-detail/sessionShareService'
-import { canShareOwnedSession } from '~/services/session-detail/sessionFileService'
-import SessionFileActions from '~/components/session-detail/SessionFileActions.vue'
 import { standingsManufacturerFromModel, standingsManufacturerLogo } from '~/services/overlay/standingsManufacturer'
 import { usePublicPath } from '~/composables/usePublicPath'
 import { autoSelectComparisonStints } from '~/services/session-detail/sessionCompareService'
@@ -190,7 +186,7 @@ function zoomOut() {
 // ========================================
 const telemetryGateway = useTelemetryGateway()
 
-const { getTheoreticalTimes, generateShareLink, fetchSessionFull } = telemetryGateway
+const { getTheoreticalTimes, fetchSessionFull } = telemetryGateway
 const commonSession = ref<FullSession | null>(null)
 const originalSession = ref<FullSession | null>(null)
 const fullSession = ref<FullSession | null>(null)
@@ -249,36 +245,11 @@ watch(detailTab, (tab, before) => { if (tab !== 'sessione' && before === 'sessio
 const isLoading = ref(true)
 const loadError = ref<string | null>(null)
 
-// ========================================
-// SESSION SHARING
-// ========================================
-const isSharing = ref(false)
-const { push: pushNotice } = useAppNotifications()
-const canShare = computed(() => canShareOwnedSession(comparisonCurrentUser.value?.uid, props.externalUserId || targetUserId.value))
+// 02/11 (user decision): no "Condividi sessione" any more (3 shared sessions in all, 2 by the owner); links
+// already sent still open. Laps are shared from the Telemetria.
 const showAutoSelectToast = ref(false)
 let autoSelectToastTimer: ReturnType<typeof setTimeout> | null = null
 
-async function shareSession() {
-  if (!props.sessionId || isSharing.value || !canShare.value) return
-
-  isSharing.value = true
-
-  try {
-    // PIP-651: one link for the whole session (Sessione and Telemetria); it opens on the tab you share from.
-    const link = await shareSessionLink({
-      sessionId: props.sessionId,
-      generateShareLink: (id) => generateShareLink(id, { tab: detailTab.value === 'avanzata' ? 'telemetria' : 'sessione' })
-    })
-    // PIP-653: the outcome in the site's notification column, never beside the buttons.
-    pushNotice(t('sessionDetail.share.copied'), 'success')
-    console.log('[SHARE] Link copied:', link)
-  } catch (e) {
-    pushNotice(t('sessionDetail.share.failed'), 'error')
-    console.error('[SHARE] Error sharing session:', e)
-  } finally {
-    isSharing.value = false
-  }
-}
 
 // Get pilot context (will be set when coach views a pilot)
 const targetUserId = usePilotContext()
@@ -469,7 +440,6 @@ async function handleSessionBSelect(sessionId: string, userId?: string, nickname
 // and brings its laps to the Telemetria; a lap link goes to the Telemetria as the reference.
 const compareTarget = ref<CompareTarget | null>(null)
 const pendingLapLink = ref<string | null>(null)
-function onLapLink(link: string) { referenceRemoved.value = false; pendingLapLink.value = link; chooseTab('avanzata') }
 // 01/11: ✕ on the reference takes the comparison away from the whole page (the session compared too) and
 // stays: leaving the lap views, reloading their laps or a link still downloading never brings it back.
 // A new choice (Confronta, a link, Cambia) clears it.
@@ -2490,9 +2460,6 @@ const gripZones = computed(() => {
 
 <template>
   <CommonSessionDetail v-if="commonSession" :session="commonSession" :owner-id="externalUserId">
-    <template #actions>
-      <SessionFileActions :can-share="canShare" :sharing="isSharing" @share="shareSession" />
-    </template>
   </CommonSessionDetail>
   <div v-else class="session-detail-wrapper">
   <!-- PIP-653: the share outcome goes to the site's notification column (useAppNotifications); this one keeps
@@ -2551,8 +2518,7 @@ const gripZones = computed(() => {
         <!-- 01/11: one Condividi per view: in Telemetria the lap (blue button in Tu), in Sessione the session.
              Confronta keeps its word: its icon alone looked like "swap the laps". -->
         <!-- 01/11: not in Telemetria: the Riferimento arrow (Cambia) already picks any lap, session or link. -->
-        <button v-if="!isEvoSession && !lapView" type="button" class="rc-btn rc-btn--compact" :title="t('sessionDetail.header.compareTitle')" @click="openSessionPicker"><UiRacingIcon name="compare" :size="16" />{{ t('sessions.picker.compare') }}</button>
-        <SessionFileActions v-if="!lapView" :can-share="canShare" :sharing="isSharing" @share="shareSession" />
+        <!-- 02/11: no Confronta / Condividi here: another session is put beside from the stint list ("Affianca"). -->
         <span v-if="panelMounted && !isEvoSession" v-show="lapView" id="session-head-share" class="head-share" />
         <div v-if="!isEvoSession" v-rc-switch class="detail-tabs rc-switch" role="tablist" :aria-label="t('sessionDetail.header.viewAria')" @keydown="onTabKey">
           <button v-for="tab in DETAIL_TABS" :key="tab.id" type="button" role="tab" :aria-selected="detailTab === tab.id" :tabindex="detailTab === tab.id ? 0 : -1" :class="{ active: detailTab === tab.id }" :title="t(tab.title)" @click="chooseTab(tab.id)">{{ t(tab.label) }}</button>
@@ -3280,7 +3246,6 @@ const gripZones = computed(() => {
     :exclude-session-id="props.sessionId"
     @close="showSessionPicker = false"
     @select="handleSessionBSelect"
-    @lap="onLapLink"
   />
   </div>
 </template>

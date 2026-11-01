@@ -52,7 +52,7 @@ export default {
       external: 'Utente Esterno',
       other: 'altra',
       removeSource: 'Rimuovi questa sorgente',
-      otherSession: 'Altra sessione o link',
+      otherSession: "Affianca un'altra sessione",
       alreadyA: 'Già in Strategia A',
       alreadyB: 'Già in Strategia B',
       addA: 'Aggiungi a Strategia A',
