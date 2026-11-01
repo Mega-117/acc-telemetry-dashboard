@@ -116,7 +116,9 @@ function onTabClick(tab: { id: string }) {
 }
 
 .tabsbar__back {
-  position: absolute; left: 24px; top: 50%; transform: translateY(-50%);
+  // 01/11: above the tab row. The row (position: relative, full width, later in the page) covered the arrow and
+  // took its clicks: the arrow showed but did nothing.
+  position: absolute; z-index: 2; left: 24px; top: 50%; transform: translateY(-50%);
   display: grid; place-items: center; width: 40px; height: 40px;
   border: 1px solid transparent; background: transparent; color: #ccc; cursor: pointer;
   transition: color 150ms, background-color 150ms, border-color 150ms;
