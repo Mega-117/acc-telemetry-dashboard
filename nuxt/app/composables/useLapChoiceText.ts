@@ -47,5 +47,15 @@ export function useLapChoiceText() {
       c.roadC !== null ? t('telemetry.choice.cond.road', { n: Math.round(c.roadC) }) : '',
     ].filter(Boolean).join(' · ')
   }
-  return { when, status, lapLine, driver, idealNote, reason, side, conditions }
+  /** 01/11 (Track Titan's pills): the same facts as short tags: "115 L", "DRY", "AIR 15°", "TRK 18°". */
+  function conditionsShort(c: LapRunConditions | null | undefined): string[] {
+    if (!c) return []
+    return [
+      c.fuelL !== null ? t('telemetry.choice.cond.fuelShort', { n: Math.round(c.fuelL) }) : '',
+      c.tyre ? t(`telemetry.choice.cond.${c.tyre}Short`) : '',
+      c.airC !== null ? t('telemetry.choice.cond.airShort', { n: Math.round(c.airC) }) : '',
+      c.roadC !== null ? t('telemetry.choice.cond.roadShort', { n: Math.round(c.roadC) }) : '',
+    ].filter(Boolean)
+  }
+  return { when, status, lapLine, driver, idealNote, reason, side, conditions, conditionsShort }
 }

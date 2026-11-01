@@ -423,7 +423,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
            when, its status and why the reference; "Cambia" opens the chooser. The view sits apart, on the right. -->
       <div class="compare" role="group" :aria-label="t('telemetry.compareAria')">
         <LapChoiceCard side="you" :choice="choice.youCard.value" :ideal-scope="idealScope" :disabled="!sessionEntries.length" @change="openChooser('you')">
-          <button v-if="shareAvailable" type="button" :disabled="!canShare || shareState === 'busy'" :title="shareHint" :aria-label="t('telemetry.share.action')" @click="shareLap">{{ shareState === 'busy' ? t('telemetry.share.busy') : t('telemetry.choice.share') }}</button>
+          <button v-if="shareAvailable" type="button" class="share-lap" :disabled="!canShare || shareState === 'busy'" :title="shareHint" :aria-label="t('telemetry.share.action')" @click="shareLap">{{ shareState === 'busy' ? '…' : '↗' }}</button>
         </LapChoiceCard>
         <div class="compare-mid">
           <p class="compare-gap" :class="{ gain: (totalDelta ?? 0) < 0, loss: (totalDelta ?? 0) > 0 }" :title="t('telemetry.gapTitle')">
@@ -523,7 +523,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
           <TraceStripHead v-model:delta-place="deltaPlace" v-model:all-channels="allChannels" :view-label="viewLabel" :whole-view="wholeView"
             :stepping="selectedCorner !== null && !zoomRange" :focus="focusCorner ? { number: focusCorner.corner.number, lostS: focusCorner.timeLostS } : null"
             :show-delta-switch="!!reference" @step="goCorner" @whole="wholeLap" @open-focus="selectCorner" />
-          <div v-if="sectorList.length" class="strip-row">
+          <div v-if="sectorList.length" class="strip-row strip-row--sectors">
             <button v-for="s in visibleSectors" :key="s.index" type="button" :class="{ active: selectedSector === s.index }" :style="{ left: `${s.left}%`, width: `${s.width}%` }" :title="t('telemetry.sectorStripTitle', { n: s.index + 1 })" @click="selectSector(s.index)">S{{ s.index + 1 }}</button>
           </div>
           <div class="strip-row strip-row--corners">
@@ -559,7 +559,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 .compare-mid { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .compare-swap { width: 34px; height: 26px; padding: 0; border: 1px solid #ffffff40; background: #ffffff0d; color: #fff; font: 700 15px/1 "Inter", sans-serif; cursor: pointer;
   &:hover { border-color: #fff; } &:focus-visible { outline: 2px solid #fff; outline-offset: 1px; } }
-@media (max-width: 860px) { .compare { flex-wrap: wrap; } .compare > .lap-card { flex: 1 1 100%; max-width: none; } .compare-mid { flex: 1 1 100%; flex-direction: row; justify-content: center; } .compare-gap { height: 30px; display: flex; gap: 6px; justify-content: center; align-items: baseline; } }
+@media (max-width: 860px) { .compare { flex-wrap: wrap; } .compare > .lap-pill { flex: 1 1 100%; max-width: none; } .compare-mid { flex: 1 1 100%; flex-direction: row; justify-content: center; } .compare-gap { height: 30px; display: flex; gap: 6px; justify-content: center; align-items: baseline; } }
 .analysis-empty { padding: 30px 0; color: #aaa; }
 .analysis-note { margin: 4px 0 0; color: #77777d; font-size: 11px; }
 .gain { color: #3ddc5a; }
@@ -614,9 +614,10 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 .tracce-center { grid-area: center; display: grid; gap: 8px; align-content: start; height: 100%; overflow-y: auto; overflow-x: hidden; }
 .tracce-right { grid-area: right; min-width: 0; height: 100%; overflow-y: auto; overflow-x: hidden; }
 // 01/11: the bar and (when on top) the delta stay fixed together while the charts scroll.
-.tracce-top { position: sticky; top: 0; z-index: 4; display: grid; gap: 6px; margin-bottom: 6px; padding-bottom: 4px; background: #0b0b10f2; box-shadow: 0 8px 10px -10px #000; }
-.tracce-strip { display: grid; gap: 2px; padding: 4px 9px 4px 43px; }
-.strip-row { position: relative; height: 26px;
+.tracce-top { position: sticky; top: 0; z-index: 4; display: grid; gap: 4px; margin-bottom: 6px; padding-bottom: 2px; background: #0b0b10f2; box-shadow: 0 8px 10px -10px #000; }
+.tracce-strip { display: grid; gap: 1px; padding: 2px 9px 2px 43px; }
+.strip-row { position: relative; height: 24px;
+  &--sectors { height: 16px; button { font-size: 11px; } }
   button { position: absolute; top: 0; height: 100%; padding: 0; border: 1px solid #0b0b10; background: #ffffff14; color: #e6e6ea; font: 700 13px 'Inter', sans-serif; cursor: pointer; overflow: hidden;
     &:hover { background: #ffffff26; }
     &.active { background: #ffffff33; color: #fff; box-shadow: inset 0 -2px #ff0024; } }
