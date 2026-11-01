@@ -8,9 +8,8 @@ export type VoiceGender = 'female' | 'male'
 export const VOICE_CATALOG = [
   { id: 'if_sara', label: 'Sara', language: 'it', gender: 'female', image: '/images/voices/sara.png' },
   { id: 'im_nicola', label: 'Nicola', language: 'it', gender: 'male', image: '/images/voices/nicola.png' },
-  // Until their own pictures exist (user decision 31/10: two new images), Heart and Michael show Sara's and Nicola's.
-  { id: 'af_heart', label: 'Heart', language: 'en', gender: 'female', image: '/images/voices/sara.png' },
-  { id: 'am_michael', label: 'Michael', language: 'en', gender: 'male', image: '/images/voices/nicola.png' },
+  { id: 'af_heart', label: 'Heart', language: 'en', gender: 'female', image: '/images/voices/heart.png' },
+  { id: 'am_michael', label: 'Michael', language: 'en', gender: 'male', image: '/images/voices/michael.png' },
 ] as const satisfies ReadonlyArray<{ id: string, label: string, language: VoiceLanguage, gender: VoiceGender, image: string }>
 
 export type VoiceId = typeof VOICE_CATALOG[number]['id']

@@ -879,6 +879,50 @@
       }
     ]
   },
+  "/images/voices/heart.png": {
+    "width": 1774,
+    "height": 887,
+    "sourceBytes": 1058193,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/heart-256-0af09dd3669b.webp",
+        "bytes": 2518
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/heart-512-5069981bdd58.webp",
+        "bytes": 7148
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/heart-1024-031c09e1fb6e.webp",
+        "bytes": 22830
+      }
+    ]
+  },
+  "/images/voices/michael.png": {
+    "width": 1774,
+    "height": 887,
+    "sourceBytes": 998407,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/michael-256-e3af296a7fb6.webp",
+        "bytes": 2352
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/michael-512-7046fe3a68a2.webp",
+        "bytes": 7028
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/michael-1024-ade8a06ea6b7.webp",
+        "bytes": 21716
+      }
+    ]
+  },
   "/images/voices/nicola.png": {
     "width": 1774,
     "height": 887,
