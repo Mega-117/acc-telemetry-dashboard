@@ -95,7 +95,7 @@ describe('voiceScript - sincronia col catalogo', () => {
       ))).toBe(true)
     }
     const voiceLab = readFileSync(resolve(process.cwd(), 'app/pages/dev-voice-lab.vue'), 'utf8')
-    expect(voiceLab).toContain('const text = labText(entry).trim()')
+    expect(voiceLab).toContain('const text = labText(entry, language).trim()')
     expect(voiceLab).toContain('synthesize(text, voice, speed)')
     expect(voiceLab).toContain("await $fetch('/api/dev/voice-script'")
   })

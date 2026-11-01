@@ -6,7 +6,7 @@ import { useAppNotifications } from '~/composables/useAppNotifications'
 import { useKokoroVoiceLabLifecycle } from '~/composables/useKokoroVoiceLabLifecycle'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import type { SpotterVoiceId } from '~/composables/useSpotterVoiceSettings'
-import { VOICE_IDS, isVoiceId, voiceEntry, voiceForLanguage, voicesForLanguage } from '~/config/voiceCatalog'
+import { VOICE_IDS, isVoiceId, voiceEntry, voiceForLanguage, voicesForLanguage, type VoiceLanguage } from '~/config/voiceCatalog'
 import { useI18n } from '~/i18n'
 import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'
 import { trainingOverlayCatalog, trainingOverlayOrder, type TrainingOverlayId } from '~/config/trainingOverlayCatalog'
@@ -90,8 +90,8 @@ function voiceName(voice: string) {
   return isVoiceId(voice) ? voiceEntry(voice).label : voice
 }
 /** Text of a script or coach line in the Voice Lab language. */
-function labText(entry: { text: string, textEn?: string }) {
-  return (isEnglishLab.value ? entry.textEn : entry.text) ?? ''
+function labText(entry: { text: string, textEn?: string }, language: VoiceLanguage = labLanguage.value) {
+  return (language === 'en' ? entry.textEn : entry.text) ?? ''
 }
 function setLabText(entry: { text: string, textEn?: string }, value: string) {
   if (isEnglishLab.value) entry.textEn = value
@@ -495,7 +495,10 @@ async function generateReference(entry: TrackVoicePoint, voice: SpotterVoiceId =
       filename: referenceWavName(entry, voice),
       dataBase64: await blobToBase64(blob),
     })
-    const savedEntry = withReferenceAudioPath({ ...entry, enabled: true }, voice, response.path)
+    // Built from the row as it is now, not from the copy taken before synthesis: an edit made meanwhile
+    // (for example the other language's text) is kept (Codex review PIP-667).
+    const latest = latestReferenceRow(pointScopedId(entry)) ?? entry
+    const savedEntry = withReferenceAudioPath({ ...latest, enabled: true }, voice, response.path)
     patchReferenceRow(entry, savedEntry)
     await saveReference(savedEntry, voice)
     referenceTasks.value[pointScopedId(entry)] = { state: 'done', message: `WAV ${voiceName(voice)} aggiornato` }
@@ -571,6 +574,7 @@ async function generateAllReferences() {
     referencesBatchBusy.value = false
   }
 }
+let lapTimeCatalogRequest = 0
 async function loadLapTimeCatalog() {
   clampLapTimeRange()
   lapTimeCatalogBusy.value = true
@@ -582,7 +586,10 @@ async function loadLapTimeCatalog() {
       fromTenths: String(lapTimeFromTenths.value),
       toTenths: String(lapTimeToTenths.value),
     })
+    const request = ++lapTimeCatalogRequest
     const data = await $fetch<{ entries: LapTimeCatalogRow[] }>(`/api/dev/lap-time-voice-catalog?${query.toString()}`)
+    // A late answer for another voice or range never replaces the current one (Codex review PIP-667).
+    if (request !== lapTimeCatalogRequest) return
     lapTimeRows.value = data.entries
     lapTimeCatalogStatus.value = `${lapTimeGeneratedCount.value}/${lapTimeRows.value.length} WAV pronti nella vista.`
   } catch (error: any) {
@@ -609,7 +616,9 @@ async function playLapTimeEntry(entry: LapTimeCatalogRow | LapTimeVoiceEntry) {
     if ('exists' in entry && entry.exists) {
       await playAudioSource(`${entry.path}?t=${Date.now()}`, label)
     } else {
-      await playBlob(await synthesize(entry.text, lapTimeVoiceId.value, lapTimeSpeed.value), label)
+      // The text always matches the voice speaking it, whatever row is shown.
+      const voiced = buildLapTimeVoiceEntry(entry.tenths, lapTimeVoiceId.value, lapTimeSpeed.value)
+      await playBlob(await synthesize(voiced.text, voiced.voice, lapTimeSpeed.value), label)
     }
   } catch (error: any) {
     lapTimeCatalogError.value = `Ascolto tempo non riuscito: ${error?.message || 'errore'}`
@@ -720,9 +729,9 @@ function scenarioWavName(entry: VoiceScriptScenario, voice: string) {
 }
 
 // Per language (PIP-667): a phrase edited in Italian is "to regenerate" only for Sara/Nicola.
-function rowKey(entry: VoiceScriptStep | VoiceScriptScenario) {
+function rowKey(entry: VoiceScriptStep | VoiceScriptScenario, language: VoiceLanguage = labLanguage.value) {
   const id = 'stepId' in entry ? `${entry.trainingId}/${entry.modeId}/${entry.stepId}` : `scenario/${entry.id}`
-  return `${labLanguage.value}:${id}`
+  return `${language}:${id}`
 }
 
 function markPendingRegen(entry: VoiceScriptStep | VoiceScriptScenario) {
@@ -731,8 +740,8 @@ function markPendingRegen(entry: VoiceScriptStep | VoiceScriptScenario) {
   if (rowTasks.value[key]?.state === 'done') rowTasks.value[key] = { state: 'idle', message: 'Da rigenerare' }
 }
 
-function clearPendingRegen(entry: VoiceScriptStep | VoiceScriptScenario) {
-  const key = rowKey(entry)
+function clearPendingRegen(entry: VoiceScriptStep | VoiceScriptScenario, language: VoiceLanguage = labLanguage.value) {
+  const key = rowKey(entry, language)
   pendingRegenKeys.value = pendingRegenKeys.value.filter(k => k !== key)
 }
 
@@ -906,12 +915,13 @@ async function loadCoachScript() {
   }
 }
 
-async function saveAndRegenerateCoachPhrase(phrase: CoachLabPhrase, options: { toast?: boolean } = {}) {
+async function saveAndRegenerateCoachPhrase(phrase: CoachLabPhrase, options: { toast?: boolean, language?: VoiceLanguage } = {}) {
   if (serverState.value !== 'online' || !coachScript.value) return false
   const shouldToast = options.toast ?? true
   // Voices and text of the Voice Lab language only (PIP-667): the other language's WAVs stay as they are.
-  const voices = [...labVoiceIds.value]
-  const text = labText(phrase).trim()
+  const language = options.language ?? labLanguage.value
+  const voices = voicesForLanguage(language).map(voice => voice.id)
+  const text = labText(phrase, language).trim()
   const words = coachWordCount(text)
   if (words < COACH_MIN_WORDS) {
     coachRowTasks.value[phrase.key] = { state: 'error', message: `${words} parole: minimo ${COACH_MIN_WORDS} (regola Kokoro)` }
@@ -973,10 +983,11 @@ async function regenerateAllCoachPhrases() {
   coachBatchBusy.value = true
   let ok = 0
   const phrases = coachScript.value.phrases
+  const language = labLanguage.value
   try {
     for (let i = 0; i < phrases.length; i++) {
       coachStatus.value = `Rigenerazione frasi coach: ${i + 1}/${phrases.length}`
-      if (await saveAndRegenerateCoachPhrase(phrases[i]!, { toast: false })) ok += 1
+      if (await saveAndRegenerateCoachPhrase(phrases[i]!, { toast: false, language })) ok += 1
     }
     coachStatus.value = `${ok}/${phrases.length} frasi rigenerate`
     pushToast(
@@ -1118,14 +1129,16 @@ async function blobToBase64(blob: Blob): Promise<string> {
  */
 async function saveAndRegenerate(
   entry: VoiceScriptStep | VoiceScriptScenario,
-  options: { toast?: boolean } = {}
+  options: { toast?: boolean, language?: VoiceLanguage } = {}
 ): Promise<boolean> {
   if (!hasFullVoiceLabAccess.value || serverState.value !== 'online') return false
   const shouldToast = options.toast ?? true
-  const key = rowKey(entry)
+  // A batch passes the language it started with: switching language mid-batch cannot mix them (Codex review).
+  const language = options.language ?? labLanguage.value
+  const key = rowKey(entry, language)
   const label = 'stepId' in entry ? entry.stepId : entry.id
-  const voices = [...labVoiceIds.value]
-  const text = labText(entry).trim()
+  const voices = voicesForLanguage(language).map(voice => voice.id)
+  const text = labText(entry, language).trim()
   if (!text) {
     rowTasks.value[key] = { state: 'error', message: 'Testo vuoto in questa lingua' }
     return false
@@ -1149,7 +1162,7 @@ async function saveAndRegenerate(
       })
     }
     rowTasks.value[key] = { state: 'done', message: 'WAV aggiornato ✓' }
-    clearPendingRegen(entry)
+    clearPendingRegen(entry, language)
     if (shouldToast) pushToast(`${label}: WAV rigenerato ✓`, 'success')
     handleKokoroWorkSettled()
     kokoroLifecycle.endWork()
@@ -1168,6 +1181,7 @@ async function saveAndRegeneratePendingVisible() {
   if (serverState.value !== 'online' || batchBusy.value) return
   const entries = pendingVisibleEntries.value
   if (!entries.length) return
+  const language = labLanguage.value
 
   batchBusy.value = true
   batchStatus.value = `Rigenerazione modifiche: 0/${entries.length}`
@@ -1175,7 +1189,7 @@ async function saveAndRegeneratePendingVisible() {
   try {
     for (let i = 0; i < entries.length; i++) {
       batchStatus.value = `Rigenerazione modifiche: ${i + 1}/${entries.length}`
-      if (await saveAndRegenerate(entries[i]!, { toast: false })) ok += 1
+      if (await saveAndRegenerate(entries[i]!, { toast: false, language })) ok += 1
     }
     batchStatus.value = `${ok}/${entries.length} rigenerate`
     if (ok === entries.length) pushToast(`Modifiche sezione rigenerate ✓ (${ok})`, 'success')

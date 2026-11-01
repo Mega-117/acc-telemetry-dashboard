@@ -84,3 +84,22 @@ describe('trackVoicePointMerge', () => {
     expect(merged.points.map(point => point.track)).toEqual(['Spa', 'Spa', 'Monza'])
   })
 })
+
+describe('PIP-667 shipped English of a point rewritten in Italian', () => {
+  const shipped: TrackVoicePoint = { id: 'p1', track: 'Spa', type: 'braking_reference', normalized_car_position: 0.5,
+    text: 'frena al cartello', text_en: 'brake at the board',
+    audio_paths: { if_sara: '/sara.wav', af_heart: '/heart.wav' } }
+
+  it('is dropped also when the saved local copy carries it unchanged (Voice Lab saves whole points)', () => {
+    const local = { ...shipped, text: 'frena alla macchia' }
+    const [point] = mergeTrackVoicePointStores(store([shipped]), store([local])).points
+    expect(point!.text_en).toBeUndefined()
+    expect(point!.audio_paths).toEqual({ if_sara: '/sara.wav' })
+  })
+
+  it('is kept when the Italian is unchanged, and a new translation by the user is kept', () => {
+    expect(mergeTrackVoicePointStores(store([shipped]), store([{ ...shipped }])).points[0]!.text_en).toBe('brake at the board')
+    const translated = { ...shipped, text: 'frena alla macchia', text_en: 'brake at the patch' }
+    expect(mergeTrackVoicePointStores(store([shipped]), store([translated])).points[0]!.text_en).toBe('brake at the patch')
+  })
+})

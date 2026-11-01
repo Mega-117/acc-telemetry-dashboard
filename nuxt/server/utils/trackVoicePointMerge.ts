@@ -48,33 +48,36 @@ function groupPoints(points: TrackVoicePoint[]) {
   return { groups, order }
 }
 
-// PIP-667 (Codex review 01/11): a shipped point whose Italian text the user rewrote keeps no shipped English
-// text or English WAV: they would say something else. Same rule as dropStaleTranslation in desktop kokoroRuntime.js.
+// PIP-667 (Codex reviews 01/11): a shipped point whose Italian text the user rewrote keeps no shipped English
+// text or English WAV: they would say something else. The Voice Lab saves whole points, so the local copy
+// can carry the shipped English unchanged: that is still the shipped translation, not the user's.
+// Same rule as hasStaleTranslation in desktop kokoroRuntime.js.
 const ENGLISH_VOICE_IDS = ['af_heart', 'am_michael']
-export function dropStaleTranslation(defaultPoint: TrackVoicePoint, localPoint: TrackVoicePoint): TrackVoicePoint {
+export function hasStaleTranslation(defaultPoint: TrackVoicePoint, localPoint: TrackVoicePoint): boolean {
   const localText = String(localPoint.text ?? '').trim()
-  if (!localText || localText === String(defaultPoint.text ?? '').trim() || localPoint.text_en) return defaultPoint
-  const audioPaths = { ...(defaultPoint.audio_paths || {}) }
-  for (const voice of ENGLISH_VOICE_IDS) delete audioPaths[voice]
-  const { text_en: _staleText, ...rest } = defaultPoint
-  return { ...rest, audio_paths: audioPaths }
+  if (!localText || localText === String(defaultPoint.text ?? '').trim()) return false
+  const localEnglish = String(localPoint.text_en ?? '').trim()
+  return !localEnglish || localEnglish === String(defaultPoint.text_en ?? '').trim()
 }
 
-function mergeAudioPaths(shippedPoint: TrackVoicePoint, localPoint: TrackVoicePoint) {
-  const defaultPoint = dropStaleTranslation(shippedPoint, localPoint)
+function mergeAudioPaths(defaultPoint: TrackVoicePoint, localPoint: TrackVoicePoint, stale: boolean) {
   const merged = { ...(defaultPoint.audio_paths || {}) }
   if (defaultPoint.audio_path && defaultPoint.audio_voice) merged[defaultPoint.audio_voice] = defaultPoint.audio_path
   Object.assign(merged, localPoint.audio_paths || {})
   if (localPoint.audio_path && localPoint.audio_voice) merged[localPoint.audio_voice] = localPoint.audio_path
+  if (stale) for (const voice of ENGLISH_VOICE_IDS) delete merged[voice]
   return Object.keys(merged).length ? merged : undefined
 }
 
 function mergeCompatiblePoint(defaultPoint: TrackVoicePoint, localPoint: TrackVoicePoint) {
-  return {
-    ...dropStaleTranslation(defaultPoint, localPoint),
+  const stale = hasStaleTranslation(defaultPoint, localPoint)
+  const merged: TrackVoicePoint = {
+    ...defaultPoint,
     ...localPoint,
-    audio_paths: mergeAudioPaths(defaultPoint, localPoint),
+    audio_paths: mergeAudioPaths(defaultPoint, localPoint, stale),
   }
+  if (stale) delete merged.text_en
+  return merged
 }
 
 // Due punti entro questa distanza normalizzata (~0.05% del giro) sono lo
