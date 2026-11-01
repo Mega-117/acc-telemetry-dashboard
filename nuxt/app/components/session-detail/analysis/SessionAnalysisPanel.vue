@@ -210,7 +210,7 @@ async function shareLap() {
   if (shareTimer) clearTimeout(shareTimer)
   shareTimer = setTimeout(() => { shareState.value = 'idle'; shareMessage.value = '' }, 4000)
 }
-onBeforeUnmount(() => { if (shareTimer) clearTimeout(shareTimer) })
+onBeforeUnmount(() => { if (shareTimer) clearTimeout(shareTimer); loadGeneration++ }) // leaving stops lap downloads
 // PIP-647: the browser reads your laps with your account: load again once it is known.
 watch(() => [props.sessionToken, props.pilotUid, currentUser.value?.uid], () => { void load() })
 onMounted(() => { void load() })
