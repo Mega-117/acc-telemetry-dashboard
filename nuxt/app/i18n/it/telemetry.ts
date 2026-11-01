@@ -23,7 +23,7 @@ export default {
     corner: 'Curva {n}',
     focus: 'Da guardare: curva {n} · {gap} s',
     focusTitle: 'La curva dove perdi di più, evidenziata su tutti i grafici: clicca per aprirla',
-    deltaPlace: { label: 'Posizione del grafico del delta', top: 'Delta in alto', centre: 'Delta al centro' },
+    deltaPlace: { label: 'Posizione del grafico del delta', name: 'Delta', top: 'In alto', centre: 'Al centro' },
     sectors: 'Settori',
     sectorTitle: 'Riferimento {time} s · clic per ingrandire',
     noSectors: 'Tempi dei settori non disponibili per questi giri.',

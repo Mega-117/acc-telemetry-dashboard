@@ -298,8 +298,8 @@ function onMove(event: PointerEvent) {
       <!-- 01/11: a click area twice the drawn circle (the numbers were hard to hit), invisible. -->
       <circle :cx="l.point.x" :cy="l.point.y" :r="17 * zoomScale" class="map-corner__hit" />
       <circle :cx="l.point.x" :cy="l.point.y" :r="9 * zoomScale" />
-      <text :x="l.point.x" :y="l.point.y + 3.5 * zoomScale" :font-size="10 * zoomScale">{{ l.number }}</text>
-      <text v-if="l.gap" :x="l.gap.x" :y="l.gap.y + 3.5 * zoomScale" :font-size="10 * zoomScale" class="map-corner__gap" :class="l.gap.loss ? 'loss' : 'gain'">{{ l.gap.text }}</text>
+      <text :x="l.point.x" :y="l.point.y + 4 * zoomScale" :font-size="11 * zoomScale">{{ l.number }}</text>
+      <text v-if="l.gap" :x="l.gap.x" :y="l.gap.y + 4 * zoomScale" :font-size="11 * zoomScale" class="map-corner__gap" :class="l.gap.loss ? 'loss' : 'gain'">{{ l.gap.text }}</text>
     </g>
     <circle v-if="refDot" :cx="refDot.x" :cy="refDot.y" :r="5 * zoomScale" class="map-dot-ref" />
     <path v-if="lapArrow" :transform="`translate(${lapArrow.x} ${lapArrow.y}) rotate(${lapArrow.angle}) scale(${zoomScale})`" d="M8 0 L-6 -6 L-3 0 L-6 6 Z" class="map-arrow" />

@@ -290,7 +290,7 @@ function onDouble() {
   .band { cursor: pointer; rect { fill: #ffffff0d; stroke: #ffffff1f; stroke-width: 1; vector-effect: non-scaling-stroke; } text { fill: #b3b3b8; font: 700 11px 'Inter', sans-serif; text-anchor: middle; } &:hover rect { fill: #ff002426; } } }
 .chart { display: grid; grid-template-columns: 42px minmax(0, 1fr); grid-template-rows: auto auto 16px; border: 1px solid #ffffff1f; background: #ffffff06; padding: 6px 8px 2px 0; }
 .chart-yaxis { position: relative;
-  span { position: absolute; right: 6px; transform: translateY(-50%); color: #8a8a90; font: 600 10px 'Inter', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; } }
+  span { position: absolute; right: 6px; transform: translateY(-50%); color: #a1a1a8; font: 600 11px 'Inter', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; } }
 .chart-plot { position: relative; min-width: 0; }
 svg { display: block; width: 100%; touch-action: none; cursor: crosshair; }
 .chart-band { fill: #ffffff06; }
@@ -307,19 +307,19 @@ svg { display: block; width: 100%; touch-action: none; cursor: crosshair; }
 // Altezza fissa: i riquadri dei valori compaiono e spariscono col cursore senza spostare nulla (niente
 // scrollbar che lampeggia nella colonna centrale).
 .chart-head { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 24px; padding: 0 0 4px 12px; }
-.chart-title { color: #fff; font: italic 700 13px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; letter-spacing: .03em;
+.chart-title { color: #fff; font: italic 700 15px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; letter-spacing: .03em;
   small { color: #8a8a90; font: 500 11px 'Inter', sans-serif; text-transform: none; } }
 .chart-note { margin-left: 8px; padding: 1px 6px; border: 1px solid #ffffff2e; color: #e6e6ea; font: normal 700 11px 'Inter', sans-serif; letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums;
   &--loss { border-color: #ff5a6e80; background: #e4002b33; color: #ff8a98; } &--gain { border-color: #3ddc5a80; background: #16a34a33; color: #7ee79a; } }
-.chart-values { display: flex; gap: 6px; font: 600 11px 'Inter', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap;
+.chart-values { display: flex; gap: 6px; font: 600 12px 'Inter', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap;
   // A small fixed width per number, right-aligned: changing digits barely move the boxes.
   // Riquadri discreti: bordo e fondo appena accennati nel colore del giro, il numero e' quello che si nota.
   .v { --vc: #e6e6ea; display: inline-flex; align-items: baseline; gap: 5px; height: 20px; box-sizing: border-box; padding: 2px 6px; border: 1px solid color-mix(in srgb, var(--vc) 22%, transparent); background: color-mix(in srgb, var(--vc) 7%, transparent); color: #8a8a90;
-    b { display: inline-block; min-width: 5ch; text-align: right; color: var(--vc); font-weight: 700; font-size: 12px; } }
+    b { display: inline-block; min-width: 5ch; text-align: right; color: var(--vc); font-weight: 700; font-size: 13px; } }
   .v--diff b { min-width: 3ch; }
   .v--lap { --vc: #38bdf8; } .v--ref { --vc: #fbbf24; } .v--loss { --vc: #ff5a6e; } .v--gain { --vc: #3ddc5a; } }
 .chart-grid--x { stroke-dasharray: none; stroke: #ffffff0d; }
-.chart-xaxis { grid-column: 2; position: relative; overflow: hidden; height: 16px; color: #8a8a90; font: 600 10px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
+.chart-xaxis { grid-column: 2; position: relative; overflow: hidden; height: 16px; color: #a1a1a8; font: 600 11px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
 // Labels slide from left-aligned at the start to right-aligned at the end (--p), so the
 // one at the cursor never sticks out of the chart: no scrollbar flashing on the far right.
 .chart-xtick { position: absolute; top: 2px; transform: translateX(calc(-1 * var(--p, 50%))); white-space: nowrap; }

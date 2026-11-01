@@ -598,24 +598,24 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 .has-active > .sector-row:not(.active), .has-active > .corner-row:not(.active) { opacity: .5; &:hover { opacity: .85; } }
 .sector-row { display: grid; grid-template-columns: 30px 1fr 1fr; gap: 3px; padding: 0; border: 0; background: none; cursor: pointer; font-variant-numeric: tabular-nums;
   &.active .sector-name { background: #fff; color: #0b0b10; } }
-.sector-name { display: grid; place-items: center; padding: 5px 0; background: #ffffff0d; color: #e6e6ea; font: italic 700 13px 'Racer Display', 'Arial Narrow', sans-serif; }
-.sector-time { display: grid; place-items: center; background: #ffffff08; color: #b3b3b8; font: 600 12px 'Inter', sans-serif; }
-.sector-gap { display: grid; place-items: center; color: #fff; font: 700 12px 'Inter', sans-serif; }
-.corner-row--head { cursor: default; color: #8a8a90; font: 700 10px 'Inter', sans-serif; text-transform: uppercase; letter-spacing: .04em; }
+.sector-name { display: grid; place-items: center; padding: 6px 0; background: #ffffff0d; color: #e6e6ea; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; }
+.sector-time { display: grid; place-items: center; background: #ffffff08; color: #c8c8cc; font: 600 13px 'Inter', sans-serif; }
+.sector-gap { display: grid; place-items: center; color: #fff; font: 700 13px 'Inter', sans-serif; }
+.corner-row--head { cursor: default; color: #a1a1a8; font: 700 11px 'Inter', sans-serif; text-transform: uppercase; letter-spacing: .04em; }
 // One corner per row, the section scrolls on its own when the list is longer than the column.
 .corner-list { display: grid; gap: 3px; align-content: start; min-height: 0; overflow-y: auto; padding-right: 2px; }
 .corner-row { display: grid; grid-template-columns: 52px 1fr; gap: 3px; padding: 0; border: 0; background: none; cursor: pointer; text-align: center;
   &.active .corner-num { background: #fff; color: #0b0b10; }
   &.active .corner-cell { box-shadow: none; } }
-.corner-num { position: relative; display: grid; place-items: center; padding: 3px 0; background: #ffffff0d; color: #e6e6ea; font: italic 700 15px 'Racer Display', 'Arial Narrow', sans-serif; }
-.corner-cell { display: grid; place-items: center; color: #fff; font: 700 12px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
+.corner-num { position: relative; display: grid; place-items: center; padding: 4px 0; background: #ffffff0d; color: #e6e6ea; font: italic 700 15px 'Racer Display', 'Arial Narrow', sans-serif; }
+.corner-cell { display: grid; place-items: center; color: #fff; font: 700 13px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
 .tracce-center { grid-area: center; display: grid; gap: 8px; align-content: start; height: 100%; overflow-y: auto; overflow-x: hidden; }
 .tracce-right { grid-area: right; min-width: 0; height: 100%; overflow-y: auto; overflow-x: hidden; }
 // 01/11: the bar and (when on top) the delta stay fixed together while the charts scroll.
 .tracce-top { position: sticky; top: 0; z-index: 4; display: grid; gap: 6px; margin-bottom: 6px; padding-bottom: 4px; background: #0b0b10f2; box-shadow: 0 8px 10px -10px #000; }
 .tracce-strip { display: grid; gap: 2px; padding: 4px 9px 4px 43px; }
-.strip-row { position: relative; height: 24px;
-  button { position: absolute; top: 0; height: 100%; padding: 0; border: 1px solid #0b0b10; background: #ffffff14; color: #e6e6ea; font: 700 12px 'Inter', sans-serif; cursor: pointer; overflow: hidden;
+.strip-row { position: relative; height: 26px;
+  button { position: absolute; top: 0; height: 100%; padding: 0; border: 1px solid #0b0b10; background: #ffffff14; color: #e6e6ea; font: 700 13px 'Inter', sans-serif; cursor: pointer; overflow: hidden;
     &:hover { background: #ffffff26; }
     &.active { background: #ffffff33; color: #fff; box-shadow: inset 0 -2px #ff0024; } }
   &--corners { height: 18px;

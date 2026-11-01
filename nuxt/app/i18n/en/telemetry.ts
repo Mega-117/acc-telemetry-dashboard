@@ -24,7 +24,7 @@ export default {
     corner: 'Corner {n}',
     focus: 'Look here: corner {n} · {gap} s',
     focusTitle: 'The corner where you lose most, highlighted on every chart: click to open it',
-    deltaPlace: { label: 'Position of the delta chart', top: 'Delta on top', centre: 'Delta in the middle' },
+    deltaPlace: { label: 'Position of the delta chart', name: 'Delta', top: 'Top', centre: 'Middle' },
     sectors: 'Sectors',
     sectorTitle: 'Reference {time} s · click to zoom',
     noSectors: 'Sector times not available for these laps.',
