@@ -24,7 +24,8 @@ import { lapShareErrorMessage } from '~/services/telemetry/lapShareLink'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { compareCorners, cornerAdvice, detectCorners, formatDelta, stretchDelta } from '~/services/telemetry/lapAnalysis'
 import { useCornerStepper } from '~/composables/useCornerStepper'
-import { normalizeLapTrace, type LapTraceView } from '~/services/telemetry/lapTraceChart'
+import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
+import { readSessionLaps, withArchiveFallback } from '~/services/telemetry/sessionLapLoading'
 import { useTrackEdges } from '~/composables/useTrackEdges'
 import { useI18n, type TranslationKey } from '~/i18n'
 
@@ -71,7 +72,7 @@ const entries = ref<Entry[]>([])
 const traces = ref<Record<string, LapTraceView>>({})
 const lapId = ref(''), refId = ref('')
 const library = useReferenceLibrary({ entries, traces, refId, sessionToken: () => props.sessionToken, sectorTimesOf: e => sectorTimes(e) })
-const loading = ref(false), error = ref(''), fromArchive = ref(false)
+const loading = ref(false), error = ref(''), fromArchive = ref(false), programArchive = ref(false)
 // PIP-635: nessun giro da analizzare: la pagina torna su Sessione se l'aveva aperta da sola.
 const emit = defineEmits<{ unavailable: [], compare: [], lapLinkHandled: [] }>(); watch(error, message => { if (message) emit('unavailable') })
 const { t, locale } = useI18n()
@@ -121,34 +122,26 @@ async function load() {
   // (valid and complete laps of the last 30 days); the program keeps reading them from the PC.
   const archiveUid = pilot ?? (desktop ? null : currentUser.value?.uid ?? null)
   fromArchive.value = !pilot && !!archiveUid
+  programArchive.value = false
   let source: LapSource
   if (archiveUid) source = pilotLapSource(archiveUid, archiveDeps, props.sharedSessionId ?? null)
   else if (desktop) source = electronLapSource(bridge!)
   else { error.value = t('telemetry.errors.desktopOnly'); return }
   loading.value = true
+  const valid = new Map(props.laps.map(l => [l.lap_number, l.is_valid === true]))
   try {
-    const list = await source.list(token)
-    if (!isCurrent()) return
-    const valid = new Map(props.laps.map(l => [l.lap_number, l.is_valid === true]))
-    // All laps of the session at once (about 120 KB each): a lap that cannot be read
-    // (pruned meanwhile, damaged) is left out here, never on a later click.
-    const readOne = async (d: (typeof list)[number]): Promise<{ trace: LapTraceView, entry: Entry } | null> => {
-      try {
-        const trace = normalizeLapTrace(await source.read(d))
-        return trace ? { trace, entry: { id: d.id, lapNumber: d.lapNumber, lapTimeMs: d.lapTimeMs, valid: d.valid ?? valid.get(d.lapNumber) ?? false, complete: trace.complete, origin: d.origin, sessionToken: d.sessionToken } } : null
-      } catch { return null }
+    let result = await readSessionLaps(source, token, valid, isCurrent, !!archiveUid)
+    if (!result) return
+    // 01/11: a session driven with another installation or PC: its laps come from the online archive.
+    const ownUid = currentUser.value?.uid ?? null
+    if (desktop && !archiveUid && ownUid && !props.sharedSessionId) {
+      const chosen = await withArchiveFallback(result, () => readSessionLaps(pilotLapSource(ownUid, archiveDeps, null), token, valid, isCurrent, true))
+      if (!isCurrent() || !chosen) return
+      result = chosen.result
+      if (chosen.fromArchive) { fromArchive.value = true; programArchive.value = true }
     }
-    // Laps on the PC are read together; from the archive one at a time, stopping if the view changed.
-    let read: ({ trace: LapTraceView, entry: Entry } | null)[] = []
-    if (archiveUid) {
-      for (const d of list) {
-        if (!isCurrent()) return
-        read.push(await readOne(d))
-      }
-    } else read = await Promise.all(list.map(readOne))
-    if (!isCurrent()) return
-    const ok = read.filter((r): r is { trace: LapTraceView, entry: Entry } => r !== null)
-    skipped.value = list.length - ok.length
+    const ok = result.ok
+    skipped.value = result.total - ok.length
     traces.value = Object.fromEntries(ok.map(r => [r.entry.id, r.trace]))
     entries.value = ok.map(r => r.entry).sort((a, b) => a.lapNumber - b.lapNumber)
     // A partial lap (logger started mid-lap, out-lap) covers only part of the track:
@@ -430,7 +423,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
     <p v-if="refEntry?.note" class="analysis-note analysis-note--warn">{{ refEntry.note }}</p>
 
     <p v-if="skipped" class="analysis-note">{{ t('telemetry.skipped', { count: skipped }) }}</p>
-    <p v-if="fromArchive && entries.length" class="analysis-note">{{ t('telemetry.browserNote') }}</p>
+    <p v-if="fromArchive && entries.length" class="analysis-note">{{ programArchive ? t('telemetry.programArchiveNote') : t('telemetry.browserNote') }}</p>
     <p v-if="loading" class="analysis-empty" role="status">{{ t('telemetry.loading') }}</p>
     <p v-else-if="error" class="analysis-empty">{{ error }}</p>
     <p v-else-if="lapId === refId && entries.length > 1" class="analysis-empty">{{ t('telemetry.sameLap') }}</p>

@@ -16,6 +16,7 @@ export default {
     viewAria: 'Analysis view',
     skipped: '{count} unreadable laps left out.',
     browserNote: 'In the browser: your valid, complete laps of the last 30 days. All the others are in the app.',
+    programArchiveNote: 'Laps from the online archive: this session was recorded with another installation or PC. It holds the valid, complete laps of the last 30 days.',
     loading: 'Loading laps…',
     sameLap: 'Pick a reference other than your lap to see the comparison.',
     wholeLap: 'Whole lap',

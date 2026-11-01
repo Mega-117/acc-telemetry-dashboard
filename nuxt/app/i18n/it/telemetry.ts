@@ -15,6 +15,7 @@ export default {
     viewAria: 'Vista dell’analisi',
     skipped: '{count} giri non leggibili esclusi.',
     browserNote: 'Nel browser: i tuoi giri validi e completi degli ultimi 30 giorni. Tutti gli altri sono nel programma.',
+    programArchiveNote: "Giri dall'archivio online: questa sessione è stata registrata con un'altra installazione o un altro PC. Ci sono i giri validi e completi degli ultimi 30 giorni.",
     loading: 'Caricamento dei giri…',
     sameLap: 'Scegli un riferimento diverso dal tuo giro per vedere il confronto.',
     wholeLap: 'Giro intero',
