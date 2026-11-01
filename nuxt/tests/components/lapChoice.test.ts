@@ -47,10 +47,11 @@ describe('LapChoiceCard', () => {
     expect(wrapper.get('.lap-pill__body').attributes('title')).toContain('Oggi 10:15 · Gara')
     expect(wrapper.get('.lap-pill__status').text()).toContain('Valido')
     const why = wrapper.get('.lap-pill__why')
-    expect(why.attributes('aria-label')).toBe('Perché questo: il tuo giro valido più veloce con questa auto')
+    expect(why.attributes('aria-label')).toContain('Perché questo: il tuo giro valido più veloce con questa auto')
     expect(text).not.toContain('Perché questo')
+    // Keyboard and touch: ⓘ opens the reason and what the tooltip holds.
     await why.trigger('click')
-    expect(wrapper.get('.lap-pill__reason').text()).toBe('Perché questo: il tuo giro valido più veloce con questa auto')
+    expect(wrapper.findAll('.lap-pill__reason').map(p => p.text())).toEqual(['Perché questo: il tuo giro valido più veloce con questa auto', expect.stringContaining('Oggi 10:15 · Gara')])
   })
   it('the ideal lap is dashed and says it is not a real lap; an unknown status is said, never valid', () => {
     wrapper = mount(LapChoiceCard, { props: { side: 'ref', choice: { ...ref, ideal: true }, idealScope: 'session' } })
@@ -61,7 +62,7 @@ describe('LapChoiceCard', () => {
     wrapper = mount(LapChoiceCard, { props: { side: 'you', choice: { ...you, status: 'unknown', mine: false, driver: 'Mike' } } })
     expect(wrapper.get('.lap-pill__status').text()).toBe('?Validità non disponibile') // icon + screen-reader words
     expect(wrapper.text()).not.toContain('TU')
-    expect(wrapper.find('.lap-pill__why').exists()).toBe(false)
+    expect(wrapper.get('.lap-pill__why').attributes('aria-label')).not.toContain('Perché questo')
   })
   it('shows what the lap was driven with: fuel, tyres, air and track (01/11)', () => {
     wrapper = mount(LapChoiceCard, { props: { side: 'you', choice: { ...you, conditions: { fuelL: 43.73, tyre: 'dry', airC: 15.2, roadC: 18.4 } } } })

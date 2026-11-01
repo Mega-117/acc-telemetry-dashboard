@@ -28,7 +28,8 @@ const when = computed(() => props.choice ? text.when(props.choice) : '')
 const tags = computed(() => text.conditionsShort(props.choice?.conditions))
 const lapLabel = computed(() => props.choice?.ideal ? t('telemetry.choice.idealShort') : props.choice?.lapNumber ? t('telemetry.choice.lapShort', { n: props.choice.lapNumber }) : '')
 const reasonText = computed(() => props.side === 'ref' && props.reason ? text.reason(props.reason, { pilotName: props.pilotName }) : '')
-const tooltip = computed(() => [props.choice?.ideal ? text.idealNote(props.idealScope) : when.value, text.conditions(props.choice?.conditions)].filter(Boolean).join('\n'))
+const infoLines = computed(() => [reasonText.value, props.choice?.ideal ? text.idealNote(props.idealScope) : when.value, text.conditions(props.choice?.conditions)].filter(Boolean))
+const tooltip = computed(() => infoLines.value.join('\n'))
 // ⓘ also opens on a click or Enter (touch and keyboard), not only on hover.
 const reasonOpen = ref(false)
 </script>
@@ -43,12 +44,12 @@ const reasonOpen = ref(false)
           <span v-if="choice.mine" class="lap-pill__you">{{ t('telemetry.choice.tagYou') }}</span>
           <span v-if="lapLabel" class="lap-pill__lap">{{ lapLabel }}</span>
           <span v-if="!choice.ideal" class="lap-pill__status" :class="`is-${choice.status}`" :title="status!.text"><span aria-hidden="true">{{ status!.icon }}</span><span class="sr-only">{{ status!.text }}</span></span>
-          <button v-if="reasonText" type="button" class="lap-pill__why" :aria-expanded="reasonOpen" :aria-label="reasonText" :title="reasonText" @click="reasonOpen = !reasonOpen">ⓘ</button>
+          <button v-if="infoLines.length" type="button" class="lap-pill__why" :aria-expanded="reasonOpen" :aria-label="infoLines.join('. ')" :title="tooltip" @click="reasonOpen = !reasonOpen">ⓘ</button>
         </p>
         <p v-if="tags.length" class="lap-pill__tags">
           <span v-for="tag in tags" :key="tag">{{ tag }}</span>
         </p>
-        <p v-if="reasonOpen && reasonText" class="lap-pill__reason">{{ reasonText }}</p>
+        <p v-for="line in reasonOpen ? infoLines : []" :key="line" class="lap-pill__reason">{{ line }}</p>
       </template>
       <p v-else class="lap-pill__main">{{ t('telemetry.choice.noLap') }}</p>
     </div>

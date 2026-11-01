@@ -145,7 +145,7 @@ describe('SessionAnalysisPanel sharing and coach view', () => {
     expect(view.get('.lap-pill--you .lap-pill__time').text()).toBe('1:44.310')
     expect(view.get('.lap-pill--ref .lap-pill__lap').text()).toBe('Giro 6')
     expect(view.get('.lap-pill--ref .lap-pill__time').text()).toBe('1:44.900')
-    expect(view.get('.lap-pill--ref .lap-pill__why').attributes('aria-label')).toBe('Perché questo: il tuo giro valido più veloce dopo questo')
+    expect(view.get('.lap-pill--ref .lap-pill__why').attributes('aria-label')).toContain('Perché questo: il tuo giro valido più veloce dopo questo')
     expect(view.get('.lap-pill--ref .lap-pill__body').attributes('title')).toContain('Gara')
     // Both laps are mine: they can be swapped.
     await view.get('.compare-swap').trigger('click')

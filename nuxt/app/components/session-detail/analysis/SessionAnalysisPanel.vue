@@ -209,7 +209,7 @@ async function shareLap() {
   const id = lapId.value
   if (!canShare.value || shareState.value === 'busy') return
   shareState.value = 'busy'
-  shareMessage.value = ''
+  shareMessage.value = t('telemetry.share.busy')
   try {
     const result = await api()!.shareLapTrace!(id)
     await navigator.clipboard.writeText(result.link)
@@ -423,7 +423,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
            when, its status and why the reference; "Cambia" opens the chooser. The view sits apart, on the right. -->
       <div class="compare" role="group" :aria-label="t('telemetry.compareAria')">
         <LapChoiceCard side="you" :choice="choice.youCard.value" :ideal-scope="idealScope" :disabled="!sessionEntries.length" @change="openChooser('you')">
-          <button v-if="shareAvailable" type="button" class="share-lap" :disabled="!canShare || shareState === 'busy'" :title="shareHint" :aria-label="t('telemetry.share.action')" @click="shareLap">{{ shareState === 'busy' ? '…' : '↗' }}</button>
+          <button v-if="shareAvailable" type="button" class="share-lap" :disabled="!canShare || shareState === 'busy'" :title="shareHint" :aria-busy="shareState === 'busy'" :aria-label="shareState === 'busy' ? t('telemetry.share.busy') : t('telemetry.share.action')" @click="shareLap">{{ shareState === 'busy' ? '…' : '↗' }}</button>
         </LapChoiceCard>
         <div class="compare-mid">
           <p class="compare-gap" :class="{ gain: (totalDelta ?? 0) < 0, loss: (totalDelta ?? 0) > 0 }" :title="t('telemetry.gapTitle')">
@@ -617,10 +617,10 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 .tracce-top { position: sticky; top: 0; z-index: 4; display: grid; gap: 4px; margin-bottom: 6px; padding-bottom: 2px; background: #0b0b10f2; box-shadow: 0 8px 10px -10px #000; }
 .tracce-strip { display: grid; gap: 1px; padding: 2px 9px 2px 43px; }
 .strip-row { position: relative; height: 24px;
-  &--sectors { height: 16px; button { font-size: 11px; } }
   button { position: absolute; top: 0; height: 100%; padding: 0; border: 1px solid #0b0b10; background: #ffffff14; color: #e6e6ea; font: 700 13px 'Inter', sans-serif; cursor: pointer; overflow: hidden;
     &:hover { background: #ffffff26; }
     &.active { background: #ffffff33; color: #fff; box-shadow: inset 0 -2px #ff0024; } }
+  &--sectors { height: 16px; button { font-size: 11px; } }
   &--corners { height: 18px;
     button { background: #ffffff0a; color: #b3b3b8; font-size: 10px; &.gain { color: #3ddc5a; } &.loss { color: #ff5a6e; } } } }
 
