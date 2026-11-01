@@ -269,7 +269,8 @@ function measureDelta() {
   const box = wrap.getBoundingClientRect()
   // Header, distance axis and padding around the plot stay as they are: only the plot grows.
   const chrome = box.height - deltaHeight.value
-  deltaHeight.value = Math.max(120, Math.floor(bottom - box.top - chrome) - 1)
+  // 01/11: as tall as the channel charts at most (it stretched to the bottom of the column: too tall to read).
+  deltaHeight.value = Math.min(Math.max(120, Math.floor(bottom - box.top - chrome) - 1), Math.max(140, traceRowHeight.value))
   // Safety net: if the column still overflows (layout not settled at the first measure),
   // take the excess off the plot, so the centre column never needs its scrollbar.
   nextTick(() => {
