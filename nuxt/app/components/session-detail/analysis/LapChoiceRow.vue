@@ -12,6 +12,7 @@ const emit = defineEmits<{ select: [choice: LapChoice], confirm: [choice: LapCho
 const { t } = useI18n()
 const text = useLapChoiceText()
 const status = computed(() => text.status(props.choice.status))
+const conditions = computed(() => text.conditions(props.choice.conditions))
 const second = computed(() => {
   if (props.choice.ideal) return text.idealNote(props.idealScope)
   const lap = props.choice.lapNumber ? t('sessionDetail.chart.lap', { lap: props.choice.lapNumber }) : ''
@@ -35,6 +36,7 @@ function onKey(event: KeyboardEvent) {
         <span class="choice-row__time" :class="{ 'is-best': choice.best }">{{ formatLapTime(choice.lapTimeMs) }}</span>
       </span>
       <span v-if="second" class="choice-row__l2">{{ second }}</span>
+      <span v-if="conditions" class="choice-row__cond">{{ conditions }}</span>
       <span class="choice-row__l3">
         <span v-if="!choice.ideal" class="choice-row__status" :class="`is-${choice.status}`"><span aria-hidden="true">{{ status.icon }}</span> {{ status.text }}</span>
         <span v-if="choice.best" class="choice-row__best"><span aria-hidden="true">★</span> {{ t('telemetry.choice.status.best') }}</span>
@@ -56,6 +58,7 @@ function onKey(event: KeyboardEvent) {
   &.is-off { color: #8a8a90; } }
 .choice-row__rank { min-width: 28px; color: #b3b3b8; font: italic 700 15px 'Racer Display', sans-serif; text-align: right; }
 .choice-row__text { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.choice-row__cond { color: #b3b3b8; font: 500 12px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
 .choice-row__l1 { display: flex; align-items: baseline; gap: 8px; font: 700 13px 'Inter', sans-serif; }
 .choice-row__driver { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .choice-row__tag { padding: 0 5px; border: 1px solid currentColor; color: #38bdf8; font: 700 10px/15px 'Inter', sans-serif; letter-spacing: .05em; }

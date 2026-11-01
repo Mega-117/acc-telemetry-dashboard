@@ -1,7 +1,7 @@
 // PIP-695: the pure part of choosing "Tu" and "Riferimento".
 import { describe, expect, it } from 'vitest'
 import {
-  chooseDefaultReference, choiceBlock, classifyLink, dateBucket, groupMyLaps, lapKey, lapStatus, leaderboard, matchesDriver, normalizeSearch,
+  chooseDefaultReference, choiceBlock, classifyLink, dateBucket, groupMyLaps, lapKey, lapStatus, leaderboard, runConditions, matchesDriver, normalizeSearch,
   parseSessionLink, pctFaster, sameTrackName, sessionDate, whenParts, type LapChoice, type LapEntryLike,
 } from '~/services/telemetry/lapChoice'
 
@@ -141,5 +141,10 @@ describe('lapChoice: same lap and links', () => {
     expect(sameTrackName('Spa', 'spa')).toBe(true)
     expect(sameTrackName('monza', 'Spa')).toBe(false)
     expect(sameTrackName('', 'spa')).toBe(false)
+  })
+  it('reads the conditions of a lap file, none when the file has none (01/11)', () => {
+    expect(runConditions({ fuelL: 43.7, tyreCompound: 'dry', conditions: { airC: 15, roadC: 18 } })).toEqual({ fuelL: 43.7, tyre: 'dry', airC: 15, roadC: 18 })
+    expect(runConditions({ fuelL: null, conditions: null })).toBeNull()
+    expect(runConditions(null)).toBeNull()
   })
 })

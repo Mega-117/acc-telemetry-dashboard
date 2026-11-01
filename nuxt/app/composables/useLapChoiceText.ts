@@ -1,5 +1,5 @@
 // PIP-695: the words of a lap row or card (who, which lap, when, status, why), one place for cards and lists.
-import { sessionDate, whenParts, type LapChoice, type LapStatus, type RefReason } from '~/services/telemetry/lapChoice'
+import { sessionDate, whenParts, type LapChoice, type LapRunConditions, type LapStatus, type RefReason } from '~/services/telemetry/lapChoice'
 import { formatLapTime } from '~/utils/telemetryFormat'
 import { useI18n, type TranslationKey } from '~/i18n'
 
@@ -37,5 +37,15 @@ export function useLapChoiceText() {
     return t('telemetry.choice.reason.prefix', { text })
   }
   const side = (s: 'you' | 'ref') => t(s === 'you' ? 'telemetry.you' : 'telemetry.reference')
-  return { when, status, lapLine, driver, idealNote, reason, side }
+  /** 01/11: "Benzina 43,7 L · Gomme da asciutto · Aria 15° · Asfalto 18°", only the parts that are known. */
+  function conditions(c: LapRunConditions | null | undefined): string {
+    if (!c) return ''
+    return [
+      c.fuelL !== null ? t('telemetry.choice.cond.fuel', { n: decimal(Math.round(c.fuelL * 10) / 10) }) : '',
+      c.tyre ? t(`telemetry.choice.cond.${c.tyre}`) : '',
+      c.airC !== null ? t('telemetry.choice.cond.air', { n: Math.round(c.airC) }) : '',
+      c.roadC !== null ? t('telemetry.choice.cond.road', { n: Math.round(c.roadC) }) : '',
+    ].filter(Boolean).join(' · ')
+  }
+  return { when, status, lapLine, driver, idealNote, reason, side, conditions }
 }

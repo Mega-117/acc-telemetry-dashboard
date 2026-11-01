@@ -35,6 +35,16 @@ export interface LapEntryLike {
   note?: string, driver?: string | null, ownerUid?: string | null, recordedAt?: string | null
 }
 
+/** 01/11: what the lap was driven with, from its file: fuel at the start, tyres, air and track. */
+export interface LapRunConditions { fuelL: number | null, tyre: 'dry' | 'wet' | null, airC: number | null, roadC: number | null }
+
+/** The conditions of a lap trace, or null when the file has none of them. */
+export function runConditions(trace: { fuelL: number | null, tyreCompound?: 'dry' | 'wet' | null, conditions: { airC: number | null, roadC: number | null } | null } | null | undefined): LapRunConditions | null {
+  if (!trace) return null
+  const out = { fuelL: trace.fuelL, tyre: trace.tyreCompound ?? null, airC: trace.conditions?.airC ?? null, roadC: trace.conditions?.roadC ?? null }
+  return out.fuelL === null && out.tyre === null && out.airC === null && out.roadC === null ? null : out
+}
+
 export interface LapChoice {
   /** Owner + session + lap number for real laps (the same lap from any source), the id otherwise. */
   key: string
@@ -53,6 +63,8 @@ export interface LapChoice {
   ideal?: boolean
   reason?: RefReason
   note?: string
+  /** 01/11: known only for laps whose file is already loaded (cards and session rows). */
+  conditions?: LapRunConditions | null
 }
 
 export interface DriverRow { uid: string, nickname: string | null, lapTimeMs: number, rank: number, gapMs: number | null, mine: boolean, libId: string, recordedAt: string | null }

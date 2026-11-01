@@ -56,6 +56,14 @@ describe('LapChoiceCard', () => {
     expect(wrapper.text()).not.toContain('TU')
     expect(wrapper.text()).not.toContain('Perché questo')
   })
+  it('shows what the lap was driven with: fuel, tyres, air and track (01/11)', () => {
+    wrapper = mount(LapChoiceCard, { props: { side: 'you', choice: { ...you, conditions: { fuelL: 43.73, tyre: 'dry', airC: 15.2, roadC: 18.4 } } } })
+    expect(wrapper.text()).toContain('Benzina 43,7 L · Gomme da asciutto · Aria 15° · Asfalto 18°')
+    wrapper.unmount()
+    wrapper = mount(LapChoiceCard, { props: { side: 'you', choice: { ...you, conditions: { fuelL: null, tyre: 'wet', airC: null, roadC: 12 } } } })
+    expect(wrapper.text()).toContain('Gomme da pioggia · Asfalto 12°')
+    expect(wrapper.text()).not.toContain('Benzina')
+  })
   it('"Cambia" asks to open the chooser', async () => {
     wrapper = mount(LapChoiceCard, { props: { side: 'you', choice: you } })
     await wrapper.get('.lap-card__change').trigger('click')

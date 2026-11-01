@@ -21,6 +21,7 @@ const text = useLapChoiceText()
 const color = computed(() => props.side === 'you' ? '#38bdf8' : '#fbbf24')
 const status = computed(() => props.choice ? text.status(props.choice.status) : null)
 const when = computed(() => props.choice ? text.when(props.choice) : '')
+const conditions = computed(() => text.conditions(props.choice?.conditions))
 </script>
 
 <template>
@@ -38,6 +39,7 @@ const when = computed(() => props.choice ? text.when(props.choice) : '')
           <span v-if="when">{{ when }}</span>
           <span class="lap-card__status" :class="`is-${choice.status}`"><span aria-hidden="true">{{ status!.icon }}</span> {{ status!.text }}</span>
         </p>
+        <p v-if="conditions" class="lap-card__cond">{{ conditions }}</p>
         <p v-if="side === 'ref' && reason" class="lap-card__reason">{{ text.reason(reason, { pilotName }) }}</p>
       </template>
       <p v-else class="lap-card__lap">{{ t('telemetry.choice.noLap') }}</p>
@@ -57,6 +59,7 @@ const when = computed(() => props.choice ? text.when(props.choice) : '')
 .lap-card__who { display: flex; align-items: center; gap: 6px; color: #fff; font: 700 13px 'Inter', sans-serif; }
 .lap-card__driver { overflow: hidden; text-overflow: ellipsis; }
 .lap-card__tag { flex-shrink: 0; padding: 0 5px; border: 1px solid var(--c); color: var(--c); font: 700 10px/16px 'Inter', sans-serif; letter-spacing: .05em; }
+.lap-card__cond { color: #b3b3b8; font: 500 12px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
 .lap-card__lap { color: #e6e6ea; font: italic 700 14px 'Racer Display', sans-serif; letter-spacing: .02em; &.is-best { color: #c084fc; } }
 .lap-card__meta { display: flex; gap: 8px; color: #b3b3b8; font: 500 12px 'Inter', sans-serif; }
 .lap-card__status { &.is-valid { color: #3ddc5a; } &.is-invalid { color: #ff8a98; } &.is-incomplete, &.is-unknown { color: #b3b3b8; } }

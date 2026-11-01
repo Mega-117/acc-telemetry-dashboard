@@ -8,7 +8,7 @@ import { fetchLibraryLap, fetchPilotLap, LapsArchiveError, listPilotTrackLaps, t
 import { loadSharedLapLink } from '~/services/telemetry/sharedLapLoad'
 import { loadPublicNickname } from '~/repositories/publicProfileRepository'
 import {
-  chooseDefaultReference, classifyLink, IDEAL_KEY, lapKey, lapStatus, leaderboard, parseSessionLink, pctFaster, sameTrackName,
+  chooseDefaultReference, classifyLink, IDEAL_KEY, lapKey, lapStatus, leaderboard, parseSessionLink, pctFaster, runConditions, sameTrackName,
   type DriverRow, type LapChoice, type LapSide, type RefReason,
 } from '~/services/telemetry/lapChoice'
 import { carMismatchNote, type Entry, type useReferenceLibrary } from './useReferenceLibrary'
@@ -84,7 +84,8 @@ export function useLapChoice(o: {
     return { key: entryKey(e), ref: { kind: 'entry', id: e.id }, ownerUid: owner, driver: e.driver ?? nick(owner), mine: !!owner && owner === o.myUid(),
       lapNumber: e.lapNumber > 0 ? e.lapNumber : null, lapTimeMs: e.lapTimeMs, sessionToken: e.sessionToken || null, recordedAt: e.recordedAt ?? null,
       sessionType: e.sessionToken && e.sessionToken === o.sessionToken() ? o.sessionType() : null,
-      status: e.validUnknown ? lapStatus(null, e.complete) : lapStatus(e.valid, e.complete), ideal: e.origin === 'ideal', note: e.note, reason }
+      status: e.validUnknown ? lapStatus(null, e.complete) : lapStatus(e.valid, e.complete), ideal: e.origin === 'ideal', note: e.note, reason,
+      conditions: e.origin === 'ideal' ? null : runConditions(o.traces.value[e.id]) }
   }
   const byId = (id: string) => o.entries.value.find(e => e.id === id) ?? null
   const lapEntry = computed(() => byId(o.lapId.value))
