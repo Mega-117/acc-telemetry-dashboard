@@ -214,13 +214,14 @@ const lapView = computed(() => detailTab.value === 'avanzata')
 // and the removed reference are still there when the driver comes back.
 const panelMounted = ref(lapView.value)
 watch(lapView, on => { if (on) panelMounted.value = true })
-// 01/11: while Telemetria is shown the main column opens to the whole window (menus unchanged).
+// 01/11: the session page (Sessione and Telemetria alike) uses the whole window (menus unchanged): switching
+// between the two views never moves the tabs (02/11: the narrow Sessione made them jump right).
 function setWideMain(on: boolean) {
   if (typeof document === 'undefined') return
   if (on) document.documentElement.style.setProperty('--app-main-max-width', 'none')
   else document.documentElement.style.removeProperty('--app-main-max-width')
 }
-watch(() => lapView.value && !isEvoSession.value, setWideMain, { immediate: true })
+onMounted(() => setWideMain(true))
 onBeforeUnmount(() => setWideMain(false))
 // PIP-635: si apre sulla Telemetria quando i giri possono esserci (programma desktop, o archivio online
 // del pilota visto dal coach); altrimenti, o se poi non ci sono giri, resta Sessione. Una scelta dell'utente vince sempre.
@@ -2506,7 +2507,7 @@ const gripZones = computed(() => {
     </Transition>
   </Teleport>
   <!-- 01/11: in Telemetria the page also takes the free space right of the centred column (wider charts). -->
-  <LayoutPageContainer class="session-detail-page" :class="{ 'session-detail-page--wide': lapView && !isEvoSession }">
+  <LayoutPageContainer class="session-detail-page session-detail-page--wide">
     <!-- NAV -->
     <div v-if="!headerBack" class="nav-bar">
       <button v-if="!headerBack" class="nav-btn" @click="emit('back')">
