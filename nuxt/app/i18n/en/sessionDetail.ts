@@ -7,7 +7,7 @@ export default {
     youName: 'You',
     min5Laps: 'min 5 laps',
     na: 'n/a',
-    compareStints: 'Stint comparison',
+    compareStints: 'Stints side by side',
     share: {
       label: 'Share',
       sharing: 'Sharing…',
@@ -43,7 +43,7 @@ export default {
     mode: {
       aria: 'Analysis mode',
       analysis: 'Analysis',
-      compare: 'Comparison',
+      compare: 'Side by side',
     },
     builder: {
       title: 'Selection',
@@ -126,7 +126,7 @@ export default {
       valid: 'VALID LAPS',
     },
     chart: {
-      compareTitle: 'Lap time comparison',
+      compareTitle: 'Lap times side by side',
       title: 'Lap times',
       time: 'Time',
       strategy: 'Strategy {side}',

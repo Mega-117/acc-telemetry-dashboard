@@ -6,7 +6,7 @@ export default {
     youName: 'Tu',
     min5Laps: 'min 5 giri',
     na: 'n/d',
-    compareStints: 'Confronto stint',
+    compareStints: 'Stint affiancati',
     share: {
       label: 'Condividi',
       sharing: 'Condivisione…',
@@ -42,7 +42,7 @@ export default {
     mode: {
       aria: 'Modalità analisi',
       analysis: 'Analisi',
-      compare: 'Confronto',
+      compare: 'Affiancati',
     },
     builder: {
       title: 'Composizione',
@@ -125,7 +125,7 @@ export default {
       valid: 'GIRI VALIDI',
     },
     chart: {
-      compareTitle: 'Confronto tempi',
+      compareTitle: 'Tempi affiancati',
       title: 'Tempi Giro',
       time: 'Tempo',
       strategy: 'Strategia {side}',

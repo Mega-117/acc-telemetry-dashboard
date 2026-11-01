@@ -97,7 +97,7 @@ export default {
       equal: 'uguale',
     },
     improve: {
-      title: 'Dove migliorare',
+      title: 'Contro il riferimento',
       pickRef: 'Scegli un riferimento per vedere dove migliorare.',
       none: 'Nessuna curva sotto il riferimento di oltre 3 centesimi.',
     },
@@ -114,7 +114,7 @@ export default {
       exit: 'In uscita perdi {s} s: confronta quando riapri il gas',
     },
     zones: {
-      title: 'Dove lavorare',
+      title: 'Dove lavorare · tutta la sessione',
       laps: 'su {laps} giri validi',
       consistencyTitle: 'Dove sei meno costante',
       consistency: 'Curva {n}: varii di {s} s da un giro all’altro',

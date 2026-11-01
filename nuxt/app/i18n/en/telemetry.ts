@@ -98,7 +98,7 @@ export default {
       equal: 'equal',
     },
     improve: {
-      title: 'Where to improve',
+      title: 'Against the reference',
       pickRef: 'Pick a reference to see where to improve.',
       none: 'No corner slower than the reference by more than 3 hundredths.',
     },
@@ -115,7 +115,7 @@ export default {
       exit: 'You lose {s} s on exit: compare when you get back on the throttle',
     },
     zones: {
-      title: 'Where to work',
+      title: 'Where to work · whole session',
       laps: 'on {laps} valid laps',
       consistencyTitle: 'Where you are least consistent',
       consistency: 'Corner {n}: you vary by {s} s from lap to lap',

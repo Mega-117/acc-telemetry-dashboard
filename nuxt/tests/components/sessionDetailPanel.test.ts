@@ -20,7 +20,7 @@ describe('Session detail analysis panel', () => {
     const wrapper = mount(SessionDetailPanel, { props: { comparisonOpen: false, label: 'Stint 4' }, slots: { default: '<input value="A #1 B #2 #3" />' } })
     const input = wrapper.get('input').element
     await wrapper.setProps({ comparisonOpen: true })
-    expect(wrapper.get('h2').text()).toBe('Confronto stint')
+    expect(wrapper.get('h2').text()).toBe('Stint affiancati') // 01/11: one "Confronta" only, the stint view is "side by side"
     await wrapper.setProps({ comparisonOpen: false })
     expect(wrapper.get('input').element).toBe(input)
     expect(wrapper.get('h2').text()).toBe('Stint 4')
