@@ -117,8 +117,8 @@ describe('SessionAnalysisPanel sharing and coach view', () => {
     }
     const view = mount(SessionAnalysisPanel, { props: { sessionToken: '20261025_175240', laps, referenceRemoved: true }, global: { stubs: { AnalysisMap: true, AnalysisCharts: true, AnalysisCar: true } } })
     await flushPromises()
-    expect(view.get('.lap-pill--you').text()).toContain('Giro 5')
-    expect(view.get('.lap-pill--ref').text()).not.toContain('Giro 6')
+    expect(view.get('.lap-pill--you').text()).toContain('G5')
+    expect(view.get('.lap-pill--ref').text()).not.toContain('G6')
     expect(view.find('.lap-pill--ref .lap-pill__remove').exists()).toBe(false)
     await view.setProps({ referenceRemoved: false })
     view.unmount()
@@ -126,7 +126,7 @@ describe('SessionAnalysisPanel sharing and coach view', () => {
     await flushPromises()
     await again.get('.lap-pill--ref .lap-pill__remove').trigger('click')
     expect(again.emitted('removeCompare')).toHaveLength(1)
-    expect(again.get('.lap-pill--ref').text()).not.toContain('Giro 6')
+    expect(again.get('.lap-pill--ref').text()).not.toContain('G6')
     again.unmount()
   })
 
@@ -141,15 +141,15 @@ describe('SessionAnalysisPanel sharing and coach view', () => {
     }
     const view = mount(SessionAnalysisPanel, { props: { sessionToken: '20261025_175240', laps, sessionType: 'race' }, attachTo: document.body, global: { stubs: { AnalysisMap: true, AnalysisCharts: true, AnalysisCar: true } } })
     await flushPromises()
-    expect(view.get('.lap-pill--you .lap-pill__lap').text()).toBe('Giro 5')
+    expect(view.get('.lap-pill--you .lap-pill__lap').text()).toBe('G5')
     expect(view.get('.lap-pill--you .lap-pill__time').text()).toBe('1:44.310')
-    expect(view.get('.lap-pill--ref .lap-pill__lap').text()).toBe('Giro 6')
+    expect(view.get('.lap-pill--ref .lap-pill__lap').text()).toBe('G6')
     expect(view.get('.lap-pill--ref .lap-pill__time').text()).toBe('1:44.900')
     expect(view.get('.lap-pill--ref .lap-pill__why').attributes('aria-label')).toContain('Perché questo: il tuo giro valido più veloce dopo questo')
     expect(view.get('.lap-pill--ref .lap-pill__body').attributes('title')).toContain('Gara')
     // Both laps are mine: they can be swapped.
     await view.get('.compare-swap').trigger('click')
-    expect(view.get('.lap-pill--you').text()).toContain('Giro 6')
+    expect(view.get('.lap-pill--you .lap-pill__lap').text()).toBe('G6')
     expect(view.get('.lap-pill--ref .lap-pill__why').attributes('aria-label')).toContain('giro scelto da te')
     await view.get('.lap-pill--ref .lap-pill__change').trigger('click')
     await flushPromises()
@@ -176,7 +176,7 @@ describe('SessionAnalysisPanel sharing and coach view', () => {
     vi.stubGlobal('fetch', fetchImpl)
     ;(window as any).electronAPI = { listLapTraces: vi.fn(async () => []), readLapTrace: vi.fn(), shareLapTrace: vi.fn() }
     const view = mount(SessionAnalysisPanel, { props: { sessionToken: '20261025_175240', laps, pilotUid: 'pilot-1' }, global: { stubs: { AnalysisMap: true, AnalysisCharts: true, AnalysisCar: true } } })
-    await vi.waitFor(() => expect(view.text()).toContain('Giro 5'))
+    await vi.waitFor(() => expect(view.text()).toContain('G5'))
     expect(fetchImpl.mock.calls[0]![0]).toContain('/v1/laps/of/pilot-1/20261025_175240')
     expect(view.findAll('button.bar-btn').some(b => b.text() === 'Condividi giro')).toBe(false)
     await vi.waitFor(() => expect((window as any).electronAPI.listLapTraces).toHaveBeenCalledWith({ track: 'Hungaroring', car: 'ferrari_296_gt3' }))

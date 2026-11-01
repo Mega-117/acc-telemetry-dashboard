@@ -151,10 +151,11 @@ export default {
     },
     // PIP-695: the two lap cards and the "Cambia" chooser. Plain words: no "delta", "stint", "teorico".
     choice: {
-      lapShort: 'Giro {n}',
-      idealShort: 'Giro ideale',
+      lapShort: 'G{n}',
+      idealShort: 'Ideale',
+      infoAria: 'Dettagli del giro',
       removeRef: 'Togli il riferimento: resta solo il tuo giro',
-      cond: { fuelShort: '{n} L', dryShort: 'DRY', wetShort: 'WET', airShort: 'AIR {n}°', roadShort: 'TRK {n}°', fuel: 'Benzina {n} L', dry: 'Gomme da asciutto', wet: 'Gomme da pioggia', air: 'Aria {n}°', road: 'Asfalto {n}°' },
+      cond: { fuelShort: '{n} L', dryShort: 'DRY', wetShort: 'WET', airShort: 'AIR {n}°', roadShort: 'TRK {n}°', fuel: 'Benzina {n} L', dry: 'Gomme da asciutto', wet: 'Gomme da pioggia', air: 'Aria {n}°', road: 'Asfalto {n}°', grip: 'Grip {g}', gripShort: { green: 'GRN', fast: 'FST', optimum: 'OPT', greasy: 'GRS', damp: 'DMP', wet: 'WET', flooded: 'FLD' } },
       tagYou: 'TU',
       change: 'Cambia',
       changeYouAria: 'Cambia il tuo giro',

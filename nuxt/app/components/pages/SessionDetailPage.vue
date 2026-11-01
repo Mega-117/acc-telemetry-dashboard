@@ -228,7 +228,7 @@ const analysisToken = computed(() => analysisSessionToken(
 ))
 const analysisLaps = computed(() => (fullSession.value?.stints ?? []).flatMap(stint => stint.laps ?? [])
   .map(lap => ({ lap_number: lap.lap_number, lap_time_ms: lap.lap_time_ms ?? null, is_valid: lap.is_valid ?? null, sector_times_ms: lap.sectors_reliable ? lap.sector_times_ms ?? null : null,
-    air_temp: lap.air_temp ?? null, road_temp: lap.road_temp ?? null, track_grip_status: lap.track_grip_status ?? null })))
+    air_temp: lap.air_temp ?? null, road_temp: lap.road_temp ?? null, track_grip_status: lap.track_grip_status ?? null, rain_intensity: lap.rain_intensity ?? null })))
 // PIP-632: traccia d'uso nel diario quando si apre la Telemetria (solo il numero di giri).
 watch(detailTab, (tab, before) => { if (tab !== 'sessione' && before === 'sessione' && !isEvoSession.value) noteFeatureUse({ event: 'telemetry.opened', laps: analysisLaps.value.length }) })
 
@@ -2520,7 +2520,9 @@ const gripZones = computed(() => {
     <!-- Identity on the left (what: track and type, then when and with what), actions and
          the Sessione / Telemetria switch on the right. -->
     <header class="session-header session-header--compact">
-      <div class="header-id">
+      <!-- 01/11: in the lap views the two laps take this place (Track Titan shows no track, date or car there). -->
+      <div v-if="lapView && !isEvoSession" id="session-head-laps" class="header-laps" />
+      <div v-else class="header-id">
         <!-- 01/11: one line: track, type, when, car (more height for the views below). -->
         <!-- The track name opens the track page (the old "Apri pista" button). -->
         <h1 class="track-name"><button type="button" class="track-link" :title="t('sessionDetail.header.openTrack')" @click="emit('go-to-track', session.trackId)">{{ session.track.toUpperCase() }}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button></h1>
@@ -2537,7 +2539,7 @@ const gripZones = computed(() => {
       </div>
     </header>
 
-    <SessionAnalysisPanel v-if="lapView && !isEvoSession" :view="detailTab === 'migliorare' ? 'pilota' : 'tracce'" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" :compare-with="compareTarget" :pending-lap-link="pendingLapLink" :session-type="session?.type ?? null" :read-session="readLinkedSession" @unavailable="onTelemetryUnavailable" @compare="openSessionPicker" @lap-link-handled="pendingLapLink = null" @remove-compare="removeCompare" :reference-removed="referenceRemoved" @reference-chosen="referenceRemoved = false" />
+    <SessionAnalysisPanel v-if="lapView && !isEvoSession" :view="detailTab === 'migliorare' ? 'pilota' : 'tracce'" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" :compare-with="compareTarget" :pending-lap-link="pendingLapLink" :session-type="session?.type ?? null" :read-session="readLinkedSession" @unavailable="onTelemetryUnavailable" @compare="openSessionPicker" @lap-link-handled="pendingLapLink = null" @remove-compare="removeCompare" :reference-removed="referenceRemoved" @reference-chosen="referenceRemoved = false" head-target="#session-head-laps" />
 
     <!-- ========================================== -->
     <!-- MASTER / DETAIL LAYOUT -->
@@ -3310,6 +3312,7 @@ const gripZones = computed(() => {
 // Breathing room under the navbar and before the content; two short lines on the left
 // (track, then date and car), actions and the switch on the right.
 .session-header--compact { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin: 4px 0 16px;
+  .header-laps { display: flex; flex: 1 1 640px; min-width: 0; }
   .header-id { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-width: 0; font-size: 14px; }
   .header-row { margin-bottom: 0; } .track-name { font-size: 24px; letter-spacing: 1px; } .header-meta { margin-bottom: 0; align-items: center; gap: 14px; font-size: 14px; }
   // PIP-666: on a phone the actions wrap under each other instead of pushing the switch off screen.

@@ -45,16 +45,18 @@ export function useLapChoiceText() {
       c.tyre ? t(`telemetry.choice.cond.${c.tyre}`) : '',
       c.airC !== null ? t('telemetry.choice.cond.air', { n: Math.round(c.airC) }) : '',
       c.roadC !== null ? t('telemetry.choice.cond.road', { n: Math.round(c.roadC) }) : '',
+      c.grip ? t('telemetry.choice.cond.grip', { g: t(`data.grip.${c.grip}`) }) : '',
+      c.rain !== null ? t(`overlays.weather.rain${c.rain}` as 'overlays.weather.rain0') : '',
     ].filter(Boolean).join(' · ')
   }
-  /** 01/11 (Track Titan's pills): the same facts as short tags: "115 L", "DRY", "AIR 15°", "TRK 18°". */
+  /** 01/11 (Track Titan's pills): short tags "115 L", "AIR 15°", "TRK 18°", "OPT"; no tyres; the weather is an icon. */
   function conditionsShort(c: LapRunConditions | null | undefined): string[] {
     if (!c) return []
     return [
       c.fuelL !== null ? t('telemetry.choice.cond.fuelShort', { n: Math.round(c.fuelL) }) : '',
-      c.tyre ? t(`telemetry.choice.cond.${c.tyre}Short`) : '',
       c.airC !== null ? t('telemetry.choice.cond.airShort', { n: Math.round(c.airC) }) : '',
       c.roadC !== null ? t('telemetry.choice.cond.roadShort', { n: Math.round(c.roadC) }) : '',
+      c.grip ? t(`telemetry.choice.cond.gripShort.${c.grip}`) : '',
     ].filter(Boolean)
   }
   return { when, status, lapLine, driver, idealNote, reason, side, conditions, conditionsShort }

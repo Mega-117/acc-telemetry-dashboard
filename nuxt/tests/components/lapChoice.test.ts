@@ -41,8 +41,8 @@ describe('LapChoiceCard', () => {
     const text = wrapper.text()
     expect(text).toContain('Riferimento')
     expect(text).toContain('Bob117')
-    expect(wrapper.get('.lap-pill__you').text()).toBe('TU')
-    expect(wrapper.get('.lap-pill__lap').text()).toBe('Giro 5')
+    expect(wrapper.find('.lap-pill__you').exists()).toBe(false) // 01/11: no TU tag beside the name
+    expect(wrapper.get('.lap-pill__lap').text()).toBe('G5')
     expect(wrapper.get('.lap-pill__time').text()).toBe('1:40.000')
     expect(wrapper.get('.lap-pill__body').attributes('title')).toContain('Oggi 10:15 · Gara')
     expect(wrapper.get('.lap-pill__status').text()).toContain('Valido')
@@ -57,7 +57,7 @@ describe('LapChoiceCard', () => {
     wrapper = mount(LapChoiceCard, { props: { side: 'ref', choice: { ...ref, ideal: true }, idealScope: 'session' } })
     expect(wrapper.classes()).toContain('is-ideal')
     expect(wrapper.get('.lap-pill__body').attributes('title')).toContain('Non è un giro vero — i tuoi settori migliori di questa sessione')
-    expect(wrapper.get('.lap-pill__lap').text()).toBe('Giro ideale')
+    expect(wrapper.get('.lap-pill__lap').text()).toBe('Ideale')
     wrapper.unmount()
     wrapper = mount(LapChoiceCard, { props: { side: 'you', choice: { ...you, status: 'unknown', mine: false, driver: 'Mike' } } })
     expect(wrapper.get('.lap-pill__status').text()).toBe('?Validità non disponibile') // icon + screen-reader words
@@ -67,11 +67,11 @@ describe('LapChoiceCard', () => {
   it('shows what the lap was driven with: fuel, tyres, air and track (01/11)', () => {
     wrapper = mount(LapChoiceCard, { props: { side: 'you', choice: { ...you, conditions: { fuelL: 43.73, tyre: 'dry', airC: 15.2, roadC: 18.4 } } } })
     // 01/11: short tags on the pill, the full words in the tooltip.
-    expect(wrapper.findAll('.lap-pill__tags span').map(s => s.text())).toEqual(['44 L', 'DRY', 'AIR 15°', 'TRK 18°'])
+    expect(wrapper.findAll('.lap-pill__tags span').map(s => s.text())).toEqual(['44 L', 'AIR 15°', 'TRK 18°'])
     expect(wrapper.get('.lap-pill__body').attributes('title')).toContain('Benzina 43,7 L · Gomme da asciutto · Aria 15° · Asfalto 18°')
     wrapper.unmount()
     wrapper = mount(LapChoiceCard, { props: { side: 'you', choice: { ...you, conditions: { fuelL: null, tyre: 'wet', airC: null, roadC: 12 } } } })
-    expect(wrapper.findAll('.lap-pill__tags span').map(s => s.text())).toEqual(['WET', 'TRK 12°'])
+    expect(wrapper.findAll('.lap-pill__tags span').map(s => s.text())).toEqual(['TRK 12°'])
     expect(wrapper.text()).not.toContain(' L')
   })
   it('the reference can be taken away with ✕; the Tu row has no ✕ (01/11)', async () => {

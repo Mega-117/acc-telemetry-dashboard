@@ -160,7 +160,12 @@ describe('lapChoice: same lap and links', () => {
     expect(pick).toEqual({ id: 'r', reason: { kind: 'myBest' } })
   })
   it('reads the conditions of a lap file, none when the file has none (01/11)', () => {
-    expect(runConditions({ fuelL: 43.7, tyreCompound: 'dry', conditions: { airC: 15, roadC: 18 } })).toEqual({ fuelL: 43.7, tyre: 'dry', airC: 15, roadC: 18 })
+    expect(runConditions({ fuelL: 43.7, tyreCompound: 'dry', conditions: { airC: 15, roadC: 18 } })).toEqual({ fuelL: 43.7, tyre: 'dry', airC: 15, roadC: 18, grip: null, rain: null })
+    // 01/11: grip from the lap, else the session row; weather from the session row; unknown words stay unknown.
+    expect(runConditions({ fuelL: null, conditions: { airC: null, roadC: null, grip: 'Optimum' } }, { track_grip_status: 'Wet', rain_intensity: 'Light Rain', air_temp: 14 }))
+      .toEqual({ fuelL: null, tyre: null, airC: 14, roadC: null, grip: 'optimum', rain: 2 })
+    expect(runConditions({ fuelL: null, conditions: null }, { track_grip_status: 'Unknown', rain_intensity: '—' })).toBeNull()
+    expect(runConditions({ fuelL: null, conditions: null }, { track_grip_status: 'Opt', rain_intensity: 'No Rain' })).toEqual({ fuelL: null, tyre: null, airC: null, roadC: null, grip: 'optimum', rain: 0 })
     expect(runConditions({ fuelL: null, conditions: null })).toBeNull()
     expect(runConditions(null)).toBeNull()
   })

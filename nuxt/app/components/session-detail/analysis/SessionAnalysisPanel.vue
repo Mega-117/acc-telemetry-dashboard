@@ -31,7 +31,7 @@ import { useI18n } from '~/i18n'
 
 const props = defineProps<{
   sessionToken: string | null
-  laps: { lap_number: number, lap_time_ms: number | null, is_valid: boolean | null, sector_times_ms?: (number | null)[] | null, air_temp?: number | null, road_temp?: number | null, track_grip_status?: string | null }[]
+  laps: { lap_number: number, lap_time_ms: number | null, is_valid: boolean | null, sector_times_ms?: (number | null)[] | null, air_temp?: number | null, road_temp?: number | null, track_grip_status?: string | null, rain_intensity?: string | null }[]
   /** Lap to open as "Tu", when the driver picked it in the Sessione table. */
   initialLap?: number | null
   /** PIP-623: coach view of a linked pilot: the laps come from the online archive. */
@@ -51,6 +51,8 @@ const props = defineProps<{
   view?: 'pilota' | 'tracce'
   /** 01/11: the driver took the reference away (✕): no default or late answer brings it back. */
   referenceRemoved?: boolean
+  /** 01/11: where the Tu / Riferimento bar goes (the page's title row); none = in place. */
+  headTarget?: string | null
 }>()
 
 type Layout = 'pilota' | 'tracce'
@@ -95,7 +97,7 @@ const archiveDeps = { getToken: async () => (await currentUser.value?.getIdToken
 // PIP-695: the two lap cards and the "Cambia" chooser (modal; a side panel only in dev builds, for the usability test).
 const choice = useLapChoice({ entries, traces, lapId, refId, library, sessionToken: () => props.sessionToken, pilotUid: () => props.pilotUid || null,
   myUid: () => currentUser.value?.uid ?? null, sessionType: () => props.sessionType ?? null, bridge: api, deps: archiveDeps, readSession: props.readSession,
-  refRemoved: () => !!props.referenceRemoved })
+  refRemoved: () => !!props.referenceRemoved, sessionRow: e => sessionRow(e) })
 // A lap picked for the reference in Cambia is a new choice: the page forgets the ✕.
 async function applyChoice(side: LapSide, c: Parameters<typeof choice.apply>[1]) {
   const result = await choice.apply(side, c)
@@ -418,7 +420,9 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 
 <template>
   <section class="analysis">
-    <div class="analysis-bar">
+    <!-- 01/11 (Track Titan): Tu and Riferimento sit in the page's title row, no row of their own: more height for the charts. -->
+    <Teleport defer :to="headTarget || 'body'" :disabled="!headTarget">
+    <div class="analysis-bar" :class="{ 'analysis-bar--head': headTarget }">
       <!-- PIP-695: two cards always in sight, "Tu  +1.733 s  Riferimento" (Track Titan colours): whose lap, which one,
            when, its status and why the reference; "Cambia" opens the chooser. The view sits apart, on the right. -->
       <div class="compare" role="group" :aria-label="t('telemetry.compareAria')">
@@ -437,6 +441,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
         @close="chooser = null" @whole-session="wholeSession" />
       <span v-if="shareMessage" class="bar-note" :class="{ failed: shareState === 'error' }" role="status">{{ shareMessage }}</span>
     </div>
+    </Teleport>
     <p v-if="linkError" class="analysis-note analysis-note--warn" role="alert">{{ linkError }}</p>
     <p v-if="refEntry?.note" class="analysis-note analysis-note--warn">{{ refEntry.note }}</p>
 
@@ -543,7 +548,8 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 // Racer Core language: dark cells, thin borders, red accent, italic display titles.
 .analysis { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 // Sticky: lap pickers and layout stay in sight while the charts scroll under them.
-.analysis-bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 6px 0; background: #0b0b10f2; box-shadow: 0 8px 12px -10px #000; }
+.analysis-bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 6px 0; background: #0b0b10f2; box-shadow: 0 8px 12px -10px #000;
+  &--head { position: static; flex: 1 1 auto; min-width: 0; padding: 0; background: none; box-shadow: none; } }
 // PIP-635: sugli schermi larghi una riga sola: i selettori dei giri si stringono, lo switcher non va a capo.
 @media (min-width: 1200px) { .analysis-bar { flex-wrap: nowrap; } .analysis-bar > * { flex-shrink: 0; } .analysis-bar > .compare { flex-shrink: 1; } }
 // PIP-623: share and paste, square buttons as tall as the pickers.
