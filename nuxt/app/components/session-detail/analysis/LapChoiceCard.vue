@@ -64,7 +64,8 @@ onBeforeUnmount(() => listen(false))
           <span class="lap-pill__driver">{{ text.driver(choice) }}</span>
           <span v-if="lapLabel" class="lap-pill__lap">{{ lapLabel }}</span>
           <!-- 01/11: valid says nothing (no tick); invalid is the red time; unknown or incomplete keep their sign. -->
-          <span v-if="!choice.ideal && choice.status !== 'valid'" class="lap-pill__status" :class="`is-${choice.status}`" :title="status!.text"><span v-if="choice.status !== 'invalid'" aria-hidden="true">{{ status!.icon }}</span><span class="sr-only">{{ status!.text }}</span></span>
+          <span v-if="!choice.ideal && choice.status === 'valid'" class="sr-only">{{ status!.text }}</span>
+          <span v-else-if="!choice.ideal" class="lap-pill__status" :class="`is-${choice.status}`" :title="status!.text"><span v-if="choice.status !== 'invalid'" aria-hidden="true">{{ status!.icon }}</span><span class="sr-only">{{ status!.text }}</span></span>
           <button v-if="infoLines.length" type="button" class="lap-pill__why" :aria-expanded="infoOpen" :aria-label="infoLines.join('. ')" :title="tooltip" @click="infoOpen = !infoOpen">ⓘ</button>
         </p>
         <p v-if="tags.length" class="lap-pill__tags">

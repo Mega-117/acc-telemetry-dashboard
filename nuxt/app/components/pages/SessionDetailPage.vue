@@ -200,15 +200,16 @@ const isEvoSession = computed(() => recordingGame(originalSession.value) === 'ev
 // 01/11 (user decision): three views on one level, each named by its question: Passo e costanza (the
 // session), Dove migliorare (the two laps, corner by corner), Telemetria (every channel). They replace
 // Sessione | Telemetria and the Semplice / Avanzata switch inside Telemetria.
-type DetailTab = 'sessione' | 'migliorare' | 'avanzata'
-const DETAIL_TABS: { id: DetailTab, label: 'sessionDetail.header.tabPace' | 'sessionDetail.header.tabImprove' | 'sessionDetail.header.tabTelemetry', short: 'sessionDetail.header.tabPaceShort' | 'sessionDetail.header.tabImproveShort' | 'sessionDetail.header.tabTelemetry', title: 'sessionDetail.header.tabPaceTitle' | 'sessionDetail.header.tabImproveTitle' | 'sessionDetail.header.tabTelemetryTitle' }[] = [
-  { id: 'sessione', label: 'sessionDetail.header.tabPace', short: 'sessionDetail.header.tabPaceShort', title: 'sessionDetail.header.tabPaceTitle' },
-  { id: 'migliorare', label: 'sessionDetail.header.tabImprove', short: 'sessionDetail.header.tabImproveShort', title: 'sessionDetail.header.tabImproveTitle' },
-  { id: 'avanzata', label: 'sessionDetail.header.tabTelemetry', short: 'sessionDetail.header.tabTelemetry', title: 'sessionDetail.header.tabTelemetryTitle' },
+type DetailTab = 'sessione' | 'avanzata'
+// 01/11: two views, Sessione and Telemetria. "Dove migliorare" repeated the Telemetria: its two own pieces moved
+// there (the whole-session zones beside the corner list, the advice of the opened corner).
+const DETAIL_TABS: { id: DetailTab, label: 'sessionDetail.header.tabPace' | 'sessionDetail.header.tabTelemetry', title: 'sessionDetail.header.tabPaceTitle' | 'sessionDetail.header.tabTelemetryTitle' }[] = [
+  { id: 'sessione', label: 'sessionDetail.header.tabPace', title: 'sessionDetail.header.tabPaceTitle' },
+  { id: 'avanzata', label: 'sessionDetail.header.tabTelemetry', title: 'sessionDetail.header.tabTelemetryTitle' },
 ]
 const detailTab = ref<DetailTab>('sessione')
 /** The two views of the lap comparison share one panel: switching between them keeps the laps and the reference. */
-const lapView = computed(() => detailTab.value === 'migliorare' || detailTab.value === 'avanzata')
+const lapView = computed(() => detailTab.value === 'avanzata')
 // PIP-635: si apre sulla Telemetria quando i giri possono esserci (programma desktop, o archivio online
 // del pilota visto dal coach); altrimenti, o se poi non ci sono giri, resta Sessione. Una scelta dell'utente vince sempre.
 const tabChosen = ref(false)
@@ -253,7 +254,7 @@ async function shareSession() {
     // PIP-651: one link for the whole session (Sessione and Telemetria); it opens on the tab you share from.
     const link = await shareSessionLink({
       sessionId: props.sessionId,
-      generateShareLink: (id) => generateShareLink(id, { tab: detailTab.value === 'avanzata' ? 'telemetria' : detailTab.value === 'migliorare' ? 'migliorare' : 'sessione' })
+      generateShareLink: (id) => generateShareLink(id, { tab: detailTab.value === 'avanzata' ? 'telemetria' : 'sessione' })
     })
     // PIP-653: the outcome in the site's notification column, never beside the buttons.
     pushNotice(t('sessionDetail.share.copied'), 'success')
@@ -279,7 +280,6 @@ watch(originalSession, (session) => {
     inArchive: lapTokenInArchive(analysisToken.value),
     requested: sharedTab === 'telemetria' || sharedTab === 'migliorare' ? 'avanzata' : sharedTab === 'sessione' ? 'sessione' : undefined,
   })
-  if (detailTab.value === 'avanzata' && sharedTab === 'migliorare') detailTab.value = 'migliorare'
 }, { immediate: true })
 
 onMounted(async () => {
@@ -456,7 +456,7 @@ async function handleSessionBSelect(sessionId: string, userId?: string, nickname
 // and brings its laps to the Telemetria; a lap link goes to the Telemetria as the reference.
 const compareTarget = ref<CompareTarget | null>(null)
 const pendingLapLink = ref<string | null>(null)
-function onLapLink(link: string) { referenceRemoved.value = false; pendingLapLink.value = link; chooseTab(detailTab.value === 'migliorare' ? 'migliorare' : 'avanzata') }
+function onLapLink(link: string) { referenceRemoved.value = false; pendingLapLink.value = link; chooseTab('avanzata') }
 // 01/11: ✕ on the reference takes the comparison away from the whole page (the session compared too) and
 // stays: leaving the lap views, reloading their laps or a link still downloading never brings it back.
 // A new choice (Confronta, a link, Cambia) clears it.
@@ -2535,12 +2535,12 @@ const gripZones = computed(() => {
         <button v-if="!isEvoSession" type="button" class="rc-btn rc-btn--compact" :class="{ 'rc-btn--icon': lapView }" :title="t('sessionDetail.header.compareTitle')" :aria-label="lapView ? t('sessions.picker.compare') : undefined" @click="openSessionPicker"><UiRacingIcon name="compare" :size="16" /><template v-if="!lapView">{{ t('sessions.picker.compare') }}</template></button>
         <SessionFileActions :can-share="canShare" :sharing="isSharing" :icon-only="lapView" @share="shareSession" />
         <div v-if="!isEvoSession" v-rc-switch class="detail-tabs rc-switch" role="tablist" :aria-label="t('sessionDetail.header.viewAria')" @keydown="onTabKey">
-          <button v-for="tab in DETAIL_TABS" :key="tab.id" type="button" role="tab" :aria-selected="detailTab === tab.id" :tabindex="detailTab === tab.id ? 0 : -1" :class="{ active: detailTab === tab.id }" :title="t(tab.title)" @click="chooseTab(tab.id)">{{ t(lapView ? tab.short : tab.label) }}</button>
+          <button v-for="tab in DETAIL_TABS" :key="tab.id" type="button" role="tab" :aria-selected="detailTab === tab.id" :tabindex="detailTab === tab.id ? 0 : -1" :class="{ active: detailTab === tab.id }" :title="t(tab.title)" @click="chooseTab(tab.id)">{{ t(tab.label) }}</button>
         </div>
       </div>
     </header>
 
-    <SessionAnalysisPanel v-if="lapView && !isEvoSession" :view="detailTab === 'migliorare' ? 'pilota' : 'tracce'" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" :compare-with="compareTarget" :pending-lap-link="pendingLapLink" :session-type="session?.type ?? null" :read-session="readLinkedSession" @unavailable="onTelemetryUnavailable" @compare="openSessionPicker" @lap-link-handled="pendingLapLink = null" @remove-compare="removeCompare" :reference-removed="referenceRemoved" @reference-chosen="referenceRemoved = false" head-target="#session-head-laps" />
+    <SessionAnalysisPanel v-if="lapView && !isEvoSession" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" :compare-with="compareTarget" :pending-lap-link="pendingLapLink" :session-type="session?.type ?? null" :read-session="readLinkedSession" @unavailable="onTelemetryUnavailable" @compare="openSessionPicker" @lap-link-handled="pendingLapLink = null" @remove-compare="removeCompare" :reference-removed="referenceRemoved" @reference-chosen="referenceRemoved = false" head-target="#session-head-laps" />
 
     <!-- ========================================== -->
     <!-- MASTER / DETAIL LAYOUT -->

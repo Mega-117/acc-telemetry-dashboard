@@ -39,7 +39,7 @@ function onKey(event: KeyboardEvent) {
       <span v-if="conditions" class="choice-row__cond">{{ conditions }}</span>
       <span class="choice-row__l3">
         <!-- 01/11: valid says nothing; invalid is the red time (the word for screen readers only). -->
-        <span v-if="!choice.ideal && choice.status === 'invalid'" class="sr-only">{{ status.text }}</span>
+        <span v-if="!choice.ideal && (choice.status === 'invalid' || choice.status === 'valid')" class="sr-only">{{ status.text }}</span>
         <span v-else-if="!choice.ideal && choice.status !== 'valid'" class="choice-row__status" :class="`is-${choice.status}`"><span aria-hidden="true">{{ status.icon }}</span> {{ status.text }}</span>
         <span v-if="choice.best" class="choice-row__best"><span aria-hidden="true">★</span> {{ t('telemetry.choice.status.best') }}</span>
         <span v-if="choice.reason" class="choice-row__reason">{{ text.reason(choice.reason) }}</span>

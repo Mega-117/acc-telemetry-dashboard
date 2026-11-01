@@ -9,7 +9,6 @@ import AnalysisCar from './AnalysisCar.vue'
 import AnalysisCharts, { type ChartRow } from './AnalysisCharts.vue'
 import { useCompareTargets } from '~/composables/useCompareTargets'
 import SessionZonesCard from './SessionZonesCard.vue'
-import { ZONE_COLORS } from '~/services/telemetry/sessionZones'
 import { useSessionZones } from '~/composables/useSessionZones'
 import { useSectorCompare } from '~/composables/useSectorCompare'
 import LapChoiceCard from './LapChoiceCard.vue'
@@ -48,15 +47,14 @@ const props = defineProps<{
   sessionType?: string | null
   /** PIP-695: a session link pasted in "Cambia il riferimento" → its lap token and track (the page reads it). */
   readSession?: (sessionId: string, userId: string) => Promise<{ sessionToken: string | null, track: string } | null>
-  /** 01/11: the page's view: 'pilota' = Dove migliorare, 'tracce' = Telemetria (no switch inside any more). */
-  view?: 'pilota' | 'tracce'
   /** 01/11: the driver took the reference away (✕): no default or late answer brings it back. */
   referenceRemoved?: boolean
   /** 01/11: where the Tu / Riferimento bar goes (the page's title row); none = in place. */
   headTarget?: string | null
 }>()
 
-type Layout = 'pilota' | 'tracce'
+// 01/11: one layout left (Dove migliorare's 'pilota' view was removed); the name stays for the checks below.
+type Layout = 'tracce'
 // Per-viewer preferences: remembered, never required.
 function remembered<T extends string>(key: string, values: readonly T[], fallback: T) {
   const value = ref<T>(fallback)
@@ -65,7 +63,7 @@ function remembered<T extends string>(key: string, values: readonly T[], fallbac
   return value
 }
 // The page chooses the view: Telemetria = Tracce (Garage 61 + Track Titan + VRS), Dove migliorare = Pilota.
-const layout = computed<Layout>(() => props.view ?? 'tracce')
+const layout = computed<Layout>(() => 'tracce')
 // 01/11 (user decision, a trial): the delta as the first chart on the right, fixed while the charts scroll,
 // or under the map as before. The switch stays until the drivers have tried both.
 const deltaPlace = remembered<DeltaPlace>('rc:analysis:delta', ['top', 'centre'], 'top')
@@ -321,8 +319,14 @@ const stretchLoss = computed(() => wholeView.value || !lap.value || !reference.v
     : selectedSector.value !== null ? (sectorGaps.value[selectedSector.value] ? sectorGaps.value[selectedSector.value]!.gap / 1000 : stretchDelta(lap.value, reference.value, range.value))
       : comparison.value.find(c => c.corner.number === selectedCorner.value)?.timeLostS ?? null)
 function wholeLap() { selectedCorner.value = null; selectedSector.value = null; zoomRange.value = null }
+const lossScope = ref<'lap' | 'session'>('lap')
+const selectedAdvice = computed(() => {
+  const c = selectedCorner.value !== null && !zoomRange.value ? comparison.value.find(x => x.corner.number === selectedCorner.value) : null
+  return c ? cornerAdvice(c) : ''
+})
 const gapWord = computed(() => totalDelta.value === null ? '' : totalDelta.value < 0 ? t('telemetry.faster') : totalDelta.value > 0 ? t('telemetry.slower') : t('telemetry.even'))
-const gapTitle = computed(() => [t('telemetry.gapTitle'), gapWord.value].filter(Boolean).join(': '))
+const gapTitle = computed(() => totalDelta.value === null ? t('telemetry.gapTitle')
+  : `${t('telemetry.gapTitle')}: ${formatDelta(totalDelta.value)} s, ${gapWord.value}`)
 // PIP-645: the double click (and zooming all the way out) goes back to the whole lap, as the chart hint says.
 function onZoom(next: [number, number] | null) { if (next) zoomRange.value = next; else if (layout.value === 'tracce') wholeLap(); else zoomRange.value = null }
 // Garage 61 sectors: the official sector times of the reference, placed on its trace.
@@ -378,13 +382,6 @@ function heat(seconds: number) {
   const strength = (0.72 + 0.28 * Math.min((Math.abs(seconds) - 0.01) / 0.14, 1)).toFixed(2)
   return seconds > 0 ? `rgba(228, 0, 43, ${strength})` : `rgba(22, 163, 74, ${strength})`
 }
-function selectFirst() {
-  if (!corners.value.length) { selectedCorner.value = null; return }
-  if (selectedCorner.value === null || selectedCorner.value > corners.value.length) selectedCorner.value = zones.firstCorner.value ?? worst.value[0]?.corner.number ?? 1
-}
-watch(corners, () => { if (layout.value !== 'tracce') selectFirst() })
-// Changing view starts clean: no sector or zoom carried over, so the Delta note matches what is shown.
-watch(layout, value => { selectedSector.value = null; zoomRange.value = null; if (value === 'tracce') selectedCorner.value = null; else selectFirst() })
 
 function emptyTrace(): LapTraceView { return { gameId: 'acc', variant: null, sessionId: null, track: '', car: '', lapTimeS: 0, source: '', complete: false, valid: null, fuelL: null, conditions: null, gridStepM: 2, lengthM: 0, channels: {} } }
 const has = (name: string) => !!lap.value?.channels[name]
@@ -407,9 +404,7 @@ const extraRows = computed<ChartRow[]>(() => [
   ...(has('rpm') ? [{ key: 'rpm', title: t('telemetry.rows.rpm'), channels: [{ name: 'rpm' }] }] : []),
 ] as ChartRow[])
 const WHEEL_NAME = { fl: 'telemetry.wheels.fl', fr: 'telemetry.wheels.fr', rl: 'telemetry.wheels.rl', rr: 'telemetry.wheels.rr' } as const
-const pilotRows = computed(() => [...deltaRow.value, speedRow, ...pedalRows])
 // Semplice: the four corner charts share the window under the three tips, never below 80 px.
-const pilotRowHeight = computed(() => Math.max(80, Math.floor((traceHeight.value - 230) / 4) - 40))
 // Garage 61: the delta sits under the map; the channels on the right are speed, pedals, steering, gear.
 const traceRows = computed(() => [speedRow, ...pedalRows, steerRow, gearRow, ...(allChannels.value ? extraRows.value : [])])
 
@@ -432,7 +427,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
         <div class="compare-mid">
           <!-- 01/11: only the number (the colour says faster or slower; the words stay in the tooltip). -->
           <p class="compare-gap" :class="{ gain: (totalDelta ?? 0) < 0, loss: (totalDelta ?? 0) > 0 }" :title="gapTitle">
-            <template v-if="totalDelta !== null"><strong>{{ formatDelta(totalDelta).replace('.', locale === 'it' ? ',' : '.') }}</strong><span class="sr-only">{{ gapWord }}</span><em v-if="invalidPair">{{ t('telemetry.choice.invalidQualifier') }}</em></template><em v-else>{{ t('telemetry.versus') }}</em>
+            <template v-if="totalDelta !== null"><strong>{{ formatDelta(totalDelta).replace('.', locale === 'it' ? ',' : '.') }}</strong><span class="sr-only"> s, {{ gapWord }}</span><em v-if="invalidPair">{{ t('telemetry.choice.invalidQualifier') }}</em></template><em v-else>{{ t('telemetry.versus') }}</em>
           </p>
         </div>
         <LapChoiceCard side="ref" removable @remove="choice.removeRef(); emit('removeCompare')" :choice="choice.refCard.value" :reason="choice.reason.value" :ideal-scope="idealScope" :pilot-name="pilotName" :disabled="!entries.length" @change="openChooser('ref')" />
@@ -452,39 +447,9 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
     <p v-else-if="error" class="analysis-empty">{{ error }}</p>
     <p v-else-if="lapId === refId && entries.length > 1" class="analysis-empty">{{ t('telemetry.sameLap') }}</p>
 
-    <!-- SEMPLICE (VRS): the coloured map and the three corners to work on, in plain words,
-         with the same frame as Avanzata: it fills the window and each column scrolls on its own. -->
-    <div v-if="lap && layout === 'pilota'" ref="traceRoot" class="layout-pilota" :style="{ height: `${traceHeight}px` }">
-      <div class="pilota-left">
-        <div class="panel">
-          <span v-if="zones.active.value" class="map-legend"><i :style="{ background: ZONE_COLORS.consistency }" />{{ t('telemetry.legend.consistency') }} <i :style="{ background: ZONE_COLORS.potential }" />{{ t('telemetry.legend.potential') }} <i :style="{ background: ZONE_COLORS.mistakes }" />{{ t('telemetry.legend.mistakes') }}</span>
-          <span v-else-if="reference" class="map-legend"><i class="g" />{{ t('telemetry.legend.gain') }} <i class="r" />{{ t('telemetry.legend.loss') }} <i class="n" />{{ t('telemetry.legend.equal') }}</span>
-          <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zone-colors="zones.colors.value" zoom-controls :size="440" @hover="cursor = $event" @select="selectCorner($event)" />
-        </div>
-        <AnalysisCar :lap="lap" :reference="reference" :cursor="cursor" :ref-cursor="refCursor" />
-      </div>
-      <div class="pilota-right">
-        <SessionZonesCard v-if="zones.active.value" :insight="zones.insight.value" :selected="selectedCorner" :total-laps="zones.totalLaps.value" @select="selectCorner($event)" />
-        <section v-else class="side-box">
-          <h4>{{ t('telemetry.improve.title') }}</h4>
-          <p v-if="!reference" class="analysis-note">{{ t('telemetry.improve.pickRef') }}</p>
-          <p v-else-if="!worst.length" class="analysis-note">{{ t('telemetry.improve.none') }}</p>
-          <div v-else class="tip-list">
-            <button v-for="(c, i) in worst" :key="c.corner.number" type="button" class="tip-row" :class="{ active: selectedCorner === c.corner.number }" @click="selectCorner(c.corner.number)">
-              <span class="tip-rank">{{ i + 1 }}</span>
-              <span class="tip-corner">{{ t('telemetry.corner', { n: c.corner.number }) }}</span>
-              <span class="tip-gap" :style="{ background: heat(c.timeLostS) }">{{ formatDelta(c.timeLostS) }}</span>
-              <span class="tip-text">{{ cornerAdvice(c) }}</span>
-            </button>
-          </div>
-        </section>
-        <AnalysisCharts v-if="selectedCorner !== null" :lap="lap" :reference="reference" :rows="pilotRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="pilotRowHeight" :focus="focusZone" :focus-effect="focusEffect" zoomable @hover="cursor = $event" @zoom="onZoom" />
-      </div>
-    </div>
-
     <!-- TRACCE, as the Garage 61 analyzer: laps and gaps on the left, the map with the
          lap lines and the delta in the middle, the channels on the right, sectors and corners on top of the charts. -->
-    <div v-else-if="lap && layout === 'tracce'" ref="traceRoot" class="layout-tracce" :class="{ 'layout-tracce--wide': deltaPlace === 'top' }" :style="{ height: `${traceHeight}px` }">
+    <div v-else-if="lap" ref="traceRoot" class="layout-tracce" :class="{ 'layout-tracce--wide': deltaPlace === 'top' }" :style="{ height: `${traceHeight}px` }">
       <aside class="tracce-left">
         <!-- Who is faster is already in the coloured pickers above: here only where. -->
         <section class="side-box">
@@ -500,10 +465,19 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
         </section>
         <!-- VRS: corners from the costliest; the first three carry their rank. -->
         <!-- PIP-635: only the list here (Delta, Garage 61): a row selects and zooms; the way back is in the charts' bar. -->
-        <section v-if="comparison.length" ref="cornersBox" class="side-box side-box--corners">
+        <!-- 01/11 (from Dove migliorare): this lap, or the whole session (where you are least consistent, the most
+             potential, the most mistakes) when the session has enough laps. -->
+        <div v-if="zones.active.value" class="rc-switch loss-scope" role="tablist" :aria-label="t('telemetry.lossScopeAria')">
+          <button type="button" role="tab" :aria-selected="lossScope === 'lap'" :class="{ active: lossScope === 'lap' }" @click="lossScope = 'lap'">{{ t('telemetry.lossScopeLap') }}</button>
+          <button type="button" role="tab" :aria-selected="lossScope === 'session'" :class="{ active: lossScope === 'session' }" @click="lossScope = 'session'">{{ t('telemetry.lossScopeSession') }}</button>
+        </div>
+        <SessionZonesCard v-if="zones.active.value && lossScope === 'session'" compact :insight="zones.insight.value" :selected="selectedCorner" :total-laps="zones.totalLaps.value" @select="selectCorner($event)" />
+        <section v-else-if="comparison.length" ref="cornersBox" class="side-box side-box--corners">
           <div class="side-head">
             <h4>{{ t('telemetry.lossTitle') }}</h4>
           </div>
+          <!-- 01/11 (from Dove migliorare): the opened corner's advice, in plain words. -->
+          <p v-if="selectedAdvice" class="corner-advice"><b>{{ t('telemetry.corner', { n: selectedCorner! }) }}</b> {{ selectedAdvice }}</p>
           <!-- Column heads as in the Curve table: the rows are corners, the cell the time lost there. -->
           <div class="corner-row corner-row--head" aria-hidden="true"><span>{{ t('telemetry.cornerHead') }}</span><span>{{ t('telemetry.timeLost') }}</span></div>
           <div class="corner-list" :class="{ 'has-active': selectedCorner !== null && selectedSector === null && !zoomRange }">
@@ -515,7 +489,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
       </aside>
       <div class="tracce-center">
         <div class="panel">
-          <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null" :focus="selectedSector !== null ? range : null" color-mode="laps" zoom-controls :size="deltaPlace === 'top' ? 420 : 320" :corner-deltas="cornerDeltas" @hover="cursor = $event" @select="selectCorner($event)" />
+          <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null" :focus="selectedSector !== null ? range : null" :color-mode="lossScope === 'session' && zones.active.value ? 'delta' : 'laps'" :zone-colors="lossScope === 'session' ? zones.colors.value : null" zoom-controls :size="deltaPlace === 'top' ? 420 : 320" :corner-deltas="cornerDeltas" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>
         <div v-if="reference && deltaPlace === 'centre'" ref="deltaWrap">
           <AnalysisCharts :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaHeight" :focus="focusZone" :focus-effect="focusEffect" zoomable @hover="cursor = $event" @zoom="onZoom" />
@@ -557,6 +531,8 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 .analysis-bar--head { flex-wrap: wrap; > .compare { flex: 1 1 0; } > .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .bar-note { flex: 1 1 100%; } }
 // PIP-623: share and paste, square buttons as tall as the pickers.
+.loss-scope { display: flex; button { flex: 1; } }
+.corner-advice { margin: 0 0 6px; padding: 6px 8px; border-left: 2px solid #fbbf24; background: #fbbf240f; color: #e6e6ea; font: 500 12px/1.4 'Inter', sans-serif; b { color: #fde68a; } }
 .bar-note { color: #3ddc5a; font-size: 12px; &.failed { color: #ff5a6e; } }
 .analysis-note--warn { color: #fbbf24; }
 // PIP-635: the comparison block: Tu, the gap between the two laps, Riferimento.
@@ -578,17 +554,6 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 .map-legend { display: flex; gap: 5px; align-items: center; color: #8a8a90; font-size: 11px;
   i { width: 14px; height: 3px; margin-left: 6px; &.g { background: #3ddc5a; } &.r { background: #ff5a6e; } &.n { background: #8a8a90; } } }
 
-.layout-pilota { display: grid; grid-template-columns: 440px minmax(0, 1fr); gap: 10px; overflow: hidden; }
-.pilota-left, .pilota-right { display: grid; gap: 10px; align-content: start; min-width: 0; height: 100%; overflow-y: auto; overflow-x: hidden; }
-.tip-list { display: grid; gap: 3px; }
-// One tip per row as the corner list of Avanzata: rank, corner, time lost on the red/green scale, the advice.
-.tip-row { display: grid; grid-template-columns: 26px 74px 64px minmax(0, 1fr); gap: 3px; padding: 0; border: 0; background: none; color: #e6e6ea; text-align: left; cursor: pointer;
-  &.active .tip-corner { background: #ff0024; color: #fff; } &.active .tip-text { box-shadow: inset 0 0 0 1px #ff0024; } }
-.tip-rank { display: grid; place-items: center; background: #ffffff0d; color: #b3b3b8; font: 700 12px 'Inter', sans-serif; }
-.tip-corner { display: grid; place-items: center; padding: 6px 0; background: #ffffff0d; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; }
-.tip-gap { display: grid; place-items: center; color: #fff; font: 700 12px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
-.tip-text { display: flex; align-items: center; padding: 4px 10px; background: #ffffff08; font-size: 13px; }
-
 // Garage 61 analyzer: left bar, map + delta in the middle, channels on the right, sector strip on top of the charts.
 .layout-tracce { display: grid; grid-template-columns: 210px 320px minmax(0, 1fr); grid-template-areas: 'left center right'; gap: 10px; align-items: stretch; overflow: hidden;
   // 01/11: with the delta on top the map has the middle column to itself: wider, numbers and times readable.
@@ -601,7 +566,8 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
     small { color: #77777d; font: 500 10px 'Inter', sans-serif; text-transform: none; margin-left: 4px; } }
   // The corner list reaches the bottom of the column, level with the delta; on a very tall
   // window it stops at a maximum height and scrolls inside.
-  &--corners { flex: 1 1 auto; min-height: 160px; max-height: 760px; grid-template-rows: auto auto minmax(0, 1fr); } }
+  // A column: title, the opened corner's advice when there is one, the head, then the list that scrolls (01/11).
+  &--corners { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 160px; max-height: 760px; > .corner-list { flex: 1 1 auto; } } }
 .side-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; h4 { margin: 0; } }
 .sector-rows { display: grid; gap: 3px; }
 // PIP-635: the row you are looking at stands out as a whole (white frame, number on white), the others step back;

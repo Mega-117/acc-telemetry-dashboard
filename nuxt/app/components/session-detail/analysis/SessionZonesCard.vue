@@ -5,7 +5,7 @@ import { computed } from 'vue'
 import { ZONE_COLORS, zoneSeconds, type SessionZones } from '~/services/telemetry/sessionZones'
 import { useI18n } from '~/i18n'
 
-const props = defineProps<{ insight: SessionZones, selected: number | null, totalLaps: number }>()
+const props = defineProps<{ insight: SessionZones, selected: number | null, totalLaps: number, /** 01/11: narrow column of the Telemetria: title over text. */ compact?: boolean }>()
 const emit = defineEmits<{ select: [corner: number] }>()
 const { t } = useI18n()
 
@@ -23,7 +23,7 @@ const rows = computed(() => {
 </script>
 
 <template>
-  <section class="side-box zones">
+  <section class="side-box zones" :class="{ 'zones--compact': compact }">
     <h4>{{ t('telemetry.zones.title') }} <small>{{ t('telemetry.zones.laps', { laps: insight.laps }) }}</small></h4>
     <div class="zone-list">
       <button v-for="r in rows" :key="r.key" type="button" class="zone-row" :class="{ active: r.corner !== null && selected === r.corner }" :disabled="r.corner === null" @click="r.corner !== null && emit('select', r.corner)">
@@ -47,4 +47,5 @@ const rows = computed(() => {
 .zone-title { display: flex; align-items: center; padding: 6px 10px; background: #ffffff0d; font: italic 700 13px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; }
 .zone-text { display: flex; align-items: center; padding: 6px 10px; background: #ffffff08; font-size: 13px; }
 @media (max-width: 700px) { .zone-row { grid-template-columns: 6px minmax(0, 1fr); } .zone-text { grid-column: 2; } }
+.zones--compact { .zone-row { grid-template-columns: 6px minmax(0, 1fr); } .zone-title { padding: 4px 8px; font-size: 12px; } .zone-text { grid-column: 2; padding: 4px 8px; font-size: 12px; } }
 </style>

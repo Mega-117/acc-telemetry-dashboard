@@ -47,6 +47,7 @@ describe('LapChoiceCard', () => {
     expect(wrapper.get('.lap-pill__body').attributes('title')).toContain('Oggi 10:15 · Gara')
     // 01/11: a valid lap shows no tick; an invalid one is its red time, the word for screen readers only.
     expect(wrapper.find('.lap-pill__status').exists()).toBe(false)
+    expect(wrapper.get('.lap-pill__main .sr-only').text()).toBe('Valido')
     expect(wrapper.get('.lap-pill__time').classes()).not.toContain('is-invalid')
     const why = wrapper.get('.lap-pill__why')
     expect(why.attributes('aria-label')).toContain('Perché questo: il tuo giro valido più veloce con questa auto')

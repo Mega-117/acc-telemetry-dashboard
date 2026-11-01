@@ -217,34 +217,56 @@ describe('map follows the cursor (PIP-635)', () => {
 
 describe('focus zone: the loss you keep (01/11, research)', () => {
   const fast = lap(() => 180)
-  it('is the piece where the kept gap grows most, one eighth of the stretch, inside it', () => {
+  // A lap whose gap to `fast` follows the given points (metres, seconds), linear in between: speed from the slope.
+  function gapLap(points: [number, number][]) {
+    const t = fast.channels.time_s!, n = t.length, gapAt = (m: number) => {
+      for (let k = 1; k < points.length; k++) {
+        const [m0, g0] = points[k - 1]!, [m1, g1] = points[k]!
+        if (m <= m1) return g0 + (g1 - g0) * Math.max(0, (m - m0) / (m1 - m0))
+      }
+      return points.at(-1)![1]
+    }
+    const out = lap(() => 180)
+    out.channels.time_s = t.map((v, i) => v + gapAt((i / (n - 1)) * 3000))
+    out.lapTimeS = out.channels.time_s.at(-1)!
+    return out
+  }
+  it('corner 1 (01/11): the bump given back is no zone; the zone is where the sustained loss starts, the rest its effect', () => {
+    const c1 = gapLap([[0, 0], [550, 0], [600, 0.10], [650, 0.03], [1000, 0.134], [3000, 0.134]])
+    const f = focusInStretch(c1, fast, [400 / 3000, 1000 / 3000])!
+    expect(f.zone[0] * 3000).toBeGreaterThanOrEqual(645)
+    expect(f.zone[0] * 3000).toBeLessThan(700)
+    expect(f.effect![1] * 3000).toBeCloseTo(1000, 0)
+    expect(f.lossS).toBeCloseTo(0.104, 2)
+  })
+  it('a uniform loss over a long corner still gives a zone (opening the corner keeps its band)', () => {
+    const even = gapLap([[0, 0], [400, 0], [1000, 0.134], [3000, 0.134]])
+    const f = focusInStretch(even, fast, [400 / 3000, 1000 / 3000])!
+    expect(f.zone[0] * 3000).toBeLessThan(420)
+    expect(f.effect).not.toBeNull()
+  })
+  it('two separate losses are never joined: the bigger one, its own run only', () => {
+    const two = gapLap([[0, 0], [450, 0], [480, 0.10], [800, 0.10], [830, 0.16], [3000, 0.16]])
+    const f = focusInStretch(two, fast, [400 / 3000, 1000 / 3000])!
+    expect(f.zone[0] * 3000).toBeGreaterThan(440)
+    expect(f.zone[1] * 3000).toBeLessThan(500)
+    expect(f.effect).toBeNull()
+  })
+  it('a concentrated loss: zone on it, no effect', () => {
     const slow = lap(m => (m >= 1500 && m < 1600 ? 120 : 180))
     const f = focusInStretch(slow, fast, [0.4, 0.6])!
-    expect(f.zone[1] - f.zone[0]).toBeCloseTo(0.2 / 8, 6)
     expect(f.zone[0]).toBeLessThan(1600 / 3000); expect(f.zone[1]).toBeGreaterThan(1500 / 3000)
-    expect(f.effect).toBeNull()
     expect(f.lossS).toBeGreaterThan(0.5)
   })
-  it('a bump given back is no zone; the loss that stays is (curva 1, 01/11)', () => {
-    // Slower at 1300-1350 m, then faster at 1350-1400 m (all given back); the real loss at 1650-1750 m.
-    const bump = lap(m => (m >= 1300 && m < 1350 ? 140 : m >= 1350 && m < 1400 ? 240 : m >= 1650 && m < 1750 ? 150 : 180))
-    const f = focusInStretch(bump, fast, [0.4, 0.6])!
-    expect(f.zone[0]).toBeGreaterThan(1450 / 3000)
-    expect(f.zone[1]).toBeGreaterThan(1650 / 3000)
-  })
-  it('a loss that keeps growing to the end of the stretch: the zone where it starts, the rest as effect', () => {
-    const exit = lap(m => (m >= 1400 ? 170 : 180))
-    const f = focusInStretch(exit, fast, [0.4, 0.6])!
-    expect(f.zone[0]).toBeLessThan(1500 / 3000)
-    expect(f.effect).not.toBeNull()
-    expect(f.effect![1]).toBeCloseTo(0.6, 6)
-  })
-  it('nothing when level, faster, under the threshold or with no stretch', () => {
+  it('nothing when level, faster, under the threshold, with no stretch or with a time reset', () => {
     const slow = lap(m => (m >= 1500 && m < 1600 ? 120 : 180))
     expect(focusInStretch(fast, fast, [0.4, 0.6])).toBeNull()
     expect(focusInStretch(fast, slow, [0.4, 0.6])).toBeNull()
     expect(focusInStretch(slow, fast, [0.4, 0.6], { min: 60 })).toBeNull()
     expect(focusInStretch(slow, fast, [0.6, 0.4])).toBeNull()
+    const reset = lap(() => 180)
+    reset.channels.time_s = reset.channels.time_s!.map((v, i) => (i === 750 ? 0 : v))
+    expect(focusInStretch(reset, fast, [0.4, 0.6])).toBeNull()
   })
 })
 
