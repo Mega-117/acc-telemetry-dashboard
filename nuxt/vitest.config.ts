@@ -490,6 +490,7 @@ export default defineConfig({
         'app/services/overlay/surfaceHealthReporter.ts',
         'app/services/overlay/telemetryRecovery.ts',
         'app/services/overlay/hudPresentationMemory.ts',
+        'app/services/overlay/hudLongTasks.ts',
         'app/composables/useRaceHudPage.ts',
         'app/composables/useOverlayInteractionRegions.ts',
         'app/composables/useOverlayInteractionContract.ts',

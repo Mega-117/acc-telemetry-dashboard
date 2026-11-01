@@ -38,7 +38,10 @@ describe('bounded telemetry pull', () => {
   })
   it('acknowledges assignment only after Vue flush', async () => {
     telemetryApplied({ hud_transport: { version: 1, bootId: 'current', sequence: 7 } })
-    expect(receivedTelemetry().fast).toEqual({ version: 1, bootId: 'current', sequence: 7 })
+    // PIP-702: the renderer's own receive time travels with the receipt.
+    expect(receivedTelemetry().fast).toEqual({ version: 1, bootId: 'current', sequence: 7, receivedAtMs: expect.any(Number) })
+    // Every receipt since the previous report travels once, as [sequence, receivedAtMs].
+    expect(receivedTelemetry().batch.fast).toEqual([])
     expect(appliedTelemetry()?.sequence).not.toBe(7)
     await nextTick()
     expect(appliedTelemetry()).toEqual({ version: 1, bootId: 'current', sequence: 7, valid: true })

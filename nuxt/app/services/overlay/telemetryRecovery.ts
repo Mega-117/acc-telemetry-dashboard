@@ -1,12 +1,22 @@
 import { nextTick } from 'vue'
 import { readCommonLive } from '../telemetry/commonLive'
 
-type Receipt = { version: number; bootId: string; sequence: number; valid?: boolean }
+type Receipt = { version: number; bootId: string; sequence: number; valid?: boolean; receivedAtMs?: number }
 const applied: Record<string, Receipt | null> = { fast: null, live: null }
 const deliveries: Record<string, Receipt | null> = { fast: null, live: null }
 const received: Record<string, number> = { fast: 0, live: 0 }
 export function appliedTelemetry(stream: 'fast' | 'live' = 'fast') { return applied[stream] }
-export function receivedTelemetry() { return { fast: deliveries.fast, live: deliveries.live } }
+// PIP-702: every receipt since the last health report as [sequence, receivedAtMs], so the
+// main sees a late frame even when a fresh one replaced it before the 1 s report.
+const MAX_BATCH = 64
+const batches: Record<string, Array<[number, number]>> = { fast: [], live: [] }
+/** Latest receipts plus the batch since the previous call (the batch is handed over once). */
+export function receivedTelemetry() {
+  const batch = { fast: batches.fast, live: batches.live }
+  batches.fast = []
+  batches.live = []
+  return { fast: deliveries.fast, live: deliveries.live, batch }
+}
 export function withRecoveryDeadline<T>(operation: () => Promise<T>, fallback: T, timeoutMs = 10000): Promise<T> {
   return new Promise(resolve => {
     const timer = setTimeout(() => resolve(fallback), timeoutMs)
@@ -23,7 +33,13 @@ export function telemetryApplied(raw: any, valid = true, stream: 'fast' | 'live'
   const receipt = raw?.hud_transport
   if (receipt?.version !== 1 || typeof receipt.bootId !== 'string'
     || receipt.bootId.length > 100 || !Number.isSafeInteger(receipt.sequence)) return
-  deliveries[stream] = { version: 1, bootId: receipt.bootId, sequence: receipt.sequence }
+  // PIP-702: the renderer's own receive time, so the diary measures logger -> HUD delivery
+  // directly and not through the 1 s health heartbeat that carries it.
+  const receivedAtMs = Date.now()
+  deliveries[stream] = { version: 1, bootId: receipt.bootId, sequence: receipt.sequence, receivedAtMs }
+  const batch = batches[stream] ?? (batches[stream] = [])
+  batch.push([receipt.sequence, receivedAtMs])
+  if (batch.length > MAX_BATCH) batch.shift()
   void nextTick(() => {
     if (token === received[stream]) applied[stream] = { version: 1, bootId: receipt.bootId, sequence: receipt.sequence, valid: presentationValid }
   })
