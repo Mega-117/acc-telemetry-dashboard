@@ -15,6 +15,7 @@ import { useSessionZones } from '~/composables/useSessionZones'
 import { useSectorCompare } from '~/composables/useSectorCompare'
 import LapChoiceCard from './LapChoiceCard.vue'
 import LapChoiceDialog from './LapChoiceDialog.vue'
+import TraceStripHead, { type DeltaPlace } from './TraceStripHead.vue'
 import { useLapChoice } from '~/composables/useLapChoice'
 import type { LapSide } from '~/services/telemetry/lapChoice'
 import { electronLapSource, pilotLapSource, type LapSource, type LocalLapBridge } from '~/services/telemetry/lapSources'
@@ -65,9 +66,7 @@ function remembered<T extends string>(key: string, values: readonly T[], fallbac
 const layout = remembered<Layout>('rc:analysis:layout', ['pilota', 'tracce'], 'tracce')
 // 01/11 (user decision, a trial): the delta as the first chart on the right, fixed while the charts scroll,
 // or under the map as before. The switch stays until the drivers have tried both.
-type DeltaPlace = 'top' | 'centre'
 const deltaPlace = remembered<DeltaPlace>('rc:analysis:delta', ['top', 'centre'], 'top')
-const DELTA_PLACES: DeltaPlace[] = ['top', 'centre']
 const allChannels = ref(false)
 
 // PIP-623: every lap carries its origin. Only laps of the shown session ("local" on the PC,
@@ -516,21 +515,9 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
              sticky under the lap bar (Track Titan's segment strip, MoTeC's section bar). -->
         <div class="tracce-top">
         <div class="tracce-strip">
-          <!-- PIP-635 (Garage 61, Delta, MoTeC): one context control on the left (what you are looking at, ‹ › for
-               corners, ✕ back to the whole lap, also Esc / double click), the channels on the right. -->
-          <div class="strip-head">
-            <span class="strip-context" :class="{ 'is-zoomed': !wholeView }">
-              <button v-if="selectedCorner !== null && !zoomRange" type="button" class="strip-context__step" :aria-label="t('telemetry.prevCorner')" :title="`${t('telemetry.prevCorner')} (←)`" @click="goCorner(-1)">‹</button>
-              <strong aria-live="polite">{{ viewLabel }}</strong>
-              <button v-if="selectedCorner !== null && !zoomRange" type="button" class="strip-context__step" :aria-label="t('telemetry.nextCorner')" :title="`${t('telemetry.nextCorner')} (→)`" @click="goCorner(1)">›</button>
-              <button v-if="!wholeView" type="button" class="strip-context__close" :aria-label="t('telemetry.backWhole')" :title="t('telemetry.backWholeTitle')" @click="wholeLap">✕</button>
-            </span>
-            <button v-if="focusCorner" type="button" class="strip-focus" :title="t('telemetry.focusTitle')" @click="selectCorner(focusCorner.corner.number)">{{ t('telemetry.focus', { n: focusCorner.corner.number, gap: formatDelta(focusCorner.timeLostS) }) }}</button>
-            <span v-if="reference" class="delta-switch" role="group" :aria-label="t('telemetry.deltaPlace.label')">
-              <button v-for="p in DELTA_PLACES" :key="p" type="button" :aria-pressed="deltaPlace === p" :class="{ active: deltaPlace === p }" @click="deltaPlace = p">{{ t(`telemetry.deltaPlace.${p}`) }}</button>
-            </span>
-            <button type="button" class="strip-channels" :class="{ active: allChannels }" @click="allChannels = !allChannels">{{ allChannels ? t('telemetry.essential') : t('telemetry.moreChannels') }}</button>
-          </div>
+          <TraceStripHead v-model:delta-place="deltaPlace" v-model:all-channels="allChannels" :view-label="viewLabel" :whole-view="wholeView"
+            :stepping="selectedCorner !== null && !zoomRange" :focus="focusCorner ? { number: focusCorner.corner.number, lostS: focusCorner.timeLostS } : null"
+            :show-delta-switch="!!reference" @step="goCorner" @whole="wholeLap" @open-focus="selectCorner" />
           <div v-if="sectorList.length" class="strip-row">
             <button v-for="s in visibleSectors" :key="s.index" type="button" :class="{ active: selectedSector === s.index }" :style="{ left: `${s.left}%`, width: `${s.width}%` }" :title="t('telemetry.sectorStripTitle', { n: s.index + 1 })" @click="selectSector(s.index)">S{{ s.index + 1 }}</button>
           </div>
@@ -620,25 +607,9 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 .corner-cell { display: grid; place-items: center; color: #fff; font: 700 12px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
 .tracce-center { grid-area: center; display: grid; gap: 8px; align-content: start; height: 100%; overflow-y: auto; overflow-x: hidden; }
 .tracce-right { grid-area: right; min-width: 0; height: 100%; overflow-y: auto; overflow-x: hidden; }
-// Sector and corner strip: sticky under the lap bar, aligned to the plot area (42 px axis, 8 px right).
-.strip-head { display: flex; align-items: center; gap: 10px; height: 22px; margin-left: -34px; color: #b3b3b8; font: 700 11px "Inter", sans-serif; text-transform: uppercase; letter-spacing: .04em; }
-.strip-channels { margin-left: auto; height: 22px; padding: 0 8px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font: 700 11px "Inter", sans-serif; text-transform: none; letter-spacing: 0; cursor: pointer; &.active { border-color: #ff0024; } }
-// PIP-635: what you are looking at, in one framed control: "‹ Curva 5 › ✕" or "Giro intero".
-.strip-context { display: inline-flex; align-items: stretch; height: 22px; border: 1px solid #ffffff2e; background: #ffffff08;
-  strong { display: grid; place-items: center; min-width: 86px; padding: 0 10px; color: #b3b3b8; font: italic 700 12px "Racer Display", sans-serif; letter-spacing: .03em; }
-  &.is-zoomed { border-color: #ffffff59; strong { color: #fff; } }
-  button { width: 24px; padding: 0; border: 0; border-left: 1px solid #ffffff1f; background: transparent; color: #e6e6ea; font: 700 13px/1 "Inter", sans-serif; cursor: pointer;
-    &:hover { background: #ffffff1a; color: #fff; } &:focus-visible { outline: 2px solid #fff; outline-offset: -2px; } }
-  &__step:first-child { border-left: 0; border-right: 1px solid #ffffff1f; }
-  &__close:hover { background: #ff002433; } }
 // 01/11: the bar and (when on top) the delta stay fixed together while the charts scroll.
 .tracce-top { position: sticky; top: 0; z-index: 4; display: grid; gap: 6px; margin-bottom: 6px; padding-bottom: 4px; background: #0b0b10f2; box-shadow: 0 8px 10px -10px #000; }
 .tracce-strip { display: grid; gap: 2px; padding: 4px 9px 4px 43px; }
-.strip-focus { padding: 3px 9px; border: 1px solid #fbbf2466; background: #fbbf2414; color: #fde68a; font: 700 12px 'Inter', sans-serif; cursor: pointer; white-space: nowrap;
-  &:hover { background: #fbbf2426; } &:focus-visible { outline: 2px solid #fff; outline-offset: 2px; } }
-.delta-switch { margin-left: auto; display: inline-flex; border: 1px solid #ffffff24;
-  button { padding: 3px 9px; border: 0; background: transparent; color: #8a8a90; font: 600 12px 'Inter', sans-serif; cursor: pointer;
-    &.active { background: #ffffff1f; color: #fff; } &:hover:not(.active) { color: #e6e6ea; } &:focus-visible { outline: 2px solid #fff; outline-offset: -2px; } } }
 .strip-row { position: relative; height: 24px;
   button { position: absolute; top: 0; height: 100%; padding: 0; border: 1px solid #0b0b10; background: #ffffff14; color: #e6e6ea; font: 700 12px 'Inter', sans-serif; cursor: pointer; overflow: hidden;
     &:hover { background: #ffffff26; }
