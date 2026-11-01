@@ -270,6 +270,20 @@ describe('focus zone: the loss you keep (01/11, research)', () => {
     expect(f.zone[0] * 3000).toBeLessThan(700)
     expect(f.lossS).toBeCloseTo(0.104, 2)
   })
+  it('the zone moves back to where the pedals differ just before the loss (T1: brake released early)', () => {
+    const c1 = gapLap([[0, 0], [550, 0], [600, 0.10], [650, 0.03], [1000, 0.134], [3000, 0.134]])
+    const ref = lap(() => 180)
+    // Both brake from 480 m; you release at 590 m, the reference holds the brake to 630 m.
+    c1.channels.brake_pct = c1.channels.brake_pct!.map((_, i) => (i * 2 >= 480 && i * 2 < 590 ? 100 : 0))
+    ref.channels.brake_pct = ref.channels.brake_pct!.map((_, i) => (i * 2 >= 480 && i * 2 < 630 ? 100 : 0))
+    const f = focusInStretch(c1, ref, [400 / 3000, 1000 / 3000])!
+    expect(f.zone[0] * 3000).toBeGreaterThan(585); expect(f.zone[0] * 3000).toBeLessThan(595)
+    expect(f.zone[1] * 3000).toBeGreaterThanOrEqual(645); expect(f.zone[1] * 3000).toBeLessThan(700)
+    // A throttle blip of 4 m never makes the zone.
+    const blip = gapLap([[0, 0], [550, 0], [600, 0.10], [650, 0.03], [1000, 0.134], [3000, 0.134]])
+    blip.channels.throttle_pct = blip.channels.throttle_pct!.map((v, i) => (i * 2 >= 600 && i * 2 < 604 ? 0 : v))
+    expect(focusInStretch(blip, fast, [400 / 3000, 1000 / 3000])!.zone[0] * 3000).toBeGreaterThanOrEqual(645)
+  })
   it('a uniform loss over a long corner still gives a zone (opening the corner keeps its band)', () => {
     const even = gapLap([[0, 0], [400, 0], [1000, 0.134], [3000, 0.134]])
     const f = focusInStretch(even, fast, [400 / 3000, 1000 / 3000])!

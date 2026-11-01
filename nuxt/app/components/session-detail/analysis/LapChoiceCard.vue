@@ -89,14 +89,15 @@ onBeforeUnmount(() => listen(false))
 <style scoped lang="scss">
 .lap-pill { --c: #38bdf8; position: relative; display: flex; align-items: center; gap: 8px; flex: 1 1 280px; min-width: 220px; max-width: 440px; padding-right: 3px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 12%, #0a0a0f);
   &.is-ideal { border-style: dashed; } }
-.lap-pill__side { align-self: stretch; display: grid; place-items: center; padding: 0 7px; background: var(--c); color: #0a0a0f; font: italic 700 12px 'Racer Display', sans-serif; text-transform: uppercase; }
+// 01/11: the same width on both pills, so Tu and Riferimento line up.
+.lap-pill__side { align-self: stretch; display: grid; place-items: center; width: 80px; flex: none; padding: 0 4px; box-sizing: border-box; background: var(--c); color: #0a0a0f; font: italic 700 11px 'Racer Display', sans-serif; text-transform: uppercase; }
 .lap-pill__body { display: grid; gap: 1px; flex: 1; min-width: 0; padding: 3px 0; p { margin: 0; } }
 .lap-pill__main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 7px; color: #fff; font: 700 13px 'Inter', sans-serif; }
 .lap-pill__driver { min-width: 0; overflow-wrap: anywhere; }
 .lap-pill__lap { color: #d4d4da; font: 600 12px 'Inter', sans-serif; }
 .lap-pill__status { font: 700 13px 'Inter', sans-serif; &.is-valid { color: #3ddc5a; } &.is-invalid { color: #ff8a98; } &.is-incomplete, &.is-unknown { color: #b3b3b8; } }
 .lap-pill__why { padding: 0 2px; border: 0; background: none; color: #fde68a; font: 700 13px 'Inter', sans-serif; cursor: help; &:focus-visible { outline: 2px solid #fff; } }
-.lap-pill__tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; > span { padding: 0 5px; border: 1px solid #ffffff24; color: #c8c8cc; font: 600 11px/15px 'Inter', sans-serif; font-variant-numeric: tabular-nums; } }
+.lap-pill__tags { display: flex; flex-wrap: nowrap; overflow: hidden; align-items: center; gap: 3px; > span { flex: none; padding: 0 4px; border: 1px solid #ffffff24; color: #c8c8cc; font: 600 11px/15px 'Inter', sans-serif; font-variant-numeric: tabular-nums; } }
 .lap-pill__time { margin-left: auto; color: #fff; font: italic 700 18px 'Racer Display', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; &.is-best { color: #c084fc; } &.is-invalid { color: #ff5a6e; } }
 .lap-pill__actions { display: flex; align-items: center; gap: 3px; }
 .lap-pill__change, .lap-pill__remove, .lap-pill__actions :slotted(button) { min-width: 28px; min-height: 28px; padding: 0 7px; border: 1px solid #ffffff40; background: #ffffff0d; color: #fff; font: 700 12px 'Inter', sans-serif; cursor: pointer;

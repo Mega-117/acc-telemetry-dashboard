@@ -169,11 +169,39 @@ export function timeRuns(trace: LapTraceView, [start, end]: [number, number]): b
  * stretch. D = the gap to the reference along it (loss over a piece = D(b) - D(a)); only the gap you keep counts:
  * at each point the smallest gap still ahead, so a bump given back is no loss (often a line or alignment
  * difference). The kept gap grows in runs; the zone is the start of the run that costs most (where that loss
- * begins); one band only (a slow exit costs all the straight after it, but the place to work is where it starts).
+ * begins), moved back to where the pedals differ just before it (inputCause) when they do; one band only.
  * Separate losses are never joined. Null when no run keeps `min` seconds, or when the
  * time of either lap jumps back (a reset) inside the stretch.
  */
-export function focusInStretch(lap: LapTraceView, reference: LapTraceView, [start, end]: [number, number], { min = 0.02, stepM = 5, zoneShare = 1 / 8, pauseM = 40 } = {}): FocusZone | null {
+/**
+ * 01/11 (user, Hungaroring T1; research: "the zone to work on can come before the one with the biggest loss"):
+ * just before a kept loss starts, where the two drivers' pedals differ most (one releases the brake while the
+ * other still brakes, one is on the gas and the other not). The piece of at least `minM` metres where the brake or
+ * throttle differ by `minPct` or more, with the largest total difference, within `lookM` metres before the loss
+ * starts (and up to it). Short blips (downshift throttle) never make a piece on their own. Null without pedals.
+ */
+function inputCause(lap: LapTraceView, reference: LapTraceView, [from, to]: [number, number], { minPct = 25, minM = 10 } = {}): [number, number] | null {
+  const lb = lap.channels.brake_pct, rb = reference.channels.brake_pct, lt = lap.channels.throttle_pct, rt = reference.channels.throttle_pct
+  if (!lb?.length || !rb?.length || !lt?.length || !rt?.length || !(to > from)) return null
+  const stepF = 2 / Math.max(lap.lengthM || 0, 1)
+  const steps = Math.max(1, Math.round((to - from) / stepF))
+  const diff = (f: number) => Math.max(Math.abs((channelAt(lap, 'brake_pct', f) ?? 0) - (channelAt(reference, 'brake_pct', f) ?? 0)),
+    Math.abs((channelAt(lap, 'throttle_pct', f) ?? 0) - (channelAt(reference, 'throttle_pct', f) ?? 0)))
+  let best: { a: number, b: number, sum: number } | null = null
+  let a = -1, sum = 0
+  for (let i = 0; i <= steps + 1; i++) {
+    const d = i <= steps ? diff(from + i * stepF) : 0
+    if (d >= minPct) { if (a < 0) { a = i; sum = 0 } sum += d; continue }
+    if (a >= 0) {
+      const b = i - 1
+      if ((b - a) * 2 >= minM && (!best || sum > best.sum)) best = { a, b, sum }
+      a = -1
+    }
+  }
+  return best ? [from + best.a * stepF, from + best.b * stepF] : null
+}
+
+export function focusInStretch(lap: LapTraceView, reference: LapTraceView, [start, end]: [number, number], { min = 0.02, stepM = 5, zoneShare = 1 / 8, pauseM = 40, lookM = 100, maxM = 150, minM = 30 } = {}): FocusZone | null {
   if (!(end > start) || !timeRuns(lap, [start, end]) || !timeRuns(reference, [start, end])) return null
   const metres = Math.max((lap.lengthM || 0) * (end - start), 1)
   const steps = Math.min(400, Math.max(24, Math.round(metres / stepM)))
@@ -211,7 +239,17 @@ export function focusInStretch(lap: LapTraceView, reference: LapTraceView, [star
   const width = Math.max(1, Math.round(steps * zoneShare))
   const zoneTo = Math.min(run.to, run.from + width)
   const at = (i: number) => start + i * piece
-  return { zone: [at(run.from), at(zoneTo)], lossS: run.loss }
+  // Where you act: the pedal difference just before (or at) the start of the loss, joined to that start.
+  const lossFrom = at(run.from)
+  const fracM = 1 / Math.max(lap.lengthM || 0, 1)
+  const cause = inputCause(lap, reference, [Math.max(start, lossFrom - lookM * fracM), Math.min(end, lossFrom + width * piece)])
+  if (cause) {
+    const from = Math.min(cause[0], lossFrom)
+    // At least `minM` metres, so the band is seen; never past the stretch.
+    const to = Math.min(Math.max(cause[1], lossFrom, from + minM * fracM), from + maxM * fracM, end)
+    if (to > from) return { zone: [from, to], lossS: run.loss }
+  }
+  return { zone: [lossFrom, at(zoneTo)], lossS: run.loss }
 }
 
 /** PIP-635: the previous or next corner, round the lap: after the last comes the first, before the first the last. */
