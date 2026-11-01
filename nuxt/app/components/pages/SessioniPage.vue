@@ -531,7 +531,9 @@ function goToSession(id: string) {
 .sessions-page { width: 100%; padding-top: var(--app-content-top-space); padding-bottom: 0; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .sessions-page :deep(.game-context), .sessions-page :deep(.game-context__content) { flex: 1 1 0%; min-height: 0; }
 // 01/11: the type switcher and the selects on one row (they wrap on a narrow window).
-.session-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-bottom: 24px; flex: 0 0 auto; }
+.session-filters { display: flex; flex-wrap: wrap; align-items: stretch; gap: 12px 16px; margin-bottom: 24px; flex: 0 0 auto; }
+// 01/11: the selects as tall as the type switcher beside them.
+.session-filters > .racing-filter-selects { align-items: stretch; select { height: auto; align-self: stretch; } }
 // Tipo di sessione: switcher del tema con la selezione che scorre.
 .racing-filter-tabs { margin-bottom: 0; }
 .filters-toggle { display: none; }
