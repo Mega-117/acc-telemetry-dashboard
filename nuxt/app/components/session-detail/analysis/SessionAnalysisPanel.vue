@@ -349,7 +349,7 @@ const range = computed<[number, number]>(() => {
   const corner = selectedCorner.value !== null ? corners.value[selectedCorner.value - 1] : null
   return corner ? [corner.start, corner.end] : [0, 1]
 })
-const { focusCorner, focusZone, focusEffect } = useFocusZone({ lap, reference, comparison, worst, range, wholeView, selectedSector, selectedCorner, zoomRange })
+const { focusCorner, focusZone } = useFocusZone({ lap, reference, comparison, worst, range, wholeView, selectedSector, selectedCorner, zoomRange })
 function selectSector(index: number) {
   selectedCorner.value = null
   selectedSector.value = selectedSector.value === index ? null : index
@@ -494,7 +494,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
         <!-- 01/11 (from Dove migliorare): the opened corner's advice under the map, only when the delta is not there. -->
         <p v-if="selectedAdvice && deltaPlace === 'top'" class="corner-advice"><b>{{ t('telemetry.corner', { n: selectedCorner! }) }}</b> {{ selectedAdvice }}</p>
         <div v-if="reference && deltaPlace === 'centre'" ref="deltaWrap">
-          <AnalysisCharts :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaHeight" :focus="focusZone" :focus-effect="focusEffect" zoomable @hover="cursor = $event" @zoom="onZoom" />
+          <AnalysisCharts :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaHeight" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
         </div>
       </div>
       <div class="tracce-right">
@@ -513,9 +513,9 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
           </div>
         </div>
         <!-- 01/11: the delta first, fixed with the bar while the other charts scroll under it. -->
-        <AnalysisCharts v-if="reference && deltaPlace === 'top'" class="tracce-delta" :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaTopHeight" :focus="focusZone" :focus-effect="focusEffect" zoomable @hover="cursor = $event" @zoom="onZoom" />
+        <AnalysisCharts v-if="reference && deltaPlace === 'top'" class="tracce-delta" :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaTopHeight" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
         </div>
-        <AnalysisCharts :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="traceRowHeight" :cursor-tag="cursorCorner" :focus="focusZone" :focus-effect="focusEffect" zoomable @hover="cursor = $event" @zoom="onZoom" />
+        <AnalysisCharts :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="traceRowHeight" :cursor-tag="cursorCorner" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
       </div>
     </div>
   </section>

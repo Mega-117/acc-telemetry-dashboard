@@ -96,21 +96,40 @@ function minIn(trace: LapTraceView, channel: string, start: number, end: number)
 const BRAKE_ON = 10
 const BRAKE_LOOKBACK_M = 300
 
+// 01/11: a braking that never reaches this pressure is a touch (trail or balance), not where the braking starts;
+// two pressings closer than BRAKE_JOIN_M are one braking released for a moment.
+const BRAKE_MAIN = 40
+const BRAKE_JOIN_M = 20
+
 /**
- * Where the braking for this corner starts: the last braking before the apex,
- * followed back to its first sample. The search may go before the corner start
- * (up to 300 m), so braking earlier than the reference is measured in full.
+ * Where the braking for this corner starts: the last real braking before the apex (one that reaches
+ * BRAKE_MAIN), followed back to its first sample. The search may go before the corner start (up to 300 m), so
+ * braking earlier than the reference is measured in full. 01/11: before, a light touch near the apex (11% at
+ * Hungaroring T1, 136 m after the real braking) was taken for the braking and the advice said "138 m later".
  */
 function brakePoint(trace: LapTraceView, start: number, apex: number): number | null {
   const values = trace.channels.brake_pct
   if (!values?.length) return null
   const last = values.length - 1
   const floor = Math.max(0, Math.floor((start - BRAKE_LOOKBACK_M / Math.max(trace.lengthM, 1)) * last))
+  const join = Math.max(1, Math.round(BRAKE_JOIN_M / Math.max(trace.gridStepM || trace.lengthM / last, 0.1)))
   let i = Math.ceil(apex * last)
-  while (i >= floor && (values[i] ?? 0) <= BRAKE_ON) i--
-  if (i < floor) return null
-  while (i > floor && (values[i - 1] ?? 0) > BRAKE_ON) i--
-  return i / last
+  let found: number | null = null
+  while (i >= floor) {
+    while (i >= floor && (values[i] ?? 0) <= BRAKE_ON) i--
+    if (i < floor) break
+    let peak = 0, first = i
+    while (first >= floor && (values[first] ?? 0) > BRAKE_ON) { peak = Math.max(peak, values[first] ?? 0); first-- }
+    first++
+    if (peak >= BRAKE_MAIN) { found = first; break }
+    i = first - 1
+  }
+  if (found === null) return null
+  // Pressings just before it, after a short release, belong to the same braking.
+  for (let j = found - 1; j >= Math.max(floor, found - join); j--) {
+    if ((values[j] ?? 0) > BRAKE_ON) { found = j; while (found > floor && (values[found - 1] ?? 0) > BRAKE_ON) found--; j = found }
+  }
+  return found / last
 }
 
 export interface CornerComparison {
@@ -132,8 +151,8 @@ export function stretchDelta(lap: LapTraceView, reference: LapTraceView, [start,
   return la === null || lb === null || ra === null || rb === null ? null : (lb - la) - (rb - ra)
 }
 
-/** 01/11: the focus zone of a stretch: where to work, and (lighter) where the same loss keeps growing after it. */
-export interface FocusZone { zone: [number, number], effect: [number, number] | null, lossS: number }
+/** 01/11: the focus zone of a stretch: where to work, and the seconds of the loss it starts. */
+export interface FocusZone { zone: [number, number], lossS: number }
 
 /** The recorded time only moves forward over [start, end]: a reset or a jump back makes the measure unusable. */
 export function timeRuns(trace: LapTraceView, [start, end]: [number, number]): boolean {
@@ -150,8 +169,8 @@ export function timeRuns(trace: LapTraceView, [start, end]: [number, number]): b
  * stretch. D = the gap to the reference along it (loss over a piece = D(b) - D(a)); only the gap you keep counts:
  * at each point the smallest gap still ahead, so a bump given back is no loss (often a line or alignment
  * difference). The kept gap grows in runs; the zone is the start of the run that costs most (where that loss
- * begins), and the rest of the same run, when longer, is the effect: the same loss still growing (a slow exit
- * costing all the straight). Separate losses are never joined. Null when no run keeps `min` seconds, or when the
+ * begins); one band only (a slow exit costs all the straight after it, but the place to work is where it starts).
+ * Separate losses are never joined. Null when no run keeps `min` seconds, or when the
  * time of either lap jumps back (a reset) inside the stretch.
  */
 export function focusInStretch(lap: LapTraceView, reference: LapTraceView, [start, end]: [number, number], { min = 0.02, stepM = 5, zoneShare = 1 / 8, pauseM = 40 } = {}): FocusZone | null {
@@ -192,7 +211,7 @@ export function focusInStretch(lap: LapTraceView, reference: LapTraceView, [star
   const width = Math.max(1, Math.round(steps * zoneShare))
   const zoneTo = Math.min(run.to, run.from + width)
   const at = (i: number) => start + i * piece
-  return { zone: [at(run.from), at(zoneTo)], effect: run.to > zoneTo ? [at(zoneTo), at(run.to)] : null, lossS: run.loss }
+  return { zone: [at(run.from), at(zoneTo)], lossS: run.loss }
 }
 
 /** PIP-635: the previous or next corner, round the lap: after the last comes the first, before the first the last. */
@@ -229,6 +248,18 @@ function phaseBounds(corner: Corner): [number, number] {
 
 export function compareCorners(lap: LapTraceView, reference: LapTraceView, corners: Corner[]): CornerComparison[] {
   const delta = (f: number) => (channelAt(lap, 'time_s', f) ?? 0) - (channelAt(reference, 'time_s', f) ?? 0)
+  // 01/11: the parts of a corner are measured on the gap you keep (the smallest gap still ahead in the corner):
+  // a bump given back (slower on the brakes, faster at the apex) is not a loss of the entry.
+  const keptIn = (corner: Corner) => {
+    const n = 80, span = corner.end - corner.start
+    const kept = Array.from({ length: n + 1 }, (_, i) => delta(corner.start + (span * i) / n))
+    for (let i = n - 1; i >= 0; i--) kept[i] = Math.min(kept[i]!, kept[i + 1]!)
+    return (f: number) => {
+      const x = Math.min(Math.max((f - corner.start) / Math.max(span, 1e-9), 0), 1) * n
+      const lo = Math.floor(x), hi = Math.min(lo + 1, n)
+      return kept[lo]! + (kept[hi]! - kept[lo]!) * (x - lo)
+    }
+  }
   return corners.map(corner => {
     const lapBrake = brakePoint(lap, corner.start, corner.apex)
     const refBrake = brakePoint(reference, corner.start, corner.apex)
@@ -243,7 +274,8 @@ export function compareCorners(lap: LapTraceView, reference: LapTraceView, corne
       exitDeltaKmh: lapExit !== null && refExit !== null ? lapExit - refExit : null,
       phaseLossS: (() => {
         const [entryEnd, midEnd] = phaseBounds(corner)
-        return { entry: delta(entryEnd) - delta(corner.start), mid: delta(midEnd) - delta(entryEnd), exit: delta(corner.end) - delta(midEnd) }
+        const kept = keptIn(corner)
+        return { entry: kept(entryEnd) - kept(corner.start), mid: kept(midEnd) - kept(entryEnd), exit: kept(corner.end) - kept(midEnd) }
       })(),
     }
   })

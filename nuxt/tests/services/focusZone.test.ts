@@ -46,7 +46,6 @@ describe('useFocusZone', () => {
   it('the worst corner with no clear piece inside: the whole corner', () => {
     const f = setup({ comparison: corners })
     expect(f.focusZone.value).toEqual([0.45, 0.6])
-    expect(f.focusEffect.value).toBeNull()
   })
   it('a time reset in the corner: no band at all, not even the whole corner (Codex 01/11)', () => {
     const f = setup({ comparison: corners })

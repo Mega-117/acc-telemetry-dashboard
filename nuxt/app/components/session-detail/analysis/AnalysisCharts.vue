@@ -44,9 +44,7 @@ const props = withDefaults(defineProps<{
   zoomable?: boolean
   /** 01/11 (the focus zone of Track Titan): the stretch to look at, highlighted at the same place on every chart. */
   focus?: [number, number] | null
-  /** 01/11: where the same loss keeps growing after the focus zone: a lighter, dashed band. */
-  focusEffect?: [number, number] | null
-}>(), { range: () => [0, 1], refCursor: null, corners: () => [], cursorTag: null, rowHeight: null, zoomable: false, focus: null, focusEffect: null })
+}>(), { range: () => [0, 1], refCursor: null, corners: () => [], cursorTag: null, rowHeight: null, zoomable: false, focus: null })
 const emit = defineEmits<{ hover: [fraction: number | null], select: [corner: number], zoom: [range: [number, number] | null] }>()
 
 const uid = useId()
@@ -68,7 +66,6 @@ function band(f: [number, number] | null) {
   return b > a ? { x: xOf(a), width: Math.max(xOf(b) - xOf(a), 2) } : null
 }
 const focusBand = computed(() => band(props.focus))
-const effectBand = computed(() => band(props.focusEffect))
 const inRange = (fraction: number | null): fraction is number => fraction !== null && fraction >= props.range[0] && fraction <= props.range[1]
 const valueAt = (trace: LapTraceView, channel: ChartChannel, fraction: number) => {
   const v = channelAt(trace, channel.name, fraction)
@@ -257,7 +254,6 @@ function onDouble() {
       <div class="chart-plot" :style="{ height: `${chart.height}px` }">
         <svg :viewBox="`0 0 ${WIDTH} ${chart.height}`" preserveAspectRatio="none" :style="{ height: `${chart.height}px` }" @pointermove="onMove" @pointerleave="emit('hover', null)" @pointerdown="onDown" @pointerup="onUp" @pointercancel="onUp" @wheel="onWheel" @dblclick="onDouble">
           <rect v-for="b in bands" :key="b.number" :x="b.x" y="0" :width="Math.max(b.width, 1)" :height="chart.height" class="chart-band" />
-          <rect v-if="effectBand" :x="effectBand.x" y="0" :width="effectBand.width" :height="chart.height" class="chart-focus chart-focus--effect" />
           <rect v-if="focusBand" :x="focusBand.x" y="0" :width="focusBand.width" :height="chart.height" class="chart-focus" />
           <line v-for="(t, i) in chart.ticks" :key="`g${i}`" x1="0" :x2="WIDTH" :y1="t.y" :y2="t.y" class="chart-grid" />
           <line v-for="(t, i) in xTicks" :key="`x${i}`" :x1="t.x" :x2="t.x" y1="0" :y2="chart.height" class="chart-grid chart-grid--x" />
@@ -299,8 +295,7 @@ function onDouble() {
 svg { display: block; width: 100%; touch-action: none; cursor: crosshair; }
 .chart-band { fill: #ffffff06; }
 // The stretch to look at: a warm band with edges, the same on every chart (never the only signal: the bar names it).
-.chart-focus { fill: #fbbf2414; stroke: #fbbf2466; stroke-width: 1; vector-effect: non-scaling-stroke; pointer-events: none;
-  &--effect { fill: #fbbf2408; stroke: #fbbf2440; stroke-dasharray: 4 4; } }
+.chart-focus { fill: #fbbf2414; stroke: #fbbf2466; stroke-width: 1; vector-effect: non-scaling-stroke; pointer-events: none; }
 .chart-line { fill: none; stroke-width: 1.8; vector-effect: non-scaling-stroke; stroke-linejoin: round; &--ref { stroke-width: 1.5; } }
 .chart-brush { fill: #ffffff1f; stroke: #ffffff59; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .chart-zero { stroke: #ffffff40; stroke-width: 1; vector-effect: non-scaling-stroke; }

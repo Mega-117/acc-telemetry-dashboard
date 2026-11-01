@@ -45,6 +45,38 @@ describe('lap analysis (our Track Titan)', () => {
     expect(c1!.brakeDeltaM).toBeCloseTo(-160, 6)
   })
 
+  // 01/11 (Hungaroring T1): a light touch of brake near the apex is not where the braking starts.
+  it('a light touch near the apex is not the braking; a short release does not split one braking', () => {
+    const reference = lap(profile(), [800, 2000])
+    const touch = lap(profile(), [800, 2000])
+    touch.channels.brake_pct = touch.channels.brake_pct!.map((v, i) => (i * 2 >= 900 && i * 2 < 914 ? 11 : v))
+    const [c1] = compareCorners(touch, reference, detectCorners(reference))
+    expect(c1!.brakeDeltaM).toBeCloseTo(0, 6)
+    const released = lap(profile(), [790, 2000], 70)
+    released.channels.brake_pct = released.channels.brake_pct!.map((v, i) => (i * 2 >= 800 && i * 2 < 808 ? 0 : v))
+    const [r1] = compareCorners(released, reference, detectCorners(reference))
+    expect(r1!.brakeDeltaM).toBeCloseTo(-10, 6)
+  })
+  it('the parts of a corner count the gap you keep: a bump given back is no entry loss', () => {
+    const reference = lap(profile())
+    const corner = detectCorners(reference)[0]!
+    const bump = lap(profile())
+    const t = reference.channels.time_s!, n = t.length
+    const at = (f: number) => (f * 3000)
+    const [entryEnd] = [corner.apex - (corner.apex - corner.start) * 0.25]
+    bump.channels.time_s = t.map((v, i) => {
+      const m = (i / (n - 1)) * 3000
+      const peak = at(entryEnd)
+      const b = m < peak - 60 || m > peak + 60 ? 0 : 0.1 * (1 - Math.abs(m - peak) / 60)
+      const exit = m > at(corner.apex) ? Math.min(0.1, (m - at(corner.apex)) / (at(corner.end) - at(corner.apex)) * 0.1) : 0
+      return v + b + exit
+    })
+    bump.lapTimeS = bump.channels.time_s.at(-1)!
+    const [c] = compareCorners(bump, reference, [corner])
+    expect(c!.phaseLossS.entry).toBeLessThan(0.01)
+    expect(c!.phaseLossS.exit).toBeGreaterThan(0.05)
+  })
+
   it('finds the logger session id for the lap files, also on older sessions', () => {
     expect(analysisSessionToken('20261025_175240', 'x', null)).toBe('20261025_175240')
     expect(analysisSessionToken(undefined, '2026_08_17T20_00_00_spa', '2026-08-17T20:00:00.123')).toBe('20260817_200000')
@@ -231,26 +263,24 @@ describe('focus zone: the loss you keep (01/11, research)', () => {
     out.lapTimeS = out.channels.time_s.at(-1)!
     return out
   }
-  it('corner 1 (01/11): the bump given back is no zone; the zone is where the sustained loss starts, the rest its effect', () => {
+  it('corner 1 (01/11): the bump given back is no zone; the zone is where the sustained loss starts', () => {
     const c1 = gapLap([[0, 0], [550, 0], [600, 0.10], [650, 0.03], [1000, 0.134], [3000, 0.134]])
     const f = focusInStretch(c1, fast, [400 / 3000, 1000 / 3000])!
     expect(f.zone[0] * 3000).toBeGreaterThanOrEqual(645)
     expect(f.zone[0] * 3000).toBeLessThan(700)
-    expect(f.effect![1] * 3000).toBeCloseTo(1000, 0)
     expect(f.lossS).toBeCloseTo(0.104, 2)
   })
   it('a uniform loss over a long corner still gives a zone (opening the corner keeps its band)', () => {
     const even = gapLap([[0, 0], [400, 0], [1000, 0.134], [3000, 0.134]])
     const f = focusInStretch(even, fast, [400 / 3000, 1000 / 3000])!
     expect(f.zone[0] * 3000).toBeLessThan(420)
-    expect(f.effect).not.toBeNull()
+    expect(f.zone[1] * 3000).toBeLessThan(500)
   })
   it('two separate losses are never joined: the bigger one, its own run only', () => {
     const two = gapLap([[0, 0], [450, 0], [480, 0.10], [800, 0.10], [830, 0.16], [3000, 0.16]])
     const f = focusInStretch(two, fast, [400 / 3000, 1000 / 3000])!
     expect(f.zone[0] * 3000).toBeGreaterThan(440)
     expect(f.zone[1] * 3000).toBeLessThan(500)
-    expect(f.effect).toBeNull()
   })
   it('wiggles of a few thousandths on 2 m data never break a sustained loss (Codex 01/11)', () => {
     const t = fast.channels.time_s!, n = t.length
