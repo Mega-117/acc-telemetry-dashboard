@@ -54,6 +54,8 @@ export function useLapChoice(o: {
   bridge: () => LocalLapBridge | null
   deps: LapsArchiveDeps
   /** Session link of the site → its lap token and track (the page reads Firestore). */
+  /** 01/11: the reference was taken away (✕) and must stay away. */
+  refRemoved?: () => boolean
   readSession?: (sessionId: string, userId: string) => Promise<{ sessionToken: string | null, track: string } | null>
 }) {
   const { t } = useI18n()
@@ -117,6 +119,8 @@ export function useLapChoice(o: {
   }
   /** The comparison on open (and while suggestions arrive), never after the driver chose. */
   function applyDefault() {
+    // 01/11: after the ✕ the page shows only your lap, whatever reloads or arrives later.
+    if (o.refRemoved?.()) { o.refId.value = ''; return }
     if (userChose.value) return
     const mine = o.entries.value.filter(e => (YOU_ORIGINS as readonly string[]).includes(e.origin) && e.origin !== 'history')
     const stepUp = o.library.suggestedId.value ? byId(o.library.suggestedId.value) : null

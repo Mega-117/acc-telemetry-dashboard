@@ -58,6 +58,7 @@ const second = computed(() => props.choice?.ideal ? text.idealNote(props.idealSc
 .lap-card__side { display: grid; place-items: center; padding: 0 8px; background: var(--c); color: #0a0a0f; font: italic 700 13px 'Racer Display', sans-serif; text-transform: uppercase; }
 .lap-card__body { display: grid; gap: 2px; flex: 1; min-width: 0; padding: 5px 10px; p { margin: 0; } }
 .lap-card__who { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; color: #fff; font: 700 13px 'Inter', sans-serif; }
+.lap-card__driver { min-width: 0; overflow-wrap: anywhere; }
 .lap-card__tag { padding: 0 5px; border: 1px solid var(--c); color: var(--c); font: 700 10px/16px 'Inter', sans-serif; letter-spacing: .05em; align-self: center; }
 .lap-card__lap { color: #e6e6ea; font: italic 700 15px 'Racer Display', sans-serif; letter-spacing: .02em; &.is-best { color: #c084fc; } }
 .lap-card__status { font: 600 12px 'Inter', sans-serif; &.is-valid { color: #3ddc5a; } &.is-invalid { color: #ff8a98; } &.is-incomplete, &.is-unknown { color: #b3b3b8; } }

@@ -49,6 +49,8 @@ const props = defineProps<{
   readSession?: (sessionId: string, userId: string) => Promise<{ sessionToken: string | null, track: string } | null>
   /** 01/11: the page's view: 'pilota' = Dove migliorare, 'tracce' = Telemetria (no switch inside any more). */
   view?: 'pilota' | 'tracce'
+  /** 01/11: the driver took the reference away (✕): no default or late answer brings it back. */
+  referenceRemoved?: boolean
 }>()
 
 type Layout = 'pilota' | 'tracce'
@@ -75,7 +77,7 @@ const lapId = ref(''), refId = ref('')
 const library = useReferenceLibrary({ entries, traces, refId, sessionToken: () => props.sessionToken, sectorTimesOf: e => sectorTimes(e) })
 const loading = ref(false), error = ref(''), fromArchive = ref(false), programArchive = ref(false)
 // PIP-635: nessun giro da analizzare: la pagina torna su Sessione se l'aveva aperta da sola.
-const emit = defineEmits<{ unavailable: [], compare: [], lapLinkHandled: [], removeCompare: [] }>(); watch(error, message => { if (message) emit('unavailable') })
+const emit = defineEmits<{ unavailable: [], compare: [], lapLinkHandled: [], removeCompare: [], referenceChosen: [] }>(); watch(error, message => { if (message) emit('unavailable') })
 const { t, locale } = useI18n()
 const cursor = ref<number | null>(null)
 const selectedCorner = ref<number | null>(null)
@@ -92,7 +94,14 @@ const { currentUser } = useFirebaseAuth()
 const archiveDeps = { getToken: async () => (await currentUser.value?.getIdToken()) ?? null }
 // PIP-695: the two lap cards and the "Cambia" chooser (modal; a side panel only in dev builds, for the usability test).
 const choice = useLapChoice({ entries, traces, lapId, refId, library, sessionToken: () => props.sessionToken, pilotUid: () => props.pilotUid || null,
-  myUid: () => currentUser.value?.uid ?? null, sessionType: () => props.sessionType ?? null, bridge: api, deps: archiveDeps, readSession: props.readSession })
+  myUid: () => currentUser.value?.uid ?? null, sessionType: () => props.sessionType ?? null, bridge: api, deps: archiveDeps, readSession: props.readSession,
+  refRemoved: () => !!props.referenceRemoved })
+// A lap picked for the reference in Cambia is a new choice: the page forgets the ✕.
+async function applyChoice(side: LapSide, c: Parameters<typeof choice.apply>[1]) {
+  const result = await choice.apply(side, c)
+  if (result === null && side === 'ref') emit('referenceChosen')
+  return result
+}
 watch([() => entries.value.map(e => e.id).join(), library.suggestedId], () => choice.applyDefault())
 const chooser = ref<LapSide | null>(null)
 const chooserVariant = ref<'modal' | 'panel'>('modal')
@@ -185,7 +194,7 @@ async function load() {
 // PIP-652: the page's one "Confronta" (a session to compare with, a lap link that becomes the reference).
 const { linkError } = useCompareTargets({ pendingLapLink: () => props.pendingLapLink, compareWith: () => props.compareWith, currentLap: () => traces.value[lapId.value] ?? null,
   entries, traces, refId, library, deps: archiveDeps, bridge: api, viewerUid: () => currentUser.value?.uid ?? null, ownView: () => !props.pilotUid,
-  isCurrent: () => { const g = loadGeneration; return () => g === loadGeneration }, handled: () => emit('lapLinkHandled'), propose: choice.propose })
+  isCurrent: () => { const g = loadGeneration; return () => g === loadGeneration }, handled: () => emit('lapLinkHandled'), propose: (id, why) => { if (!props.referenceRemoved) choice.propose(id, why) } })
 
 // PIP-623: "Condividi giro": the selected lap goes online (if not yet) and its link is copied.
 const shareState = ref<'idle' | 'busy' | 'copied' | 'error'>('idle')
@@ -424,7 +433,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
         </div>
         <LapChoiceCard side="ref" removable @remove="choice.removeRef(); emit('removeCompare')" :choice="choice.refCard.value" :reason="choice.reason.value" :ideal-scope="idealScope" :pilot-name="pilotName" :disabled="!entries.length" @change="openChooser('ref')" />
       </div>
-      <LapChoiceDialog :open="chooser !== null" :side="chooser ?? 'ref'" :source="choice.source" :apply="choice.apply" :variant="chooserVariant" :ideal-scope="idealScope"
+      <LapChoiceDialog :open="chooser !== null" :side="chooser ?? 'ref'" :source="choice.source" :apply="applyChoice" :variant="chooserVariant" :ideal-scope="idealScope"
         @close="chooser = null" @whole-session="wholeSession" />
       <span v-if="shareMessage" class="bar-note" :class="{ failed: shareState === 'error' }" role="status">{{ shareMessage }}</span>
     </div>

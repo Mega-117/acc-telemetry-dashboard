@@ -106,6 +106,30 @@ describe('SessionAnalysisPanel sharing and coach view', () => {
     view.unmount()
   })
 
+  // 01/11: after the ✕ the panel opens with only your lap, and a choice in Cambia gives the page its reference back.
+  it('opens without a reference after the ✕ and asks the page to remove the comparison', async () => {
+    ;(window as any).electronAPI = {
+      listLapTraces: vi.fn(async (f: { sessionToken?: string }) => f?.sessionToken ? [
+        { id: 'h__c/lap_20261025_175240_L005_104310ms.json.gz' },
+        { id: 'h__c/lap_20261025_175240_L006_104900ms.json.gz' },
+      ] : []),
+      readLapTrace: vi.fn(async (id: string) => rawLap({ lapNumber: id.includes('L005') ? 5 : 6, lapTime: id.includes('L005') ? 104.31 : 104.9 })),
+    }
+    const view = mount(SessionAnalysisPanel, { props: { sessionToken: '20261025_175240', laps, referenceRemoved: true }, global: { stubs: { AnalysisMap: true, AnalysisCharts: true, AnalysisCar: true } } })
+    await flushPromises()
+    expect(view.get('.lap-card--you').text()).toContain('Giro 5')
+    expect(view.get('.lap-card--ref').text()).not.toContain('Giro 6')
+    expect(view.find('.lap-card--ref .lap-card__remove').exists()).toBe(false)
+    await view.setProps({ referenceRemoved: false })
+    view.unmount()
+    const again = mount(SessionAnalysisPanel, { props: { sessionToken: '20261025_175240', laps }, global: { stubs: { AnalysisMap: true, AnalysisCharts: true, AnalysisCar: true } } })
+    await flushPromises()
+    await again.get('.lap-card--ref .lap-card__remove').trigger('click')
+    expect(again.emitted('removeCompare')).toHaveLength(1)
+    expect(again.get('.lap-card--ref').text()).not.toContain('Giro 6')
+    again.unmount()
+  })
+
   // PIP-695 + 01/11: the two cards on open: Tu my fastest valid lap, Riferimento the next one with its reason; "Cambia" opens the chooser.
   it('opens with the two cards, the reason of the reference and the chooser on the right side', async () => {
     ;(window as any).electronAPI = {

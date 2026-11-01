@@ -419,6 +419,7 @@ const comparisonLoadError = ref<string | null>(null)
 async function handleSessionBSelect(sessionId: string, userId?: string, nickname?: string) {
   clearCrossSession()
   clearCompare()
+  referenceRemoved.value = false
   const version = ++comparisonLoadVersion
   comparisonLoadError.value = null
   showSessionPicker.value = false
@@ -455,9 +456,29 @@ async function handleSessionBSelect(sessionId: string, userId?: string, nickname
 // and brings its laps to the Telemetria; a lap link goes to the Telemetria as the reference.
 const compareTarget = ref<CompareTarget | null>(null)
 const pendingLapLink = ref<string | null>(null)
-function onLapLink(link: string) { pendingLapLink.value = link; chooseTab(detailTab.value === 'migliorare' ? 'migliorare' : 'avanzata') }
-// 01/11: ✕ on the reference takes the comparison away from the whole page (the session compared too).
-function removeCompare() { clearCrossSession(); clearCompare() }
+function onLapLink(link: string) { referenceRemoved.value = false; pendingLapLink.value = link; chooseTab(detailTab.value === 'migliorare' ? 'migliorare' : 'avanzata') }
+// 01/11: ✕ on the reference takes the comparison away from the whole page (the session compared too) and
+// stays: leaving the lap views, reloading their laps or a link still downloading never brings it back.
+// A new choice (Confronta, a link, Cambia) clears it.
+const referenceRemoved = ref(false)
+function removeCompare() {
+  referenceRemoved.value = true
+  pendingLapLink.value = null
+  clearCrossSession()
+  clearCompare()
+  comparisonOpen.value = false
+}
+// Keyboard on the three views (tabs pattern): ← → move, Home / End jump.
+function onTabKey(event: KeyboardEvent) {
+  const order = DETAIL_TABS.map(tab => tab.id)
+  const at = order.indexOf(detailTab.value)
+  const next = event.key === 'ArrowRight' ? order[(at + 1) % order.length] : event.key === 'ArrowLeft' ? order[(at - 1 + order.length) % order.length]
+    : event.key === 'Home' ? order[0] : event.key === 'End' ? order[order.length - 1] : null
+  if (!next) return
+  event.preventDefault()
+  chooseTab(next)
+  void nextTick(() => (event.currentTarget as HTMLElement | null)?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus())
+}
 const compareLapsToast = ref('')
 // PIP-695: a session link pasted in the Telemetria's "Cambia il riferimento": its lap token and track.
 async function readLinkedSession(sessionId: string, userId: string) {
@@ -2464,8 +2485,8 @@ const gripZones = computed(() => {
   <Teleport defer to="#app-toast-slot">
     <Transition name="autoselect-toast">
       <div v-if="showAutoSelectToast" class="autoselect-notification">
-        <span class="autoselect-notification-text">{{ detailTab === 'avanzata' && compareLapsToast ? compareLapsToast : t('sessionDetail.autoSelect.text') }}</span>
-        <button v-if="detailTab !== 'avanzata'" type="button" class="autoselect-notification-action" @click="showAutoSelectToast = false; resetBuilder()">{{ t('sessionDetail.autoSelect.change') }}</button>
+        <span class="autoselect-notification-text">{{ lapView && compareLapsToast ? compareLapsToast : t('sessionDetail.autoSelect.text') }}</span>
+        <button v-if="!lapView" type="button" class="autoselect-notification-action" @click="showAutoSelectToast = false; resetBuilder()">{{ t('sessionDetail.autoSelect.change') }}</button>
         <button type="button" class="autoselect-notification-close" :aria-label="t('common.close')" @click="showAutoSelectToast = false">✕</button>
       </div>
     </Transition>
@@ -2510,13 +2531,13 @@ const gripZones = computed(() => {
       <div class="header-actions">
         <button v-if="!isEvoSession" type="button" class="rc-btn rc-btn--compact" :title="t('sessionDetail.header.compareTitle')" @click="openSessionPicker"><UiRacingIcon name="compare" :size="16" />{{ t('sessions.picker.compare') }}</button>
         <SessionFileActions :can-share="canShare" :sharing="isSharing" @share="shareSession" />
-        <div v-if="!isEvoSession" v-rc-switch class="detail-tabs rc-switch" role="tablist" :aria-label="t('sessionDetail.header.viewAria')">
-          <button v-for="tab in DETAIL_TABS" :key="tab.id" type="button" role="tab" :aria-selected="detailTab === tab.id" :class="{ active: detailTab === tab.id }" :title="t(tab.title)" @click="chooseTab(tab.id)">{{ t(tab.label) }}</button>
+        <div v-if="!isEvoSession" v-rc-switch class="detail-tabs rc-switch" role="tablist" :aria-label="t('sessionDetail.header.viewAria')" @keydown="onTabKey">
+          <button v-for="tab in DETAIL_TABS" :key="tab.id" type="button" role="tab" :aria-selected="detailTab === tab.id" :tabindex="detailTab === tab.id ? 0 : -1" :class="{ active: detailTab === tab.id }" :title="t(tab.title)" @click="chooseTab(tab.id)">{{ t(tab.label) }}</button>
         </div>
       </div>
     </header>
 
-    <SessionAnalysisPanel v-if="lapView && !isEvoSession" :view="detailTab === 'migliorare' ? 'pilota' : 'tracce'" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" :compare-with="compareTarget" :pending-lap-link="pendingLapLink" :session-type="session?.type ?? null" :read-session="readLinkedSession" @unavailable="onTelemetryUnavailable" @compare="openSessionPicker" @lap-link-handled="pendingLapLink = null" @remove-compare="removeCompare" />
+    <SessionAnalysisPanel v-if="lapView && !isEvoSession" :view="detailTab === 'migliorare' ? 'pilota' : 'tracce'" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" :compare-with="compareTarget" :pending-lap-link="pendingLapLink" :session-type="session?.type ?? null" :read-session="readLinkedSession" @unavailable="onTelemetryUnavailable" @compare="openSessionPicker" @lap-link-handled="pendingLapLink = null" @remove-compare="removeCompare" :reference-removed="referenceRemoved" @reference-chosen="referenceRemoved = false" />
 
     <!-- ========================================== -->
     <!-- MASTER / DETAIL LAYOUT -->

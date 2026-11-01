@@ -88,7 +88,8 @@ export function useReferenceLibrary(o: {
         valid: true, complete: true, origin: 'best', sessionToken: d.sessionToken, label: `${t.car} · ${day(d.sessionToken)} · ${formatLapTime(d.lapTimeMs)}`, note: carMismatchNote() }))
       if (!isCurrent()) return
       historyTraces = mine.map(r => r.trace)
-      add([...mine.slice(0, 3), ...otherCar])
+      // 01/11: six, not three: a race lap of yours must be there to pick even behind faster qualifying laps.
+      add([...mine.slice(0, 6), ...otherCar])
     } catch { /* the best laps are an extra */ }
     if (isCurrent()) refreshIdeal()
   }
@@ -172,7 +173,7 @@ export function useReferenceLibrary(o: {
    * labelled with the driver; returns the id of its best lap, to propose it as the reference.
    */
   async function loadCompareSession(isCurrent: () => boolean, source: LapSource, target: { sessionToken: string, label: string, ownerUid?: string },
-    youKind: LapKind | null = null): Promise<string | null> {
+    youKind: () => LapKind | null = () => null): Promise<string | null> {
     try {
       const list = await source.list(target.sessionToken)
       // One lap at a time, as the archive is read for a coach, and one retry: a lap that does not arrive
@@ -194,7 +195,8 @@ export function useReferenceLibrary(o: {
       const ok = read.filter((r): r is Loaded => r !== null).sort((a, b) => a.entry.lapTimeMs - b.entry.lapTimeMs)
       add(ok)
       // 01/11: the proposed lap is the best of the same kind as "Tu" (race with race), else the best one.
-      return sameKindFirst(ok, r => lapKind(r.trace.fuelL), youKind)[0]?.entry.id ?? null
+      // The kind of "Tu" now, after the download: Tu may have changed meanwhile.
+      return sameKindFirst(ok, r => lapKind(r.trace.fuelL), youKind())[0]?.entry.id ?? null
     } catch { return null }
   }
   function clearCompareSession() { o.entries.value = o.entries.value.filter(e => e.origin !== 'compare') }
