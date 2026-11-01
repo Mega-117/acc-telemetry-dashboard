@@ -161,6 +161,21 @@ export function leaderboard(entries: { libId: string, uid: string, lapTimeMs: nu
     gapMs: base ? e.lapTimeMs - base : null, mine: !!myUid && e.uid === myUid, libId: e.libId, recordedAt: e.recordedAt }))
 }
 
+/**
+ * 01/11 (user decision, same rule as the stints, PIP-649): a lap started with 20 L or less is a qualifying
+ * lap, more is a race lap; unknown without the fuel. Comparing like with like: race with race.
+ */
+export type LapKind = 'qualify' | 'race'
+export function lapKind(fuelL: number | null | undefined): LapKind | null {
+  return typeof fuelL === 'number' && Number.isFinite(fuelL) && fuelL > 0 ? (fuelL <= 20 ? 'qualify' : 'race') : null
+}
+/** The laps of the same kind as `you` when there is at least one; otherwise all of them. */
+export function sameKindFirst<T>(laps: T[], kindOf: (lap: T) => LapKind | null, you: LapKind | null): T[] {
+  if (!you) return laps
+  const same = laps.filter(l => kindOf(l) === you)
+  return same.length ? same : laps
+}
+
 /** How much quicker `faster` is than `slower`, in % with one decimal. */
 export function pctFaster(fasterMs: number, slowerMs: number): number {
   return slowerMs > 0 ? Math.round((slowerMs - fasterMs) / slowerMs * 1000) / 10 : 0
@@ -170,9 +185,13 @@ export function pctFaster(fasterMs: number, slowerMs: number): number {
  * The reference on open (user decision 31/10): my best valid lap here with this car if it beats "Tu";
  * otherwise the driver a step ahead (the library's suggestion); otherwise my next best lap. Always a reason.
  */
-export function chooseDefaultReference(o: { you: LapEntryLike | null, mine: LapEntryLike[], stepUp: LapEntryLike | null, stepUpDriver?: string | null }): { id: string, reason: RefReason } | null {
+export function chooseDefaultReference(o: { you: LapEntryLike | null, mine: LapEntryLike[], stepUp: LapEntryLike | null, stepUpDriver?: string | null,
+  kindOf?: (id: string) => LapKind | null }): { id: string, reason: RefReason } | null {
   const you = o.you
-  const valid = o.mine.filter(e => e.valid && e.complete && !e.note && e.id !== you?.id).sort((a, b) => a.lapTimeMs - b.lapTimeMs)
+  const kindOf = (e: LapEntryLike) => o.kindOf?.(e.id) ?? null
+  // 01/11: your laps of the same kind as "Tu" first (race with race, qualifying with qualifying).
+  const valid = sameKindFirst(o.mine.filter(e => e.valid && e.complete && !e.note && e.id !== you?.id), kindOf, you ? kindOf(you) : null)
+    .sort((a, b) => a.lapTimeMs - b.lapTimeMs)
   const best = valid[0]
   if (best && (!you || best.lapTimeMs < you.lapTimeMs)) return { id: best.id, reason: { kind: 'myBest' } }
   if (o.stepUp && o.stepUp.id !== you?.id) return { id: o.stepUp.id, reason: { kind: 'stepUp', driver: o.stepUpDriver ?? o.stepUp.driver ?? null, pct: you ? pctFaster(o.stepUp.lapTimeMs, you.lapTimeMs) : 0 } }

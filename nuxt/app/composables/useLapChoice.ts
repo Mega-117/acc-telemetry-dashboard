@@ -8,7 +8,7 @@ import { fetchLibraryLap, fetchPilotLap, LapsArchiveError, listPilotTrackLaps, t
 import { loadSharedLapLink } from '~/services/telemetry/sharedLapLoad'
 import { loadPublicNickname } from '~/repositories/publicProfileRepository'
 import {
-  chooseDefaultReference, classifyLink, IDEAL_KEY, lapKey, lapStatus, leaderboard, parseSessionLink, pctFaster, runConditions, sameTrackName,
+  chooseDefaultReference, classifyLink, IDEAL_KEY, lapKey, lapKind, lapStatus, leaderboard, parseSessionLink, pctFaster, runConditions, sameTrackName,
   type DriverRow, type LapChoice, type LapSide, type RefReason,
 } from '~/services/telemetry/lapChoice'
 import { carMismatchNote, type Entry, type useReferenceLibrary } from './useReferenceLibrary'
@@ -120,7 +120,7 @@ export function useLapChoice(o: {
     if (userChose.value) return
     const mine = o.entries.value.filter(e => (YOU_ORIGINS as readonly string[]).includes(e.origin) && e.origin !== 'history')
     const stepUp = o.library.suggestedId.value ? byId(o.library.suggestedId.value) : null
-    const pick = chooseDefaultReference({ you: lapEntry.value, mine, stepUp })
+    const pick = chooseDefaultReference({ you: lapEntry.value, mine, stepUp, kindOf: id => lapKind(o.traces.value[id]?.fuelL) })
     if (pick && (pick.id !== o.refId.value || refReason.value?.id !== pick.id)) setRef(pick.id, pick.reason, false)
   }
   function reset() { userChose.value = false; refReason.value = null; o.library.resetLibrary() }
@@ -132,6 +132,8 @@ export function useLapChoice(o: {
   }
   /** A link or a compared session proposed a reference: it is the driver's own action. */
   function propose(id: string, why: RefReason) { setRef(id, why, true) }
+  /** 01/11: ✕ on the reference: only your lap, and no suggestion comes back by itself. */
+  function removeRef() { o.refId.value = ''; refReason.value = null; userChose.value = true }
 
   // ── Reading a lap picked in the dialog ─────────────────────────────────────────────
   async function materialize(choice: LapChoice): Promise<string> {
@@ -297,5 +299,5 @@ export function useLapChoice(o: {
     currentKey: side => (side === 'you' ? youCard.value : refCard.value)?.key ?? null,
     suggested, idealSame: () => o.library.idealSameAsBest.value, sessionLaps, listMine, drivers, driversState, loadDriverNames, listDriverLaps, resolveLink,
   }
-  return { youCard, refCard, reason, canSwap, swap, apply, applyDefault, propose, reset, userChose, source, nick, loadArchiveBest }
+  return { youCard, refCard, reason, canSwap, swap, removeRef, apply, applyDefault, propose, reset, userChose, source, nick, loadArchiveBest }
 }

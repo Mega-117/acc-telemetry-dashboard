@@ -455,7 +455,9 @@ async function handleSessionBSelect(sessionId: string, userId?: string, nickname
 // and brings its laps to the Telemetria; a lap link goes to the Telemetria as the reference.
 const compareTarget = ref<CompareTarget | null>(null)
 const pendingLapLink = ref<string | null>(null)
-function onLapLink(link: string) { pendingLapLink.value = link; chooseTab('avanzata') }
+function onLapLink(link: string) { pendingLapLink.value = link; chooseTab(detailTab.value === 'migliorare' ? 'migliorare' : 'avanzata') }
+// 01/11: ✕ on the reference takes the comparison away from the whole page (the session compared too).
+function removeCompare() { clearCrossSession(); clearCompare() }
 const compareLapsToast = ref('')
 // PIP-695: a session link pasted in the Telemetria's "Cambia il riferimento": its lap token and track.
 async function readLinkedSession(sessionId: string, userId: string) {
@@ -2514,7 +2516,7 @@ const gripZones = computed(() => {
       </div>
     </header>
 
-    <SessionAnalysisPanel v-if="lapView && !isEvoSession" :view="detailTab === 'migliorare' ? 'pilota' : 'tracce'" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" :compare-with="compareTarget" :pending-lap-link="pendingLapLink" :session-type="session?.type ?? null" :read-session="readLinkedSession" @unavailable="onTelemetryUnavailable" @compare="openSessionPicker" @lap-link-handled="pendingLapLink = null" />
+    <SessionAnalysisPanel v-if="lapView && !isEvoSession" :view="detailTab === 'migliorare' ? 'pilota' : 'tracce'" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" :compare-with="compareTarget" :pending-lap-link="pendingLapLink" :session-type="session?.type ?? null" :read-session="readLinkedSession" @unavailable="onTelemetryUnavailable" @compare="openSessionPicker" @lap-link-handled="pendingLapLink = null" @remove-compare="removeCompare" />
 
     <!-- ========================================== -->
     <!-- MASTER / DETAIL LAYOUT -->

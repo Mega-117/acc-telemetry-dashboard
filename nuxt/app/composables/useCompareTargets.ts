@@ -1,3 +1,4 @@
+import { lapKind } from '~/services/telemetry/lapChoice'
 import { ref, watch, type Ref } from 'vue'
 import { electronLapSource, pilotLapSource, type LocalLapBridge } from '~/services/telemetry/lapSources'
 import type { LapsArchiveDeps } from '~/services/telemetry/lapsArchiveClient'
@@ -59,7 +60,7 @@ export function useCompareTargets(o: {
     const mine = target.ownerUid === o.viewerUid()
     const source = mine && o.ownView() && typeof bridge?.listLapTraces === 'function' ? electronLapSource(bridge)
       : pilotLapSource(target.ownerUid, o.deps, mine ? null : target.sharedSessionId)
-    const best = await o.library.loadCompareSession(isCurrent, source, target)
+    const best = await o.library.loadCompareSession(isCurrent, source, target, lapKind(o.currentLap()?.fuelL))
     if (best && isCurrent()) propose(best, { kind: 'compare', label: target.label })
   })
   return { linkError }

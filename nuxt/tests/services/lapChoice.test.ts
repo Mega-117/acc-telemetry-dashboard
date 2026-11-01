@@ -1,7 +1,7 @@
 // PIP-695: the pure part of choosing "Tu" and "Riferimento".
 import { describe, expect, it } from 'vitest'
 import {
-  chooseDefaultReference, choiceBlock, classifyLink, dateBucket, groupMyLaps, lapKey, lapStatus, leaderboard, runConditions, matchesDriver, normalizeSearch,
+  chooseDefaultReference, choiceBlock, classifyLink, dateBucket, groupMyLaps, lapKey, lapStatus, leaderboard, runConditions, lapKind, sameKindFirst, matchesDriver, normalizeSearch,
   parseSessionLink, pctFaster, sameTrackName, sessionDate, whenParts, type LapChoice, type LapEntryLike,
 } from '~/services/telemetry/lapChoice'
 
@@ -146,6 +146,18 @@ describe('lapChoice: same lap and links', () => {
     expect(sameTrackName('Spa', 'spa')).toBe(true)
     expect(sameTrackName('monza', 'Spa')).toBe(false)
     expect(sameTrackName('', 'spa')).toBe(false)
+  })
+  it('compares like with like: 20 L or less is qualifying, more is race (01/11)', () => {
+    expect([lapKind(8.8), lapKind(20), lapKind(20.1), lapKind(null), lapKind(0)]).toEqual(['qualify', 'qualify', 'race', null, null])
+    const laps = [{ id: 'q', fuel: 10 }, { id: 'r', fuel: 60 }]
+    expect(sameKindFirst(laps, l => lapKind(l.fuel), 'race').map(l => l.id)).toEqual(['r'])
+    expect(sameKindFirst(laps, l => lapKind(l.fuel), null).map(l => l.id)).toEqual(['q', 'r'])
+    expect(sameKindFirst([{ id: 'q', fuel: 10 }], l => lapKind(l.fuel), 'race').map(l => l.id)).toEqual(['q'])
+    // The default reference: my faster qualifying lap is skipped for a race lap of mine.
+    const lap = (id: string, ms: number) => ({ id, lapNumber: 1, lapTimeMs: ms, valid: true, complete: true, origin: 'local', sessionToken: 't' })
+    const fuel: Record<string, number> = { you: 60, q: 10, r: 55 }
+    const pick = chooseDefaultReference({ you: lap('you', 104000), mine: [lap('you', 104000), lap('q', 100000), lap('r', 103500)], stepUp: null, kindOf: id => lapKind(fuel[id]) })
+    expect(pick).toEqual({ id: 'r', reason: { kind: 'myBest' } })
   })
   it('reads the conditions of a lap file, none when the file has none (01/11)', () => {
     expect(runConditions({ fuelL: 43.7, tyreCompound: 'dry', conditions: { airC: 15, roadC: 18 } })).toEqual({ fuelL: 43.7, tyre: 'dry', airC: 15, roadC: 18 })

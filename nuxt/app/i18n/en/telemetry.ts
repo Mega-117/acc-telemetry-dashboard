@@ -151,6 +151,7 @@ export default {
       bar: 'bar = suspension (load)',
     },
     choice: {
+      removeRef: 'Remove the reference: only your lap stays',
       cond: { fuel: 'Fuel {n} L', dry: 'Dry tyres', wet: 'Wet tyres', air: 'Air {n}°', road: 'Track {n}°' },
       tagYou: 'YOU',
       change: 'Change',

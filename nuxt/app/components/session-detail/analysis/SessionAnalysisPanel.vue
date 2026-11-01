@@ -75,7 +75,7 @@ const lapId = ref(''), refId = ref('')
 const library = useReferenceLibrary({ entries, traces, refId, sessionToken: () => props.sessionToken, sectorTimesOf: e => sectorTimes(e) })
 const loading = ref(false), error = ref(''), fromArchive = ref(false), programArchive = ref(false)
 // PIP-635: nessun giro da analizzare: la pagina torna su Sessione se l'aveva aperta da sola.
-const emit = defineEmits<{ unavailable: [], compare: [], lapLinkHandled: [] }>(); watch(error, message => { if (message) emit('unavailable') })
+const emit = defineEmits<{ unavailable: [], compare: [], lapLinkHandled: [], removeCompare: [] }>(); watch(error, message => { if (message) emit('unavailable') })
 const { t, locale } = useI18n()
 const cursor = ref<number | null>(null)
 const selectedCorner = ref<number | null>(null)
@@ -422,7 +422,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
           </p>
           <button v-if="choice.canSwap.value" type="button" class="compare-swap" :title="t('telemetry.choice.swap')" :aria-label="t('telemetry.choice.swap')" @click="choice.swap()"><span aria-hidden="true">⇄</span></button>
         </div>
-        <LapChoiceCard side="ref" :choice="choice.refCard.value" :reason="choice.reason.value" :ideal-scope="idealScope" :pilot-name="pilotName" :disabled="!entries.length" @change="openChooser('ref')" />
+        <LapChoiceCard side="ref" removable @remove="choice.removeRef(); emit('removeCompare')" :choice="choice.refCard.value" :reason="choice.reason.value" :ideal-scope="idealScope" :pilot-name="pilotName" :disabled="!entries.length" @change="openChooser('ref')" />
       </div>
       <LapChoiceDialog :open="chooser !== null" :side="chooser ?? 'ref'" :source="choice.source" :apply="choice.apply" :variant="chooserVariant" :ideal-scope="idealScope"
         @close="chooser = null" @whole-session="wholeSession" />

@@ -44,7 +44,7 @@ describe('useCompareTargets (PIP-652)', () => {
     loadCompareSession.mockResolvedValue('compare:best')
     s.target.value = { ownerUid: 'friend', sessionToken: '20261025_172328', sharedSessionId: '2026_10_25T17_23_28_Hungaroring', label: 'Mike83' }
     await flush()
-    expect(loadCompareSession).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({ list: expect.any(Function) }), s.target.value)
+    expect(loadCompareSession).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({ list: expect.any(Function) }), s.target.value, null) // 01/11: the kind of "Tu" (none in this fixture: no fuel)
     expect(s.refId.value).toBe('compare:best')
     s.target.value = null
     await flush()

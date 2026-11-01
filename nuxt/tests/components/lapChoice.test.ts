@@ -64,6 +64,15 @@ describe('LapChoiceCard', () => {
     expect(wrapper.text()).toContain('Gomme da pioggia · Asfalto 12°')
     expect(wrapper.text()).not.toContain('Benzina')
   })
+  it('the reference can be taken away with ✕; the Tu row has no ✕ (01/11)', async () => {
+    wrapper = mount(LapChoiceCard, { props: { side: 'ref', choice: ref, removable: true } })
+    await wrapper.get('.lap-card__remove').trigger('click')
+    expect(wrapper.emitted('remove')).toHaveLength(1)
+    expect(wrapper.get('.lap-card__remove').attributes('aria-label')).toBe('Togli il riferimento: resta solo il tuo giro')
+    wrapper.unmount()
+    wrapper = mount(LapChoiceCard, { props: { side: 'you', choice: you } })
+    expect(wrapper.find('.lap-card__remove').exists()).toBe(false)
+  })
   it('"Cambia" asks to open the chooser', async () => {
     wrapper = mount(LapChoiceCard, { props: { side: 'you', choice: you } })
     await wrapper.get('.lap-card__change').trigger('click')
