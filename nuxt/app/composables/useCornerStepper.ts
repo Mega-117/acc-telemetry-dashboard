@@ -25,7 +25,7 @@ export function useCornerStepper(o: {
     if (event.key === 'Escape') { o.wholeLap(); return }
     if ((event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') || o.selectedCorner.value === null) return
     // Le frecce restano ai campi e agli switcher quando sono loro ad avere il fuoco.
-    if ((event.target as HTMLElement | null)?.closest?.("input, select, textarea, [role='tablist']")) return
+    if ((event.target as HTMLElement | null)?.closest?.("input, select, textarea, [role='tablist'], [role='dialog']")) return
     event.preventDefault()
     goCorner(event.key === 'ArrowRight' ? 1 : -1)
   }

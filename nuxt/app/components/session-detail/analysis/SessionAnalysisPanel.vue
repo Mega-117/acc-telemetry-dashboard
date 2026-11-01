@@ -23,6 +23,7 @@ import { lapShareErrorMessage } from '~/services/telemetry/lapShareLink'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { compareCorners, detectCorners, formatDelta, stretchDelta } from '~/services/telemetry/lapAnalysis'
 import { useFocusZone } from '~/composables/useFocusZone'
+import { carMismatchNote } from '~/composables/useReferenceLibrary'
 import { useCornerStepper } from '~/composables/useCornerStepper'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { readSessionLaps, withArchiveFallback } from '~/services/telemetry/sessionLapLoading'
@@ -53,6 +54,8 @@ const props = defineProps<{
   headTarget?: string | null
   /** 01/11: where Condividi giro goes (the page's buttons); none = in place. */
   shareTarget?: string | null
+  /** 01/11: false while the page shows Sessione (the panel stays mounted, hidden): keys do nothing. */
+  active?: boolean
 }>()
 
 // 01/11: one layout left (Dove migliorare's 'pilota' view was removed); the name stays for the checks below.
@@ -141,7 +144,8 @@ async function load() {
   else if (desktop) source = electronLapSource(bridge!)
   else { error.value = t('telemetry.errors.desktopOnly'); return }
   loading.value = true
-  const valid = new Map(props.laps.map(l => [l.lap_number, l.is_valid === true]))
+  // 01/11 (Codex): unknown validity stays unknown (never "invalid").
+  const valid = new Map(props.laps.map(l => [l.lap_number, l.is_valid ?? null]))
   try {
     let result = await readSessionLaps(source, token, valid, isCurrent, !!archiveUid)
     if (!result) return
@@ -203,13 +207,21 @@ const { linkError } = useCompareTargets({ pendingLapLink: () => props.pendingLap
 const shareState = ref<'idle' | 'busy' | 'copied' | 'error'>('idle')
 const shareMessage = ref('')
 let shareTimer: ReturnType<typeof setTimeout> | null = null
+// The lap file on this PC behind an entry (this session, your best or a lap of yours from another session).
+function localLapFile(e: Entry | null | undefined): string | null {
+  if (!e) return null
+  if (e.origin === 'local') return e.id
+  if (e.origin === 'history' || e.origin === 'best') { const id = e.id.replace(/^(history|best):/, ''); return id.includes('/') ? id : null }
+  return null
+}
 const canShare = computed(() => !props.pilotUid && typeof api()?.shareLapTrace === 'function'
-  && lapEntry.value?.origin === 'local' && lapEntry.value.complete && lapEntry.value.valid)
-const shareHint = computed(() => props.pilotUid ? '' : lapEntry.value && !lapEntry.value.valid ? t('telemetry.share.validOnly') : t('telemetry.share.hint'))
+  && !!localLapFile(lapEntry.value) && !!lapEntry.value?.complete && !!lapEntry.value?.valid)
+const shareHint = computed(() => props.pilotUid ? '' : lapEntry.value && !lapEntry.value.valid ? t('telemetry.share.validOnly')
+  : lapEntry.value && !localLapFile(lapEntry.value) ? t('telemetry.share.notLocal') : t('telemetry.share.hint'))
 // PIP-695: sharing your lap sits on the Tu card; a lap by link is in "Cambia il riferimento".
 const shareAvailable = computed(() => !props.pilotUid && typeof api()?.shareLapTrace === 'function')
 async function shareLap() {
-  const id = lapId.value
+  const id = localLapFile(lapEntry.value) ?? lapId.value
   if (!canShare.value || shareState.value === 'busy') return
   shareState.value = 'busy'
   shareMessage.value = t('telemetry.share.busy')
@@ -312,6 +324,8 @@ const traceRowHeight = computed(() => Math.max(80, Math.floor((viewportHeight.va
 const deltaTopHeight = computed(() => Math.max(70, Math.round(traceRowHeight.value * 0.8)))
 // Garage 61 keeps the lap bar on the left, always open: sectors and corners say where to look.
 watch([traceRoot, layout, reference, deltaPlace], () => nextTick(measureTrace))
+// Shown again after Sessione: measured while hidden (zero size), so measure now.
+watch(() => props.active, on => { if (on !== false) nextTick(() => { measureTrace(); measureDelta() }) })
 // What the charts show now, and the way back to the whole lap (Garage 61 reset, Esc, double click).
 const viewLabel = computed(() => zoomRange.value ? "Zoom" : selectedSector.value !== null ? t('telemetry.sector', { n: selectedSector.value + 1 }) : selectedCorner.value !== null ? t('telemetry.corner', { n: selectedCorner.value }) : t('telemetry.wholeLap'))
 const wholeView = computed(() => !zoomRange.value && selectedSector.value === null && selectedCorner.value === null)
@@ -325,6 +339,7 @@ function wholeLap() { selectedCorner.value = null; selectedSector.value = null; 
 const lossScope = ref<'lap' | 'session'>('lap')
 // The whole-session colours on the map: the map stays whole (a picked zone highlights its corner, no zoom).
 const sessionColours = computed(() => lossScope.value === 'session' && zones.active.value)
+const refNote = computed(() => lap.value && reference.value && reference.value.car !== lap.value.car ? carMismatchNote() : '')
 const gapWord = computed(() => totalDelta.value === null ? '' : totalDelta.value < 0 ? t('telemetry.faster') : totalDelta.value > 0 ? t('telemetry.slower') : t('telemetry.even'))
 const gapTitle = computed(() => totalDelta.value === null ? t('telemetry.gapTitle')
   : `${t('telemetry.gapTitle')}: ${formatDelta(totalDelta.value)} s, ${gapWord.value}`)
@@ -339,7 +354,7 @@ const { sectorList, sectorGaps } = useSectorCompare({ lap, reference, lapTimes: 
 const selectedSector = ref<number | null>(null)
 // Tracce: a stretch zoomed with the mouse (drag, wheel) wins over the sector or the corner.
 const zoomRange = ref<[number, number] | null>(null)
-const { goCorner, cursorCorner } = useCornerStepper({ active: () => layout.value === 'tracce', corners, selectedCorner, selectedSector, zoomRange, cursor, wholeLap })
+const { goCorner, cursorCorner } = useCornerStepper({ active: () => layout.value === 'tracce' && props.active !== false, corners, selectedCorner, selectedSector, zoomRange, cursor, wholeLap })
 const range = computed<[number, number]>(() => {
   // PIP-645: a dragged zoom applies in Semplice too.
   if (zoomRange.value) return zoomRange.value
@@ -426,7 +441,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
         <div class="compare-mid">
           <!-- 01/11: only the number (the colour says faster or slower; the words stay in the tooltip). -->
           <p class="compare-gap" :class="{ gain: (totalDelta ?? 0) < 0, loss: (totalDelta ?? 0) > 0 }" :title="gapTitle">
-            <template v-if="totalDelta !== null"><strong>{{ formatDelta(totalDelta).replace('.', locale === 'it' ? ',' : '.') }}</strong><span class="sr-only"> s, {{ gapWord }}</span><em v-if="invalidPair">{{ t('telemetry.choice.invalidQualifier') }}</em></template><em v-else>{{ t('telemetry.versus') }}</em>
+            <template v-if="totalDelta !== null"><strong>{{ formatDelta(totalDelta).replace('.', locale === 'it' ? ',' : '.') }}</strong><span class="sr-only"> s, {{ gapWord }}</span><em v-if="invalidPair">{{ t('telemetry.choice.invalidQualifier') }}</em></template>
           </p>
         </div>
         <LapChoiceCard side="ref" :choice="choice.refCard.value" :reason="choice.reason.value" :ideal-scope="idealScope" :pilot-name="pilotName" :disabled="!entries.length" @change="openChooser('ref')" />
@@ -434,7 +449,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
       <LapChoiceDialog :open="chooser !== null" :side="chooser ?? 'ref'" :source="choice.source" :apply="applyChoice" :variant="chooserVariant" :ideal-scope="idealScope"
         :can-swap="choice.canSwap.value" :can-remove="!!choice.refCard.value" @swap="choice.swap(); chooser = null"
         @remove="choice.removeRef(); emit('removeCompare'); chooser = null"
-        @close="chooser = null" @whole-session="wholeSession" />
+        @close="chooser = null; choice.cancelPending()" @whole-session="wholeSession" />
       <span v-if="shareMessage" class="bar-note" :class="{ failed: shareState === 'error' }" role="status">{{ shareMessage }}</span>
     </div>
     </Teleport>
@@ -445,7 +460,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
       </button>
     </Teleport>
     <p v-if="linkError" class="analysis-note analysis-note--warn" role="alert">{{ linkError }}</p>
-    <p v-if="refEntry?.note" class="analysis-note analysis-note--warn">{{ refEntry.note }}</p>
+    <p v-if="refNote" class="analysis-note analysis-note--warn">{{ refNote }}</p>
 
     <p v-if="skipped" class="analysis-note">{{ t('telemetry.skipped', { count: skipped }) }}</p>
     <p v-if="fromArchive && entries.length" class="analysis-note">{{ programArchive ? t('telemetry.programArchiveNote') : t('telemetry.browserNote') }}</p>

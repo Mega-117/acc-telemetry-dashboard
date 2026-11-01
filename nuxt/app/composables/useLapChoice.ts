@@ -111,8 +111,10 @@ export function useLapChoice(o: {
   const reason = computed<RefReason | null>(() => refReason.value && refReason.value.id === o.refId.value ? refReason.value.reason : inferReason(refEntry.value))
   const youCard = computed(() => lapEntry.value ? entryChoice(lapEntry.value) : null)
   const refCard = computed(() => refEntry.value && o.refId.value !== o.lapId.value ? entryChoice(refEntry.value, reason.value ?? undefined) : null)
+  // 01/11 (Codex): a lap of a compared session of yours can be swapped too.
+  const canBeYou = (e: Entry) => (YOU_ORIGINS as readonly string[]).includes(e.origin) || (e.origin === 'compare' && (e.ownerUid ?? subjectUid()) === subjectUid())
   const canSwap = computed(() => !!lapEntry.value && !!refEntry.value && lapEntry.value.id !== refEntry.value.id
-    && (YOU_ORIGINS as readonly string[]).includes(refEntry.value.origin) && (YOU_ORIGINS as readonly string[]).includes(lapEntry.value.origin))
+    && canBeYou(refEntry.value) && canBeYou(lapEntry.value))
 
   function setRef(id: string, why: RefReason, chosen: boolean) {
     o.refId.value = id
@@ -136,6 +138,13 @@ export function useLapChoice(o: {
     const you = o.lapId.value
     o.lapId.value = o.refId.value
     setRef(you, { kind: 'picked' }, true)
+  }
+  /** Annulla / Esc / ✕ in the chooser: a lap still loading is dropped, never applied after the window closed. */
+  function cancelPending() { pairEdit++ }
+  /** 01/11 (Codex): reasons measured against "Tu" (a step up, the next best) are no longer true once Tu changes. */
+  function reasonFollowsYou() {
+    const r = refReason.value
+    if (r && r.id === o.refId.value && (r.reason.kind === 'stepUp' || r.reason.kind === 'nextBest')) refReason.value = { id: r.id, reason: { kind: 'picked' } }
   }
   /** A link or a compared session proposed a reference: it is the driver's own action. */
   function propose(id: string, why: RefReason) { pairEdit++; setRef(id, why, true) }
@@ -168,11 +177,12 @@ export function useLapChoice(o: {
   // Bumped by every other change of the pair: a lap that finishes loading after it is dropped, not applied.
   let pairEdit = 0
   async function apply(side: LapSide, choice: LapChoice): Promise<string | null> {
-    const edit = pairEdit
+    // A new choice also drops one still loading (Codex 01/11).
+    const edit = ++pairEdit
     try {
       const id = await materialize(choice)
       if (edit !== pairEdit) return null
-      if (side === 'you') { o.lapId.value = id; userChose.value = true }
+      if (side === 'you') { o.lapId.value = id; userChose.value = true; reasonFollowsYou() }
       else setRef(id, choice.reason ?? { kind: 'picked' }, true)
       return null
     } catch (e) {
@@ -196,7 +206,9 @@ export function useLapChoice(o: {
     if (ideal) out.push(entryChoice(ideal, { kind: 'ideal' }))
     const fastest = o.library.fastestId.value ? byId(o.library.fastestId.value) : null
     if (fastest && out.length < 4) out.push(entryChoice(fastest, { kind: 'fastest', driver: fastest.driver ?? null }))
-    return out.slice(0, 4)
+    // 01/11 (Codex): the laps of the session compared with "Confronta" are choosable too, fastest first.
+    const compared = o.entries.value.filter(e => e.origin === 'compare' && !out.some(c => c.key === entryKey(e))).sort((a, b) => a.lapTimeMs - b.lapTimeMs).slice(0, 8)
+    return [...out.slice(0, 4), ...compared.map(e => entryChoice(e, { kind: 'compare', label: e.label ?? '' }))]
   }
   const sessionLaps = () => o.entries.value.filter(e => (SESSION_ORIGINS as readonly string[]).includes(e.origin)).map(e => entryChoice(e))
 
@@ -310,5 +322,5 @@ export function useLapChoice(o: {
     currentKey: side => (side === 'you' ? youCard.value : refCard.value)?.key ?? null,
     suggested, idealSame: () => o.library.idealSameAsBest.value, sessionLaps, listMine, drivers, driversState, loadDriverNames, listDriverLaps, resolveLink,
   }
-  return { youCard, refCard, reason, canSwap, swap, removeRef, apply, applyDefault, propose, reset, userChose, source, nick, loadArchiveBest }
+  return { youCard, refCard, reason, canSwap, swap, cancelPending, removeRef, apply, applyDefault, propose, reset, userChose, source, nick, loadArchiveBest }
 }

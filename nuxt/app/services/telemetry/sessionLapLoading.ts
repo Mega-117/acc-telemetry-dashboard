@@ -11,15 +11,17 @@ export interface SessionLapResult { total: number, ok: SessionLapRead[] }
  * left out here, never on a later click. Laps on the PC are read together; from the archive one at a time,
  * stopping as soon as the view changed (`null`).
  */
-export async function readSessionLaps(source: LapSource, sessionToken: string, validByLap: Map<number, boolean>,
+export async function readSessionLaps(source: LapSource, sessionToken: string, validByLap: Map<number, boolean | null>,
   isCurrent: () => boolean, oneByOne: boolean): Promise<SessionLapResult | null> {
   const list = await source.list(sessionToken)
   if (!isCurrent()) return null
   const readOne = async (d: (typeof list)[number]): Promise<SessionLapRead | null> => {
     try {
       const trace = normalizeLapTrace(await source.read(d))
+      // 01/11 (Codex): unknown validity stays unknown ("?"), never shown as an invalid lap.
+      const valid = d.valid ?? validByLap.get(d.lapNumber) ?? trace?.valid ?? null
       return trace ? { trace, entry: { id: d.id, lapNumber: d.lapNumber, lapTimeMs: d.lapTimeMs,
-        valid: d.valid ?? validByLap.get(d.lapNumber) ?? false, complete: trace.complete, origin: d.origin, sessionToken: d.sessionToken } } : null
+        valid: valid === true, validUnknown: valid === null, complete: trace.complete, origin: d.origin, sessionToken: d.sessionToken } } : null
     } catch { return null }
   }
   let read: (SessionLapRead | null)[] = []

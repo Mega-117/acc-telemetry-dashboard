@@ -138,6 +138,43 @@ describe('useLapChoice', () => {
     expect([s.lapId.value, s.refId.value]).toEqual(pair)
   })
 
+  // Codex 01/11: Annulla / Esc while a lap loads drops it; a new choice drops the one before.
+  it('closing the chooser while a lap loads drops that lap', async () => {
+    let release!: (v: LapTraceView) => void
+    const readLapTrace = vi.fn(() => new Promise<LapTraceView>(r => { release = r }))
+    const bridge = { listLapTraces: vi.fn(async () => [{ id: 'spa__bmw/lap_20261030_100000_L004_99500ms.json.gz' }]), readLapTrace }
+    const s = setup({ bridge })
+    s.c.applyDefault()
+    const { laps } = await s.c.source.listMine()
+    const other = laps.find(l => l.sessionToken === '20261030_100000')!
+    const before = [s.lapId.value, s.refId.value]
+    const pending = s.c.apply('ref', other)
+    await Promise.resolve()
+    s.c.cancelPending()
+    release(trace({ valid: null }))
+    expect(await pending).toBeNull()
+    expect([s.lapId.value, s.refId.value]).toEqual(before)
+  })
+
+  it('a reason measured against Tu (next best) becomes "picked" when Tu changes', async () => {
+    const s = setup()
+    s.c.applyDefault()
+    s.c.propose('L1', { kind: 'nextBest' })
+    expect(s.c.reason.value?.kind).toBe('nextBest')
+    const { laps } = { laps: s.c.source.sessionLaps() }
+    await s.c.apply('you', laps.find(l => l.lapNumber === 2)!)
+    expect(s.c.reason.value?.kind).toBe('picked')
+  })
+
+  it('the laps of a compared session are offered in Suggeriti and can be swapped when yours', () => {
+    const s = setup()
+    s.library.addLoaded({ id: 'compare:x', lapNumber: 9, lapTimeMs: 99000, valid: true, complete: true, origin: 'compare', sessionToken: '20261029_100000', label: 'Sessione 29/10 · Giro 9' }, trace())
+    s.c.applyDefault()
+    expect(s.c.source.suggested().some(c => c.ref.kind === 'entry' && c.ref.id === 'compare:x')).toBe(true)
+    s.c.propose('compare:x', { kind: 'compare', label: 'x' })
+    expect(s.c.canSwap.value).toBe(true)
+  })
+
   it('swaps only two laps of mine', () => {
     const s = setup()
     s.c.applyDefault()

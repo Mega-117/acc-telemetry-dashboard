@@ -11,6 +11,7 @@ export default {
     lossScopeAria: 'Where you lose: this lap or the whole session',
     lossScopeLap: 'Lap',
     lossScopeSession: 'Session',
+    compareNoLaps: 'The laps of the compared session did not load: try again or pick a lap in "Change"',
     gapTitle: 'Your lap against the reference',
     faster: 'faster',
     slower: 'slower',
@@ -55,6 +56,7 @@ export default {
       read: 'Could not read the laps of this session.',
     },
     share: {
+      notLocal: 'Only your laps saved on this PC can be shared',
       validOnly: 'Only valid laps can be shared',
       hint: 'Copy the link of this lap: whoever gets it uses it as a reference',
       busy: 'Sharing…',
@@ -156,6 +158,7 @@ export default {
       lapShort: 'L{n}',
       idealShort: 'Ideal',
       infoAria: 'Lap details',
+      removeRefShort: 'Remove the reference',
       removeRef: 'Remove the reference: only your lap stays',
       cond: { fuelShort: '{n} L', dryShort: 'DRY', wetShort: 'WET', airShort: 'AIR {n}°', roadShort: 'TRK {n}°', fuel: 'Fuel {n} L', dry: 'Dry tyres', wet: 'Wet tyres', air: 'Air {n}°', road: 'Track {n}°', grip: 'Grip {g}', gripShort: { green: 'GRN', fast: 'FST', optimum: 'OPT', greasy: 'GRS', damp: 'DMP', wet: 'WET', flooded: 'FLD' } },
       tagYou: 'YOU',

@@ -137,10 +137,12 @@ const labels = computed(() => {
     const { cx, cy, span } = frameNow.value
     const box = { x: cx - span / 2, y: cy - span * 0.4, w: span, h: span * 0.8 }
     const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), Math.max(lo, hi))
+    // 01/11 (Codex): the bend out of the visible frame: no time pushed onto the edge, far from its corner.
+    const inView = p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h
     const gx = clamp(p.x + nx * far, box.x + margin * 1.6, box.x + box.w - margin * 1.6)
     const gy = clamp(p.y + ny * far, box.y + margin, box.y + box.h - margin * 0.6)
     return { number: c.number, point: { x: p.x + nx * offset, y: p.y + ny * offset },
-      gap: gap === null ? null : { text: `${gap > 0 ? '+' : gap < 0 ? '−' : '±'}${Math.abs(gap).toFixed(3)}`, loss: gap > 0, x: gx, y: gy } }
+      gap: gap === null || !inView ? null : { text: `${gap > 0 ? '+' : gap < 0 ? '−' : '±'}${Math.abs(gap).toFixed(3)}`, loss: gap > 0, x: gx, y: gy } }
   })
 })
 const finish = computed(() => base.value ? finishLine(base.value, 10) : null)

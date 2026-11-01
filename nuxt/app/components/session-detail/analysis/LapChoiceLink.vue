@@ -8,7 +8,7 @@ import type { LapChoiceSource, LinkResult } from '~/composables/useLapChoice'
 import { useI18n } from '~/i18n'
 
 const props = defineProps<{ source: LapChoiceSource, selectedKey: string | null, currentKey: string | null, otherKey: string | null, otherSide: string }>()
-const emit = defineEmits<{ select: [choice: LapChoice], confirm: [choice: LapChoice], wholeSession: [] }>()
+const emit = defineEmits<{ select: [choice: LapChoice | null], confirm: [choice: LapChoice], wholeSession: [] }>()
 const { t } = useI18n()
 const id = useId()
 
@@ -16,17 +16,19 @@ const text = ref('')
 const busy = ref(false)
 const result = ref<LinkResult | null>(null)
 let attempt = 0
-watch(text, () => { if (result.value?.state === 'error') result.value = null })
+// 01/11 (Codex): a new text forgets the lap of the old one, so "Usa" never applies a link no longer written.
+watch(text, () => { result.value = null; if (props.selectedKey) emit('select', null) })
 
 async function check() {
   if (busy.value || !text.value.trim()) return
-  if (classifyLink(text.value) === 'unknown') { result.value = { state: 'error', message: t('telemetry.choice.link.unknown') }; return }
+  if (classifyLink(text.value) === 'unknown') { result.value = { state: 'error', message: t('telemetry.choice.link.unknown') }; emit('select', null); return }
   const mine = ++attempt
   busy.value = true
   try {
     const answer = await props.source.resolveLink(text.value)
     if (mine !== attempt || !answer) return
     result.value = answer
+    if (answer.state === 'error') emit('select', null)
     if (answer.state === 'lap') emit('select', answer.choice)
     else if (answer.state === 'session') {
       const proposed = answer.choices.find(c => c.key === answer.proposedKey)

@@ -42,6 +42,8 @@ const { t } = useI18n()
 
 <style scoped lang="scss">
 // Aligned to the plot area of the charts (42 px axis): the head starts over the axis.
+// 01/11 (Codex): on a narrow column the controls wrap instead of leaving it.
+@media (max-width: 900px) { .strip-head { flex-wrap: wrap; height: auto !important; white-space: normal !important; row-gap: 6px; } }
 .strip-head { display: flex; align-items: center; gap: 10px; height: 26px; white-space: nowrap; margin-left: -34px; color: #b3b3b8; font: 700 12px "Inter", sans-serif; text-transform: uppercase; letter-spacing: .04em; }
 .strip-channels { height: 26px; padding: 0 10px; border: 1px solid #ffffff2e; background: #ffffff0a; color: #e6e6ea; font: 700 12px "Inter", sans-serif; text-transform: none; letter-spacing: 0; cursor: pointer;
   &.active { border-color: #ff0024; } &.alone { margin-left: auto; } }

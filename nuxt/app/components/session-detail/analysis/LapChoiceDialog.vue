@@ -48,7 +48,7 @@ const tabLabel = (id: Tab) => id === 'mine' && props.source.subjectName() ? t('t
 const block = computed(() => choiceBlock(selected.value, otherKey.value))
 const blockText = computed(() => block.value === 'sameLap' ? t('telemetry.choice.dialog.sameLap', { side: otherSideName.value })
   : block.value === 'incomplete' ? t('telemetry.choice.dialog.incomplete') : '')
-function select(choice: LapChoice) { selected.value = choice; message.value = '' }
+function select(choice: LapChoice | null) { selected.value = choice; message.value = '' }
 async function confirm(choice: LapChoice | null = selected.value) {
   if (busy.value) return
   if (choice) selected.value = choice
@@ -109,7 +109,7 @@ const rowProps = (c: LapChoice) => ({ choice: c, selected: c.key === selected.va
         <header class="choice-dialog__head">
           <h2 :id="`${uid}-title`"><span class="choice-dialog__swatch" aria-hidden="true" />{{ t(side === 'you' ? 'telemetry.choice.dialog.titleYou' : 'telemetry.choice.dialog.titleRef') }}</h2>
           <button v-if="canSwap" type="button" class="choice-dialog__swap" :disabled="busy" @click="emit('swap')"><span aria-hidden="true">⇄</span> {{ t('telemetry.choice.swap') }}</button>
-          <button v-if="canRemove && side === 'ref'" type="button" class="choice-dialog__swap" :disabled="busy" @click="emit('remove')">{{ t('telemetry.choice.removeRef') }}</button>
+          <button v-if="canRemove && side === 'ref'" type="button" class="choice-dialog__swap" :disabled="busy" :title="t('telemetry.choice.removeRef')" @click="emit('remove')">{{ t('telemetry.choice.removeRefShort') }}</button>
           <button type="button" class="choice-dialog__x" :aria-label="t('telemetry.choice.dialog.close')" @click="close">✕</button>
         </header>
         <p v-if="variant === 'panel'" class="choice-empty">{{ t('telemetry.choice.dialog.panelNote') }}</p>

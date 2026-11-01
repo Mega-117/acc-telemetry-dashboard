@@ -210,6 +210,10 @@ const DETAIL_TABS: { id: DetailTab, label: 'sessionDetail.header.tabPace' | 'ses
 const detailTab = ref<DetailTab>('sessione')
 /** The two views of the lap comparison share one panel: switching between them keeps the laps and the reference. */
 const lapView = computed(() => detailTab.value === 'avanzata')
+// 01/11 (Codex): once opened, the Telemetria stays mounted (hidden on Sessione): the laps chosen, a lap by link
+// and the removed reference are still there when the driver comes back.
+const panelMounted = ref(lapView.value)
+watch(lapView, on => { if (on) panelMounted.value = true })
 // 01/11: while Telemetria is shown the main column opens to the whole window (menus unchanged).
 function setWideMain(on: boolean) {
   if (typeof document === 'undefined') return
@@ -484,8 +488,10 @@ function onTabKey(event: KeyboardEvent) {
     : event.key === 'Home' ? order[0] : event.key === 'End' ? order[order.length - 1] : null
   if (!next) return
   event.preventDefault()
+  // The element is read now: after the tick event.currentTarget is null (Codex 01/11).
+  const list = event.currentTarget as HTMLElement | null
   chooseTab(next)
-  void nextTick(() => (event.currentTarget as HTMLElement | null)?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus())
+  void nextTick(() => list?.querySelector<HTMLElement>('[aria-selected="true"]')?.focus())
 }
 const compareLapsToast = ref('')
 // PIP-695: a session link pasted in the Telemetria's "Cambia il riferimento": its lap token and track.
@@ -2530,8 +2536,8 @@ const gripZones = computed(() => {
          the Sessione / Telemetria switch on the right. -->
     <header class="session-header session-header--compact" :class="{ 'session-header--laps': lapView && !isEvoSession }">
       <!-- 01/11: in the lap views the two laps take this place (Track Titan shows no track, date or car there). -->
-      <div v-if="lapView && !isEvoSession" id="session-head-laps" class="header-laps" />
-      <div v-else class="header-id">
+      <div v-if="panelMounted && !isEvoSession" v-show="lapView" id="session-head-laps" class="header-laps" />
+      <div v-if="!lapView || isEvoSession" class="header-id">
         <!-- 01/11: one line: track, type, when, car (more height for the views below). -->
         <!-- The track name opens the track page (the old "Apri pista" button). -->
         <h1 class="track-name"><button type="button" class="track-link" :title="t('sessionDetail.header.openTrack')" @click="emit('go-to-track', session.trackId)">{{ session.track.toUpperCase() }}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button></h1>
@@ -2546,14 +2552,14 @@ const gripZones = computed(() => {
         <!-- 01/11: not in Telemetria: the Riferimento arrow (Cambia) already picks any lap, session or link. -->
         <button v-if="!isEvoSession && !lapView" type="button" class="rc-btn rc-btn--compact" :title="t('sessionDetail.header.compareTitle')" @click="openSessionPicker"><UiRacingIcon name="compare" :size="16" />{{ t('sessions.picker.compare') }}</button>
         <SessionFileActions v-if="!lapView" :can-share="canShare" :sharing="isSharing" @share="shareSession" />
-        <span v-if="lapView && !isEvoSession" id="session-head-share" class="head-share" />
+        <span v-if="panelMounted && !isEvoSession" v-show="lapView" id="session-head-share" class="head-share" />
         <div v-if="!isEvoSession" v-rc-switch class="detail-tabs rc-switch" role="tablist" :aria-label="t('sessionDetail.header.viewAria')" @keydown="onTabKey">
           <button v-for="tab in DETAIL_TABS" :key="tab.id" type="button" role="tab" :aria-selected="detailTab === tab.id" :tabindex="detailTab === tab.id ? 0 : -1" :class="{ active: detailTab === tab.id }" :title="t(tab.title)" @click="chooseTab(tab.id)">{{ t(tab.label) }}</button>
         </div>
       </div>
     </header>
 
-    <SessionAnalysisPanel v-if="lapView && !isEvoSession" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" :compare-with="compareTarget" :pending-lap-link="pendingLapLink" :session-type="session?.type ?? null" :read-session="readLinkedSession" @unavailable="onTelemetryUnavailable" @compare="openSessionPicker" @lap-link-handled="pendingLapLink = null" @remove-compare="removeCompare" :reference-removed="referenceRemoved" @reference-chosen="referenceRemoved = false" head-target="#session-head-laps" share-target="#session-head-share" />
+    <SessionAnalysisPanel v-if="panelMounted && !isEvoSession" v-show="lapView" :active="lapView" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" :compare-with="compareTarget" :pending-lap-link="pendingLapLink" :session-type="session?.type ?? null" :read-session="readLinkedSession" @unavailable="onTelemetryUnavailable" @compare="openSessionPicker" @lap-link-handled="pendingLapLink = null" @remove-compare="removeCompare" :reference-removed="referenceRemoved" @reference-chosen="referenceRemoved = false" head-target="#session-head-laps" share-target="#session-head-share" />
 
     <!-- ========================================== -->
     <!-- MASTER / DETAIL LAYOUT -->

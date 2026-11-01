@@ -10,6 +10,7 @@ export default {
     lossScopeAria: 'Dove perdi: questo giro o tutta la sessione',
     lossScopeLap: 'Giro',
     lossScopeSession: 'Sessione',
+    compareNoLaps: 'I giri della sessione confrontata non si sono caricati: riprova o scegli un giro da "Cambia"',
     gapTitle: 'Il tuo giro contro il riferimento',
     faster: 'più veloce',
     slower: 'più lento',
@@ -54,6 +55,7 @@ export default {
       read: 'Impossibile leggere i giri di questa sessione.',
     },
     share: {
+      notLocal: 'Si condividono i tuoi giri salvati su questo PC',
       validOnly: 'Si condividono solo giri validi',
       hint: 'Copia il link di questo giro: chi lo riceve lo usa come riferimento',
       busy: 'Condivido…',
@@ -156,6 +158,7 @@ export default {
       lapShort: 'G{n}',
       idealShort: 'Ideale',
       infoAria: 'Dettagli del giro',
+      removeRefShort: 'Togli il riferimento',
       removeRef: 'Togli il riferimento: resta solo il tuo giro',
       cond: { fuelShort: '{n} L', dryShort: 'DRY', wetShort: 'WET', airShort: 'AIR {n}°', roadShort: 'TRK {n}°', fuel: 'Benzina {n} L', dry: 'Gomme da asciutto', wet: 'Gomme da pioggia', air: 'Aria {n}°', road: 'Asfalto {n}°', grip: 'Grip {g}', gripShort: { green: 'GRN', fast: 'FST', optimum: 'OPT', greasy: 'GRS', damp: 'DMP', wet: 'WET', flooded: 'FLD' } },
       tagYou: 'TU',

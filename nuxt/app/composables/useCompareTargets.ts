@@ -6,6 +6,7 @@ import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { loadSharedLapLink, type SharedLapLoaded } from '~/services/telemetry/sharedLapLoad'
 import type { RefReason } from '~/services/telemetry/lapChoice'
 import { carMismatchNote, type Entry, type useReferenceLibrary } from './useReferenceLibrary'
+import { useI18n } from '~/i18n'
 
 export interface CompareTarget { ownerUid: string, sessionToken: string, sharedSessionId: string | null, label: string }
 
@@ -32,6 +33,7 @@ export function useCompareTargets(o: {
   /** PIP-695: the reference proposed by a link or a compared session, with its reason (default: set it). */
   propose?: (id: string, reason: RefReason) => void
 }) {
+  const { t } = useI18n()
   const linkError = ref('')
   const propose = o.propose ?? ((id: string) => { o.refId.value = id })
   // A lap shared with a link becomes the reference (one at a time); another car gets its note.
@@ -58,10 +60,14 @@ export function useCompareTargets(o: {
     const sameView = o.isCurrent(), bridge = o.bridge()
     const isCurrent = () => sameView() && mineRun === run
     const mine = target.ownerUid === o.viewerUid()
-    const source = mine && o.ownView() && typeof bridge?.listLapTraces === 'function' ? electronLapSource(bridge)
-      : pilotLapSource(target.ownerUid, o.deps, mine ? null : target.sharedSessionId)
-    const best = await o.library.loadCompareSession(isCurrent, source, target, () => lapKind(o.currentLap()?.fuelL))
-    if (best && isCurrent()) propose(best, { kind: 'compare', label: target.label })
+    const onThisPc = mine && o.ownView() && typeof bridge?.listLapTraces === 'function'
+    const kind = () => lapKind(o.currentLap()?.fuelL)
+    let best = await o.library.loadCompareSession(isCurrent, onThisPc ? electronLapSource(bridge!) : pilotLapSource(target.ownerUid, o.deps, mine ? null : target.sharedSessionId), target, kind)
+    // 01/11 (Codex): a session of yours driven on another PC is not on this one: its laps from the online archive.
+    if (!best && onThisPc && isCurrent()) best = await o.library.loadCompareSession(isCurrent, pilotLapSource(target.ownerUid, o.deps, null), target, kind)
+    if (!isCurrent()) return
+    if (best) propose(best, { kind: 'compare', label: target.label })
+    else linkError.value = t('telemetry.compareNoLaps')
   })
   return { linkError }
 }

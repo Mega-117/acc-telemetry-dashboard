@@ -19,6 +19,12 @@ describe('01/11 laps of a session in the Telemetria tab', () => {
     expect(result?.ok.map(r => [r.entry.lapNumber, r.entry.valid, r.entry.complete])).toEqual([[1, true, true]])
   })
 
+  it('unknown validity stays unknown, never invalid (Codex 01/11)', async () => {
+    const src = source([lap(1), lap(2)], { l1: { complete: true }, l2: { complete: true } })
+    const result = await readSessionLaps(src as never, 's', new Map<number, boolean | null>([[1, null], [2, false]]), () => true, false)
+    expect(result?.ok.map(r => [r.entry.lapNumber, r.entry.valid, r.entry.validUnknown])).toEqual([[1, false, true], [2, false, false]])
+  })
+
   it('stops when the view changed', async () => {
     let current = true
     const src = source([lap(1), lap(2)], { l1: { complete: true }, l2: { complete: true } })
