@@ -10,9 +10,13 @@ const ACCEPTED_AS_CURRENT = new Set(['2026-10-27'])
 /** `usage`: the optional usage-statistics box (PIP-698), applied once at the first entry (RegistrationUsageChoice). */
 export type RegisterConsent = { termsVersion: string; privacyVersion: string; acceptedAt: string; usage?: boolean }
 
-/** Absolute-to-site URL of a legal page, under the app base (Pages serves the app below /docs/). */
-export function legalPageUrl(page: 'privacy' | 'termini', baseURL = '/'): string {
-  return `${baseURL.endsWith('/') ? baseURL : `${baseURL}/`}legal/${page}.html`
+// 01/11: English texts of the same version (terms.html, privacy-en.html); the Italian text prevails.
+const ENGLISH_PAGES = { privacy: 'privacy-en', termini: 'terms' } as const
+
+/** Absolute-to-site URL of a legal page, under the app base (Pages serves the app below /docs/), in the UI language. */
+export function legalPageUrl(page: 'privacy' | 'termini', baseURL = '/', locale: 'it' | 'en' = 'it'): string {
+  const file = locale === 'en' ? ENGLISH_PAGES[page] : page
+  return `${baseURL.endsWith('/') ? baseURL : `${baseURL}/`}legal/${file}.html`
 }
 
 /** True when the stored acceptance is for the current texts (an older version asks again). */

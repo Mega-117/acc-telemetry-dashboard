@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Privacy notice · Racer Core</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0a0a0d; color: #e6e6ea; font: 15px/1.65 'Inter', 'Segoe UI', sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 40px 20px 64px; }
+  h1 { margin: 0 0 4px; font: italic 700 30px/1.2 'Segoe UI', sans-serif; text-transform: uppercase; }
+  h2 { margin: 32px 0 8px; font-size: 17px; color: #fff; }
+  p, li { color: #c9c9d1; }
+  .meta { color: #8a8a95; font-size: 13px; margin: 0 0 24px; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 14px; }
+  th, td { border: 1px solid #ffffff1f; padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { color: #fff; background: #ffffff08; }
+  a { color: #fff; }
+</style>
+</head>
+<body>
+<main>
+  <!-- PIP-658: version = PRIVACY_VERSION in nuxt/app/utils/legalVersions.ts. English text of privacy.html (same version). -->
+  <h1>Privacy notice</h1>
+  <p class="meta">Racer Core · beta · version 2026-10-31 · <a href="./privacy.html">Italiano</a></p>
+
+  <h2>Who handles the data</h2>
+  <p>Controller: the developer of Racer Core (project in beta). For any request about your data write to <a href="mailto:info@racercore.app">info@racercore.app</a> or use "Report a problem" from the menu under your name, in the program.</p>
+
+  <h2>What we collect and why</h2>
+  <table>
+    <tr><th>Data</th><th>Why</th><th>How long it is kept</th></tr>
+    <tr><td>Account: first name, last name, nickname, email, password (handled by Firebase, never visible to us)</td><td>Creating and protecting your account; the nickname is visible to other users</td><td>As long as you keep the account</td></tr>
+    <tr><td>Driving sessions: times, laps, stints, fuel, conditions, car and track</td><td>Showing you history, statistics and comparisons: this is the service itself</td><td>As long as you keep the account</td></tr>
+    <tr><td>Lap traces (speed, pedals, steering for each point of the track)</td><td>Telemetry and lap comparison</td><td>Online archive as long as you keep the account; on your PC until you delete them</td></tr>
+    <tr><td>Your laps and sessions seen by other drivers (with your nickname and the conditions, never your email)</td><td>Comparison with other drivers ("Other drivers", search by nickname, shared links): it is part of the service and you accept it by registering</td><td>As long as you keep the account</td></tr>
+    <tr><td>Technical diagnostics: errors, freezes, program version, operating system, installation identifier</td><td>Needed for the program to work: finding and fixing errors and freezes. It is always on, like the required diagnostic data of Windows</td><td>30 days at most</td></tr>
+    <tr><td>Usage statistics: which features you use and how often, without content</td><td>Understanding what to improve. You can turn them off</td><td>90 days</td></tr>
+    <tr><td>Pitwall: room status and real-time strategy orders</td><td>Making the Pitwall work with your team</td><td>During the session, then they expire</td></tr>
+  </table>
+  <p>Legal basis: the contract (the beta terms of use) for account, sessions, laps and Pitwall; our legitimate interest in making the program work and fixing its faults for technical diagnostics; your consent, which you can withdraw at any time, for usage statistics. The visibility of laps and sessions to other drivers is part of the service (contract).</p>
+
+  <h2>Where the data is</h2>
+  <p>We use providers that process the data on our behalf: Google Firebase (account, database, real time) and Cloudflare (lap archive, diagnostics, statistics). They may also be outside the European Union, with the safeguards required by the GDPR (standard contractual clauses / Data Privacy Framework). We do not sell data and we do not show advertising.</p>
+
+  <h2>Your choices</h2>
+  <ul>
+    <li>You choose usage statistics when you register (optional box) and you can change them at any time from the Profile. Laps and sessions are visible to other drivers: to stop that you can delete the account. Technical diagnostics cannot be turned off: they are needed for the program to work.</li>
+    <li>You can delete the account and all its data from the Profile, with "Delete account". Laps already downloaded to your PC stay yours and you delete them yourself. Diagnostic packages and temporary Pitwall data are not linked to your account name and expire on their own (diagnostics after 30 days); to delete them earlier use "Report a problem".</li>
+  </ul>
+
+  <h2>Your rights</h2>
+  <p>Access, rectification, erasure, restriction, portability, objection and withdrawal of consent: write to <a href="mailto:info@racercore.app">info@racercore.app</a> or use "Report a problem" in the program. You can also lodge a complaint with the Italian data protection authority, Garante per la protezione dei dati personali (garanteprivacy.it), or with the authority of your country.</p>
+
+  <h2>Age</h2>
+  <p>The beta is reserved for people aged 14 or over.</p>
+
+  <h2>Changes</h2>
+  <p>If this notice changes, the new version appears here with a new date, and we ask you again in the app when the change is relevant. If this notice is translated, the Italian text prevails.</p>
+</main>
+</body>
+</html>

@@ -9,7 +9,7 @@ import { useI18n } from '~/i18n'
 import { emailDomainHintMessage } from '~/utils/emailDomainHint'
 import { PRIVACY_VERSION, TERMS_VERSION, legalPageUrl, type RegisterConsent } from '~/utils/legalVersions'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 withDefaults(defineProps<{
   loading?: boolean
@@ -30,8 +30,8 @@ const acceptPrivacy = ref(false)
 // PIP-698: usage statistics need a consent, so the box is optional and starts unticked.
 const acceptUsage = ref(false)
 const baseURL = useRuntimeConfig().app.baseURL
-const termsUrl = legalPageUrl('termini', baseURL)
-const privacyUrl = legalPageUrl('privacy', baseURL)
+const termsUrl = computed(() => legalPageUrl('termini', baseURL, locale.value))
+const privacyUrl = computed(() => legalPageUrl('privacy', baseURL, locale.value))
 
 const emit = defineEmits<{
   submit: [data: { firstName: string; lastName: string; nickname: string; email: string; password: string; consent: RegisterConsent }]

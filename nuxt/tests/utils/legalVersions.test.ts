@@ -8,6 +8,9 @@ describe('legal versions (PIP-658)', () => {
     expect(legalPageUrl('privacy', '/acc-telemetry-dashboard/docs/')).toBe('/acc-telemetry-dashboard/docs/legal/privacy.html')
     expect(legalPageUrl('termini', '/x')).toBe('/x/legal/termini.html')
     expect(legalPageUrl('privacy')).toBe('/legal/privacy.html')
+    // 01/11: English texts for the English interface.
+    expect(legalPageUrl('privacy', '/', 'en')).toBe('/legal/privacy-en.html')
+    expect(legalPageUrl('termini', '/x/', 'en')).toBe('/x/legal/terms.html')
   })
   it('asks again when either text has a newer version', () => {
     expect(hasCurrentConsent({ termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION })).toBe(true)
@@ -28,6 +31,10 @@ describe('legal versions (PIP-658)', () => {
     const page = (name: string) => readFileSync(resolve(__dirname, `../../public/legal/${name}.html`), 'utf8')
     expect(page('privacy')).toContain(`versione ${PRIVACY_VERSION}`)
     expect(page('termini')).toContain(`versione ${TERMS_VERSION}`)
+    // 01/11: official texts (no draft notice), English twins of the same version.
+    expect(page('privacy-en')).toContain(`version ${PRIVACY_VERSION}`)
+    expect(page('terms')).toContain(`version ${TERMS_VERSION}`)
+    for (const name of ['privacy', 'termini', 'privacy-en', 'terms']) expect(page(name)).not.toMatch(/bozza|draft/i)
   })
   it('decision 27/10: diagnostics are necessary (legitimate interest, 30 days); usage statistics stay optional', () => {
     const privacy = readFileSync(resolve(__dirname, '../../public/legal/privacy.html'), 'utf8')
