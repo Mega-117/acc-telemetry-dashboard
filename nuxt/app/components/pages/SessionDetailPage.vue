@@ -3276,7 +3276,9 @@ const gripZones = computed(() => {
 .session-detail-page { display: flex; flex-direction: column; height: 100%; }
 // The left edge stays with the menu; the right edge goes to the window edge (minus a small margin) when the window
 // is wider than the centred column.
-.session-detail-page--wide { max-width: none; margin-left: 0; margin-right: min(0px, calc((100% - 100vw) / 2 + 8px)); width: auto; }
+.session-detail-page--wide { max-width: none; margin-left: 0; margin-right: min(0px, calc((100% - 100vw) / 2 + 8px)); width: auto;
+  // The right edge lines up with the user menu above (its 28 px less the scrollbar), not 24 px further in.
+  padding-right: 12px; }
 
 // NAV
 .nav-bar { display: flex; justify-content: space-between; margin-bottom: 20px; }

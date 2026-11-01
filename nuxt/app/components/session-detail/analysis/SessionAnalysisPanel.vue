@@ -528,12 +528,12 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 .analysis { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 // Sticky: lap pickers and layout stay in sight while the charts scroll under them.
 .analysis-bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 6px 0; background: #0b0b10f2; box-shadow: 0 8px 12px -10px #000;
-  &--head { position: static; flex: 1 1 auto; min-width: 0; padding: 0; background: none; box-shadow: none; } }
+  &--head { position: static; flex: 1 1 auto; justify-content: flex-end; min-width: 0; padding: 0; background: none; box-shadow: none; } }
 // PIP-635: sugli schermi larghi una riga sola: i selettori dei giri si stringono, lo switcher non va a capo.
 @media (min-width: 1200px) { .analysis-bar { flex-wrap: nowrap; } .analysis-bar > * { flex-shrink: 0; } .analysis-bar > .compare { flex-shrink: 1; } }
 // 01/11: in the title row the share message takes a line of its own: it never pushes the pills into the buttons.
-.analysis-bar--head { flex-wrap: wrap; > .compare { flex: 1 1 0; } > .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.bar-note { flex: 1 1 100%; } }
+.analysis-bar--head { flex-wrap: wrap; > .compare { flex: 1 1 0; justify-content: flex-end; } > .bar-note { flex: 1 1 100%; text-align: right; } }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 // PIP-623: share and paste, square buttons as tall as the pickers.
 .loss-scope { display: flex; button { flex: 1; } }
 .bar-note { color: #3ddc5a; font-size: 12px; &.failed { color: #ff5a6e; } }
