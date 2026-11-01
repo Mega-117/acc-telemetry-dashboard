@@ -257,6 +257,7 @@ export function normalizeAccFastState(state: any, common: CommonLive | null): Fa
     gas: toNumber(state.gas),
     brake: toNumber(state.brake),
     rpm: toNumber(state.rpm),
+    rpmRatePerS: toNumber(state.rpm_rate_per_s),
     maxRpm: toNumber(state.max_rpm),
     gear: toNumber(state.gear),
     fuelL: common ? (common.capabilities.fuel ? commonValue(common, 'fuel', 'L') : null) : toNumber(state.fuel_l),

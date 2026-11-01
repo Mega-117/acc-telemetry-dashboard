@@ -209,6 +209,8 @@ export interface FastOverlayState {
   gas: number | null
   brake: number | null
   rpm: number | null
+  /** PIP-702: rpm rise in the current gear (logger sample rate); null when unknown. */
+  rpmRatePerS: number | null
   maxRpm: number | null
   gear: number | null
   fuelL: number | null

@@ -274,6 +274,7 @@ function focusedFastState(
     gas: null,
     brake: null,
     rpm: null,
+    rpmRatePerS: null,
     maxRpm: null,
     gear: finiteNumber(car?.gear),
     fuelL: null,

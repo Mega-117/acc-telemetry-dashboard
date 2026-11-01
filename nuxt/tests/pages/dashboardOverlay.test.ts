@@ -24,7 +24,7 @@ function state(overrides: Partial<FastOverlayState> = {}): FastOverlayState {
     sessionType: 2, normalizedCarPosition: 0.4, speedKmh: 123.4, speedDeltaKmh: 3,
     referenceSpeedKmh: null, referenceRpm: null, referenceGear: null, referenceEngineMap: null,
     referenceTractionControl: null, referenceTractionControl2: null, referenceAbs: null,
-    gas: 0.7, brake: 0.2, rpm: 7800, maxRpm: 12000, gear: 4,
+    gas: 0.7, brake: 0.2, rpm: 7800, rpmRatePerS: null, maxRpm: 12000, gear: 4,
     fuelL: 62, fuelPerLapL: 3, fuelLapsRemaining: 20.7, fuelLeftTimeMs: 2_174_000,
     sessionLapsRemaining: 8, sessionTimeLeftMs: 1000, engineMap: 3,
     tractionControl: 5, tractionControl2: 5, abs: 5, tractionControlInAction: false, absInAction: false, brakeBiasPct: 65,

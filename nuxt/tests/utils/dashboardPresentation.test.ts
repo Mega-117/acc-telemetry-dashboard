@@ -7,6 +7,7 @@ import {
   buildDashboardPresentation,
   DEFAULT_DASHBOARD_OPTIONS,
   normalizeFuelCriticalLapsThreshold,
+  withoutStaleShiftFlash,
 } from '~/utils/dashboardPresentation'
 
 function context(car = 'porsche_992_gt3_r', sessionIndex = 1): FastOverlayState['context'] {
@@ -25,7 +26,7 @@ function state(overrides: Partial<FastOverlayState> = {}): FastOverlayState {
     referenceSpeedKmh: null, referenceRpm: null, referenceGear: null,
     referenceEngineMap: null, referenceTractionControl: null,
     referenceTractionControl2: null, referenceAbs: null,
-    gas: 0.7, brake: 0.2, rpm: 7800, maxRpm: 12000, gear: 3,
+    gas: 0.7, brake: 0.2, rpm: 7800, rpmRatePerS: null, maxRpm: 12000, gear: 3,
     fuelL: 42.35, fuelPerLapL: 2.71, fuelLapsRemaining: 15.6, fuelLeftTimeMs: 531_001,
     sessionLapsRemaining: 8, sessionTimeLeftMs: 1000, engineMap: 2,
     tractionControl: 3, tractionControl2: 1, abs: 4, tractionControlInAction: false, absInAction: false, brakeBiasPct: 54.8,
@@ -181,6 +182,53 @@ describe('dashboardPresentation', () => {
     expect(buildDashboardPresentation(state({
       context: context('bentley_continental_gt3_2016', 3), rpm: 6999,
     })).shiftFlash).toBe(false)
+  })
+
+  describe('anticipo del lampeggio (PIP-702)', () => {
+    const ferrari = (overrides: Partial<FastOverlayState>) =>
+      buildDashboardPresentation(state({ context: context('ferrari_296_gt3'), gas: 1, brake: 0, ...overrides })).shiftFlash
+
+    it('lampeggia 0,3 s prima della soglia con i giri che salgono', () => {
+      // 1000 rpm/s: 7300 - 300 = 7000 is the first rpm that flashes.
+      expect(ferrari({ rpm: 7000, rpmRatePerS: 1000 })).toBe(true)
+      expect(ferrari({ rpm: 6999, rpmRatePerS: 1000 })).toBe(false)
+      expect(ferrari({ rpm: 7150, rpmRatePerS: 500 })).toBe(true)
+      expect(ferrari({ rpm: 7149, rpmRatePerS: 500 })).toBe(false)
+    })
+
+    it('limita l anticipo a 600 rpm anche con una salita molto rapida', () => {
+      expect(ferrari({ rpm: 6700, rpmRatePerS: 5000 })).toBe(true)
+      expect(ferrari({ rpm: 6699, rpmRatePerS: 5000 })).toBe(false)
+    })
+
+    it('senza salita, senza gas o senza dato resta alla soglia esatta', () => {
+      for (const overrides of [
+        { rpmRatePerS: null }, { rpmRatePerS: 0 }, { rpmRatePerS: -800 }, { rpmRatePerS: Number.NaN },
+        { rpmRatePerS: 1000, gas: 0.2 }, { rpmRatePerS: 1000, gas: null },
+        // Downshift blip: throttle and brake together.
+        { rpmRatePerS: 1000, brake: 0.4 }, { rpmRatePerS: 1000, brake: null },
+      ] as Array<Partial<FastOverlayState>>) {
+        expect(ferrari({ rpm: 7200, ...overrides })).toBe(false)
+        expect(ferrari({ rpm: 7300, ...overrides })).toBe(true)
+      }
+    })
+
+    it('un modello trattenuto su dati vecchi non lampeggia', () => {
+      const flashing = buildDashboardPresentation(state({ context: context('ferrari_296_gt3'), rpm: 7400 }))
+      const live = buildDashboardPresentation(state({ context: context('ferrari_296_gt3'), rpm: 7400, isFresh: false }))
+      expect(flashing.shiftFlash).toBe(true)
+      expect(live.shiftFlash).toBe(false)
+      const shown = withoutStaleShiftFlash(flashing, live)
+      expect(shown.shiftFlash).toBe(false)
+      expect(shown.ignitionLabel).toBe(flashing.ignitionLabel)
+      expect(withoutStaleShiftFlash(flashing, flashing)).toBe(flashing)
+    })
+
+    it('mai per auto senza soglia o con telemetria non valida', () => {
+      expect(ferrari({ context: context('future_gt3'), rpm: 7200, rpmRatePerS: 1000 })).toBe(false)
+      expect(ferrari({ isFresh: false, rpm: 7200, rpmRatePerS: 1000 })).toBe(false)
+      expect(ferrari({ isEngineRunning: false, rpm: 7200, rpmRatePerS: 1000 })).toBe(false)
+    })
   })
 
   it('non lampeggia con telemetria o RPM mancanti e invalidi', () => {

@@ -16,6 +16,7 @@ import { useHudOverlayBackground } from '~/composables/useHudOverlayBackground'
 import { useDashboardAdjustment } from '~/composables/useDashboardAdjustment'
 import {
   buildDashboardPresentation,
+  withoutStaleShiftFlash,
   DEFAULT_DASHBOARD_OPTIONS,
   normalizeFuelCriticalLapsThreshold,
 } from '~/utils/dashboardPresentation'
@@ -44,7 +45,8 @@ const liveModel = stableComputed(() => buildDashboardPresentation(
 ))
 // --hud-frame-unit keeps the panel frames whole screen pixels under the scale (hud-cut-corner).
 const canvasStyle = computed(() => ({ 'transform': `scale(${overlay.scale.value})`, '--hud-frame-unit': `${1 / overlay.scale.value}px` }))
-const model = useHudPresentationMemory(liveModel, telemetry.fastState)
+const retainedModel = useHudPresentationMemory(liveModel, telemetry.fastState)
+const model = computed(() => withoutStaleShiftFlash(retainedModel.value, liveModel.value))
 // The box being adjusted (TC, TC2, ABS, MAP, BB) is highlighted for 1.5 s; local live telemetry only.
 const adjustmentEnabled = computed(() => {
   const state = telemetry.fastState.value

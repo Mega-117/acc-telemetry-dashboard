@@ -33,6 +33,8 @@ export function commonFastPresentation(live: CommonLive): Partial<FastOverlaySta
     context: { track: live.identity?.track ?? null, car: live.identity?.car ?? null, sessionUid: live.sessionId,
       sessionType: null, sessionIndex: null, serverId: null, gameId: live.gameId, variant: live.identity?.variant ?? null },
     speedKmh: value('speed', 'km/h'), rpm: value('rpm', 'rpm'), maxRpm: value('max_rpm', 'rpm'),
+    // PIP-702: no shared rpm-rise field yet; the flash stays at the exact threshold.
+    rpmRatePerS: null,
     gear: value('gear', 'gear'), gas: value('throttle', 'ratio'), brake: value('brake', 'ratio'),
     currentLapTimeMs: value('current_lap_time', 'ms'), lastLapTimeMs: value('last_lap_time', 'ms'),
     bestLapTimeMs: value('best_lap_time', 'ms'), lapValid: commonBoolean(live, 'lap_valid'),

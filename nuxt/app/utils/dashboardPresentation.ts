@@ -249,6 +249,37 @@ function interventionVisible(state: FastOverlayState, active: boolean): boolean 
     && !state.isInPitLane
 }
 
+/**
+ * PIP-702: the flash must come before the shift point. Between the logger and the driver's
+ * paddle there are ~0.1 s of HUD delivery and ~0.2 s of reaction: a flash at the exact
+ * threshold made drivers shift 250-500 rpm late (Ferrari 296: 7300 → 7550-7800).
+ * The lead uses the rpm rise of the current gear (measured by the logger over ~0.1 s) and is
+ * capped at 600 rpm: a short wheelspin spike can still light it up to 600 rpm early, never more.
+ * It applies only on the throttle and off the brake, so a downshift blip never flashes early.
+ */
+export const SHIFT_FLASH_LEAD_S = 0.3
+export const SHIFT_FLASH_MAX_LEAD_RPM = 600
+export const SHIFT_FLASH_MIN_THROTTLE = 0.5
+export const SHIFT_FLASH_MAX_BRAKE = 0.1
+
+export function shiftFlashDue(
+  rpm: number, threshold: number, rpmRatePerS: number | null, throttle: number | null, brake: number | null,
+): boolean {
+  if (rpm >= threshold) return true
+  if (rpmRatePerS === null || !Number.isFinite(rpmRatePerS) || rpmRatePerS <= 0) return false
+  if (throttle === null || !(throttle >= SHIFT_FLASH_MIN_THROTTLE)) return false
+  if (brake === null || !(brake <= SHIFT_FLASH_MAX_BRAKE)) return false
+  return rpm + Math.min(rpmRatePerS * SHIFT_FLASH_LEAD_S, SHIFT_FLASH_MAX_LEAD_RPM) >= threshold
+}
+
+/**
+ * PIP-702: a retained model (stale frame, same context) keeps the last values on screen,
+ * but never a shift flash: the flash is an instant cue, not a value.
+ */
+export function withoutStaleShiftFlash(shown: DashboardPresentation, live: DashboardPresentation): DashboardPresentation {
+  return shown !== live && shown.shiftFlash ? { ...shown, shiftFlash: false } : shown
+}
+
 function resolveRpmBand(
   state: FastOverlayState,
   rpm: number,
@@ -323,7 +354,7 @@ export function buildDashboardPresentation(
       && state.isEngineRunning
       && threshold !== null
       && rpmValid
-      && rpm >= threshold,
+      && shiftFlashDue(rpm, threshold, state.rpmRatePerS ?? null, state.gas, state.brake),
     rpmPulse: !spectatorMode && !ignitionUnknown && state.isFresh && (rpmBand === 'off' || rpmBand === 'pit'),
     fuelUrgency,
     fuelCriticalPulse: fuelUrgency === 'critical' && options.fuelCriticalFlashEnabled,

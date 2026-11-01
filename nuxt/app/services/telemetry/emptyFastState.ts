@@ -37,6 +37,7 @@ export const EMPTY_FAST_STATE: FastOverlayState = {
   gas: null,
   brake: null,
   rpm: null,
+  rpmRatePerS: null,
   maxRpm: null,
   gear: null,
   fuelL: null,
