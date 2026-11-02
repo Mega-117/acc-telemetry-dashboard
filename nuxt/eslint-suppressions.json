@@ -20,11 +20,6 @@
       "count": 1
     }
   },
-  "app/components/coach/CoachLessonsPanel.vue": {
-    "max-lines": {
-      "count": 1
-    }
-  },
   "app/components/electron/ElectronTitlebar.vue": {
     "@typescript-eslint/no-explicit-any": {
       "count": 1
@@ -51,11 +46,6 @@
     }
   },
   "app/components/pages/SessionDetailPage.vue": {
-    "max-lines": {
-      "count": 1
-    }
-  },
-  "app/components/profile/CoachLessonsCard.vue": {
     "max-lines": {
       "count": 1
     }
@@ -289,11 +279,6 @@
     "@typescript-eslint/no-explicit-any": {
       "count": 2
     },
-    "max-lines": {
-      "count": 1
-    }
-  },
-  "app/pages/preparazione.vue": {
     "max-lines": {
       "count": 1
     }

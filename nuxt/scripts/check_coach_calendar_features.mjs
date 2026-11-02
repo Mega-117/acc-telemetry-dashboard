@@ -67,25 +67,6 @@ assert.ok(!profilePage.includes('ProfileCoachAssociationCard'), 'ProfilePage mus
 assert.ok(profilePage.includes('startEquipmentEdit'), 'Equipment tab must expose read/edit mode')
 assert.ok(profilePage.includes('type="range"'), 'Equipment settings must use sliders')
 
-const pilotAreaPage = readNuxt('app/components/pages/PilotAreaPage.vue')
-for (const token of [
-  'Area pilota',
-  'ProfileRaceCalendarCard',
-  'ProfileCoachAssociationCard',
-  'ProfileCoachLessonsCard',
-  'showCoachAssociation',
-  'Programma e coaching'
-]) {
-  assert.ok(pilotAreaPage.includes(token), `PilotAreaPage missing ${token}`)
-}
-
-const pilotAreaRoute = readNuxt('app/pages/area-pilota.vue')
-assert.ok(pilotAreaRoute.includes('PagesPilotAreaPage'), 'Area pilota route must render PilotAreaPage')
-
-const dashboardTabs = readNuxt('app/components/layout/TabsBarRouter.vue')
-assert.ok(dashboardTabs.includes("to: '/area-pilota'"), 'Dashboard tabs must include Area pilota route')
-assert.ok(dashboardTabs.includes('AREA PILOTA'), 'Dashboard tabs must label Area pilota')
-
 const coachAssociation = readNuxt('app/components/profile/CoachAssociationCard.vue')
 assert.ok(coachAssociation.includes('Nessun coach assegnato'), 'Coach association card must be read-only display copy')
 assert.ok(!coachAssociation.includes('assignCoachToPilot'), 'Pilot profile must not assign coaches directly')
@@ -101,69 +82,6 @@ assert.ok(calendarCard.includes('v-model="form.carName"'), 'Calendar events must
 assert.ok(calendarCard.includes('event-form-expand'), 'Calendar form must animate open and close')
 assert.ok(calendarCard.includes('Nessuna gara pianificata'), 'Calendar empty state must use planned race copy')
 
-const pilotDetail = readNuxt('app/pages/piloti/[id].vue')
-assert.ok(pilotDetail.includes("{ id: 'lezioni', label: 'PILOTA' }"), 'Pilot detail missing PILOTA tab')
-assert.ok(pilotDetail.includes("import CoachLessonsPanel from '~/components/coach/CoachLessonsPanel.vue'"), 'Pilot detail must import coach lessons panel explicitly')
-assert.ok(pilotDetail.includes('<CoachLessonsPanel'), 'Pilot detail missing coach lessons panel')
-
-const coachLessonsPanel = readNuxt('app/components/coach/CoachLessonsPanel.vue')
-for (const token of [
-  'CoachRaceCalendarPanel',
-  'ACC_TRACK_OPTIONS',
-  'ACC_CAR_OPTIONS',
-  'durationPresets',
-  'selectDuration',
-  'selectDurationFromEvent',
-  'list="acc-track-options"',
-  'list="acc-car-options"',
-  'toggleLesson',
-  'lesson-accordion',
-  'lesson-row__chevron',
-  'lessonLinksFor',
-  'Analisi sessione',
-  '<div><span>Durata</span><strong>{{ lesson.durationMinutes }} min</strong></div>',
-  '<Transition name="lesson-detail-transition">',
-  'lesson-detail__body',
-  'prefers-reduced-motion',
-  'Commento generale',
-  'placeholder="Opzionale"',
-  'hasMoreLessons',
-  'showMoreLessons',
-  'Mostra altre',
-  'historyFilters',
-  'hasActiveHistoryFilters',
-  'resetHistoryFilters',
-  'history-filters',
-  'loadCoachLessonsPage',
-  'trackFlag',
-  'track-flag',
-  '&--nl',
-  'canSaveLesson',
-  'lesson-form-section',
-  'form-substatus',
-  'lesson-history-heading',
-  'feedbackTypeLabel',
-  'feedbackContext',
-  'feedbackSummary',
-  'detail-kicker',
-  'Contesto pilota',
-  'Storico lezioni',
-  'lesson-total-count',
-  'context-expand',
-  'countCoachLessons',
-  'accordion-trigger',
-  'trackTitanPilotUrl',
-  'trackTitanReferenceUrl',
-  'recordingUrl',
-  'carName',
-  'updateCoachLesson',
-  'Modifica lezione',
-  "::-webkit-calendar-picker-indicator",
-  "trackedGetDoc(doc(db, 'users', props.pilotId)"
-]) {
-  assert.ok(coachLessonsPanel.includes(token), `CoachLessonsPanel missing ${token}`)
-}
-
 const accCatalog = readNuxt('app/constants/accCatalog.ts')
 for (const token of ['ACC_TRACK_OPTIONS', 'ACC_CAR_OPTIONS', 'Ferrari 296 GT3', 'Nurburgring 24H', 'Nordschleife']) {
   assert.ok(accCatalog.includes(token), `ACC catalog missing ${token}`)
@@ -174,21 +92,13 @@ for (const token of ['updateCoachLesson', 'trackedUpdateDoc', 'users\', pilotId,
   assert.ok(coachLessonsRepository.includes(token), `CoachLessonsRepository missing ${token}`)
 }
 
-const coachRaceCalendar = readNuxt('app/components/coach/CoachRaceCalendarPanel.vue')
-for (const token of [
-  'Aggiungi gara al pilota',
-  "createdByRole: 'coach'",
-  'isAdding',
-  'event-form-expand',
-  'carName',
-  'loadRaceCalendarEvents(props.pilotId'
-]) {
-  assert.ok(coachRaceCalendar.includes(token), `CoachRaceCalendarPanel missing ${token}`)
-}
-
-const profileCoachLessons = readNuxt('app/components/profile/CoachLessonsCard.vue')
-for (const token of ['lessonLinks', 'lesson.carName', 'lesson-accordion', 'lesson-expand', 'TrackTitan pilota', 'Registrazione', 'feedbackTypeLabel', 'feedbackContext']) {
-  assert.ok(profileCoachLessons.includes(token), `Profile coach lessons card missing ${token}`)
+// PIP-705 (user decision 02/11): the coach keeps the pilot list and the pilot's data; the
+// lessons/calendar tab, the pilot area and the lessons cards are gone.
+const pilotDetail = readNuxt('app/pages/piloti/[id].vue')
+assert.ok(!pilotDetail.includes('CoachLessonsPanel'), 'Pilot detail must not mount the removed lessons panel')
+assert.ok(!pilotDetail.includes("id: 'lezioni'"), 'Pilot detail must not offer the removed lessons tab')
+for (const removed of ['app/components/coach/CoachLessonsPanel.vue', 'app/components/coach/CoachRaceCalendarPanel.vue', 'app/components/profile/CoachLessonsCard.vue', 'app/components/pages/PilotAreaPage.vue']) {
+  assert.ok(!fs.existsSync(path.join(nuxtRoot, removed)), `${removed} must stay removed (PIP-705)`)
 }
 
 console.log('[COACH_CALENDAR_FEATURES_CHECK] OK')
