@@ -319,7 +319,9 @@ export function useTrackBests() {
         const calculated = await calculateAllBestTimesForTrack(trackId, userId)
 
         // Reads never publish a partial legacy fallback over the canonical projection.
-        trackBestsCache.value[cacheKey] = calculated
+        // 02/11: nor cache it while the account is still connecting: that empty answer stayed in the cache and the
+        // stint references read "Non disponibile" after sign-in, although the projection had them.
+        if (!targetUserId || cloudSessionReady.value) trackBestsCache.value[cacheKey] = calculated
         return calculated.bests[category] || {}
     }
 

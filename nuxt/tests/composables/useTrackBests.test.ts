@@ -27,8 +27,9 @@ vi.mock('~/services/telemetry/activityProjectionService', () => ({
 
 // ─── Auth mock ───────────────────────────────────────────────────────────────
 const mockCurrentUser = ref<{ uid: string } | null>(null)
+const mockCloudReady = ref(true)
 vi.mock('~/composables/useFirebaseAuth', () => ({
-  useFirebaseAuth: () => ({ profileUser: mockCurrentUser, cloudSessionReady: ref(true) }),
+  useFirebaseAuth: () => ({ profileUser: mockCurrentUser, cloudSessionReady: mockCloudReady }),
 }))
 
 // ─── Import dopo i mock ───────────────────────────────────────────────────────
@@ -40,6 +41,7 @@ import { globalSessions } from '~/composables/useSessionLoader'
 describe('useTrackBests', () => {
   beforeEach(() => {
     mockCurrentUser.value = { uid: 'user-tb' }
+    mockCloudReady.value = true
     globalSessions.value = []
     globalPrefetchComplete.value = false
     vi.clearAllMocks()
@@ -51,6 +53,18 @@ describe('useTrackBests', () => {
   })
 
   // ───────────────────────────────────────────────────
+  // 02/11: an answer read while the account was still connecting must not stay in the cache.
+  describe('getBestTimesForGrip before sign-in', () => {
+    it('does not keep the empty answer of a connecting account', async () => {
+      mockCloudReady.value = false
+      const service = useTrackBests()
+      expect((await service.getBestTimesForGrip('hungaroring_cache_test', 'Optimum', 'GT3')).bestQualy).toBeNull()
+      mockCloudReady.value = true
+      globalSessions.value = [{ sessionId: 'later', meta: { gameId: 'acc', track: 'hungaroring_cache_test', car: 'ferrari_296_gt3' }, summary: { best_by_grip: { Optimum: { bestQualy: 99000 } } } }] as any
+      expect((await service.getBestTimesForGrip('hungaroring_cache_test', 'Optimum', 'GT3')).bestQualy).toBe(99000)
+    })
+  })
+
   describe('calculateAllBestTimesForTrack', () => {
     it('excludes non-ACC records from local class bests and their latest-session date', async () => {
       globalSessions.value = ['evo', 'synthetic'].map(gameId => ({ sessionId: gameId,

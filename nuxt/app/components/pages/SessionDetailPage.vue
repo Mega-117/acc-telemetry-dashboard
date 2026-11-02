@@ -366,7 +366,7 @@ const isCrossSessionMode = computed(() => comparisonOpen.value && crossSessionId
 
 // External session (from shared link)
 const crossSessionUserId = ref<string | null>(null)
-const { currentUser: comparisonCurrentUser } = useFirebaseAuth()
+const { currentUser: comparisonCurrentUser, cloudSessionReady: referencesAuthReady } = useFirebaseAuth()
 const crossSessionNickname = ref<string | null>(null)
 const isExternalSession = computed(() => !!crossSessionUserId.value && crossSessionUserId.value !== comparisonCurrentUser.value?.uid)
 
@@ -1696,8 +1696,10 @@ const stintConditions = computed(() => getStintConditions(selectedStintLaps.valu
 // ========================================
 // THEORETICAL TIMES WATCHER - Recalculate when stint/session changes
 // ========================================
+// 02/11: also when the account is ready: computed before sign-in, the references read an empty history and were
+// never computed again ("Non disponibile" on every stint until a reload).
 watch(
-  [fullSession, crossSessionData, () => props.externalUserId || targetUserId.value, crossSessionUserId],
+  [fullSession, crossSessionData, () => props.externalUserId || targetUserId.value, crossSessionUserId, () => referencesAuthReady.value],
   async ([primary, secondary, primaryOwner, secondaryOwner], _previous, onCleanup) => {
     let stale = false
     onCleanup(() => { stale = true })
