@@ -4,7 +4,10 @@ import { useHudPresentationMemory } from '~/services/overlay/hudPresentationMemo
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { stableComputed } from '~/services/overlay/stableTelemetry'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { createShiftTraceAggregator } from '~/services/overlay/shiftTrace'
+import { reportHudTrace } from '~/services/overlay/hudTrace'
+import { hudSourcePolicy } from '~/services/sim/hudSourceAdapter'
 import DashboardHud from '~/components/overlay/DashboardHud.vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
 import {
@@ -53,6 +56,21 @@ const adjustmentEnabled = computed(() => {
   return state.dataSource !== 'focused' && state.isFresh && state.isLive
 })
 const { active: adjusting } = useDashboardAdjustment(model, adjustmentEnabled)
+
+// PIP-704: flash onset vs real upshift, every 10 upshifts, for the diary (own car only).
+const shiftTrace = createShiftTraceAggregator(summary => reportHudTrace('hud.shift', { ...summary }))
+watch(liveModel, (live) => {
+  const state = telemetry.fastState.value
+  const own = state.dataSource !== 'focused' && state.isFresh && state.isLive
+  shiftTrace.feed({
+    now: Date.now(),
+    car: own && typeof state.context?.car === 'string' ? state.context.car : null,
+    gear: own && typeof state.gear === 'number' ? state.gear : null,
+    rpm: own && typeof state.rpm === 'number' ? state.rpm : null,
+    flash: live.shiftFlash,
+    targetRpm: own ? hudSourcePolicy(state).shiftRpm ?? null : null,
+  })
+})
 
 onMounted(async () => {
   overlay.start(route.query.scale)

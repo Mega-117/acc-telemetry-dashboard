@@ -6,6 +6,8 @@ import { usePresentationInterval } from '~/composables/usePresentationVisibility
 import { stableComputed } from '~/services/overlay/stableTelemetry'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { createValueEpisodeCounter } from '~/services/overlay/valueEpisodes'
+import { reportHudTrace } from '~/services/overlay/hudTrace'
 import InfoHud from '~/components/overlay/InfoHud.vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
 import { useOverlayTelemetrySource } from '~/composables/useOverlayTelemetrySource'
@@ -46,6 +48,19 @@ const options = computed(() => ({
 const liveModel = stableComputed(() => buildInfoPresentation(telemetry.fastState.value, options.value))
 const model = useHudPresentationMemory(liveModel, telemetry.fastState)
 const localTimeValue = computed(() => formatInfoLocalTime(clockMs.value))
+
+// PIP-704: the delta on screen dropping out for a moment while driving (own car, on track,
+// away from the line where a reset is expected).
+const deltaEpisodes = createValueEpisodeCounter(
+  summary => reportHudTrace('hud.value_episode', { hud: 'info', field: 'delta', ...summary }), Date.now())
+watch(model, (shown) => {
+  const state = telemetry.fastState.value
+  const lapMs = state.info?.currentLapTimeMs ?? null
+  const watching = shown.delta.visible && state.dataSource !== 'focused' && state.isFresh && state.isLive
+    && !state.isInPitLane && typeof state.speedKmh === 'number' && state.speedKmh > 30
+    && typeof lapMs === 'number' && lapMs > 3_000
+  deltaEpisodes.feed({ now: Date.now(), blank: shown.delta.value === '+0.000' || shown.delta.value === '—', watch: watching })
+})
 // The canvas scales by transform; --hud-scale lets InfoHud keep pixel floors on the RENDERED text size.
 // --hud-frame-unit keeps the panel frames whole screen pixels under the scale (hud-cut-corner).
 const canvasStyle = computed(() => ({ 'transform': `scale(${overlay.scale.value})`, '--hud-scale': String(overlay.scale.value), '--hud-frame-unit': `${1 / overlay.scale.value}px` }))
@@ -78,6 +93,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  deltaEpisodes.final(Date.now())
   telemetry.stopFastStatePolling()
   overlay.stop()
   resizeObserver?.disconnect()

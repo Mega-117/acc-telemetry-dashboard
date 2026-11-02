@@ -65,7 +65,8 @@ import {
   type QaBotSnapshot,
 } from '~/services/overlay/qaBotPresentation'
 import { pressureActionPresentation, pressureOriginLine, pressureOutcomeMessage, pressureProgressBadge } from '~/services/overlay/pressureActionPresentation'
-import { createControlKContextTracker, type ControlKContext } from '~/services/overlay/controlKContext'
+import { CONTROL_K_SETTLE_MS, createControlKContextTracker, type ControlKContext } from '~/services/overlay/controlKContext'
+import { reportHudTrace } from '~/services/overlay/hudTrace'
 import { notificationItemFromElement as readNotificationItem, notificationRank, expireOutcomeCards, pickControlKStatus,
   type ControlKNotificationItem, type ControlKNotificationKind, type ControlKStatusMessage } from '~/services/overlay/controlKStatus'
 import { useTrackVoiceReferenceAvailability } from '~/composables/useTrackVoiceReferenceAvailability'
@@ -559,7 +560,15 @@ const targetVoiceOn = computed(() => voiceOnForSession(targetLapVoiceEnabled.val
 // Guida (compact row) while the driver is in the cockpit, even stopped in the
 // box; Pausa (full grid) in the menus: ESC pause, setup screen, no live data.
 // Weak evidence (force feedback while standing still) must settle for 1,5 s: no flicker.
-const controlKContextTracker = createControlKContextTracker('pause')
+// PIP-704: every committed switch goes to the diary with the evidence that decided it.
+const controlKContextTracker = createControlKContextTracker('pause', CONTROL_K_SETTLE_MS, (change) => {
+  const fast = fastState.value
+  reportHudTrace('ctrlk.context', {
+    ...change,
+    speedKmh: typeof fast.speedKmh === 'number' && Number.isFinite(fast.speedKmh) ? Math.round(fast.speedKmh) : null,
+    engine: fast.isEngineRunning === true,
+  })
+})
 const controlKContext = ref<ControlKContext>('pause')
 function updateControlKContext() {
   const fast = fastState.value

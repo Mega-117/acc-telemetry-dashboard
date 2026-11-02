@@ -19,7 +19,8 @@ import HudTimedPager from '~/components/overlay/HudTimedPager.vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
 import InfoTargetSetup from '~/components/overlay/InfoTargetSetup.vue'
 import { resolveCustomSectorTimes } from '~/utils/customSectorReferences'
-import { normalizeSectorDeltaReference } from '~/utils/sectorDeltaPresentation'
+import { normalizeSectorDeltaReference, sectorLapTrace } from '~/utils/sectorDeltaPresentation'
+import { reportHudTrace } from '~/services/overlay/hudTrace'
 import { resolveLocalCompactPresentation } from '~/utils/compactSectorPresentation'
 import {
   evaluateInfoTarget,
@@ -119,6 +120,18 @@ const liveSectorHud = computed(() => telemetry.source.value === 'focused'
 const compactDisplayLap = useHudPresentationMemory(liveCompactDisplayLap, fastState)
 const liveCurrentLapTimeMs = useHudPresentationMemory(currentLapTimeMs, fastState)
 const visibleSectorHud = useHudPresentationMemory(liveSectorHud, fastState)
+// PIP-704: once per finished lap, the colours shown checked against the rules (own car only).
+let tracedLapKey: string | null = null
+watch(visibleSectorHud, (hud) => {
+  const state = fastState.value
+  if (state.dataSource === 'focused') return
+  const trace = sectorLapTrace(hud, deltaReference.value, customSectorTimes.value)
+  if (!trace) return
+  const key = `${state.context?.track ?? ''}|${state.context?.car ?? ''}|${trace.lap}`
+  if (key === tracedLapKey) return
+  tracedLapKey = key
+  reportHudTrace('hud.sector_state', { ...trace })
+})
 // Classic lap tile delta (mock 27/10): the Info live delta, hidden while a finished lap is held.
 const liveLapDeltaMs = computed(() => {
   const delta = fastState.value.info?.delta

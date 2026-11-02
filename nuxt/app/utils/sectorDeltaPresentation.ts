@@ -55,3 +55,52 @@ export function resolveSectorDeltaPresentation(
   const deltaMs = sector.currentMs - bestReferenceMs
   return { deltaMs, color: judge(deltaMs) }
 }
+
+export type SectorLapProblem = 'invalid_not_white' | 'color_vs_delta' | 'missing_delta' | 'first_not_purple'
+
+/** One `hud.sector_state` line for a finished lap (PIP-704). */
+export interface SectorLapTrace {
+  lap: number
+  lapValid: boolean
+  firstBest: boolean
+  ok: boolean
+  problem: SectorLapProblem | null
+  colors: SectorHudColor[]
+  deltas: Array<number | null>
+}
+
+/**
+ * The finished lap as the sectors HUD shows it, checked against the user's rules with the raw
+ * numbers from the logger (current time and reference), independently of the presenter.
+ * Null while no finished lap is shown.
+ */
+export function sectorLapTrace(
+  hud: { mode?: string, lap?: number | null, lapValid?: boolean | null, sectors: SectorHudEntry[] } | null,
+  reference: SectorDeltaReference,
+  customTimes: Array<number | null> | null = null,
+): SectorLapTrace | null {
+  if (!hud || hud.mode !== 'last_lap' || typeof hud.lap !== 'number' || typeof hud.lapValid !== 'boolean') return null
+  const lapValid = hud.lapValid
+  const shown = hud.sectors.map((sector) => resolveSectorDeltaPresentation(
+    sector, reference, customTimes?.[sector.index - 1] ?? null, lapValid))
+  const firstBest = hud.sectors.every(sector => sector.bestReferenceMs == null)
+  let problem: SectorLapProblem | null = null
+  hud.sectors.forEach((sector, offset) => {
+    const presented = shown[offset]
+    if (problem || !presented) return
+    const { color, deltaMs } = presented
+    if (sector.state !== 'complete' || sector.currentMs === null) { if (lapValid) problem = 'missing_delta'; return }
+    if (!lapValid) { if (color !== 'white') problem = 'invalid_not_white'; return }
+    const custom = reference === 'custom' ? customTimes?.[sector.index - 1] ?? null : null
+    const ref = custom !== null && Number.isFinite(custom) ? custom : sector.bestReferenceMs
+    const expectedDelta = ref == null ? 0 : sector.currentMs - ref
+    if (deltaMs === null) problem = 'missing_delta'
+    else if (ref == null && (deltaMs !== 0 || color !== 'purple')) problem = 'first_not_purple'
+    else if (deltaMs !== expectedDelta || color !== (expectedDelta <= 0 ? 'purple' : 'red')) problem = 'color_vs_delta'
+  })
+  return {
+    lap: hud.lap, lapValid, firstBest, ok: problem === null, problem,
+    colors: shown.map(item => item.color),
+    deltas: shown.map(item => (item.deltaMs === null ? null : Math.round(item.deltaMs))),
+  }
+}

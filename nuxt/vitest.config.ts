@@ -492,6 +492,10 @@ export default defineConfig({
         'app/services/overlay/telemetryRecovery.ts',
         'app/services/overlay/hudPresentationMemory.ts',
         'app/services/overlay/hudLongTasks.ts',
+        // PIP-704: HUD traces for the diary.
+        'app/services/overlay/hudTrace.ts',
+        'app/services/overlay/shiftTrace.ts',
+        'app/services/overlay/valueEpisodes.ts',
         'app/composables/useRaceHudPage.ts',
         'app/composables/useOverlayInteractionRegions.ts',
         'app/composables/useOverlayInteractionContract.ts',

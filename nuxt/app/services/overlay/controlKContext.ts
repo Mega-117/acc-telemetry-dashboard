@@ -52,18 +52,53 @@ export function isCertainContext(input: ControlKContextInput): boolean {
 
 export const CONTROL_K_SETTLE_MS = 1500
 
+/** PIP-704: which evidence decided the context, in the same order as `inCockpit`. */
+export type ControlKContextReason = 'no_live' | 'setup_menu' | 'moving' | 'engine' | 'ffb_on' | 'ffb_off' | 'hud_driving' | 'hud_not_driving' | 'unknown'
+
+export function controlKContextReason(input: ControlKContextInput): ControlKContextReason {
+  if (!input.isLive) return 'no_live'
+  if (input.isSetupMenuVisible === true) return 'setup_menu'
+  if (input.speedKmh !== null && Number.isFinite(input.speedKmh) && Math.abs(input.speedKmh) > CONTROL_K_MOVING_KMH) return 'moving'
+  if (input.isEngineRunning) return 'engine'
+  if (typeof input.finalFf === 'number' && Number.isFinite(input.finalFf)) {
+    return Math.abs(input.finalFf) > CONTROL_K_FORCE_ACTIVE ? 'ffb_on' : 'ffb_off'
+  }
+  if (input.hudDriving === true) return 'hud_driving'
+  if (input.hudDriving === false) return 'hud_not_driving'
+  return 'unknown'
+}
+
+/** One committed switch (PIP-704, `ctrlk.context` in the diary). */
+export interface ControlKContextChange {
+  from: ControlKContext
+  to: ControlKContext
+  reason: ControlKContextReason
+  /** How long the weak evidence had to agree; 0 for a certain switch. */
+  settledMs: number
+}
+
 /** Stateful wrapper: weak evidence must stay the same for CONTROL_K_SETTLE_MS. */
-export function createControlKContextTracker(initial: ControlKContext = 'pause', settleMs = CONTROL_K_SETTLE_MS) {
+export function createControlKContextTracker(
+  initial: ControlKContext = 'pause',
+  settleMs = CONTROL_K_SETTLE_MS,
+  onChange?: (change: ControlKContextChange) => void,
+) {
   let current = initial
   let pending: { context: ControlKContext; since: number } | null = null
+  const commit = (next: ControlKContext, input: ControlKContextInput, settledMs: number) => {
+    const from = current
+    current = next
+    pending = null
+    try { onChange?.({ from, to: next, reason: controlKContextReason(input), settledMs: Math.max(0, Math.round(settledMs)) }) } catch { /* diagnostics never change the panel */ }
+  }
   return {
     get current() { return current },
     update(input: ControlKContextInput, now: number): ControlKContext {
       const next = resolveControlKContext(input, current)
       if (next === current) { pending = null; return current }
-      if (isCertainContext(input)) { current = next; pending = null; return current }
+      if (isCertainContext(input)) { commit(next, input, 0); return current }
       if (!pending || pending.context !== next) pending = { context: next, since: now }
-      if (now - pending.since >= settleMs) { current = next; pending = null }
+      if (now - pending.since >= settleMs) commit(next, input, now - pending.since)
       return current
     },
   }
