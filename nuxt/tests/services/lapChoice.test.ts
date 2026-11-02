@@ -1,7 +1,7 @@
 // PIP-695: the pure part of choosing "Tu" and "Riferimento".
 import { describe, expect, it } from 'vitest'
 import {
-  chooseDefaultReference, choiceBlock, classifyLink, dateBucket, mySessionRows, sessionKindBests, lapKey, lapStatus, leaderboard, runConditions, lapKind, sameKindFirst, matchesDriver, normalizeSearch,
+  chooseDefaultReference, choiceBlock, classifyLink, dateBucket, mySessionRows, sessionKindBests, lapKey, lapStatus, driverBestRows, runConditions, lapKind, sameKindFirst, matchesDriver, normalizeSearch,
   parseSessionLink, pctFaster, sameTrackName, sessionDate, whenParts, type LapChoice, type LapEntryLike,
 } from '~/services/telemetry/lapChoice'
 
@@ -99,33 +99,18 @@ describe('lapChoice: search and leaderboard', () => {
     expect(matchesDriver('Bob', 'zz')).toBe(false)
     expect(matchesDriver(null, '')).toBe(true)
   })
-  it('lists the best lap per driver fastest first, with the gap to my best and my row marked', () => {
-    const rows = leaderboard([
-      { libId: 'a', uid: 'u1', lapTimeMs: 101000, recordedAt: null },
-      { libId: 'b', uid: 'me', lapTimeMs: 100500, recordedAt: null },
-      { libId: 'c', uid: 'u2', lapTimeMs: 99800, recordedAt: null },
-      { libId: 'd', uid: 'u1', lapTimeMs: 100900, recordedAt: null },
-    ], { u1: 'Mike', u2: 'Ann' }, 'me', 100500)
-    expect(rows.map(r => [r.rank, r.uid, r.lapTimeMs])).toEqual([[1, 'u2', 99800], [2, 'me', 100500], [3, 'u1', 100900]])
-    expect(rows[0]!.gapMs).toBe(-700)
-    expect(rows[1]!.mine).toBe(true)
-    expect(rows[2]!.nickname).toBe('Mike')
-    expect(leaderboard([{ libId: 'a', uid: 'u1', lapTimeMs: 1, recordedAt: null }], {}, null, null)[0]!.gapMs).toBeNull()
-  })
-  it('my row shows my real best when the library only has an older, slower lap of mine (01/11)', () => {
-    const rows = leaderboard([
-      { libId: 'old', uid: 'me', lapTimeMs: 103585, recordedAt: null },
-      { libId: 'r', uid: 'rico', lapTimeMs: 102635, recordedAt: null },
-    ], {}, 'me', 102842, true)
-    expect(rows.map(r => [r.rank, r.uid, r.lapTimeMs, r.libId])).toEqual([[1, 'rico', 102635, 'r'], [2, 'me', 102842, 'old']])
-    expect(rows[1]!.gapMs).toBe(0)
-    // A faster library lap of mine stays as it is, and the gaps use it too.
-    const faster = leaderboard([{ libId: 'x', uid: 'me', lapTimeMs: 100000, recordedAt: null }, { libId: 'y', uid: 'b', lapTimeMs: 102000, recordedAt: null }], {}, 'me', 103000, true)
-    expect(faster.map(r => [r.uid, r.lapTimeMs, r.gapMs])).toEqual([['me', 100000, 0], ['b', 102000, 2000]])
-  })
-  it('a coach looking at a pilot never gets the pilot best on the coach row (01/11)', () => {
-    const rows = leaderboard([{ libId: 'c', uid: 'coach', lapTimeMs: 105000, recordedAt: null }], {}, 'coach', 100000, false)
-    expect(rows[0]!.lapTimeMs).toBe(105000)
+  // 02/11 (user): at most two rows per driver, best qualifying and best race (the Worker's slots).
+  it('lists best qualifying and best race per driver, drivers by their fastest row', () => {
+    const rows = driverBestRows([
+      { libId: 'a', uid: 'u1', lapTimeMs: 101000, recordedAt: null, kind: 'qualify' },
+      { libId: 'b', uid: 'u1', lapTimeMs: 103000, recordedAt: null, kind: 'race', stintFuelL: 95 },
+      { libId: 'c', uid: 'u2', lapTimeMs: 100500, recordedAt: null, fuelL: 9 },
+      // Older entries without kind: by their fuel (over 20 L = race, unknown = qualifying).
+      { libId: 'd', uid: 'me', lapTimeMs: 104000, recordedAt: null, fuelL: 70 },
+    ], { u1: 'Mike', u2: 'Ann' }, 'me')
+    expect(rows.map(r => [r.rank, r.uid, r.kind, r.entry.libId])).toEqual([[1, 'u2', 'qualify', 'c'], [2, 'u1', 'qualify', 'a'], [2, 'u1', 'race', 'b'], [3, 'me', 'race', 'd']])
+    expect(rows[1]!.nickname).toBe('Mike')
+    expect(rows[3]!.mine).toBe(true)
   })
 })
 

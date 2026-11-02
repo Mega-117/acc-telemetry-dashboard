@@ -256,7 +256,7 @@ export default {
         hideLink: 'Chiudi il link',
         search: 'Cerca un pilota per nickname',
         searchHint: 'Basta una parte del nome; maiuscole e accenti non contano.',
-        order: 'Classifica: il giro migliore di ogni pilota su questa pista con questa auto',
+        order: 'Classifica: best qualifica e best gara di ogni pilota su questa pista con questa auto',
         gapSlower: '{gap} s più lento di te',
         gapFaster: '{gap} s più veloce di te',
         loading: 'Carico la classifica dei piloti…',

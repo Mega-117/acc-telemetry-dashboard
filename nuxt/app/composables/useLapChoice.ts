@@ -8,8 +8,8 @@ import { fetchLibraryLap, fetchPilotLap, LapsArchiveError, listPilotTrackLaps, t
 import { loadSharedLapLink } from '~/services/telemetry/sharedLapLoad'
 import { loadPublicNickname } from '~/repositories/publicProfileRepository'
 import {
-  chooseDefaultReference, classifyLink, IDEAL_KEY, lapKey, lapKind, lapStatus, leaderboard, parseSessionLink, pctFaster, runConditions, type LapSessionRow, sameTrackName,
-  type DriverRow, type LapChoice, type LapSide, type RefReason,
+  chooseDefaultReference, classifyLink, IDEAL_KEY, lapKey, lapKind, lapStatus, driverBestRows, gripOf, libraryFuel, parseSessionLink, pctFaster, runConditions, type LapSessionRow, sameTrackName,
+  type DriverBestRow, type LapChoice, type LapSide, type RefReason,
   type SessionKindBests,
 } from '~/services/telemetry/lapChoice'
 import { carMismatchNote, type Entry, type useReferenceLibrary } from './useReferenceLibrary'
@@ -34,10 +34,10 @@ export interface LapChoiceSource {
   listMine: () => Promise<{ laps: LapChoice[], truncated: boolean }>
   /** 02/11: best qualifying / race time of each past session (session summaries); {} when unknown. */
   sessionBests: () => Promise<Record<string, SessionKindBests>>
-  drivers: () => DriverRow[]
+  /** 02/11: best qualifying / race rows of the other drivers here, each with its lap ready to use. */
+  drivers: () => (DriverBestRow & { choice: LapChoice })[]
   driversState: () => LoadState
   loadDriverNames: () => Promise<void>
-  listDriverLaps: (uid: string) => Promise<LapChoice[]>
   resolveLink: (text: string) => Promise<LinkResult | null>
 }
 
@@ -268,8 +268,10 @@ export function useLapChoice(o: {
     } catch { /* a suggestion only: the comparison works without it */ }
   }
 
-  const myBestMs = () => fastestValid(realLaps(YOU_ORIGINS))?.lapTimeMs ?? null
-  const drivers = () => leaderboard(o.library.libraryList.value, nicknames.value, o.myUid(), myBestMs(), !o.pilotUid())
+  const drivers = () => driverBestRows(o.library.libraryList.value, nicknames.value, o.myUid()).map(r => ({ ...r, choice: {
+    key: `library:${r.entry.libId}`, ref: { kind: 'library' as const, libId: r.entry.libId, uid: r.uid }, ownerUid: r.uid, driver: r.nickname, mine: r.mine,
+    lapNumber: null, lapTimeMs: r.entry.lapTimeMs, sessionToken: null, recordedAt: r.entry.recordedAt, status: 'valid' as const,
+    conditions: { fuelL: libraryFuel(r.entry), tyre: null, airC: r.entry.airC ?? null, roadC: r.entry.roadC ?? null, grip: gripOf(r.entry.grip) } } }))
   const driversState = (): LoadState => { const s = o.library.libraryState.value; return s === 'error' ? 'error' : s === 'ready' ? 'ready' : 'loading' }
   /** The nicknames of the whole leaderboard, for the search: a few at a time (it can list hundreds of drivers). */
   async function loadDriverNames() {
@@ -280,17 +282,7 @@ export function useLapChoice(o: {
       nicknames.value = { ...nicknames.value, ...Object.fromEntries(part) }
     }
   }
-  async function listDriverLaps(uid: string): Promise<LapChoice[]> {
-    const w = where()
-    if (!w) return []
-    const { laps } = await listPilotTrackLaps(uid, w, o.deps)
-    const list = laps.map(d => archiveChoice(uid, d))
-    if (list.length) return list
-    // Only the library's lap (best lap here): the leaderboard row is always usable.
-    const lib = o.library.libraryList.value.find(e => e.uid === uid)
-    return lib ? [{ key: `library:${lib.libId}`, ref: { kind: 'library', libId: lib.libId, uid }, ownerUid: uid, driver: nick(uid), mine: uid === o.myUid(),
-      lapNumber: null, lapTimeMs: lib.lapTimeMs, sessionToken: null, recordedAt: lib.recordedAt, status: 'valid' }] : []
-  }
+
 
   async function resolveLink(text: string): Promise<LinkResult | null> {
     const kind = classifyLink(text)
@@ -326,7 +318,7 @@ export function useLapChoice(o: {
     subjectName: () => o.pilotUid() ? nick(o.pilotUid()) ?? t('sessions.picker.driver') : null,
     currentKey: side => (side === 'you' ? youCard.value : refCard.value)?.key ?? null,
     suggested, idealSame: () => o.library.idealSameAsBest.value, sessionLaps, listMine, drivers,
-    sessionBests: async () => { const owner = subjectUid(); return owner && o.readSessionBests ? await o.readSessionBests(owner).catch(() => ({})) : {} }, driversState, loadDriverNames, listDriverLaps, resolveLink,
+    sessionBests: async () => { const owner = subjectUid(); return owner && o.readSessionBests ? await o.readSessionBests(owner).catch(() => ({})) : {} }, driversState, loadDriverNames, resolveLink,
   }
   return { youCard, refCard, reason, canSwap, swap, cancelPending, removeRef, apply, applyDefault, propose, reset, userChose, source, nick, loadArchiveBest }
 }

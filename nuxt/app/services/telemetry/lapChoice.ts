@@ -81,7 +81,10 @@ export interface LapChoice {
   conditions?: LapRunConditions | null
 }
 
-export interface DriverRow { uid: string, nickname: string | null, lapTimeMs: number, rank: number, gapMs: number | null, mine: boolean, libId: string, recordedAt: string | null }
+/** 02/11: a library lap (the Worker keeps one best qualifying and one best race lap per driver). */
+export interface LibraryLapLike { libId: string, uid: string, lapTimeMs: number, recordedAt: string | null, grip?: string | null, airC?: number | null,
+  roadC?: number | null, fuelL?: number | null, stintFuelL?: number | null, kind?: string | null }
+export interface DriverBestRow { rank: number, uid: string, nickname: string | null, mine: boolean, kind: LapKind, entry: LibraryLapLike }
 
 export const IDEAL_KEY = 'ideal'
 const TOKEN = /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$/
@@ -208,19 +211,31 @@ export function matchesDriver(nickname: string | null | undefined, query: string
   return !q || normalizeSearch(nickname).includes(q)
 }
 
-/** Best lap per driver here, fastest first, with the gap to my best (positive = slower than me). */
-export function leaderboard(entries: { libId: string, uid: string, lapTimeMs: number, recordedAt: string | null }[], nicknames: Record<string, string | null>,
-  myUid: string | null, myBestMs: number | null, ownView = false): DriverRow[] {
-  const best = new Map<string, (typeof entries)[number]>()
-  for (const e of entries) { const prev = best.get(e.uid); if (!prev || e.lapTimeMs < prev.lapTimeMs) best.set(e.uid, e) }
-  // 01/11: in your own view (never a coach looking at a pilot: those laps are not the coach's) your row
-  // shows your true best here. The library can hold an older, slower lap of yours (a lap not uploaded
-  // yet): the row keeps that library lap to open, but ranks with the real time. Gaps use the same best.
-  const mineRow = ownView && myUid ? best.get(myUid) : undefined
-  if (mineRow && myBestMs && myBestMs < mineRow.lapTimeMs) best.set(myUid!, { ...mineRow, lapTimeMs: myBestMs })
-  const base = mineRow ? Math.min(best.get(myUid!)!.lapTimeMs, myBestMs ?? Infinity) : myBestMs
-  return [...best.values()].sort((a, b) => a.lapTimeMs - b.lapTimeMs).map((e, i) => ({ uid: e.uid, nickname: nicknames[e.uid] ?? null, lapTimeMs: e.lapTimeMs, rank: i + 1,
-    gapMs: base ? e.lapTimeMs - base : null, mine: !!myUid && e.uid === myUid, libId: e.libId, recordedAt: e.recordedAt }))
+/** The departure fuel of a library lap (older laps only know the lap's own fuel). */
+export const libraryFuel = (e: LibraryLapLike) => typeof e.stintFuelL === 'number' ? e.stintFuelL : typeof e.fuelL === 'number' ? e.fuelL : null
+/** Its kind as the Worker files it; older entries by their fuel (unknown = qualifying, as the Worker). */
+export function libraryKind(e: LibraryLapLike): LapKind {
+  if (e.kind === 'qualify' || e.kind === 'race') return e.kind
+  const fuel = libraryFuel(e)
+  return fuel !== null && fuel > 20 ? 'race' : 'qualify'
+}
+
+/**
+ * 02/11 (user): "Altri piloti" = at most two rows per driver, best qualifying and best race, no list of laps.
+ * Drivers ordered by their fastest row (rank per driver); qualifying before race inside a driver.
+ */
+export function driverBestRows(entries: LibraryLapLike[], nicknames: Record<string, string | null>, myUid: string | null): DriverBestRow[] {
+  const best = new Map<string, LibraryLapLike>()
+  for (const e of entries) {
+    const key = `${e.uid}|${libraryKind(e)}`
+    const prev = best.get(key)
+    if (!prev || e.lapTimeMs < prev.lapTimeMs) best.set(key, e)
+  }
+  const byDriver = new Map<string, LibraryLapLike[]>()
+  for (const e of best.values()) byDriver.set(e.uid, [...(byDriver.get(e.uid) ?? []), e])
+  const order = [...byDriver].sort(([, a], [, b]) => Math.min(...a.map(e => e.lapTimeMs)) - Math.min(...b.map(e => e.lapTimeMs)))
+  return order.flatMap(([uid, list], i) => list.sort((a, b) => (libraryKind(a) === 'qualify' ? 0 : 1) - (libraryKind(b) === 'qualify' ? 0 : 1))
+    .map(entry => ({ rank: i + 1, uid, nickname: nicknames[uid] ?? null, mine: !!myUid && uid === myUid, kind: libraryKind(entry), entry })))
 }
 
 /**

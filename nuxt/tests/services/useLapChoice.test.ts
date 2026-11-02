@@ -106,18 +106,15 @@ describe('useLapChoice', () => {
     expect(await setup().c.source.resolveLink('ciao')).toMatchObject({ state: 'error' })
   })
 
-  it('the leaderboard comes from the library with my best as the gap', async () => {
+  it('the drivers rows come from the library, each with its lap', async () => {
     const s = setup()
     s.library.libraryList.value = [{ libId: 'c'.repeat(24), uid: 'u2', lapTimeMs: 99000, recordedAt: null, grip: null, airC: null, roadC: null, fuelL: null }]
     s.library.libraryState.value = 'ready'
     await s.c.source.loadDriverNames()
     expect(s.c.source.driversState()).toBe('ready')
-    expect(s.c.source.drivers()[0]).toMatchObject({ uid: 'u2', nickname: 'RICO117', gapMs: -1000, rank: 1 })
-    // A driver with no archived laps still has the library lap.
-    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ laps: [] }), { status: 200 })) as unknown as typeof fetch
-    const t2 = setup({ fetchImpl })
-    t2.library.libraryList.value = s.library.libraryList.value
-    expect((await t2.c.source.listDriverLaps('u2'))[0]).toMatchObject({ ref: { kind: 'library' }, lapTimeMs: 99000 })
+    // 02/11: each row carries its library lap, ready to use, with the stint's departure fuel when known.
+    expect(s.c.source.drivers()[0]).toMatchObject({ uid: 'u2', nickname: 'RICO117', rank: 1, kind: 'qualify',
+      choice: { key: `library:${'c'.repeat(24)}`, ref: { kind: 'library', uid: 'u2' }, lapTimeMs: 99000, driver: 'RICO117', status: 'valid' } })
   })
 
   // Codex 01/11: a lap still loading never lands on a pair changed meanwhile (swap, ✕).

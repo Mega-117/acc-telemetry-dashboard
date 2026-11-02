@@ -27,7 +27,7 @@ function source(extra: Partial<LapChoiceSource> = {}): LapChoiceSource {
     sessionLaps: () => [lap(1, 102000, { status: 'invalid' }), lap(2, 0, { status: 'incomplete' }), you, ref],
     listMine: async () => ({ laps: [lap(1, 100500, { sessionToken: '20260101_100000', key: lapKey('me', '20260101_100000', 1), status: 'unknown' })], truncated: false }),
     sessionBests: async () => ({}),
-    drivers: () => [], driversState: () => 'ready', loadDriverNames: async () => {}, listDriverLaps: async () => [], resolveLink: async () => null,
+    drivers: () => [], driversState: () => 'ready', loadDriverNames: async () => {}, resolveLink: async () => null,
     ...extra,
   }
 }
@@ -241,35 +241,34 @@ describe('LapChoiceDialog', () => {
 })
 
 describe('LapChoiceDrivers (Altri piloti)', () => {
+  const libLap = (uid: string, nickname: string, ms: number, libId: string, extra: Partial<LapChoice> = {}): LapChoice => ({ key: `library:${libId}`,
+    ref: { kind: 'library', libId, uid }, ownerUid: uid, driver: nickname, mine: uid === 'me', lapNumber: null, lapTimeMs: ms, sessionToken: null, status: 'valid', ...extra })
   const drivers = () => [
-    { uid: 'u2', nickname: 'RICO117', lapTimeMs: 99000, rank: 1, gapMs: -1000, mine: false, libId: 'a', recordedAt: null },
-    { uid: 'me', nickname: 'Bob117', lapTimeMs: 100000, rank: 2, gapMs: 0, mine: true, libId: 'b', recordedAt: null },
-    { uid: 'u3', nickname: 'Jérôme', lapTimeMs: 100400, rank: 3, gapMs: 400, mine: false, libId: 'c', recordedAt: null },
+    { rank: 1, uid: 'u2', nickname: 'RICO117', mine: false, kind: 'qualify' as const, entry: { libId: 'a', uid: 'u2', lapTimeMs: 99000, recordedAt: null },
+      choice: libLap('u2', 'RICO117', 99000, 'a', { conditions: { fuelL: 9, tyre: null, airC: 15, roadC: 18, grip: 'optimum' } }) },
+    { rank: 1, uid: 'u2', nickname: 'RICO117', mine: false, kind: 'race' as const, entry: { libId: 'b', uid: 'u2', lapTimeMs: 101000, recordedAt: null },
+      choice: libLap('u2', 'RICO117', 101000, 'b') },
+    { rank: 2, uid: 'u3', nickname: 'Jérôme', mine: false, kind: 'qualify' as const, entry: { libId: 'c', uid: 'u3', lapTimeMs: 100400, recordedAt: null },
+      choice: libLap('u3', 'Jérôme', 100400, 'c') },
   ]
-  it('a leaderboard with my row, a tolerant search, a driver with their best preselected and the way back', async () => {
-    const theirs = [lap(4, 99200, { key: 'u2|t|4', ownerUid: 'u2', driver: null, mine: false }), lap(7, 99000, { key: 'u2|t|7', ownerUid: 'u2', driver: null, mine: false })]
-    const listDriverLaps = vi.fn(async () => theirs)
+  // 02/11 (user): two rows per driver at most (Best qualifica / Best gara); a click uses the lap; no list of laps.
+  it('lists best qualifying and race rows, searches by nickname, a click uses the lap', async () => {
     const loadDriverNames = vi.fn(async () => {})
-    openDialog('ref', undefined, { drivers, listDriverLaps, loadDriverNames })
+    const { apply } = openDialog('ref', undefined, { drivers, loadDriverNames })
     await wrapper!.setProps({ open: true }); await flushPromises()
     button('Altri piloti').click(); await flushPromises()
     expect(loadDriverNames).toHaveBeenCalled()
-    const list = () => [...document.body.querySelectorAll<HTMLButtonElement>('.driver-row')]
-    expect(list()[1]!.querySelector('.driver-row__name')?.textContent).toBe('Bob117 TU')
-    expect(list().map(r => r.textContent)).toEqual([expect.stringContaining('RICO117'), expect.stringContaining('TU'), expect.stringContaining('Jérôme')])
-    expect(list()[0]!.textContent).toContain('1,000 s più veloce di te')
+    expect(rows().map(r => r.querySelector('.choice-row__kind')?.textContent)).toEqual(['Best qualifica', 'Best gara', 'Best qualifica'])
+    expect(rows()[0]!.querySelector('.choice-row__tags')?.textContent).toContain('9 L')
     const search = document.body.querySelector<HTMLInputElement>('.drivers__search input')!
     search.value = 'jero'; search.dispatchEvent(new Event('input')); await flushPromises()
-    expect(list()).toHaveLength(1)
+    expect(rows()).toHaveLength(1)
     search.value = 'zzz'; search.dispatchEvent(new Event('input')); await flushPromises()
     expect(dialog()?.textContent).toContain('Nessun pilota contiene “zzz”')
     search.value = 'rico'; search.dispatchEvent(new Event('input')); await flushPromises()
-    list()[0]!.click(); await flushPromises()
-    expect(listDriverLaps).toHaveBeenCalledWith('u2')
-    expect(dialog()?.textContent).toContain('Altri piloti › RICO117')
-    expect(rows().find(r => r.getAttribute('aria-pressed') === 'true')?.dataset.key).toBe('u2|t|7')
-    button('← Tutti i piloti').click(); await flushPromises()
-    expect(list().length).toBeGreaterThan(0)
+    rows()[1]!.click(); await flushPromises()
+    expect(apply).toHaveBeenCalledWith('ref', expect.objectContaining({ key: 'library:b' }))
+    expect(document.body.querySelector('.drivers__crumb')).toBeNull()
   })
   it('says what is happening while the leaderboard loads, or why it is not there', async () => {
     openDialog('ref', undefined, { drivers: () => [], driversState: () => 'loading' })
@@ -277,13 +276,6 @@ describe('LapChoiceDrivers (Altri piloti)', () => {
     button('Altri piloti').click(); await flushPromises()
     expect(dialog()?.textContent).toContain('Carico la classifica dei piloti')
     expect(dialog()?.textContent).not.toContain('Nessun altro pilota')
-  })
-  it('a driver whose laps cannot be read says so', async () => {
-    openDialog('ref', undefined, { drivers, listDriverLaps: async () => { throw new Error('rete') } })
-    await wrapper!.setProps({ open: true }); await flushPromises()
-    button('Altri piloti').click(); await flushPromises()
-    document.body.querySelector<HTMLButtonElement>('.driver-row')!.click(); await flushPromises()
-    expect(dialog()?.textContent).toContain('Non riesco a leggere i giri di RICO117: rete')
   })
 })
 

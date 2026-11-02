@@ -256,7 +256,7 @@ export default {
         hideLink: 'Close the link',
         search: 'Search a driver by nickname',
         searchHint: 'Part of the name is enough; case and accents do not matter.',
-        order: 'Leaderboard: the best lap of each driver on this track with this car',
+        order: 'Leaderboard: best qualifying and best race lap of every driver on this track with this car',
         gapSlower: '{gap} s slower than you',
         gapFaster: '{gap} s faster than you',
         loading: 'Loading the drivers’ leaderboard…',
