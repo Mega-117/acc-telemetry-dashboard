@@ -55,10 +55,11 @@ onMounted(() => { void load() })
 const rowProps = (lap: LapChoice) => ({ choice: lap, selected: lap.key === props.selectedKey, current: lap.key === props.currentKey,
   otherSide: lap.key === props.otherKey ? props.otherSide : null, swappable: !!props.canSwap && lap.key === props.otherKey })
 // One row per best lap of each past session: qualifying and race when the summary knows them, else its fastest lap.
-const pastBests = computed(() => rows.value.flatMap((s: MySessionRow) => s.qualify || s.race
-  ? [s.qualify && { key: `${s.token}|q`, kind: t('telemetry.choice.mine.qualify'), lap: s.qualify }, s.race && { key: `${s.token}|r`, kind: t('telemetry.choice.mine.race'), lap: s.race }]
-    .filter((r): r is { key: string, kind: string, lap: LapChoice } => !!r)
-  : s.best ? [{ key: `${s.token}|b`, kind: '', lap: s.best }] : []))
+type PastBest = { key: string, kind: 'qualify' | 'race' | null, lap: LapChoice }
+const pastBests = computed(() => rows.value.flatMap((s: MySessionRow): PastBest[] => s.qualify || s.race
+  ? [s.qualify && { key: `${s.token}|q`, kind: 'qualify' as const, lap: s.qualify }, s.race && { key: `${s.token}|r`, kind: 'race' as const, lap: s.race }]
+    .filter((r): r is { key: string, kind: 'qualify' | 'race', lap: LapChoice } => !!r)
+  : s.best ? [{ key: `${s.token}|b`, kind: null, lap: s.best }] : []))
 </script>
 
 <template>
@@ -66,19 +67,19 @@ const pastBests = computed(() => rows.value.flatMap((s: MySessionRow) => s.quali
     <section v-if="top.length" class="my-laps__block">
       <h4>{{ t('telemetry.choice.mine.top') }}</h4>
       <div class="choice-list">
-        <LapChoiceRow v-for="c in top" :key="c.key" v-bind="rowProps(c)" brief @select="emit('select', $event)" @confirm="emit('confirm', $event)" />
+        <LapChoiceRow v-for="c in top" :key="c.key" v-bind="rowProps(c)" brief aligned @select="emit('select', $event)" @confirm="emit('confirm', $event)" />
       </div>
     </section>
     <section v-if="thisSession.length" class="my-laps__block">
       <h4>{{ t('telemetry.choice.mine.current') }}</h4>
       <div class="choice-list">
-        <LapChoiceRow v-for="lap in thisSession" :key="lap.key" v-bind="rowProps(lap)" hide-when hide-driver @select="emit('select', $event)" @confirm="emit('confirm', $event)" />
+        <LapChoiceRow v-for="lap in thisSession" :key="lap.key" v-bind="rowProps(lap)" hide-when hide-driver aligned @select="emit('select', $event)" @confirm="emit('confirm', $event)" />
       </div>
     </section>
     <section class="my-laps__block">
       <h4>{{ t('telemetry.choice.mine.sessions') }}</h4>
       <div v-if="pastBests.length" class="choice-list">
-        <LapChoiceRow v-for="r in pastBests" :key="r.key" v-bind="rowProps({ ...r.lap, best: false })" :kind="r.kind || null" hide-driver @select="emit('select', $event)" @confirm="emit('confirm', $event)" />
+        <LapChoiceRow v-for="r in pastBests" :key="r.key" v-bind="rowProps({ ...r.lap, best: false })" :kind="r.kind" aligned hide-driver @select="emit('select', $event)" @confirm="emit('confirm', $event)" />
       </div>
       <p v-if="state === 'loading'" class="choice-empty" role="status">{{ t('telemetry.choice.mine.loading') }}</p>
       <p v-else-if="state === 'error'" class="choice-empty" role="alert">

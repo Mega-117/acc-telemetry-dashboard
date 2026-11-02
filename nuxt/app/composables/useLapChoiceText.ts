@@ -58,5 +58,10 @@ export function useLapChoiceText() {
       c.grip ? t(`telemetry.choice.cond.gripShort.${c.grip}`) : '',
     ].filter(Boolean)
   }
-  return { when, status, lapLine, driver, idealNote, reason, side, conditions, conditionsShort, decimal }
+  /** 02/11: the same four tags in fixed places ('' when unknown), so the rows of a list line up in columns. */
+  function conditionSlots(c: LapRunConditions | null | undefined): string[] {
+    const one = (part: Partial<LapRunConditions>) => conditionsShort({ fuelL: null, tyre: null, airC: null, roadC: null, grip: null, ...part })[0] ?? ''
+    return [one({ fuelL: c?.fuelL ?? null }), one({ airC: c?.airC ?? null }), one({ roadC: c?.roadC ?? null }), one({ grip: c?.grip ?? null })]
+  }
+  return { when, status, lapLine, driver, idealNote, reason, side, conditions, conditionsShort, conditionSlots, decimal }
 }

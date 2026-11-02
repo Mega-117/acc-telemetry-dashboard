@@ -162,8 +162,9 @@ describe('LapChoiceDialog', () => {
     expect(dialog()?.textContent).toContain('In evidenza')
     expect(dialog()?.textContent).toContain('Le tue sessioni')
     // 02/11 (user): only the best laps of a past session, as rows (lap, date, tags, Qualifica / Gara); no list to open.
-    const past = rows().filter(e => e.querySelector('.choice-row__kind'))
-    expect(past.map(e => e.querySelector('.choice-row__kind')?.textContent)).toEqual(['Qualifica', 'Gara'])
+    const past = rows().filter(e => e.querySelector('.choice-row__kind:not(.is-none)'))
+    expect(past.map(e => e.querySelector('.choice-row__kind')?.textContent)).toEqual(['Best qualifica', 'Best gara'])
+    expect(past[0]!.querySelector('.choice-row__kind')?.classList.contains('is-qualify')).toBe(true)
     expect(past[0]!.querySelector('.choice-row__lap')?.textContent).toBe('Giro 1')
     expect(past[0]!.querySelector('.choice-row__tags')?.textContent).toContain('AIR 14°')
     expect(document.body.querySelector('.my-session__head')).toBeNull()

@@ -14,13 +14,16 @@ const props = defineProps<{ choice: LapChoice, selected: boolean, current?: bool
   swappable?: boolean,
   /** 02/11 (user, as Track Titan): name, tags and time only; the "why" only when it says something (x% faster). */
   brief?: boolean,
-  /** 02/11: "Qualifica" / "Gara" on the best laps of a past session. */
-  kind?: string | null }>()
+  /** 02/11: best qualifying / race lap of a past session (yellow / red, as the times elsewhere). */
+  kind?: 'qualify' | 'race' | null,
+  /** 02/11: fixed columns (name/lap, kind, the four tags), so the rows of a list line up. */
+  aligned?: boolean }>()
 const emit = defineEmits<{ select: [choice: LapChoice], confirm: [choice: LapChoice] }>()
 const { t } = useI18n()
 const text = useLapChoiceText()
 const status = computed(() => text.status(props.choice.status))
-const tags = computed(() => text.conditionsShort(props.choice.conditions))
+const tags = computed(() => props.aligned ? text.conditionSlots(props.choice.conditions) : text.conditionsShort(props.choice.conditions))
+const kindText = computed(() => props.kind ? t(`stats.best.${props.kind === 'qualify' ? 'qualy' : 'race'}`) : '')
 const lapLabel = computed(() => props.choice.ideal ? t('telemetry.choice.idealShort') : props.choice.lapNumber && !props.brief ? t('sessionDetail.chart.lap', { lap: props.choice.lapNumber }) : '')
 const when = computed(() => props.choice.ideal || props.hideWhen || props.brief ? '' : text.when(props.choice))
 const reasonText = computed(() => {
@@ -40,7 +43,7 @@ function onKey(event: KeyboardEvent) {
 </script>
 
 <template>
-  <button type="button" class="choice-row" :class="{ 'is-selected': selected, 'is-current': current, 'is-ideal': choice.ideal, 'is-off': choice.status === 'incomplete' || blocked }" :aria-pressed="selected"
+  <button type="button" class="choice-row" :class="{ 'is-aligned': aligned, 'is-selected': selected, 'is-current': current, 'is-ideal': choice.ideal, 'is-off': choice.status === 'incomplete' || blocked }" :aria-pressed="selected"
     :aria-current="current ? 'true' : undefined" :aria-disabled="blocked || undefined" :data-key="choice.key" :title="tooltip" @click="use" @keydown="onKey">
     <span v-if="rank" class="choice-row__rank">{{ rank }}</span>
     <span class="choice-row__main">
@@ -48,8 +51,8 @@ function onKey(event: KeyboardEvent) {
       <span v-if="lapLabel" class="choice-row__lap">{{ lapLabel }}</span>
       <span v-if="when" class="choice-row__when">{{ when }}</span>
     </span>
-    <span v-if="kind" class="choice-row__kind">{{ kind }}</span>
-    <span v-if="tags.length" class="choice-row__tags"><span v-for="tag in tags" :key="tag">{{ tag }}</span></span>
+    <span v-if="aligned || kind" class="choice-row__kind" :class="kind ? `is-${kind}` : 'is-none'">{{ kindText }}</span>
+    <span v-if="tags.length" class="choice-row__tags"><span v-for="(tag, i) in tags" :key="i" :class="{ 'is-empty': !tag }">{{ tag }}</span></span>
     <span class="choice-row__badges">
       <!-- valid says nothing; invalid is the red time (the word for screen readers only). -->
       <span v-if="!choice.ideal && (choice.status === 'invalid' || choice.status === 'valid')" class="sr-only">{{ status.text }}</span>
@@ -77,7 +80,15 @@ function onKey(event: KeyboardEvent) {
 .choice-row__driver { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .choice-row__lap { color: #d4d4da; white-space: nowrap; }
 .choice-row__when { color: #9a9aa0; font: 500 13px 'Inter', sans-serif; white-space: nowrap; }
-.choice-row__kind { flex: none; padding: 1px 8px; border: 1px solid #ffffff40; color: #fff; font: 700 11px/18px 'Inter', sans-serif; letter-spacing: .04em; text-transform: uppercase; }
+.choice-row__kind { flex: none; padding: 1px 8px; border: 1px solid color-mix(in srgb, var(--k) 45%, transparent); background: color-mix(in srgb, var(--k) 10%, transparent); color: var(--k);
+  font: 700 11px/18px 'Inter', sans-serif; letter-spacing: .04em; text-align: center; text-transform: uppercase; white-space: nowrap;
+  &.is-qualify { --k: var(--racing-qualify, #ffc400); } &.is-race { --k: color-mix(in srgb, var(--racing-race, #ff0024) 80%, white); } &.is-none { visibility: hidden; } }
+// 02/11: fixed columns in the lists (name or lap + date | best kind | fuel | air | track | grip | … | time).
+.choice-row.is-aligned {
+  .choice-row__main { flex: 0 0 190px; }
+  .choice-row__kind { flex: 0 0 128px; box-sizing: border-box; }
+  .choice-row__tags span { box-sizing: border-box; text-align: center; &:nth-child(1) { width: 50px; } &:nth-child(2) { width: 66px; } &:nth-child(3) { width: 66px; } &:nth-child(4) { width: 46px; }
+    &.is-empty { visibility: hidden; } } }
 .choice-row__tags { display: flex; gap: 4px; flex: none; span { padding: 1px 6px; border: 1px solid #ffffff24; color: #c8c8cc; font: 600 12px/18px 'Inter', sans-serif; font-variant-numeric: tabular-nums; } }
 .choice-row__badges { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; flex: 1; font: 600 13px 'Inter', sans-serif; color: #9a9aa0; }
 .choice-row__status { font-size: 15px; &.is-incomplete, &.is-unknown { color: #b3b3b8; } }

@@ -234,8 +234,6 @@ export default {
       mine: {
         top: 'In evidenza',
         sessions: 'Le tue sessioni',
-        qualify: 'Qualifica',
-        race: 'Gara',
         best: 'Migliore',
         current: 'Questa sessione',
         today: 'Oggi',
