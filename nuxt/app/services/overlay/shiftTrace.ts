@@ -10,6 +10,7 @@
  */
 export const SHIFT_TRACE_BATCH = 10
 export const SHIFT_TRACE_LATE_RPM = 200
+export const SHIFT_TRACE_ONSET_MAX_MS = 3_000
 
 export interface ShiftTraceFrame {
   now: number
@@ -63,6 +64,8 @@ export function createShiftTraceAggregator(report: (summary: ShiftTraceSummary) 
         // Another car or shift point: the batch would mix two rules.
         car = frameCar; target = targetRpm; clear(); prev = null; onset = null
       }
+      // Codex 02/11: a flash followed by a lift belongs to no shift: it expires after 3 s.
+      if (onset && frame.now - onset.at > SHIFT_TRACE_ONSET_MAX_MS) onset = null
       if (prev && gear === prev.gear && frame.flash && !prev.flash) onset = { rpm: Math.round(rpm), at: frame.now }
       if (prev && prev.gear >= 1 && gear === prev.gear + 1) {
         const upshiftRpm = Math.round(prev.rpm)

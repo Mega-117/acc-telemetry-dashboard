@@ -56,11 +56,20 @@ describe('sectorDeltaPresentation', () => {
     expect(resolveSectorDeltaPresentation(sector({ currentMs: 30_300 }), 'bestSector')).toEqual({ deltaMs: -200, color: 'purple' })
   })
 
-  it('PIP-704: primo giro lanciato (nessun best) = 0.000 viola; non valido = bianco senza delta', () => {
+  it('PIP-704: primo giro lanciato (nessun best) = 0.000 viola; se si invalida resta 0.000, bianco', () => {
     const first = sector({ bestReferenceMs: null, referenceMs: 31_000, deltaMs: null })
     expect(resolveSectorDeltaPresentation(first, 'bestSector', null, true)).toEqual({ deltaMs: 0, color: 'purple' })
     expect(resolveSectorDeltaPresentation(first, 'bestSector')).toEqual({ deltaMs: 0, color: 'purple' })
-    expect(resolveSectorDeltaPresentation(first, 'bestSector', null, false)).toEqual({ deltaMs: null, color: 'white' })
+    expect(resolveSectorDeltaPresentation(first, 'bestSector', null, false)).toEqual({ deltaMs: 0, color: 'white' })
+  })
+
+  it('PIP-704 (Codex): su un giro non valido anche i settori ancora da fare sono bianchi', () => {
+    for (const state of ['pending', 'running'] as const) {
+      expect(resolveSectorDeltaPresentation(sector({ state, currentMs: null, color: 'grey' }), 'bestSector', null, false))
+        .toEqual({ deltaMs: null, color: 'white' })
+    }
+    expect(resolveSectorDeltaPresentation(sector({ state: 'pending', currentMs: null, color: 'grey' }), 'bestSector', null, true))
+      .toEqual({ deltaMs: null, color: 'grey' })
   })
 
   it('non calcola il delta finché il settore non è completo', () => {

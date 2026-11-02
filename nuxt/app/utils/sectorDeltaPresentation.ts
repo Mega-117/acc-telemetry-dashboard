@@ -33,10 +33,11 @@ export function resolveSectorDeltaPresentation(
   customReferenceMs: number | null = null,
   lapValid: boolean | null = null,
 ): SectorDeltaPresentation {
-  if (sector.state !== 'complete' || sector.currentMs === null) {
-    return { deltaMs: null, color: sector.color }
-  }
   const invalid = lapValid === false
+  if (sector.state !== 'complete' || sector.currentMs === null) {
+    // Codex 02/11: on an invalid lap the sectors still to come are white too ("all three").
+    return { deltaMs: null, color: invalid ? 'white' : sector.color }
+  }
   const judge = (deltaMs: number): SectorHudColor => (invalid ? 'white' : deltaMs <= 0 ? 'purple' : 'red')
 
   // PIP-697: custom chosen but no time saved for this track and car: compare with the best
@@ -48,8 +49,9 @@ export function resolveSectorDeltaPresentation(
 
   const bestReferenceMs = sector.bestReferenceMs
   if (bestReferenceMs == null || !Number.isFinite(bestReferenceMs)) {
-    // Primo best: delta 0.000. Su un giro non valido non diventa riferimento: niente delta.
-    return invalid ? { deltaMs: null, color: 'white' } : { deltaMs: 0, color: 'purple' }
+    // Primo best: delta 0.000. Se il giro si invalida il delta resta, solo il colore diventa
+    // bianco (non diventera' riferimento: lo decide il logger).
+    return { deltaMs: 0, color: invalid ? 'white' : 'purple' }
   }
 
   const deltaMs = sector.currentMs - bestReferenceMs
@@ -80,6 +82,9 @@ export function sectorLapTrace(
   customTimes: Array<number | null> | null = null,
 ): SectorLapTrace | null {
   if (!hud || hud.mode !== 'last_lap' || typeof hud.lap !== 'number' || typeof hud.lapValid !== 'boolean') return null
+  // Codex 02/11: a lap the logger could not rebuild (started mid-lap, lost splits) has no
+  // sectors to judge; it is not a presentation error, so it is not traced at all.
+  if (!hud.sectors.length || hud.sectors.some(sector => sector.state !== 'complete' || sector.currentMs === null)) return null
   const lapValid = hud.lapValid
   const shown = hud.sectors.map((sector) => resolveSectorDeltaPresentation(
     sector, reference, customTimes?.[sector.index - 1] ?? null, lapValid))
@@ -89,7 +94,7 @@ export function sectorLapTrace(
     const presented = shown[offset]
     if (problem || !presented) return
     const { color, deltaMs } = presented
-    if (sector.state !== 'complete' || sector.currentMs === null) { if (lapValid) problem = 'missing_delta'; return }
+    if (sector.currentMs === null) return
     if (!lapValid) { if (color !== 'white') problem = 'invalid_not_white'; return }
     const custom = reference === 'custom' ? customTimes?.[sector.index - 1] ?? null : null
     const ref = custom !== null && Number.isFinite(custom) ? custom : sector.bestReferenceMs

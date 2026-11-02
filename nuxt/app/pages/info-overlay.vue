@@ -59,7 +59,10 @@ watch(model, (shown) => {
   const watching = shown.delta.visible && state.dataSource !== 'focused' && state.isFresh && state.isLive
     && !state.isInPitLane && typeof state.speedKmh === 'number' && state.speedKmh > 30
     && typeof lapMs === 'number' && lapMs > 3_000
-  deltaEpisodes.feed({ now: Date.now(), blank: shown.delta.value === '+0.000' || shown.delta.value === '—', watch: watching })
+  // A real zero crossing (+0.001 -> +0.000 -> -0.001) is not a drop-out (Codex 02/11): blank
+  // only when the delta on screen is a placeholder because the data behind it is missing.
+  const placeholder = shown.delta.value === '+0.000' || shown.delta.value === '—'
+  deltaEpisodes.feed({ now: Date.now(), blank: placeholder && state.info?.delta.available !== true, watch: watching })
 })
 // The canvas scales by transform; --hud-scale lets InfoHud keep pixel floors on the RENDERED text size.
 // --hud-frame-unit keeps the panel frames whole screen pixels under the scale (hud-cut-corner).

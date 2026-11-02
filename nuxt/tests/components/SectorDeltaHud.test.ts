@@ -392,7 +392,7 @@ describe('SectorDeltaHud', () => {
     expect(html).not.toContain('00:12.345')
   })
 
-  it('PIP-704: giro non valido senza best: cronometro rosso, settori bianchi senza delta', async () => {
+  it('PIP-704: giro non valido senza best: cronometro rosso, settori bianchi con 0.000', async () => {
     const invalidHud: SectorHudState = {
       ...sectorHud,
       lapValid: false,
@@ -409,6 +409,7 @@ describe('SectorDeltaHud', () => {
     expect(html).toContain('sector-compact__lap--invalid')
     expect(html).not.toContain('>wait</small>')
     expect(html).not.toMatch(/sector-delta--(purple|red|green|grey)/)
+    expect((html.match(/>\+0\.000<\/small>/g) || []).length).toBe(3)
     expect(html).not.toContain('-0.200</small>')
   })
 

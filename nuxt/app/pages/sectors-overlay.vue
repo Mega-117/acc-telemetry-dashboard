@@ -125,6 +125,9 @@ let tracedLapKey: string | null = null
 watch(visibleSectorHud, (hud) => {
   const state = fastState.value
   if (state.dataSource === 'focused') return
+  // Codex 02/11: forget the last lap once a new lap is running, so a restarted session's
+  // lap 1 is traced again (the 7 s hold keeps one key, the next lap has another number).
+  if (hud?.mode !== 'last_lap') { tracedLapKey = null; return }
   const trace = sectorLapTrace(hud, deltaReference.value, customSectorTimes.value)
   if (!trace) return
   const key = `${state.context?.track ?? ''}|${state.context?.car ?? ''}|${trace.lap}`

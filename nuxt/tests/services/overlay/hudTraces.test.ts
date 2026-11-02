@@ -33,6 +33,17 @@ describe('PIP-704 hud.shift', () => {
     expect(report.mock.calls[0]![0]).toMatchObject({ shifts: 2, flashed: 1, beforeFlash: 1, late: 1 })
   })
 
+  it('a flash followed by a lift expires after 3 s (Codex): the later shift counts as before the flash', () => {
+    const report = vi.fn()
+    const trace = createShiftTraceAggregator(report, 1)
+    trace.feed(frame(0, 3, 7000, false))
+    trace.feed(frame(100, 3, 7160, true))
+    trace.feed(frame(500, 3, 6000, false))
+    trace.feed(frame(11_000, 3, 7100, false))
+    trace.feed(frame(11_050, 4, 5200, false))
+    expect(report.mock.calls[0]![0]).toMatchObject({ flashed: 0, beforeFlash: 1, leadMsMedian: null })
+  })
+
   it('a downshift, another car or missing data never counts', () => {
     const report = vi.fn()
     const trace = createShiftTraceAggregator(report, 1)
@@ -136,9 +147,9 @@ describe('PIP-704 hud.sector_state', () => {
     expect(trace).toMatchObject({ ok: true, lapValid: false, colors: ['white', 'white', 'white'], deltas: [-287, 455, 35] })
   })
 
-  it('a valid lap with a missing sector is reported', () => {
-    expect(sectorLapTrace(lap(true, [sector(1, 37160, 37447), sector(2, null, 38545), sector(3, 29520, 29485)]), 'bestSector'))
-      .toMatchObject({ ok: false, problem: 'missing_delta' })
+  it('a lap the logger could not rebuild is not traced (Codex: not a presentation error)', () => {
+    expect(sectorLapTrace(lap(true, [sector(1, 37160, 37447), sector(2, null, 38545), sector(3, 29520, 29485)]), 'bestSector')).toBeNull()
+    expect(sectorLapTrace(lap(true, []), 'bestSector')).toBeNull()
   })
 
   it('nothing while a lap is running', () => {
