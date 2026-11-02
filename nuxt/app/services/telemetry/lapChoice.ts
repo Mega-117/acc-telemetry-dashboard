@@ -128,6 +128,42 @@ export interface SessionKindBests { qualifyMs: number | null, raceMs: number | n
   qualifyConditions?: LapRunConditions | null, raceConditions?: LapRunConditions | null }
 export interface MySessionRow { token: string, laps: LapChoice[], best: LapChoice | null, qualify: LapChoice | null, race: LapChoice | null }
 
+type SummaryLike = { best_qualy_ms?: number | null, best_race_ms?: number | null,
+  best_qualy_conditions?: { airTemp: number, roadTemp: number, grip: string } | null, best_race_conditions?: { airTemp: number, roadTemp: number, grip: string } | null,
+  best_by_grip?: Record<string, unknown> }
+const BUCKET_ORDER = ['100+', '80-100', '60-80', '40-60'] as const
+const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null
+const temp = (v: unknown) => typeof v === 'number' && Number.isFinite(v) ? v : null
+
+/**
+ * 02/11 (user): the best laps of a session by the historical rules. Qualifying = departure fuel <= 20 L.
+ * Race = the fastest lap of the HIGHEST fuel band the session reached (100+, 80-100, 60-80, 40-60; departure
+ * fuel), even when a lighter band was quicker. 20-40 L counts for neither (as the historical bests).
+ */
+export function sessionKindBests(summary: SummaryLike | null | undefined): SessionKindBests {
+  const grips = summary?.best_by_grip && typeof summary.best_by_grip === 'object' ? Object.values(summary.best_by_grip) as Record<string, unknown>[] : []
+  let race: { ms: number, c: LapRunConditions } | null = null
+  for (const band of BUCKET_ORDER) {
+    for (const g of grips) {
+      const r = (g?.raceBestByFuelBucket as Record<string, Record<string, unknown>> | undefined)?.[band]
+      const ms = num(r?.timeMs)
+      if (ms && (!race || ms < race.ms)) race = { ms, c: { fuelL: num(r?.fuel), tyre: null, airC: temp(r?.airTemp), roadC: temp(r?.roadTemp), grip: gripOf(r?.grip) } }
+    }
+    if (race) break
+  }
+  const qualifyMs = num(summary?.best_qualy_ms)
+  const qualifyGrip = grips.find(g => qualifyMs && num(g?.bestQualy) === qualifyMs)
+  const qc = summary?.best_qualy_conditions
+  const qualifyConditions = qc ? { fuelL: num(qualifyGrip?.bestQualyFuel), tyre: null, airC: temp(qc.airTemp), roadC: temp(qc.roadTemp), grip: gripOf(qc.grip) } : null
+  // Older summaries without the bands: the historical race best (over 40 L).
+  const rc = summary?.best_race_conditions
+  const historicalMs = num(summary?.best_race_ms)
+  const fallback = !race && historicalMs
+    ? { ms: historicalMs, c: rc ? { fuelL: null, tyre: null, airC: temp(rc.airTemp), roadC: temp(rc.roadTemp), grip: gripOf(rc.grip) } : null } : null
+  const raceBest = race ?? fallback
+  return { qualifyMs, raceMs: raceBest?.ms ?? null, qualifyConditions, raceConditions: raceBest?.c ?? null }
+}
+
 /**
  * 02/11 (user, as Track Titan): one row per past session, newest first, with its best qualifying and race lap.
  * The summary gives the times (stint departure fuel; invalid, pit-in and pit-out laps excluded); the row uses the

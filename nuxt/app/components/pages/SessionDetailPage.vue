@@ -80,7 +80,7 @@ import type { SessionDetailLap, SessionDetailStint } from '~/types/sessionDetail
 import SessionDetailPanel from '~/components/session-detail/SessionDetailPanel.vue'
 import SessionAnalysisPanel from '~/components/session-detail/analysis/SessionAnalysisPanel.vue'
 import { analysisSessionToken } from '~/services/telemetry/lapAnalysis'
-import { gripOf, type SessionKindBests } from '~/services/telemetry/lapChoice'
+import { sessionKindBests, type SessionKindBests } from '~/services/telemetry/lapChoice'
 import type { CompareTarget } from '~/composables/useCompareTargets'
 import { useI18n } from '~/i18n'
 import { parseTelemetryDate } from '~/utils/telemetryFormat'
@@ -499,12 +499,7 @@ function readSessionBests(ownerUid: string) {
       for (const s of sessions) {
         const token = analysisSessionToken(s.meta?.sourceSessionId, s.sessionId, s.meta?.date_start)
         const summary = s.summary
-        if (!token || !summary) continue
-        const sessionRace = !!summary.best_session_race_ms
-        const cond = (c: { airTemp: number, roadTemp: number, grip: string } | null | undefined) => c
-          ? { fuelL: null, tyre: null, airC: Number.isFinite(c.airTemp) ? c.airTemp : null, roadC: Number.isFinite(c.roadTemp) ? c.roadTemp : null, grip: gripOf(c.grip) } : null
-        out[token] = { qualifyMs: summary.best_qualy_ms || null, raceMs: (sessionRace ? summary.best_session_race_ms : summary.best_race_ms) || null,
-          qualifyConditions: cond(summary.best_qualy_conditions), raceConditions: cond(sessionRace ? summary.best_session_race_conditions : summary.best_race_conditions) }
+        if (token && summary) out[token] = sessionKindBests(summary)
       }
       return out
     })

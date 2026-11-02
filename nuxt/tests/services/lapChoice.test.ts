@@ -1,7 +1,7 @@
 // PIP-695: the pure part of choosing "Tu" and "Riferimento".
 import { describe, expect, it } from 'vitest'
 import {
-  chooseDefaultReference, choiceBlock, classifyLink, dateBucket, mySessionRows, lapKey, lapStatus, leaderboard, runConditions, lapKind, sameKindFirst, matchesDriver, normalizeSearch,
+  chooseDefaultReference, choiceBlock, classifyLink, dateBucket, mySessionRows, sessionKindBests, lapKey, lapStatus, leaderboard, runConditions, lapKind, sameKindFirst, matchesDriver, normalizeSearch,
   parseSessionLink, pctFaster, sameTrackName, sessionDate, whenParts, type LapChoice, type LapEntryLike,
 } from '~/services/telemetry/lapChoice'
 
@@ -65,6 +65,22 @@ describe('lapChoice: I miei giri', () => {
     expect(rows[1]!.qualify).toBeNull()
     expect(rows[1]!.race).toBeNull()
     expect(rows[1]!.best?.lapNumber).toBe(2)
+  })
+  // 02/11 (user): race best = fastest lap of the highest fuel band reached, even if a lighter band was quicker; 20-40 L never.
+  it('takes the race best from the highest fuel band and the qualifying best with its fuel', () => {
+    const band = (timeMs: number, fuel: number) => ({ timeMs, fuel, airTemp: 15, roadTemp: 18, grip: 'Optimum' })
+    const empty = { '40-60': {}, '60-80': {}, '80-100': {}, '100+': {} }
+    const bests = sessionKindBests({ best_qualy_ms: 102000, best_qualy_conditions: { airTemp: 14, roadTemp: 19, grip: 'Optimum' }, best_race_ms: 103000,
+      best_by_grip: {
+        Optimum: { bestQualy: 102000, bestQualyFuel: 9, raceBestByFuelBucket: { ...empty, '60-80': band(103000, 70), '80-100': band(104500, 85) } },
+        Fast: { bestQualy: null, raceBestByFuelBucket: { ...empty, '80-100': band(104200, 90) } },
+      } })
+    expect(bests.raceMs).toBe(104200)
+    expect(bests.raceConditions?.fuelL).toBe(90)
+    expect(bests.qualifyMs).toBe(102000)
+    expect(bests.qualifyConditions).toMatchObject({ fuelL: 9, airC: 14, grip: 'optimum' })
+    // Only 20-40 L race laps: no race best (best_session_race_ms is not used).
+    expect(sessionKindBests({ best_qualy_ms: null, best_by_grip: { Optimum: { raceBestByFuelBucket: empty } } }).raceMs).toBeNull()
   })
   it('never gives qualifying and race the same lap', () => {
     const t = '20261030_100000'
