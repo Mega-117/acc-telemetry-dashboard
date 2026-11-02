@@ -13,7 +13,9 @@ const props = defineProps<{ choice: LapChoice, selected: boolean, current?: bool
   /** 01/11: the row of the other side swaps the two laps (no "Scambia" button any more). */
   swappable?: boolean,
   /** 02/11 (user, as Track Titan): name, tags and time only; the "why" only when it says something (x% faster). */
-  brief?: boolean }>()
+  brief?: boolean,
+  /** 02/11: "Qualifica" / "Gara" on the best laps of a past session. */
+  kind?: string | null }>()
 const emit = defineEmits<{ select: [choice: LapChoice], confirm: [choice: LapChoice] }>()
 const { t } = useI18n()
 const text = useLapChoiceText()
@@ -46,6 +48,7 @@ function onKey(event: KeyboardEvent) {
       <span v-if="lapLabel" class="choice-row__lap">{{ lapLabel }}</span>
       <span v-if="when" class="choice-row__when">{{ when }}</span>
     </span>
+    <span v-if="kind" class="choice-row__kind">{{ kind }}</span>
     <span v-if="tags.length" class="choice-row__tags"><span v-for="tag in tags" :key="tag">{{ tag }}</span></span>
     <span class="choice-row__badges">
       <!-- valid says nothing; invalid is the red time (the word for screen readers only). -->
@@ -74,6 +77,7 @@ function onKey(event: KeyboardEvent) {
 .choice-row__driver { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .choice-row__lap { color: #d4d4da; white-space: nowrap; }
 .choice-row__when { color: #9a9aa0; font: 500 13px 'Inter', sans-serif; white-space: nowrap; }
+.choice-row__kind { flex: none; padding: 1px 8px; border: 1px solid #ffffff40; color: #fff; font: 700 11px/18px 'Inter', sans-serif; letter-spacing: .04em; text-transform: uppercase; }
 .choice-row__tags { display: flex; gap: 4px; flex: none; span { padding: 1px 6px; border: 1px solid #ffffff24; color: #c8c8cc; font: 600 12px/18px 'Inter', sans-serif; font-variant-numeric: tabular-nums; } }
 .choice-row__badges { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; flex: 1; font: 600 13px 'Inter', sans-serif; color: #9a9aa0; }
 .choice-row__status { font-size: 15px; &.is-incomplete, &.is-unknown { color: #b3b3b8; } }

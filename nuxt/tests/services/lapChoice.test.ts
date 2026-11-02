@@ -58,6 +58,8 @@ describe('lapChoice: I miei giri', () => {
     // Times within 1 ms; the invalid lap 9 is faster but never used.
     expect(oct30.qualify?.lapNumber).toBe(7)
     expect(oct30.race?.lapNumber).toBe(1)
+    // The summary names valid laps only.
+    expect(oct30.race?.status).toBe('valid')
     expect(oct30.laps.filter(l => l.best).map(l => l.lapNumber)).toEqual([7])
     // No summary: only the fastest valid lap.
     expect(rows[1]!.qualify).toBeNull()

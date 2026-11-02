@@ -154,18 +154,21 @@ describe('LapChoiceDialog', () => {
     const old = '20260101_100000'
     const q = lap(1, 100500, { sessionToken: old, key: lapKey('me', old, 1), status: 'unknown' })
     const r = lap(8, 103200, { sessionToken: old, key: lapKey('me', old, 8), status: 'unknown' })
-    const { apply } = openDialog('ref', undefined, { listMine: async () => ({ laps: [q, r], truncated: false }),
-      sessionBests: async () => ({ [old]: { qualifyMs: 100500, raceMs: 103200 } }) })
+    const other = lap(5, 104000, { sessionToken: old, key: lapKey('me', old, 5), status: 'unknown' })
+    const { apply } = openDialog('ref', undefined, { listMine: async () => ({ laps: [q, other, r], truncated: false }),
+      sessionBests: async () => ({ [old]: { qualifyMs: 100500, raceMs: 103200, qualifyConditions: { fuelL: null, tyre: null, airC: 14, roadC: 20, grip: 'optimum' } } }) })
     await wrapper!.setProps({ open: true }); await flushPromises()
     button('I miei giri').click(); await flushPromises()
     expect(dialog()?.textContent).toContain('In evidenza')
     expect(dialog()?.textContent).toContain('Le tue sessioni')
-    const kinds = [...document.body.querySelectorAll<HTMLButtonElement>('.my-session__kind')]
-    expect(kinds.map(k => k.textContent)).toEqual(['Qualifica1:40.500', 'Gara1:43.200'])
-    expect(document.body.querySelector('.my-session__laps')).toBeNull()
-    document.body.querySelector<HTMLButtonElement>('.my-session__head')!.click(); await flushPromises()
-    expect(document.body.querySelectorAll('.my-session__laps .choice-row')).toHaveLength(2)
-    kinds[1]!.click(); await flushPromises()
+    // 02/11 (user): only the best laps of a past session, as rows (lap, date, tags, Qualifica / Gara); no list to open.
+    const past = rows().filter(e => e.querySelector('.choice-row__kind'))
+    expect(past.map(e => e.querySelector('.choice-row__kind')?.textContent)).toEqual(['Qualifica', 'Gara'])
+    expect(past[0]!.querySelector('.choice-row__lap')?.textContent).toBe('Giro 1')
+    expect(past[0]!.querySelector('.choice-row__tags')?.textContent).toContain('AIR 14°')
+    expect(document.body.querySelector('.my-session__head')).toBeNull()
+    expect(rows().some(e => e.dataset.key === lapKey('me', old, 5))).toBe(false)
+    past[1]!.click(); await flushPromises()
     expect(apply).toHaveBeenCalledWith('ref', expect.objectContaining({ key: r.key }))
   })
   it('says why there is no ideal lap when it is the best lap itself (01/11)', async () => {

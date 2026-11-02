@@ -40,7 +40,7 @@ export interface LapEntryLike {
 export interface LapRunConditions { fuelL: number | null, tyre: 'dry' | 'wet' | null, airC: number | null, roadC: number | null, grip: LapGrip | null }
 export type LapGrip = 'green' | 'fast' | 'optimum' | 'greasy' | 'damp' | 'wet' | 'flooded'
 const GRIPS: readonly LapGrip[] = ['green', 'fast', 'optimum', 'greasy', 'damp', 'wet', 'flooded']
-function gripOf(value: unknown): LapGrip | null {
+export function gripOf(value: unknown): LapGrip | null {
   if (typeof value !== 'string') return null
   const word = value.trim().toLowerCase()
   const key = word === 'opt' ? 'optimum' : word === 'flood' ? 'flooded' : word
@@ -123,7 +123,9 @@ export function dateBucket(date: Date | null, now: Date): Exclude<DateBucket, 'c
 }
 
 /** 02/11: the best qualifying (<= 20 L) and race (> 20 L) lap time of a session, from its summary (same rule as the stints). */
-export interface SessionKindBests { qualifyMs: number | null, raceMs: number | null }
+export interface SessionKindBests { qualifyMs: number | null, raceMs: number | null,
+  /** The summary's air, track and grip of those laps (no fuel): the tags of the rows. */
+  qualifyConditions?: LapRunConditions | null, raceConditions?: LapRunConditions | null }
 export interface MySessionRow { token: string, laps: LapChoice[], best: LapChoice | null, qualify: LapChoice | null, race: LapChoice | null }
 
 /**
@@ -150,8 +152,14 @@ export function mySessionRows(laps: LapChoice[], currentToken: string | null, be
     const race = byTime(list, kinds?.raceMs, qualify)
     const best = [fastest, qualify, race].filter((l): l is LapChoice => !!l).sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0] ?? null
     const sorted = [...list].sort((a, b) => (a.lapNumber ?? 0) - (b.lapNumber ?? 0)).map(l => ({ ...l, best: l.key === best?.key }))
-    const marked = (l: LapChoice | null) => l ? sorted.find(s => s.key === l.key) ?? null : null
-    return { token, laps: sorted, best: marked(best), qualify: marked(qualify), race: marked(race) }
+    const marked = (l: LapChoice | null, c?: LapRunConditions | null) => {
+      const found = l ? sorted.find(s => s.key === l.key) ?? null : null
+      if (!found) return null
+      // The summary counts valid laps only: a lap it names is valid even when the file list did not say.
+      const named = found.key === qualify?.key || found.key === race?.key
+      return { ...found, status: named ? 'valid' as const : found.status, conditions: found.conditions ?? c ?? null }
+    }
+    return { token, laps: sorted, best: marked(best), qualify: marked(qualify, kinds?.qualifyConditions), race: marked(race, kinds?.raceConditions) }
   })
 }
 

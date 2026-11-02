@@ -1,13 +1,13 @@
 <script setup lang="ts">
 // PIP-695: "I miei giri" (coach: "Giri di …"). 02/11 (user, as Track Titan): first the all-time best and the ideal
 // lap, then the laps of this session, then one row per past session with its best qualifying (<= 20 L) and race
-// (> 20 L) lap, no date headings. A click on a time uses that lap; the row opens the session's laps.
+// (> 20 L) lap, no date headings. 02/11 (user): only those best laps, as rows like this session's (lap, date, tags,
+// Qualifica / Gara); never the whole list of a past session.
 import { computed, onMounted, ref } from 'vue'
 import LapChoiceRow from './LapChoiceRow.vue'
 import { mySessionRows, type LapChoice, type MySessionRow, type SessionKindBests } from '~/services/telemetry/lapChoice'
 import type { LapChoiceSource } from '~/composables/useLapChoice'
 import { useLapChoiceText } from '~/composables/useLapChoiceText'
-import { formatLapTime } from '~/utils/telemetryFormat'
 import { useI18n } from '~/i18n'
 
 const props = defineProps<{ source: LapChoiceSource, selectedKey: string | null, currentKey: string | null, otherKey: string | null, otherSide: string , /** 01/11: the other side's row swaps the laps. */ canSwap?: boolean }>()
@@ -37,13 +37,6 @@ const top = computed(() => {
   return [best && { ...best, best: false, reason: undefined }, ideal].filter((c): c is LapChoice => !!c)
 })
 const rows = computed(() => mySessionRows(listed.value, currentToken.value, bests.value))
-const open = ref<Set<string>>(new Set())
-function toggle(token: string) {
-  const next = new Set(open.value)
-  if (next.has(token)) next.delete(token); else next.add(token)
-  open.value = next
-}
-
 async function load() {
   state.value = 'loading'
   error.value = ''
@@ -52,9 +45,6 @@ async function load() {
     listed.value = result.laps
     bests.value = kinds
     truncated.value = result.truncated
-    // The session of the lap in use opens by itself.
-    const inUse = result.laps.find(l => l.key === props.currentKey)
-    if (inUse?.sessionToken && inUse.sessionToken !== currentToken.value) open.value = new Set([...open.value, inUse.sessionToken])
     state.value = 'ready'
   } catch (e) {
     error.value = (e as Error)?.message || ''
@@ -62,13 +52,13 @@ async function load() {
   }
 }
 onMounted(() => { void load() })
-const lapCount = (n: number) => n === 1 ? t('telemetry.choice.mine.oneLap') : t('telemetry.choice.mine.laps', { count: n })
 const rowProps = (lap: LapChoice) => ({ choice: lap, selected: lap.key === props.selectedKey, current: lap.key === props.currentKey,
   otherSide: lap.key === props.otherKey ? props.otherSide : null, swappable: !!props.canSwap && lap.key === props.otherKey })
-const kinds = (s: MySessionRow) => s.qualify || s.race
-  ? [s.qualify && { id: 'qualify', label: t('telemetry.choice.mine.qualify'), lap: s.qualify }, s.race && { id: 'race', label: t('telemetry.choice.mine.race'), lap: s.race }].filter(Boolean) as { id: string, label: string, lap: LapChoice }[]
-  : s.best ? [{ id: 'best', label: t('telemetry.choice.mine.best'), lap: s.best }] : []
-const blocked = (lap: LapChoice) => lap.key === props.otherKey && !props.canSwap
+// One row per best lap of each past session: qualifying and race when the summary knows them, else its fastest lap.
+const pastBests = computed(() => rows.value.flatMap((s: MySessionRow) => s.qualify || s.race
+  ? [s.qualify && { key: `${s.token}|q`, kind: t('telemetry.choice.mine.qualify'), lap: s.qualify }, s.race && { key: `${s.token}|r`, kind: t('telemetry.choice.mine.race'), lap: s.race }]
+    .filter((r): r is { key: string, kind: string, lap: LapChoice } => !!r)
+  : s.best ? [{ key: `${s.token}|b`, kind: '', lap: s.best }] : []))
 </script>
 
 <template>
@@ -87,29 +77,15 @@ const blocked = (lap: LapChoice) => lap.key === props.otherKey && !props.canSwap
     </section>
     <section class="my-laps__block">
       <h4>{{ t('telemetry.choice.mine.sessions') }}</h4>
-      <div v-for="s in rows" :key="s.token" class="my-session">
-        <div class="my-session__row">
-          <button type="button" class="my-session__head" :aria-expanded="open.has(s.token)" @click="toggle(s.token)">
-            <span class="my-session__chev" aria-hidden="true">{{ open.has(s.token) ? '▾' : '▸' }}</span>
-            <span>{{ text.when({ sessionToken: s.token }) || s.token }}</span>
-            <span class="my-session__count">{{ lapCount(s.laps.length) }}</span>
-          </button>
-          <button v-for="k in kinds(s)" :key="k.id" type="button" class="my-session__kind"
-            :class="{ 'is-current': k.lap.key === currentKey, 'is-best': k.lap.best }" :aria-disabled="blocked(k.lap) || undefined"
-            :aria-current="k.lap.key === currentKey ? 'true' : undefined" @click="blocked(k.lap) || emit('confirm', k.lap)">
-            <span class="my-session__label">{{ k.label }}</span><span class="my-session__time">{{ formatLapTime(k.lap.lapTimeMs) }}</span>
-          </button>
-        </div>
-        <div v-if="open.has(s.token)" class="choice-list my-session__laps">
-          <LapChoiceRow v-for="lap in s.laps" :key="lap.key" v-bind="rowProps(lap)" hide-when hide-driver @select="emit('select', $event)" @confirm="emit('confirm', $event)" />
-        </div>
+      <div v-if="pastBests.length" class="choice-list">
+        <LapChoiceRow v-for="r in pastBests" :key="r.key" v-bind="rowProps({ ...r.lap, best: false })" :kind="r.kind || null" hide-driver @select="emit('select', $event)" @confirm="emit('confirm', $event)" />
       </div>
       <p v-if="state === 'loading'" class="choice-empty" role="status">{{ t('telemetry.choice.mine.loading') }}</p>
       <p v-else-if="state === 'error'" class="choice-empty" role="alert">
         {{ t('telemetry.choice.mine.error', { message: error }) }}
         <button type="button" class="choice-link" @click="load">{{ t('telemetry.choice.mine.retry') }}</button>
       </p>
-      <p v-else-if="!rows.length" class="choice-empty">{{ t('telemetry.choice.mine.none') }}</p>
+      <p v-else-if="!pastBests.length" class="choice-empty">{{ t('telemetry.choice.mine.none') }}</p>
       <p v-if="truncated" class="choice-empty">{{ t('telemetry.choice.mine.truncated') }}</p>
     </section>
   </div>
@@ -118,19 +94,4 @@ const blocked = (lap: LapChoice) => lap.key === props.otherKey && !props.canSwap
 <style scoped lang="scss">
 .my-laps { display: grid; gap: 18px; }
 .my-laps__block { display: grid; gap: 8px; h4 { margin: 0; color: #fff; font: italic 700 14px 'Racer Display', sans-serif; text-transform: uppercase; } }
-.my-session { display: grid; gap: 6px; }
-.my-session__row { display: flex; align-items: stretch; gap: 6px; }
-.my-session__head { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; min-height: 48px; padding: 10px 16px; border: 1px solid #ffffff14; background: #ffffff05; color: #e6e6ea; font: 700 15px 'Inter', sans-serif; text-align: left; cursor: pointer;
-  &:hover { background: #ffffff10; border-color: #ffffff40; } &:focus-visible { outline: 2px solid #fff; outline-offset: -2px; } }
-.my-session__chev { width: 12px; color: #9a9aa0; }
-.my-session__count { color: #9a9aa0; font: 500 13px 'Inter', sans-serif; }
-.my-session__kind { display: grid; align-content: center; justify-items: end; min-width: 132px; padding: 6px 14px; border: 1px solid #ffffff14; border-left: 3px solid transparent; background: #ffffff05; color: #e6e6ea; cursor: pointer;
-  &:hover { background: #ffffff10; border-color: #ffffff40; } &:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
-  &.is-current { border-left-color: var(--c, #fff); background: color-mix(in srgb, var(--c, #fff) 12%, transparent); }
-  &.is-best .my-session__time { color: #c084fc; }
-  &[aria-disabled='true'] { color: #8a8a90; cursor: default; } }
-.my-session__label { color: #9a9aa0; font: 600 11px 'Inter', sans-serif; letter-spacing: .04em; text-transform: uppercase; }
-.my-session__time { font: italic 700 17px 'Racer Display', sans-serif; font-variant-numeric: tabular-nums; }
-.my-session__laps { padding-left: 18px; }
-@media (max-width: 640px) { .my-session__row { flex-wrap: wrap; } .my-session__head { flex-basis: 100%; } .my-session__kind { flex: 1; } }
 </style>
