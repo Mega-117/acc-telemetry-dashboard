@@ -138,6 +138,9 @@ describe('LapChoiceDialog', () => {
     expect(rows()[0]!.querySelector('.choice-row__lap')).toBeNull()
     expect(rows()[0]!.textContent).not.toContain('Perché questo')
     expect(rows()[1]!.querySelector('.choice-row__reason')?.textContent).toBe('1% più veloce')
+    // Columns as in I miei giri; no fuel known here, so no Best qualifica / gara label.
+    expect(rows().every(r => r.classList.contains('is-aligned'))).toBe(true)
+    expect(rows()[0]!.querySelector('.choice-row__kind')?.classList.contains('is-none')).toBe(true)
     expect(rows()[0]!.textContent).toContain('Scelta attuale')
     expect(rows()[0]!.getAttribute('aria-current')).toBe('true')
     expect(rows()[1]!.hasAttribute('aria-current')).toBe(false)

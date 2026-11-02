@@ -8,7 +8,7 @@ import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 import LapChoiceRow from './LapChoiceRow.vue'
 import LapChoiceMyLaps from './LapChoiceMyLaps.vue'
 import LapChoiceDrivers from './LapChoiceDrivers.vue'
-import { choiceBlock, type LapChoice, type LapSide } from '~/services/telemetry/lapChoice'
+import { choiceBlock, lapKind, type LapChoice, type LapSide } from '~/services/telemetry/lapChoice'
 import type { LapChoiceSource } from '~/composables/useLapChoice'
 import { useLapChoiceText } from '~/composables/useLapChoiceText'
 import { useI18n } from '~/i18n'
@@ -106,6 +106,9 @@ watch(() => props.open, open => {
   }
 }, { immediate: true })
 onBeforeUnmount(() => { opener?.focus?.() })
+// 02/11 (user): a suggested best lap says "Best qualifica" / "Best gara" by its fuel (<= 20 L / > 20 L), as in I miei giri.
+const BEST_REASONS = new Set(['myBest', 'coachBest', 'stepUp', 'fastest', 'nextBest'])
+const bestKind = (c: LapChoice) => c.reason && BEST_REASONS.has(c.reason.kind) ? lapKind(c.conditions?.fuelL) : null
 const rowProps = (c: LapChoice) => ({ choice: c, selected: c.key === selected.value?.key, current: c.key === currentKey.value, otherSide: c.key === otherKey.value ? otherSideName.value : null,
   idealScope: props.idealScope })
 </script>
@@ -132,7 +135,7 @@ const rowProps = (c: LapChoice) => ({ choice: c, selected: c.key === selected.va
             <div class="choice-list">
               <p v-if="!suggested.length" class="choice-empty">{{ t('telemetry.choice.suggested.empty') }}</p>
               <template v-for="c in suggested" :key="c.key">
-                <LapChoiceRow v-bind="rowProps(c)" brief @confirm="confirm" />
+                <LapChoiceRow v-bind="rowProps(c)" :kind="bestKind(c)" brief aligned @confirm="confirm" />
                 <p v-if="c.reason?.kind === 'fastest'" class="choice-empty">{{ t('telemetry.choice.suggested.fastestNote') }}</p>
               </template>
             </div>
