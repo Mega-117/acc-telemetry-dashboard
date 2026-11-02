@@ -183,34 +183,15 @@ function fractionOf(event: PointerEvent | WheelEvent | MouseEvent) {
   const ratio = Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1)
   return props.range[0] + (props.range[1] - props.range[0]) * ratio
 }
-// Garage 61 zoom: drag across a stretch to zoom it, Ctrl + wheel to zoom around the
-// pointer, double click for the whole lap. 20 m is the smallest stretch.
-const dragFrom = ref<number | null>(null)
-const dragTo = ref<number | null>(null)
-const brush = computed(() => dragFrom.value === null || dragTo.value === null ? null
-  : { x: xOf(Math.min(dragFrom.value, dragTo.value)), width: Math.abs(xOf(dragTo.value) - xOf(dragFrom.value)) })
+// Zoom: Ctrl + wheel around the pointer, double click for the whole lap. 20 m is the smallest stretch.
+// 02/11 (user): no drag across a stretch to zoom any more.
 const minSpan = computed(() => 20 / Math.max(props.lap.lengthM, 1))
 function zoomTo(start: number, end: number) {
   const span = Math.max(end - start, minSpan.value)
   const s = Math.min(Math.max(start, 0), 1 - span)
   emit('zoom', s <= 0 && span >= 1 ? null : [Math.max(s, 0), Math.min(s + span, 1)])
 }
-function onMove(event: PointerEvent) {
-  const f = fractionOf(event)
-  if (dragFrom.value !== null) dragTo.value = f
-  emit('hover', f)
-}
-function onDown(event: PointerEvent) {
-  if (!props.zoomable || event.button !== 0) return
-  dragFrom.value = dragTo.value = fractionOf(event)
-  ;(event.currentTarget as SVGElement).setPointerCapture?.(event.pointerId)
-}
-function onUp() {
-  if (dragFrom.value !== null && dragTo.value !== null && Math.abs(dragTo.value - dragFrom.value) > minSpan.value / 2) {
-    zoomTo(Math.min(dragFrom.value, dragTo.value), Math.max(dragFrom.value, dragTo.value))
-  }
-  dragFrom.value = dragTo.value = null
-}
+function onMove(event: PointerEvent) { emit('hover', fractionOf(event)) }
 function onWheel(event: WheelEvent) {
   // Plain wheel scrolls the page; Ctrl + wheel zooms (as Google Maps), never both.
   if (!props.zoomable || !event.ctrlKey) return
@@ -252,7 +233,7 @@ function onDouble() {
         <span v-for="(t, i) in chart.ticks" :key="i" :style="{ top: `${t.y}px` }">{{ t.label }}</span>
       </div>
       <div class="chart-plot" :style="{ height: `${chart.height}px` }">
-        <svg :viewBox="`0 0 ${WIDTH} ${chart.height}`" preserveAspectRatio="none" :style="{ height: `${chart.height}px` }" @pointermove="onMove" @pointerleave="emit('hover', null)" @pointerdown="onDown" @pointerup="onUp" @pointercancel="onUp" @wheel="onWheel" @dblclick="onDouble">
+        <svg :viewBox="`0 0 ${WIDTH} ${chart.height}`" preserveAspectRatio="none" :style="{ height: `${chart.height}px` }" @pointermove="onMove" @pointerleave="emit('hover', null)" @wheel="onWheel" @dblclick="onDouble">
           <rect v-for="b in bands" :key="b.number" :x="b.x" y="0" :width="Math.max(b.width, 1)" :height="chart.height" class="chart-band" />
           <rect v-if="focusBand" :x="focusBand.x" y="0" :width="focusBand.width" :height="chart.height" class="chart-focus" />
           <line v-for="(t, i) in chart.ticks" :key="`g${i}`" x1="0" :x2="WIDTH" :y1="t.y" :y2="t.y" class="chart-grid" />
@@ -271,7 +252,6 @@ function onDouble() {
           </template>
           <polyline v-for="(line, i) in chart.lines" :key="i" :points="line.points" :stroke="line.color" :class="['chart-line', { 'chart-line--ref': line.ref }]" />
           <line v-if="inRange(cursor)" :x1="xOf(cursor!)" :x2="xOf(cursor!)" y1="0" :y2="chart.height" class="chart-cursor" />
-          <rect v-if="brush" :x="brush.x" y="0" :width="brush.width" :height="chart.height" class="chart-brush" />
         </svg>
         <!-- Dots in an overlay without aspect distortion: round whatever the chart width. -->
         <i v-for="(d, i) in dots[index]" :key="i" class="chart-dot" :class="{ ref: d.ref }" :style="{ left: `${d.x / WIDTH * 100}%`, top: `${d.y}px`, '--c': d.color }" />
@@ -297,7 +277,6 @@ svg { display: block; width: 100%; touch-action: none; cursor: crosshair; }
 // The stretch to look at: a warm band with edges, the same on every chart (never the only signal: the bar names it).
 .chart-focus { fill: #fbbf2414; stroke: #fbbf2466; stroke-width: 1; vector-effect: non-scaling-stroke; pointer-events: none; }
 .chart-line { fill: none; stroke-width: 1.8; vector-effect: non-scaling-stroke; stroke-linejoin: round; &--ref { stroke-width: 1.5; } }
-.chart-brush { fill: #ffffff1f; stroke: #ffffff59; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .chart-zero { stroke: #ffffff40; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .chart-cursor { stroke: #fff; stroke-width: 1; vector-effect: non-scaling-stroke; opacity: .55; }
 .chart-grid { stroke: #ffffff14; stroke-width: 1; stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }

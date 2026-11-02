@@ -108,6 +108,12 @@ function glideStep() {
   if (!done) glide = requestAnimationFrame(glideStep)
 }
 watch(lapDot, (point) => {
+  // 02/11 (user): the cursor moved on the charts again after the map was dragged by hand: follow and centre the
+  // dot again (keeping the zoom); not zoomed in, the whole track comes back.
+  if (point && !onMap.value && !follow.value) {
+    follow.value = true
+    if (frameNow.value.span >= W.value * 0.9) view.value = null
+  }
   if (!point || !follow.value || onMap.value || frameNow.value.span >= W.value * 0.9) { glideTarget = null; return }
   glideTarget = point
   if (!glide) glide = requestAnimationFrame(glideStep)
@@ -306,7 +312,8 @@ function onMove(event: PointerEvent) {
     <!-- 01/11: on a zoomed corner no numbers and no times: those around the edge belonged to corners out of sight. -->
     <g v-for="l in zoomed ? [] : labels" :key="l.number" class="map-corner" :class="{ active: selected === l.number }" @click="!dragged && emit('select', l.number)">
       <!-- 01/11: a click area twice the drawn circle (the numbers were hard to hit), invisible. -->
-      <circle :cx="l.point.x" :cy="l.point.y" :r="17 * zoomScale" class="map-corner__hit" />
+      <!-- 02/11: three times the drawn circle, invisible: the numbers are easy to hit. -->
+      <circle :cx="l.point.x" :cy="l.point.y" :r="27 * zoomScale" class="map-corner__hit" />
       <circle :cx="l.point.x" :cy="l.point.y" :r="9 * zoomScale" />
       <text :x="l.point.x" :y="l.point.y + 4 * zoomScale" :font-size="11 * zoomScale">{{ l.number }}</text>
       <text v-if="l.gap" :x="l.gap.x" :y="l.gap.y + 4 * zoomScale" :font-size="11 * zoomScale" class="map-corner__gap" :class="l.gap.loss ? 'loss' : 'gain'">{{ l.gap.text }}</text>
@@ -319,8 +326,8 @@ function onMove(event: PointerEvent) {
 </template>
 
 <style>
-/* While the map is dragged: the closed hand everywhere and no text selection. */
-html.map-grabbing, html.map-grabbing * { cursor: grabbing !important; user-select: none !important; }
+/* While the map is dragged: no text selection (02/11: the normal arrow, no hand). */
+html.map-grabbing, html.map-grabbing * { user-select: none !important; }
 </style>
 
 <style scoped lang="scss">
@@ -328,7 +335,7 @@ html.map-grabbing, html.map-grabbing * { cursor: grabbing !important; user-selec
 .map-zoom { position: absolute; top: 4px; left: 4px; display: grid; gap: 3px; z-index: 1;
   button { width: 24px; height: 24px; border: 1px solid #ffffff2e; background: #0d0d12e6; color: #e6e6ea; font: 700 14px/1 "Inter", sans-serif; cursor: pointer; &:disabled { opacity: .35; cursor: default; } } }
 .map { display: block; width: 100%; height: auto; touch-action: none; user-select: none;
-  &--pan { cursor: grab; } &--dragging { cursor: grabbing; } }
+  &--pan, &--dragging { cursor: default; } }
 // Strokes scale with the zoom (--z), so a zoomed corner keeps thin lines.
 .map-surface { fill: #ffffff0d; stroke: none; }
 .map-edge { fill: none; stroke: #ffffff59; stroke-width: calc(1px * var(--z, 1)); stroke-linejoin: round; }
@@ -340,7 +347,7 @@ html.map-grabbing, html.map-grabbing * { cursor: grabbing !important; user-selec
 .map-lap { stroke-width: calc(3px * var(--z, 1)); stroke-linecap: round; }
 .map-finish-white { stroke: #fff; stroke-width: calc(4px * var(--z, 1)); }
 .map-finish-black { stroke: #000; stroke-width: calc(4px * var(--z, 1)); stroke-dasharray: calc(2px * var(--z, 1)) calc(2px * var(--z, 1)); }
-.map-corner { cursor: pointer;
+.map-corner { cursor: default;
   circle { fill: #0a0a0f; stroke: #ffffff59; stroke-width: calc(1px * var(--z, 1)); }
   .map-corner__hit { fill: transparent; stroke: none; }
   // Readable on the track and the dark background: a dark outline around the digits.
