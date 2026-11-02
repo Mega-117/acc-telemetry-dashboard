@@ -547,7 +547,10 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 
 <style scoped lang="scss">
 // Racer Core language: dark cells, thin borders, red accent, italic display titles.
-.analysis { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.analysis { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; animation: rc-panel-in 200ms ease-out; }
+// 02/11: shown again after Sessione (v-show) the view fades in, as the Sessione view does.
+@keyframes rc-panel-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .analysis { animation: none; } }
 // Sticky: lap pickers and layout stay in sight while the charts scroll under them.
 .analysis-bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 6px 0; background: #0b0b10f2; box-shadow: 0 8px 12px -10px #000;
   &--head { position: static; flex: 1 1 auto; justify-content: flex-end; min-width: 0; padding: 0; background: none; box-shadow: none; } }

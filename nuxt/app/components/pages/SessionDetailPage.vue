@@ -3306,12 +3306,16 @@ const gripZones = computed(() => {
 // PIP-618: in Avanzata the analysis needs the height, the header shrinks to one line.
 // Breathing room under the navbar and before the content; two short lines on the left
 // (track, then date and car), actions and the switch on the right.
-.session-header--compact { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin: 4px 0 16px;
+// 02/11 (option A): the view switch is always first on the left, at the same place in Sessione and Telemetria;
+// the row keeps one height and one spacing in both views (nothing jumps), the rest of it fades in.
+.session-header--compact { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 10px 16px; min-height: 44px; margin: 4px 0 10px;
+  .header-actions { order: -1; } .detail-tabs { order: -1; }
+  .header-id, .header-laps { animation: rc-view-in 200ms ease-out; }
   .header-laps { display: flex; flex: 1 1 560px; min-width: 0; }
   .head-share { display: contents; }
   // 01/11: the lap views keep the title row on one line on a desktop window (1100 px and up).
   // 01/11: tabs, then Condividi, then the two laps aligned right.
-  &.session-header--laps { gap: 10px 16px; margin-bottom: 10px; .header-actions { gap: 8px; order: -1; } .detail-tabs { order: -1; } .header-laps { justify-content: flex-end; } }
+  &.session-header--laps { .header-actions { gap: 8px; } .header-laps { justify-content: flex-end; } }
   @media (min-width: 1100px) { &.session-header--laps { flex-wrap: nowrap; .header-actions { flex-wrap: nowrap; flex-shrink: 0; } } }
   .header-id { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-width: 0; font-size: 14px; }
   .header-row { margin-bottom: 0; } .track-name { font-size: 24px; letter-spacing: 1px; } .header-meta { margin-bottom: 0; align-items: center; gap: 14px; font-size: 14px; }
@@ -3375,7 +3379,10 @@ const gripZones = computed(() => {
 }
 
 // MASTER / DETAIL
-.master-detail { display: grid; grid-template-columns: 380px 1fr; gap: 32px; flex: 1; min-height: 0; align-items: start; }
+.master-detail { display: grid; grid-template-columns: 380px 1fr; gap: 32px; flex: 1; min-height: 0; align-items: start; animation: rc-view-in 200ms ease-out; }
+// 02/11: switching Sessione / Telemetria fades the new view in instead of a hard cut (shown again = played again).
+@keyframes rc-view-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .master-detail, .session-header--compact .header-id, .session-header--compact .header-laps { animation: none; } }
 
 
 // MASTER
