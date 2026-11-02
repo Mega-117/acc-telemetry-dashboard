@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { lapStatus, recordedNumber, sessionDataReferences, stintDataFacts } from '~/services/session-detail/sessionDataPresentation'
+import { lapStatus, recordedNumber, sessionDataReferences, stintDataFacts, stintEndFacts } from '~/services/session-detail/sessionDataPresentation'
 import type { FullSession, LapData, StintData } from '~/types/telemetry'
 
 const lap = (overrides = {}): LapData => ({ lap_number: 1, lap_time_ms: 90000, elapsed_time_ms: 90000, fuel_start: 50, fuel_remaining: 47,
@@ -20,6 +20,21 @@ describe('DATI recorded session facts', () => {
     expect(stintDataFacts(stint)).toMatchObject({consumed:6,perLap:3,lapCount:2,duration:180000})
     expect(stintDataFacts({...stint,laps:[lap({fuel_remaining:60})]}).consumed).toBeNull()
     expect(stintDataFacts(undefined).perLap).toBeNull()
+  })
+  // 02/11 (ACC Drive TELEMETRY): the bottom row is the stint's, whatever lap is selected.
+  it('gives stint start and end temperatures, end-of-stint damage and the stint pressure loss', () => {
+    const tel = (loss: (number | null)[], body: number) => ({ pressure: { high: [0, 0, 0, 0], avg: [0, 0, 0, 0], loss }, damage: { body, suspension: 0 } })
+    const session = { session_info: { start_air_temp: 15, start_road_temp: 18 }, stints: [
+      { stint_number: 1, laps: [lap({ air_temp: 15.5, road_temp: 19, telemetry: tel([0.1, 0, null, 0], 0) }), lap({ air_temp: 16, road_temp: 20, telemetry: tel([0.05, 0.2, null, 0], 3000) })] },
+      { stint_number: 2, laps: [lap({ air_temp: 17, road_temp: 22 }), lap({ air_temp: 16.5, road_temp: 21 })] },
+    ] } as unknown as FullSession
+    const first = stintEndFacts(session, 1)
+    expect(first).toMatchObject({ startAir: 15, startTrack: 18, endAir: 16, endTrack: 20, damageBody: 3000, damageSuspension: 0 })
+    expect(first.pressureLoss[0]).toBeCloseTo(0.15)
+    expect(first.pressureLoss.slice(1)).toEqual([0.2, null, 0])
+    // A later stint starts where the previous one ended.
+    expect(stintEndFacts(session, 2)).toMatchObject({ startAir: 16, startTrack: 20, endAir: 16.5, endTrack: 21, damageBody: null })
+    expect(stintEndFacts(null, 1).pressureLoss).toEqual([null, null, null, null])
   })
   it('distinguishes lost, partial, invalid and outlap records', () => {
     expect(lapStatus(lap({completeness:'missing'}))).toBe('Dati persi')

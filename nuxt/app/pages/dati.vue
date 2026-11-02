@@ -6,7 +6,7 @@ import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { useSessionLoader } from '~/composables/useSessionLoader'
 import { mergeSessionsDeterministic } from '~/services/telemetry/telemetryMergeService'
 import { sessionGame } from '~/services/telemetry/gameIdentity'
-import { sessionDataReferences, stintDataFacts, lapStatus } from '~/services/session-detail/sessionDataPresentation'
+import { sessionDataReferences, stintDataFacts, stintEndFacts, lapStatus } from '~/services/session-detail/sessionDataPresentation'
 import { formatLapTime, formatTrackName, formatCarName, getSessionTypeLabel } from '~/utils/telemetryFormat'
 import { brakeColor, pressureColor, tyreColor, type BrakePad } from '~/utils/temperatureColor'
 import type { FullSession, SectorTelemetry, SessionDocument } from '~/types/telemetry'
@@ -46,6 +46,10 @@ const laps = computed(() => stint.value?.laps ?? [])
 const lap = computed(() => laps.value.find(l => l.lap_number === lapNumber.value))
 const references = computed(() => sessionDataReferences(full.value))
 const facts = computed(() => stintDataFacts(stint.value))
+// 02/11: the bottom row and the stint's pressure loss are stint facts, as ACC Drive (they do not follow the lap).
+const stintEnd = computed(() => stintEndFacts(full.value, stintNumber.value))
+// ACC Drive: hovering Perdita shows the loss of the whole stint (TOTAL LOSS) in the same cell.
+const showStintLoss = ref(false)
 const bestLap = computed(() => references.value.best)
 // Sim racing colours: fuchsia = best of the session, green = best of this stint, white = valid.
 type LapLike = { lap_time_ms?: number, is_valid?: boolean, has_pit_stop?: boolean, pit_out_lap?: boolean }
@@ -98,7 +102,7 @@ function wheelCells(kind: WheelKind, key: WheelKey) {
   const values = (source as Record<string, (number | null)[]> | undefined)?.[key]
   // Always four cells: a missing reading shows "--" on its own and never hides the other wheels.
   return [0, 1, 2, 3].map((wheel) => {
-    const value = values?.[wheel] ?? null
+    const value = kind === 'pressure' && key === 'loss' && showStintLoss.value ? stintEnd.value.pressureLoss[wheel] ?? null : values?.[wheel] ?? null
     if (kind === 'pressure') {
       // The pressure drop in orange (as ACC Drive); max and average against the target window.
       const color = key === 'loss' ? (finite(value) ? '#ffa94d' : null) : pressureColor(value, !!reading?.tyre?.wet)
@@ -139,10 +143,10 @@ function onKey(event: KeyboardEvent) {
   event.preventDefault()
   stepLap(event.key === 'ArrowUp' ? -1 : 1)
 }
-const startAir = computed(() => recordedTemp(full.value?.session_info?.start_air_temp))
-const startTrack = computed(() => recordedTemp(full.value?.session_info?.start_road_temp))
+const startAir = computed(() => stintEnd.value.startAir)
+const startTrack = computed(() => stintEnd.value.startTrack)
 function recordedTemp(value: unknown) { return typeof value === 'number' && Number.isFinite(value) ? value : null }
-/** Change from the start of the session to the selected lap. */
+/** Change from the start of the stint to its end (ACC Drive: stint start vs stint end). */
 function delta(start: number | null, now: unknown) {
   const value = recordedTemp(now)
   return start === null || value === null ? null : value - start
@@ -226,10 +230,13 @@ const time = (value: number | null | undefined) => value && value > 0 ? formatLa
 const number = (value: number | null | undefined, digits = 1) => typeof value === 'number' && Number.isFinite(value) ? value.toFixed(digits) : '--'
 // Damage is the repair time in the pit (ms), as the ACC menu shows it.
 const repair = (value: number | null | undefined) => typeof value !== 'number' ? '--' : value > 0 ? formatLapTime(value) : t('data.none')
+// Damage at the end of the stint (ACC Drive shows the stint's last state, not the selected lap).
 const repairTotal = computed(() => {
-  const d = tel.value?.damage
-  return typeof d?.body === 'number' && typeof d?.suspension === 'number' ? d.body + d.suspension : null
+  const { damageBody: body, damageSuspension: suspension } = stintEnd.value
+  return body !== null && suspension !== null ? body + suspension : null
 })
+// ACC Drive: delta yellow when the temperature went down, red when it went up.
+const deltaClass = (value: number | null) => value === null || value === 0 ? undefined : value < 0 ? 'cooler' : 'warm'
 </script>
 
 
@@ -285,8 +292,12 @@ const repairTotal = computed(() => {
         <div class="tele-grid">
           <section v-for="column in wheelColumns" :key="column.title" class="tele-col">
             <h3 :title="t(column.hint)">{{ t(column.title) }} <small>{{ column.unit }}</small></h3>
-            <div v-for="[label, key, hint] in column.rows" :key="key" class="tele-cell" :title="t(hint)">
-              <span class="tele-label">{{ t(label) }}</span>
+            <div v-for="[label, key, hint] in column.rows" :key="key" class="tele-cell" :class="{ 'is-hover-total': column.kind === 'pressure' && key === 'loss' }"
+              :title="t(column.kind === 'pressure' && key === 'loss' && showStintLoss ? 'data.cell.pressureLossStint' : hint)"
+              :tabindex="column.kind === 'pressure' && key === 'loss' ? 0 : undefined"
+              @mouseenter="column.kind === 'pressure' && key === 'loss' && (showStintLoss = true)" @mouseleave="showStintLoss = false"
+              @focus="column.kind === 'pressure' && key === 'loss' && (showStintLoss = true)" @blur="showStintLoss = false">
+              <span class="tele-label">{{ t(column.kind === 'pressure' && key === 'loss' && showStintLoss ? 'data.cell.lossStint' : label) }}</span>
               <div class="tele-wheels"><b v-for="(cell, i) in wheelCells(column.kind, key)" :key="i" :style="cell.color ? { color: cell.color } : undefined">{{ cell.text }}</b></div>
             </div>
           </section>
@@ -349,8 +360,8 @@ const repairTotal = computed(() => {
           <section class="tele-card">
             <h3>{{ t('data.damage') }}</h3>
             <dl :title="t('data.damageHint')">
-              <div><dt>{{ t('data.bodyCap') }}</dt><dd>{{ repair(tel?.damage?.body) }}</dd></div>
-              <div><dt>{{ t('data.suspensionCap') }}</dt><dd>{{ repair(tel?.damage?.suspension) }}</dd></div>
+              <div><dt>{{ t('data.bodyCap') }}</dt><dd>{{ repair(stintEnd.damageBody) }}</dd></div>
+              <div><dt>{{ t('data.suspensionCap') }}</dt><dd>{{ repair(stintEnd.damageSuspension) }}</dd></div>
               <div><dt>{{ t('data.box.total') }}</dt><dd>{{ repair(repairTotal) }}</dd></div>
             </dl>
           </section>
@@ -358,14 +369,14 @@ const repairTotal = computed(() => {
             <h3>{{ t('sessionDetail.conditions.air') }}</h3>
             <dl>
               <div><dt>{{ t('data.start') }}</dt><dd>{{ number(startAir, 1) }}°</dd></div>
-              <div><dt>{{ t('data.delta') }}</dt><dd :class="{ warm: (delta(startAir, lap?.air_temp) ?? 0) > 0 }">{{ signed(delta(startAir, lap?.air_temp)) }}</dd></div>
+              <div><dt>{{ t('data.delta') }}</dt><dd :class="deltaClass(delta(startAir, stintEnd.endAir))">{{ signed(delta(startAir, stintEnd.endAir)) }}</dd></div>
             </dl>
           </section>
           <section class="tele-card">
             <h3>{{ t('sessions.list.track') }}</h3>
             <dl>
               <div><dt>{{ t('data.start') }}</dt><dd>{{ number(startTrack, 1) }}°</dd></div>
-              <div><dt>{{ t('data.delta') }}</dt><dd :class="{ warm: (delta(startTrack, lap?.road_temp) ?? 0) > 0 }">{{ signed(delta(startTrack, lap?.road_temp)) }}</dd></div>
+              <div><dt>{{ t('data.delta') }}</dt><dd :class="deltaClass(delta(startTrack, stintEnd.endTrack))">{{ signed(delta(startTrack, stintEnd.endTrack)) }}</dd></div>
             </dl>
           </section>
         </div>
@@ -469,7 +480,9 @@ select { @include controls.select; }
   .lap-time { color: #fff; &.invalid { color: #ff5a6e; } }
   .sector-time { color: #e6e6ea; }
   .best, .best-lap { color: #e14bff; }
-  .warm { color: #ff5a6e; } }
+  .warm { color: #ff5a6e; }
+  .cooler { color: #ffd400; } }
+.tele-cell.is-hover-total { cursor: help; &:focus-visible { outline: 2px solid #fff; outline-offset: -2px; } }
 
 @media (max-width: 1100px) {
   .tele-grid, .tele-row--lap, .tele-row--facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }

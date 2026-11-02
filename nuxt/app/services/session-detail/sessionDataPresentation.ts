@@ -33,6 +33,31 @@ export function stintDataFacts(stint: StintData | undefined) {
     first: laps[0], last: laps.at(-1) }
 }
 
+/**
+ * 02/11 (user: the bottom row as ACC Drive TELEMETRY): stint-level facts that do not change with the selected lap.
+ * Air / track: the start of the stint (first stint = session start, later ones = the end of the previous stint)
+ * and the change to the end of the stint (its last lap). Damage: the repair time at the end of the stint.
+ * Pressure loss of the stint: the sum of the laps' losses per wheel (ACC Drive's "TOTAL LOSS" on hover).
+ */
+export function stintEndFacts(session: FullSession | null, stintNumber: number) {
+  const stints = session?.stints ?? []
+  const index = stints.findIndex(s => s.stint_number === stintNumber)
+  const stint = index >= 0 ? stints[index] : undefined
+  const laps = stint?.laps.filter(lap => lap.completeness !== 'missing') ?? []
+  const previous = index > 0 ? stints[index - 1]?.laps.at(-1) : undefined
+  const startAir = index === 0 ? recordedNumber(session?.session_info?.start_air_temp) : recordedNumber(previous?.air_temp) ?? recordedNumber(laps[0]?.air_temp)
+  const startTrack = index === 0 ? recordedNumber(session?.session_info?.start_road_temp) : recordedNumber(previous?.road_temp) ?? recordedNumber(laps[0]?.road_temp)
+  const last = laps.at(-1)
+  const lossLaps = laps.map(lap => lap.telemetry?.pressure?.loss).filter((loss): loss is NonNullable<typeof loss> => Array.isArray(loss))
+  const pressureLoss = [0, 1, 2, 3].map(i => {
+    const values = lossLaps.map(loss => recordedNumber(loss[i]))
+    return values.some(v => v !== null) ? values.reduce<number>((sum, v) => sum + (v ?? 0), 0) : null
+  })
+  const damage = last?.telemetry?.damage
+  return { startAir, startTrack, endAir: recordedNumber(last?.air_temp), endTrack: recordedNumber(last?.road_temp),
+    damageBody: recordedNumber(damage?.body), damageSuspension: recordedNumber(damage?.suspension), pressureLoss }
+}
+
 export function lapStatus(lap: LapData): string {
   const { t } = useI18n()
   if (lap.completeness === 'missing') return t('data.status.lost')
