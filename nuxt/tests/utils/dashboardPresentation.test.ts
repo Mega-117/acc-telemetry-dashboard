@@ -184,29 +184,23 @@ describe('dashboardPresentation', () => {
     })).shiftFlash).toBe(false)
   })
 
-  describe('anticipo del lampeggio (PIP-702)', () => {
+  describe('anticipo del lampeggio (PIP-702, PIP-704: 150 rpm come ACC Drive)', () => {
     const ferrari = (overrides: Partial<FastOverlayState>) =>
       buildDashboardPresentation(state({ context: context('ferrari_296_gt3'), gas: 1, brake: 0, ...overrides })).shiftFlash
 
-    it('lampeggia 0,3 s prima della soglia con i giri che salgono', () => {
-      // 1000 rpm/s: 7300 - 300 = 7000 is the first rpm that flashes.
-      expect(ferrari({ rpm: 7000, rpmRatePerS: 1000 })).toBe(true)
-      expect(ferrari({ rpm: 6999, rpmRatePerS: 1000 })).toBe(false)
-      expect(ferrari({ rpm: 7150, rpmRatePerS: 500 })).toBe(true)
-      expect(ferrari({ rpm: 7149, rpmRatePerS: 500 })).toBe(false)
+    it('lampeggia 150 rpm prima della soglia, qualunque sia la salita dei giri', () => {
+      // Ferrari 296: 7300 - 150 = 7150 is the first rpm that flashes.
+      for (const rpmRatePerS of [null, 0, 500, 1000, 5000]) {
+        expect(ferrari({ rpm: 7150, rpmRatePerS })).toBe(true)
+        expect(ferrari({ rpm: 7149, rpmRatePerS })).toBe(false)
+      }
     })
 
-    it('limita l anticipo a 600 rpm anche con una salita molto rapida', () => {
-      expect(ferrari({ rpm: 6700, rpmRatePerS: 5000 })).toBe(true)
-      expect(ferrari({ rpm: 6699, rpmRatePerS: 5000 })).toBe(false)
-    })
-
-    it('senza salita, senza gas o senza dato resta alla soglia esatta', () => {
+    it('senza gas, con il freno o senza dato resta alla soglia esatta', () => {
       for (const overrides of [
-        { rpmRatePerS: null }, { rpmRatePerS: 0 }, { rpmRatePerS: -800 }, { rpmRatePerS: Number.NaN },
-        { rpmRatePerS: 1000, gas: 0.2 }, { rpmRatePerS: 1000, gas: null },
+        { gas: 0.2 }, { gas: null },
         // Downshift blip: throttle and brake together.
-        { rpmRatePerS: 1000, brake: 0.4 }, { rpmRatePerS: 1000, brake: null },
+        { brake: 0.4 }, { brake: null },
       ] as Array<Partial<FastOverlayState>>) {
         expect(ferrari({ rpm: 7200, ...overrides })).toBe(false)
         expect(ferrari({ rpm: 7300, ...overrides })).toBe(true)

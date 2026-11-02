@@ -16,15 +16,16 @@ export function commonSectorHud(live: CommonLive): SectorHudState | null {
       const index = offset + 1
       const currentMs = value(`sector.${index}.time`)
       const referenceMs = value(`sector.${index}.reference`)
-      // PIP-524: same rules as ACC: compare with the best valid sector,
-      // purple = new best, green = equal, red = slower, invalid lap neutral.
+      // PIP-704: same rules as ACC (resolveSectorDeltaPresentation): purple = at or
+      // under the best (or the first best, delta 0), red = slower, invalid lap white.
       const bestReferenceMs = value(`sector.${index}.best_reference`)
-      const deltaMs = currentMs !== null && bestReferenceMs !== null ? currentMs - bestReferenceMs : null
       const lapValid = commonBoolean(live, showingLast ? 'sector_lap_valid' : 'lap_valid') !== false
+      const deltaMs = currentMs === null ? null
+        : bestReferenceMs !== null ? currentMs - bestReferenceMs : lapValid ? 0 : null
       return { index, state: currentMs !== null ? 'complete' : active === index ? 'running' : 'pending',
         currentMs, referenceMs, bestMs: value(`sector.${index}.best`), bestReferenceMs,
-        deltaMs, color: currentMs === null ? 'grey' : !lapValid ? 'grey' : deltaMs === null ? 'white'
-          : deltaMs < 0 ? 'purple' : deltaMs === 0 ? 'green' : 'red' }
+        deltaMs, color: currentMs === null ? 'grey' : !lapValid ? 'white'
+          : deltaMs !== null && deltaMs > 0 ? 'red' : 'purple' }
     }),
   }
 }

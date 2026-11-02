@@ -66,7 +66,12 @@ const visibleSectors = computed(() => {
   const sectors = props.sectorHud?.sectors ?? idleSectors.value
   return sectors.map((sector) => ({
     ...sector,
-    ...resolveSectorDeltaPresentation(sector, selectedReference.value, props.customSectorTimes?.[sector.index - 1] ?? null),
+    ...resolveSectorDeltaPresentation(
+      sector,
+      selectedReference.value,
+      props.customSectorTimes?.[sector.index - 1] ?? null,
+      props.sectorHud?.lapValid ?? null,
+    ),
   }))
 })
 const comparisonToken = computed(() => sectorDeltaReferenceToken(selectedReference.value))
@@ -148,7 +153,8 @@ function valueText(sector: SectorHudEntry): string {
 
 function deltaText(sector: SectorHudEntry): string {
   if (props.sectorHud?.awaitingFlyingLap) return 'wait'
-  if (sector.state === 'complete') return sector.deltaMs === null ? 'wait' : formatDelta(sector.deltaMs)
+  // A completed sector with no reference (invalid first lap) has nothing to wait for.
+  if (sector.state === 'complete') return sector.deltaMs === null ? '--' : formatDelta(sector.deltaMs)
   return sector.state === 'running' ? 'live' : 'wait'
 }
 

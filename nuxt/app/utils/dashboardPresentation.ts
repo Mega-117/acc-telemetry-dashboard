@@ -250,26 +250,24 @@ function interventionVisible(state: FastOverlayState, active: boolean): boolean 
 }
 
 /**
- * PIP-702: the flash must come before the shift point. Between the logger and the driver's
- * paddle there are ~0.1 s of HUD delivery and ~0.2 s of reaction: a flash at the exact
- * threshold made drivers shift 250-500 rpm late (Ferrari 296: 7300 → 7550-7800).
- * The lead uses the rpm rise of the current gear (measured by the logger over ~0.1 s) and is
- * capped at 600 rpm: a short wheelspin spike can still light it up to 600 rpm early, never more.
- * It applies only on the throttle and off the brake, so a downshift blip never flashes early.
+ * PIP-702 / PIP-704: the flash must come before the shift point, or with ~0.1 s of HUD
+ * delivery and ~0.2 s of reaction drivers shift late (Ferrari 296: 7300 → 7550-7800).
+ * User decision 02/11: align with ACC Drive (RPMDashboardItem.cs), a fixed lead of 150 rpm
+ * below the shift point instead of a time-based lead. It is simple, the same in every gear,
+ * and with the measured 700-1000 rpm/s it is ~0.15-0.2 s early. The early part applies only
+ * on the throttle and off the brake, so a downshift blip never flashes early.
  */
-export const SHIFT_FLASH_LEAD_S = 0.3
-export const SHIFT_FLASH_MAX_LEAD_RPM = 600
+export const SHIFT_FLASH_LEAD_RPM = 150
 export const SHIFT_FLASH_MIN_THROTTLE = 0.5
 export const SHIFT_FLASH_MAX_BRAKE = 0.1
 
 export function shiftFlashDue(
-  rpm: number, threshold: number, rpmRatePerS: number | null, throttle: number | null, brake: number | null,
+  rpm: number, threshold: number, throttle: number | null, brake: number | null,
 ): boolean {
   if (rpm >= threshold) return true
-  if (rpmRatePerS === null || !Number.isFinite(rpmRatePerS) || rpmRatePerS <= 0) return false
   if (throttle === null || !(throttle >= SHIFT_FLASH_MIN_THROTTLE)) return false
   if (brake === null || !(brake <= SHIFT_FLASH_MAX_BRAKE)) return false
-  return rpm + Math.min(rpmRatePerS * SHIFT_FLASH_LEAD_S, SHIFT_FLASH_MAX_LEAD_RPM) >= threshold
+  return rpm >= threshold - SHIFT_FLASH_LEAD_RPM
 }
 
 /**
@@ -354,7 +352,7 @@ export function buildDashboardPresentation(
       && state.isEngineRunning
       && threshold !== null
       && rpmValid
-      && shiftFlashDue(rpm, threshold, state.rpmRatePerS ?? null, state.gas, state.brake),
+      && shiftFlashDue(rpm, threshold, state.gas, state.brake),
     rpmPulse: !spectatorMode && !ignitionUnknown && state.isFresh && (rpmBand === 'off' || rpmBand === 'pit'),
     fuelUrgency,
     fuelCriticalPulse: fuelUrgency === 'critical' && options.fuelCriticalFlashEnabled,

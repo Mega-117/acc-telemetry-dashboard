@@ -19,35 +19,39 @@ export function sectorDeltaReferenceToken(reference: SectorDeltaReference): 'BES
 /**
  * Deriva soltanto delta e colore dal riferimento scelto. Tempi, best persistito
  * e visibilità delle righe restano responsabilità dei rispettivi layer.
+ *
+ * Regole utente del 02/11 (PIP-704), uguali per Compatto e Classico:
+ * - viola = sotto o pari al riferimento; rosso = sopra;
+ * - nessun best ancora (primo giro lanciato) = il settore diventa il best: 0.000 viola;
+ * - giro non valido = tutti i settori bianchi, il delta resta visibile;
+ * - la pit lane non ha un colore suo: conta solo la validita' del giro.
+ * `lapValid` e' la validita' del giro mostrato (in corso o trattenuto a fine giro).
  */
 export function resolveSectorDeltaPresentation(
   sector: SectorHudEntry,
   reference: SectorDeltaReference,
   customReferenceMs: number | null = null,
+  lapValid: boolean | null = null,
 ): SectorDeltaPresentation {
   if (sector.state !== 'complete' || sector.currentMs === null) {
     return { deltaMs: null, color: sector.color }
   }
-  // Pit-lane sectors and invalid laps arrive neutral from the logger: they
-  // keep their time and delta but never a judgement colour (PIP-524).
-  const neutral = sector.color === 'grey'
+  const invalid = lapValid === false
+  const judge = (deltaMs: number): SectorHudColor => (invalid ? 'white' : deltaMs <= 0 ? 'purple' : 'red')
 
   // PIP-697: custom chosen but no time saved for this track and car: compare with the best
   // sector instead of a blank tile with no delta.
   if (reference === 'custom' && customReferenceMs !== null && Number.isFinite(customReferenceMs)) {
     const deltaMs = sector.currentMs - customReferenceMs
-    return { deltaMs, color: neutral ? 'grey' : deltaMs <= 0 ? 'green' : 'red' }
+    return { deltaMs, color: judge(deltaMs) }
   }
 
   const bestReferenceMs = sector.bestReferenceMs
   if (bestReferenceMs == null || !Number.isFinite(bestReferenceMs)) {
-    return { deltaMs: null, color: 'white' }
+    // Primo best: delta 0.000. Su un giro non valido non diventa riferimento: niente delta.
+    return invalid ? { deltaMs: null, color: 'white' } : { deltaMs: 0, color: 'purple' }
   }
 
   const deltaMs = sector.currentMs - bestReferenceMs
-  if (neutral) return { deltaMs, color: 'grey' }
-  if (sector.currentMs < bestReferenceMs) {
-    return { deltaMs, color: 'purple' }
-  }
-  return { deltaMs, color: deltaMs <= 0 ? 'green' : 'red' }
+  return { deltaMs, color: judge(deltaMs) }
 }

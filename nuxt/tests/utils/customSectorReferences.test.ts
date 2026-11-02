@@ -38,15 +38,17 @@ describe('custom sector references', () => {
   expect(resolveCustomSectorTimes(map,{track:'imola',car:'audi'})).toBeNull()
  })
  it.each([[149,'+0.1'],[150,'+0.2'],[-150,'−0.2'],[-49,'+0.0'],[0,'+0.0']])('rounds %s symmetrically to a tenth', (ms,text) => expect(formatCustomSectorDelta(Number(ms))).toBe(text))
- it('compares each completed sector independently; no purple or invented reference', () => {
+ it('compares each completed sector independently against the custom time', () => {
   const sector={state:'complete',currentMs:27050,deltaMs:-10,color:'purple'} as SectorHudEntry
   expect(resolveSectorDeltaPresentation(sector,'custom',27000)).toEqual({deltaMs:50,color:'red'})
-  expect(resolveSectorDeltaPresentation(sector,'custom',27100)).toEqual({deltaMs:-50,color:'green'})
-  expect(resolveSectorDeltaPresentation(sector,'custom')).toEqual({deltaMs:null,color:'white'})
+  // PIP-704: purple at or under the reference, red above, for custom too.
+  expect(resolveSectorDeltaPresentation(sector,'custom',27100)).toEqual({deltaMs:-50,color:'purple'})
+  // No custom time and no best yet: the first flying lap rule (0.000 purple).
+  expect(resolveSectorDeltaPresentation(sector,'custom')).toEqual({deltaMs:0,color:'purple'})
   // PIP-697: no custom time for this track/car -> the best sector instead of a blank tile.
   expect(resolveSectorDeltaPresentation({...sector,bestReferenceMs:27000},'custom',null)).toEqual({deltaMs:50,color:'red'})
   expect(resolveSectorDeltaPresentation({...sector,state:'running'},'custom',27100).deltaMs).toBeNull()
-  // PIP-524: a saved previous-lap reference reads as best (no best here -> wait).
-  expect(resolveSectorDeltaPresentation(sector,'previousLap')).toEqual({deltaMs:null,color:'white'})
+  // PIP-524: a saved previous-lap reference reads as best.
+  expect(resolveSectorDeltaPresentation({...sector,bestReferenceMs:27000},'previousLap')).toEqual({deltaMs:50,color:'red'})
  })
 })

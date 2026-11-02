@@ -175,13 +175,14 @@ describe('SectorDeltaHud', () => {
     expect(html).toMatch(VS_BEST)
   })
 
-  it('mostra wait senza fallback quando manca il best selezionato', async () => {
+  it('PIP-704: primo giro lanciato senza best = +0.000 viola su ogni settore', async () => {
     const missingBest = { ...sectorHud, sectors: sectorHud.sectors.map(item => ({ ...item, bestReferenceMs: null })) }
     const html = await renderToString(createSSRApp({
       render: () => h(SectorDeltaHud, { sectorHud: missingBest, deltaReference: 'bestSector' }),
     }))
 
-    expect(html).toContain('>wait</small>')
+    expect((html.match(/>\+0\.000<\/small>/g) || []).length).toBe(3)
+    expect((html.match(/sector-delta--purple/g) || []).length).toBe(3)
     expect(html).not.toContain('-0.200</small>')
   })
 
@@ -391,7 +392,7 @@ describe('SectorDeltaHud', () => {
     expect(html).not.toContain('00:12.345')
   })
 
-  it('colora di rosso il cronometro compatto quando il giro è invalido e conserva Wait senza fallback', async () => {
+  it('PIP-704: giro non valido senza best: cronometro rosso, settori bianchi senza delta', async () => {
     const invalidHud: SectorHudState = {
       ...sectorHud,
       lapValid: false,
@@ -406,8 +407,19 @@ describe('SectorDeltaHud', () => {
     }))
 
     expect(html).toContain('sector-compact__lap--invalid')
-    expect((html.match(/>wait<\/small>/g) || []).length).toBe(3)
+    expect(html).not.toContain('>wait</small>')
+    expect(html).not.toMatch(/sector-delta--(purple|red|green|grey)/)
     expect(html).not.toContain('-0.200</small>')
+  })
+
+  it('PIP-704: giro non valido con best: tutti e tre bianchi, delta visibile', async () => {
+    const invalidHud: SectorHudState = { ...sectorHud, lapValid: false }
+    const html = await renderToString(createSSRApp({
+      render: () => h(SectorDeltaHud, { sectorHud: invalidHud, variant: 'compact', deltaReference: 'bestSector' }),
+    }))
+
+    expect(html).not.toMatch(/sector-delta--(purple|red|green|grey)/)
+    expect(html).toContain('+0.300')
   })
   it('mostra l esito Target sul bordo senza cambiare il colore di validita', async () => {
     const inside = await renderHud({
