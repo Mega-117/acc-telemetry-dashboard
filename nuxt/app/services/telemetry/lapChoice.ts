@@ -47,7 +47,7 @@ export function gripOf(value: unknown): LapGrip | null {
   return (GRIPS as readonly string[]).includes(key) ? key as LapGrip : null
 }
 /** This session's row of the lap (the table): fills what the lap file does not carry. */
-export interface LapSessionRow { air_temp?: number | null, road_temp?: number | null, track_grip_status?: string | null }
+export interface LapSessionRow { air_temp?: number | null, road_temp?: number | null, track_grip_status?: string | null, stint_fuel?: number | null }
 
 /** The conditions of a lap trace (and its session row), or null when nothing is known. */
 export function runConditions(trace: { fuelL: number | null, tyreCompound?: 'dry' | 'wet' | null, conditions: { airC: number | null, roadC: number | null, grip?: string | null } | null } | null | undefined,
@@ -79,6 +79,8 @@ export interface LapChoice {
   note?: string
   /** 01/11: known only for laps whose file is already loaded (cards and session rows). */
   conditions?: LapRunConditions | null
+  /** 02/11: the departure fuel of the lap's stint, for laps of the shown session. */
+  stintFuelL?: number | null
 }
 
 /** 02/11: a library lap (the Worker keeps one best qualifying and one best race lap per driver). */

@@ -59,6 +59,8 @@ const rowProps = (lap: LapChoice) => ({ choice: lap, selected: lap.key === props
 // that session's best qualifying / race lap when its summary names it (same rules as Le tue sessioni); the
 // all-time best of another session takes the label of its row there, else of its departure fuel.
 function kindOf(lap: LapChoice): 'qualify' | 'race' | null {
+  // A lap of the shown session: the kind of its stint (departure fuel, 20 L), whatever the lap.
+  if (typeof lap.stintFuelL === 'number') return lap.stintFuelL <= 20 ? 'qualify' : 'race'
   const token = lap.sessionToken
   const kinds = token ? bests.value[token] : undefined
   const near = (ms: number | null | undefined) => !!ms && Math.abs(lap.lapTimeMs - ms) <= 1

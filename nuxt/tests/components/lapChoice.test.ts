@@ -166,7 +166,7 @@ describe('LapChoiceDialog', () => {
     expect(dialog()?.textContent).toContain('Le tue sessioni')
     // 02/11 (user): only the best laps of a past session, as rows (lap, date, tags, Qualifica / Gara); no list to open.
     const past = rows().filter(e => e.querySelector('.choice-row__kind:not(.is-none)'))
-    expect(past.map(e => e.querySelector('.choice-row__kind')?.textContent)).toEqual(['Best qualifica', 'Best gara'])
+    expect(past.map(e => e.querySelector('.choice-row__kind')?.textContent)).toEqual(['Stint qualifica', 'Stint gara'])
     expect(past[0]!.querySelector('.choice-row__kind')?.classList.contains('is-qualify')).toBe(true)
     expect(past[0]!.querySelector('.choice-row__lap')?.textContent).toBe('Giro 1')
     expect(past[0]!.querySelector('.choice-row__tags')?.textContent).toContain('AIR 14°')
@@ -181,8 +181,15 @@ describe('LapChoiceDialog', () => {
     await wrapper!.setProps({ open: true }); await flushPromises()
     button('I miei giri').click(); await flushPromises()
     const kindOfLap = (n: number) => rows().find(r => r.dataset.key === lapKey('me', today, n))?.querySelector('.choice-row__kind:not(.is-none)')?.textContent ?? null
-    expect(kindOfLap(5)).toBe('Best qualifica')
+    expect(kindOfLap(5)).toBe('Stint qualifica')
     expect(kindOfLap(1)).toBeNull()
+    await wrapper!.setProps({ open: false }); wrapper!.unmount(); document.body.innerHTML = ''
+    // With the stint's departure fuel known, every lap of the session says its stint (an invalid one too).
+    openDialog('ref', undefined, { sessionLaps: () => [lap(1, 102000, { status: 'invalid', stintFuelL: 118 }), lap(2, 101500, { stintFuelL: 9 }), you, ref] })
+    await wrapper!.setProps({ open: true }); await flushPromises()
+    button('I miei giri').click(); await flushPromises()
+    expect(kindOfLap(1)).toBe('Stint gara')
+    expect(kindOfLap(2)).toBe('Stint qualifica')
   })
   it('says why there is no ideal lap when it is the best lap itself (01/11)', async () => {
     openDialog('ref', undefined, { idealSame: () => true })
@@ -269,7 +276,7 @@ describe('LapChoiceDrivers (Altri piloti)', () => {
     await wrapper!.setProps({ open: true }); await flushPromises()
     button('Altri piloti').click(); await flushPromises()
     expect(loadDriverNames).toHaveBeenCalled()
-    expect(rows().map(r => r.querySelector('.choice-row__kind')?.textContent)).toEqual(['Best qualifica', 'Best gara', 'Best qualifica'])
+    expect(rows().map(r => r.querySelector('.choice-row__kind')?.textContent)).toEqual(['Stint qualifica', 'Stint gara', 'Stint qualifica'])
     expect(rows()[0]!.querySelector('.choice-row__tags')?.textContent).toContain('9 L')
     const search = document.body.querySelector<HTMLInputElement>('.drivers__search input')!
     search.value = 'jero'; search.dispatchEvent(new Event('input')); await flushPromises()

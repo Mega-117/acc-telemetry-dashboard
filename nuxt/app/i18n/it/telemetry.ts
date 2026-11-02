@@ -231,6 +231,7 @@ export default {
         fastestNote: 'Solo come ultima scelta: può essere molto più veloce di te.',
         idealSame: 'Giro ideale: è il tuo giro migliore, già il più veloce in tutti e tre i settori.',
       },
+      kind: { qualify: 'Stint qualifica', race: 'Stint gara' },
       mine: {
         top: 'In evidenza',
         sessions: 'Le tue sessioni',

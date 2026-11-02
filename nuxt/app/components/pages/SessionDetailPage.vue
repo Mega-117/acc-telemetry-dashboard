@@ -80,6 +80,7 @@ import type { SessionDetailLap, SessionDetailStint } from '~/types/sessionDetail
 import SessionDetailPanel from '~/components/session-detail/SessionDetailPanel.vue'
 import SessionAnalysisPanel from '~/components/session-detail/analysis/SessionAnalysisPanel.vue'
 import { analysisSessionToken } from '~/services/telemetry/lapAnalysis'
+import { stintDepartureFuel } from '~/services/telemetry/raceFuelClassification'
 import { sessionKindBests, type SessionKindBests } from '~/services/telemetry/lapChoice'
 import type { CompareTarget } from '~/composables/useCompareTargets'
 import { useI18n } from '~/i18n'
@@ -251,8 +252,9 @@ const analysisToken = computed(() => analysisSessionToken(
   props.sessionId,
   originalSession.value?.session_info?.date_start ?? fullSession.value?.session_info?.date_start,
 ))
-const analysisLaps = computed(() => (fullSession.value?.stints ?? []).flatMap(stint => stint.laps ?? [])
-  .map(lap => ({ lap_number: lap.lap_number, lap_time_ms: lap.lap_time_ms ?? null, is_valid: lap.is_valid ?? null, sector_times_ms: lap.sectors_reliable ? lap.sector_times_ms ?? null : null,
+// 02/11: each lap knows its stint's departure fuel (PIP-649 rule): "Stint qualifica" / "Stint gara" in Cambia.
+const analysisLaps = computed(() => (fullSession.value?.stints ?? []).flatMap(stint => (stint.laps ?? []).map(lap => ({ lap, stintFuel: stintDepartureFuel(stint) })))
+  .map(({ lap, stintFuel }) => ({ stint_fuel: stintFuel, lap_number: lap.lap_number, lap_time_ms: lap.lap_time_ms ?? null, is_valid: lap.is_valid ?? null, sector_times_ms: lap.sectors_reliable ? lap.sector_times_ms ?? null : null,
     air_temp: lap.air_temp ?? null, road_temp: lap.road_temp ?? null, track_grip_status: lap.track_grip_status ?? null })))
 // PIP-632: traccia d'uso nel diario quando si apre la Telemetria (solo il numero di giri).
 watch(detailTab, (tab, before) => { if (tab !== 'sessione' && before === 'sessione' && !isEvoSession.value) noteFeatureUse({ event: 'telemetry.opened', laps: analysisLaps.value.length }) })

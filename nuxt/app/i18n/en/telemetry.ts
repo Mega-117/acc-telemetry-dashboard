@@ -231,6 +231,7 @@ export default {
         fastestNote: 'Only as a last choice: it can be much faster than you.',
         idealSame: 'Ideal lap: it is your best lap, already the fastest in all three sectors.',
       },
+      kind: { qualify: 'Qualifying stint', race: 'Race stint' },
       mine: {
         top: 'Highlights',
         sessions: 'Your sessions',

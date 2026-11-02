@@ -94,7 +94,7 @@ export function useLapChoice(o: {
       lapNumber: e.lapNumber > 0 ? e.lapNumber : null, lapTimeMs: e.lapTimeMs, sessionToken: e.sessionToken || null, recordedAt: e.recordedAt ?? null,
       sessionType: e.sessionToken && e.sessionToken === o.sessionToken() ? o.sessionType() : null,
       status: e.validUnknown ? lapStatus(null, e.complete) : lapStatus(e.valid, e.complete), ideal: e.origin === 'ideal', note: e.note, reason,
-      conditions: e.origin === 'ideal' ? null : runConditions(o.traces.value[e.id], o.sessionRow?.(e)) }
+      conditions: e.origin === 'ideal' ? null : runConditions(o.traces.value[e.id], o.sessionRow?.(e)), stintFuelL: o.sessionRow?.(e)?.stint_fuel ?? null }
   }
   const byId = (id: string) => o.entries.value.find(e => e.id === id) ?? null
   const lapEntry = computed(() => byId(o.lapId.value))

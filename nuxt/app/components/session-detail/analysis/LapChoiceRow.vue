@@ -21,7 +21,8 @@ const { t } = useI18n()
 const text = useLapChoiceText()
 const status = computed(() => text.status(props.choice.status))
 const tags = computed(() => props.aligned ? text.conditionSlots(props.choice.conditions) : text.conditionsShort(props.choice.conditions))
-const kindText = computed(() => props.kind ? t(`stats.best.${props.kind === 'qualify' ? 'qualy' : 'race'}`) : '')
+// 02/11 (user): "Stint qualifica" / "Stint gara" (yellow / red).
+const kindText = computed(() => props.kind ? t(`telemetry.choice.kind.${props.kind}`) : '')
 const lapLabel = computed(() => props.choice.ideal ? t('telemetry.choice.idealShort') : props.choice.lapNumber && !props.brief ? t('sessionDetail.chart.lap', { lap: props.choice.lapNumber }) : '')
 const when = computed(() => props.choice.ideal || props.hideWhen || props.brief ? '' : text.when(props.choice))
 const reasonText = computed(() => {
