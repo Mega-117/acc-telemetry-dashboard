@@ -26,6 +26,7 @@ function source(extra: Partial<LapChoiceSource> = {}): LapChoiceSource {
     suggested: () => [{ ...ref, reason: { kind: 'myBest' } }, step],
     sessionLaps: () => [lap(1, 102000, { status: 'invalid' }), lap(2, 0, { status: 'incomplete' }), you, ref],
     listMine: async () => ({ laps: [lap(1, 100500, { sessionToken: '20260101_100000', key: lapKey('me', '20260101_100000', 1), status: 'unknown' })], truncated: false }),
+    sessionBests: async () => ({}),
     drivers: () => [], driversState: () => 'ready', loadDriverNames: async () => {}, listDriverLaps: async () => [], resolveLink: async () => null,
     ...extra,
   }
@@ -129,8 +130,14 @@ describe('LapChoiceDialog', () => {
     expect(dialog()?.getAttribute('aria-modal')).toBe('true')
     expect(dialog()?.textContent).toContain('Cambia il riferimento')
     expect(document.body.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe('Suggeriti')
-    expect(button('Usa un link')).toBeTruthy()
+    // 02/11 (user, as Track Titan): three tabs, the link inside Altri piloti, no "Nessun riferimento".
+    expect([...document.body.querySelectorAll('[role="tab"]')].map(e => e.textContent)).toEqual(['Suggeriti', 'I miei giri', 'Altri piloti'])
+    expect(document.body.querySelector('.choice-none')).toBeNull()
     expect(rows()).toHaveLength(2)
+    // Name, tags and time: no lap number, no date; the "why" only when it says something.
+    expect(rows()[0]!.querySelector('.choice-row__lap')).toBeNull()
+    expect(rows()[0]!.textContent).not.toContain('Perché questo')
+    expect(rows()[1]!.querySelector('.choice-row__reason')?.textContent).toBe('1% più veloce')
     expect(rows()[0]!.textContent).toContain('Scelta attuale')
     expect(rows()[0]!.getAttribute('aria-current')).toBe('true')
     expect(rows()[1]!.hasAttribute('aria-current')).toBe(false)
@@ -140,6 +147,26 @@ describe('LapChoiceDialog', () => {
     rows()[1]!.click(); await flushPromises()
     expect(apply).toHaveBeenCalledWith('ref', expect.objectContaining({ key: 'library:x' }))
     expect(wrapper!.emitted('close')).toHaveLength(1)
+  })
+  // 02/11 (user, as Track Titan): I miei giri = the best laps, this session, then one row per past session with its
+  // best qualifying and race lap (session summaries); a click on a time uses that lap, the row opens its laps.
+  it('I miei giri lists past sessions with their qualifying and race lap', async () => {
+    const old = '20260101_100000'
+    const q = lap(1, 100500, { sessionToken: old, key: lapKey('me', old, 1), status: 'unknown' })
+    const r = lap(8, 103200, { sessionToken: old, key: lapKey('me', old, 8), status: 'unknown' })
+    const { apply } = openDialog('ref', undefined, { listMine: async () => ({ laps: [q, r], truncated: false }),
+      sessionBests: async () => ({ [old]: { qualifyMs: 100500, raceMs: 103200 } }) })
+    await wrapper!.setProps({ open: true }); await flushPromises()
+    button('I miei giri').click(); await flushPromises()
+    expect(dialog()?.textContent).toContain('In evidenza')
+    expect(dialog()?.textContent).toContain('Le tue sessioni')
+    const kinds = [...document.body.querySelectorAll<HTMLButtonElement>('.my-session__kind')]
+    expect(kinds.map(k => k.textContent)).toEqual(['Qualifica1:40.500', 'Gara1:43.200'])
+    expect(document.body.querySelector('.my-session__laps')).toBeNull()
+    document.body.querySelector<HTMLButtonElement>('.my-session__head')!.click(); await flushPromises()
+    expect(document.body.querySelectorAll('.my-session__laps .choice-row')).toHaveLength(2)
+    kinds[1]!.click(); await flushPromises()
+    expect(apply).toHaveBeenCalledWith('ref', expect.objectContaining({ key: r.key }))
   })
   it('says why there is no ideal lap when it is the best lap itself (01/11)', async () => {
     openDialog('ref', undefined, { idealSame: () => true })
@@ -198,7 +225,8 @@ describe('LapChoiceDialog', () => {
     const shared: LapChoice = { ...step, key: 'shared:z', reason: { kind: 'link', driver: 'Mike83' }, driver: 'Mike83' }
     openDialog('ref', undefined, { resolveLink: async () => ({ state: 'lap', choice: shared }) })
     await wrapper!.setProps({ open: true }); await flushPromises()
-    button('Usa un link').click(); await flushPromises()
+    button('Altri piloti').click(); await flushPromises()
+    button('Hai un link condiviso?').click(); await flushPromises()
     const input = document.body.querySelector<HTMLInputElement>('.link-choice input')!
     input.value = `https://app.racercore.app/giro#${'a'.repeat(32)}.${'b'.repeat(32)}`; input.dispatchEvent(new Event('input'))
     await flushPromises()
@@ -264,7 +292,8 @@ describe('LapChoiceDialog: session link and keyboard', () => {
     const a = lap(1, 99500, { key: 'u2|s|1', ownerUid: 'u2', mine: false }), b = lap(2, 99000, { key: 'u2|s|2', ownerUid: 'u2', mine: false, status: 'invalid' })
     openDialog('ref', undefined, { resolveLink: async () => ({ state: 'session', choices: [a, b], proposedKey: a.key, driver: 'RICO117', sessionToken: 's' }) })
     await wrapper!.setProps({ open: true }); await flushPromises()
-    button('Usa un link').click(); await flushPromises()
+    button('Altri piloti').click(); await flushPromises()
+    button('Hai un link condiviso?').click(); await flushPromises()
     const input = document.body.querySelector<HTMLInputElement>('.link-choice input')!
     input.value = 'https://x/sessioni/abc?userId=u2'; input.dispatchEvent(new Event('input')); await flushPromises()
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); await flushPromises()

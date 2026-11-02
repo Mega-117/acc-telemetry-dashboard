@@ -197,6 +197,7 @@ export default {
         coachBest: 'il tuo giro più veloce qui',
         picked: 'giro scelto da te',
         link: 'dal link di {driver}',
+        fasterShort: '{pct}% più veloce',
         compare: 'il più veloce di: {label}',
       },
       dialog: {
@@ -223,7 +224,6 @@ export default {
         incomplete: 'Questo giro è incompleto: copre solo una parte della pista e non si può confrontare.',
         pickFirst: 'Seleziona un giro dall’elenco.',
         hint: 'Doppio clic o Invio per usarlo subito.',
-        wholeSession: 'Confronta con un’intera sessione…',
         panelNote: 'Prova: scelta nel pannello laterale (solo sviluppo).',
       },
       suggested: {
@@ -232,6 +232,11 @@ export default {
         idealSame: 'Giro ideale: è il tuo giro migliore, già il più veloce in tutti e tre i settori.',
       },
       mine: {
+        top: 'In evidenza',
+        sessions: 'Le tue sessioni',
+        qualify: 'Qualifica',
+        race: 'Gara',
+        best: 'Migliore',
         current: 'Questa sessione',
         today: 'Oggi',
         yesterday: 'Ieri',
@@ -249,6 +254,8 @@ export default {
         truncated: 'Ci sono altri giri più vecchi che qui non compaiono.',
       },
       drivers: {
+        hasLink: 'Hai un link condiviso?',
+        hideLink: 'Chiudi il link',
         search: 'Cerca un pilota per nickname',
         searchHint: 'Basta una parte del nome; maiuscole e accenti non contano.',
         order: 'Classifica: il giro migliore di ogni pilota su questa pista con questa auto',

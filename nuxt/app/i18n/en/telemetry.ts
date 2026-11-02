@@ -197,6 +197,7 @@ export default {
         coachBest: 'your fastest lap here',
         picked: 'lap chosen by you',
         link: 'from the link of {driver}',
+        fasterShort: '{pct}% faster',
         compare: 'the fastest of: {label}',
       },
       dialog: {
@@ -223,7 +224,6 @@ export default {
         incomplete: 'This lap is incomplete: it covers only part of the track and cannot be compared.',
         pickFirst: 'Select a lap in the list.',
         hint: 'Double click or Enter to use it at once.',
-        wholeSession: 'Compare with a whole session…',
         panelNote: 'Test: choice in the side panel (development only).',
       },
       suggested: {
@@ -232,6 +232,11 @@ export default {
         idealSame: 'Ideal lap: it is your best lap, already the fastest in all three sectors.',
       },
       mine: {
+        top: 'Highlights',
+        sessions: 'Your sessions',
+        qualify: 'Qualifying',
+        race: 'Race',
+        best: 'Best',
         current: 'This session',
         today: 'Today',
         yesterday: 'Yesterday',
@@ -249,6 +254,8 @@ export default {
         truncated: 'There are older laps that do not appear here.',
       },
       drivers: {
+        hasLink: 'Got a shared link?',
+        hideLink: 'Close the link',
         search: 'Search a driver by nickname',
         searchHint: 'Part of the name is enough; case and accents do not matter.',
         order: 'Leaderboard: the best lap of each driver on this track with this car',

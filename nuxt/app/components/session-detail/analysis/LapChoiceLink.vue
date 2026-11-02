@@ -8,7 +8,7 @@ import type { LapChoiceSource, LinkResult } from '~/composables/useLapChoice'
 import { useI18n } from '~/i18n'
 
 const props = defineProps<{ source: LapChoiceSource, selectedKey: string | null, currentKey: string | null, otherKey: string | null, otherSide: string }>()
-const emit = defineEmits<{ select: [choice: LapChoice | null], confirm: [choice: LapChoice], wholeSession: [] }>()
+const emit = defineEmits<{ select: [choice: LapChoice | null], confirm: [choice: LapChoice] }>()
 const { t } = useI18n()
 const id = useId()
 
@@ -66,7 +66,6 @@ async function check() {
         </div>
       </template>
     </template>
-    <button type="button" class="choice-link" @click="emit('wholeSession')">{{ t('telemetry.choice.dialog.wholeSession') }}</button>
   </div>
 </template>
 

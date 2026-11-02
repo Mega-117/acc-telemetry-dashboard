@@ -10,6 +10,7 @@ import { loadPublicNickname } from '~/repositories/publicProfileRepository'
 import {
   chooseDefaultReference, classifyLink, IDEAL_KEY, lapKey, lapKind, lapStatus, leaderboard, parseSessionLink, pctFaster, runConditions, type LapSessionRow, sameTrackName,
   type DriverRow, type LapChoice, type LapSide, type RefReason,
+  type SessionKindBests,
 } from '~/services/telemetry/lapChoice'
 import { carMismatchNote, type Entry, type useReferenceLibrary } from './useReferenceLibrary'
 import { sharedLapEntry } from './useCompareTargets'
@@ -31,6 +32,8 @@ export interface LapChoiceSource {
   idealSame?: () => boolean
   sessionLaps: () => LapChoice[]
   listMine: () => Promise<{ laps: LapChoice[], truncated: boolean }>
+  /** 02/11: best qualifying / race time of each past session (session summaries); {} when unknown. */
+  sessionBests: () => Promise<Record<string, SessionKindBests>>
   drivers: () => DriverRow[]
   driversState: () => LoadState
   loadDriverNames: () => Promise<void>
@@ -59,6 +62,8 @@ export function useLapChoice(o: {
   /** 01/11: this session's table row of a lap (grip and weather the lap file does not carry). */
   sessionRow?: (e: Entry) => LapSessionRow | undefined
   readSession?: (sessionId: string, userId: string) => Promise<{ sessionToken: string | null, track: string } | null>
+  /** 02/11: the page reads the session summaries of the shown driver (best qualifying / race per session). */
+  readSessionBests?: (ownerUid: string) => Promise<Record<string, SessionKindBests>>
 }) {
   const { t } = useI18n()
   const subjectUid = () => o.pilotUid() ?? o.myUid()
@@ -320,7 +325,8 @@ export function useLapChoice(o: {
   const source: LapChoiceSource = {
     subjectName: () => o.pilotUid() ? nick(o.pilotUid()) ?? t('sessions.picker.driver') : null,
     currentKey: side => (side === 'you' ? youCard.value : refCard.value)?.key ?? null,
-    suggested, idealSame: () => o.library.idealSameAsBest.value, sessionLaps, listMine, drivers, driversState, loadDriverNames, listDriverLaps, resolveLink,
+    suggested, idealSame: () => o.library.idealSameAsBest.value, sessionLaps, listMine, drivers,
+    sessionBests: async () => { const owner = subjectUid(); return owner && o.readSessionBests ? await o.readSessionBests(owner).catch(() => ({})) : {} }, driversState, loadDriverNames, listDriverLaps, resolveLink,
   }
   return { youCard, refCard, reason, canSwap, swap, cancelPending, removeRef, apply, applyDefault, propose, reset, userChose, source, nick, loadArchiveBest }
 }

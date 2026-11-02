@@ -80,6 +80,7 @@ import type { SessionDetailLap, SessionDetailStint } from '~/types/sessionDetail
 import SessionDetailPanel from '~/components/session-detail/SessionDetailPanel.vue'
 import SessionAnalysisPanel from '~/components/session-detail/analysis/SessionAnalysisPanel.vue'
 import { analysisSessionToken } from '~/services/telemetry/lapAnalysis'
+import type { SessionKindBests } from '~/services/telemetry/lapChoice'
 import type { CompareTarget } from '~/composables/useCompareTargets'
 import { useI18n } from '~/i18n'
 import { parseTelemetryDate } from '~/utils/telemetryFormat'
@@ -483,6 +484,28 @@ const compareLapsToast = ref('')
 async function readLinkedSession(sessionId: string, userId: string) {
   const data = await fetchSessionFull(sessionId, userId)
   return data ? { sessionToken: analysisSessionToken((data as { session_id?: unknown }).session_id, sessionId, data.session_info?.date_start), track: String(data.session_info?.track ?? '') } : null
+}
+
+// 02/11: "I miei giri" of the Riferimento window shows the best qualifying and race lap of each past session:
+// the summaries of the driver's newest sessions (one page, as the "Affianca" list), read once per driver.
+const sessionBestsCache = new Map<string, Promise<Record<string, SessionKindBests>>>()
+function readSessionBests(ownerUid: string) {
+  let pending = sessionBestsCache.get(ownerUid)
+  if (!pending) {
+    const own = ownerUid === comparisonCurrentUser.value?.uid
+    pending = telemetryGateway.getSessionsPage(own ? undefined : ownerUid, {}, 1, 50, true).then(({ sessions }) => {
+      const out: Record<string, SessionKindBests> = {}
+      for (const s of sessions) {
+        const token = analysisSessionToken(s.meta?.sourceSessionId, s.sessionId, s.meta?.date_start)
+        const summary = s.summary
+        if (token && summary) out[token] = { qualifyMs: summary.best_qualy_ms || null, raceMs: summary.best_session_race_ms || summary.best_race_ms || null }
+      }
+      return out
+    })
+    pending.catch(() => sessionBestsCache.delete(ownerUid))
+    sessionBestsCache.set(ownerUid, pending)
+  }
+  return pending
 }
 
 function clearCrossSession() {
@@ -2542,7 +2565,7 @@ const gripZones = computed(() => {
       </div>
     </header>
 
-    <SessionAnalysisPanel v-if="panelMounted && !isEvoSession" v-show="lapView" :active="lapView" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" :compare-with="compareTarget" :pending-lap-link="pendingLapLink" :session-type="session?.type ?? null" :read-session="readLinkedSession" @unavailable="onTelemetryUnavailable" @compare="openSessionPicker" @lap-link-handled="pendingLapLink = null" @remove-compare="removeCompare" :reference-removed="referenceRemoved" @reference-chosen="referenceRemoved = false" head-target="#session-head-laps" share-target="#session-head-share" />
+    <SessionAnalysisPanel v-if="panelMounted && !isEvoSession" v-show="lapView" :active="lapView" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" :compare-with="compareTarget" :pending-lap-link="pendingLapLink" :session-type="session?.type ?? null" :read-session="readLinkedSession" :read-session-bests="readSessionBests" @unavailable="onTelemetryUnavailable" @lap-link-handled="pendingLapLink = null" @remove-compare="removeCompare" :reference-removed="referenceRemoved" @reference-chosen="referenceRemoved = false" head-target="#session-head-laps" share-target="#session-head-share" />
 
     <!-- ========================================== -->
     <!-- MASTER / DETAIL LAYOUT -->

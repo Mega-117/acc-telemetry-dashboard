@@ -11,14 +11,22 @@ import { useI18n } from '~/i18n'
 
 const props = defineProps<{ choice: LapChoice, selected: boolean, current?: boolean, otherSide?: string | null, idealScope?: 'session' | 'history', rank?: number | null, hideWhen?: boolean, hideDriver?: boolean,
   /** 01/11: the row of the other side swaps the two laps (no "Scambia" button any more). */
-  swappable?: boolean }>()
+  swappable?: boolean,
+  /** 02/11 (user, as Track Titan): name, tags and time only; the "why" only when it says something (x% faster). */
+  brief?: boolean }>()
 const emit = defineEmits<{ select: [choice: LapChoice], confirm: [choice: LapChoice] }>()
 const { t } = useI18n()
 const text = useLapChoiceText()
 const status = computed(() => text.status(props.choice.status))
 const tags = computed(() => text.conditionsShort(props.choice.conditions))
-const lapLabel = computed(() => props.choice.ideal ? t('telemetry.choice.idealShort') : props.choice.lapNumber ? t('sessionDetail.chart.lap', { lap: props.choice.lapNumber }) : '')
-const when = computed(() => props.choice.ideal || props.hideWhen ? '' : text.when(props.choice))
+const lapLabel = computed(() => props.choice.ideal ? t('telemetry.choice.idealShort') : props.choice.lapNumber && !props.brief ? t('sessionDetail.chart.lap', { lap: props.choice.lapNumber }) : '')
+const when = computed(() => props.choice.ideal || props.hideWhen || props.brief ? '' : text.when(props.choice))
+const reasonText = computed(() => {
+  const r = props.choice.reason
+  if (!r) return ''
+  if (!props.brief) return text.reason(r)
+  return r.kind === 'stepUp' && r.pct > 0 ? t('telemetry.choice.reason.fasterShort', { pct: text.decimal(r.pct) }) : ''
+})
 const tooltip = computed(() => [props.choice.ideal ? text.idealNote(props.idealScope) : text.when(props.choice), text.conditions(props.choice.conditions)].filter(Boolean).join('\n'))
 const blocked = computed(() => !!props.otherSide && !props.swappable)
 function use() { emit('confirm', props.choice) }
@@ -44,7 +52,7 @@ function onKey(event: KeyboardEvent) {
       <span v-if="!choice.ideal && (choice.status === 'invalid' || choice.status === 'valid')" class="sr-only">{{ status.text }}</span>
       <span v-else-if="!choice.ideal && choice.status !== 'valid'" class="choice-row__status" :class="`is-${choice.status}`" :title="status.text"><span aria-hidden="true">{{ status.icon }}</span><span class="sr-only">{{ status.text }}</span></span>
       <span v-if="choice.best" class="choice-row__best" :title="t('telemetry.choice.status.best')"><span aria-hidden="true">★</span><span class="sr-only">{{ t('telemetry.choice.status.best') }}</span></span>
-      <span v-if="choice.reason" class="choice-row__reason">{{ text.reason(choice.reason) }}</span>
+      <span v-if="reasonText" class="choice-row__reason">{{ reasonText }}</span>
       <span v-if="choice.note" class="choice-row__note">{{ choice.note }}</span>
       <span v-if="current" class="choice-row__pill">{{ t('telemetry.choice.dialog.current') }}</span>
       <span v-if="otherSide" class="choice-row__pill" :class="{ 'is-swap': swappable }">{{ swappable ? t('telemetry.choice.dialog.swapWith', { side: otherSide }) : t('telemetry.choice.dialog.onOtherSide', { side: otherSide }) }}</span>

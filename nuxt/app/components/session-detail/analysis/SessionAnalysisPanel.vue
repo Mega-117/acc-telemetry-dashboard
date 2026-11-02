@@ -15,7 +15,7 @@ import LapChoiceCard from './LapChoiceCard.vue'
 import LapChoiceDialog from './LapChoiceDialog.vue'
 import TraceStripHead, { type DeltaPlace } from './TraceStripHead.vue'
 import { useLapChoice } from '~/composables/useLapChoice'
-import type { LapSide } from '~/services/telemetry/lapChoice'
+import type { LapSide, SessionKindBests } from '~/services/telemetry/lapChoice'
 import { electronLapSource, pilotLapSource, type LapSource, type LocalLapBridge } from '~/services/telemetry/lapSources'
 import { useReferenceLibrary, type Entry } from '~/composables/useReferenceLibrary'
 import { LapsArchiveError } from '~/services/telemetry/lapsArchiveClient'
@@ -48,6 +48,8 @@ const props = defineProps<{
   sessionType?: string | null
   /** PIP-695: a session link pasted in "Cambia il riferimento" → its lap token and track (the page reads it). */
   readSession?: (sessionId: string, userId: string) => Promise<{ sessionToken: string | null, track: string } | null>
+  /** 02/11: best qualifying / race time of each session of a driver, by lap token (the page reads the summaries). */
+  readSessionBests?: (ownerUid: string) => Promise<Record<string, SessionKindBests>>
   /** 01/11: the driver took the reference away (✕): no default or late answer brings it back. */
   referenceRemoved?: boolean
   /** 01/11: where the Tu / Riferimento bar goes (the page's title row); none = in place. */
@@ -83,7 +85,7 @@ const lapId = ref(''), refId = ref('')
 const library = useReferenceLibrary({ entries, traces, refId, sessionToken: () => props.sessionToken, sectorTimesOf: e => sectorTimes(e) })
 const loading = ref(false), error = ref(''), fromArchive = ref(false), programArchive = ref(false)
 // PIP-635: nessun giro da analizzare: la pagina torna su Sessione se l'aveva aperta da sola.
-const emit = defineEmits<{ unavailable: [], compare: [], lapLinkHandled: [], removeCompare: [], referenceChosen: [] }>(); watch(error, message => { if (message) emit('unavailable') })
+const emit = defineEmits<{ unavailable: [], lapLinkHandled: [], removeCompare: [], referenceChosen: [] }>(); watch(error, message => { if (message) emit('unavailable') })
 const { t, locale } = useI18n()
 const cursor = ref<number | null>(null)
 const selectedCorner = ref<number | null>(null)
@@ -101,7 +103,7 @@ const archiveDeps = { getToken: async () => (await currentUser.value?.getIdToken
 // PIP-695: the two lap cards and the "Cambia" chooser (modal; a side panel only in dev builds, for the usability test).
 const choice = useLapChoice({ entries, traces, lapId, refId, library, sessionToken: () => props.sessionToken, pilotUid: () => props.pilotUid || null,
   myUid: () => currentUser.value?.uid ?? null, sessionType: () => props.sessionType ?? null, bridge: api, deps: archiveDeps, readSession: props.readSession,
-  refRemoved: () => !!props.referenceRemoved, sessionRow: e => sessionRow(e) })
+  readSessionBests: props.readSessionBests, refRemoved: () => !!props.referenceRemoved, sessionRow: e => sessionRow(e) })
 // A lap picked for the reference in Cambia is a new choice: the page forgets the ✕.
 async function applyChoice(side: LapSide, c: Parameters<typeof choice.apply>[1]) {
   const result = await choice.apply(side, c)
@@ -116,7 +118,6 @@ const pilotName = computed(() => choice.source.subjectName())
 const idealScope = computed(() => entries.value.find(e => e.origin === 'ideal')?.idealScope)
 const invalidPair = computed(() => [lapEntry.value, refEntry.value].some(e => e && !e.valid && !e.validUnknown))
 function openChooser(side: LapSide) { chooser.value = side }
-function wholeSession() { chooser.value = null; emit('compare') }
 // Each load gets a generation: a late answer for another session or pilot never replaces the current one.
 let loadGeneration = 0
 async function load() {
@@ -453,9 +454,8 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
         <LapChoiceCard side="ref" :choice="choice.refCard.value" :reason="choice.reason.value" :ideal-scope="idealScope" :pilot-name="pilotName" :disabled="!entries.length" @change="openChooser('ref')" />
       </div>
       <LapChoiceDialog :open="chooser !== null" :side="chooser ?? 'ref'" :source="choice.source" :apply="applyChoice" :variant="chooserVariant" :ideal-scope="idealScope"
-        :can-swap="choice.canSwap.value" :can-remove="!!choice.refCard.value" @swap="choice.swap(); chooser = null"
-        @remove="choice.removeRef(); emit('removeCompare'); chooser = null"
-        @close="chooser = null; choice.cancelPending()" @whole-session="wholeSession" />
+        :can-swap="choice.canSwap.value" @swap="choice.swap(); chooser = null"
+        @close="chooser = null; choice.cancelPending()" />
       <span v-if="shareMessage" class="bar-note" :class="{ failed: shareState === 'error' }" role="status">{{ shareMessage }}</span>
     </div>
     </Teleport>

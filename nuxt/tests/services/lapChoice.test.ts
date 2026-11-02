@@ -1,7 +1,7 @@
 // PIP-695: the pure part of choosing "Tu" and "Riferimento".
 import { describe, expect, it } from 'vitest'
 import {
-  chooseDefaultReference, choiceBlock, classifyLink, dateBucket, groupMyLaps, lapKey, lapStatus, leaderboard, runConditions, lapKind, sameKindFirst, matchesDriver, normalizeSearch,
+  chooseDefaultReference, choiceBlock, classifyLink, dateBucket, mySessionRows, lapKey, lapStatus, leaderboard, runConditions, lapKind, sameKindFirst, matchesDriver, normalizeSearch,
   parseSessionLink, pctFaster, sameTrackName, sessionDate, whenParts, type LapChoice, type LapEntryLike,
 } from '~/services/telemetry/lapChoice'
 
@@ -40,24 +40,29 @@ describe('lapChoice: status and dates', () => {
 })
 
 describe('lapChoice: I miei giri', () => {
-  it('shows the current session first, then by date, laps by number with the fastest valid starred', () => {
+  // 02/11 (user, as Track Titan): one row per past session, newest first, with its best qualifying and race lap.
+  it('lists past sessions newest first with the qualifying and race lap of their summary', () => {
     const laps = [
       lap({ sessionToken: '20261001_100000', lapNumber: 2, lapTimeMs: 101000 }),
-      lap({ sessionToken: '20261031_170000', lapNumber: 3, lapTimeMs: 99000, status: 'invalid' }),
       lap({ sessionToken: '20261031_170000', lapNumber: 1, lapTimeMs: 100500 }),
-      lap({ sessionToken: '20261031_170000', lapNumber: 2, lapTimeMs: 100200 }),
-      lap({ sessionToken: '20261030_100000', lapNumber: 1, lapTimeMs: 100900 }),
-      lap({ sessionToken: '20261031_120000', lapNumber: 1, lapTimeMs: 100800 }),
-      lap({ sessionToken: '20261031_170000', lapNumber: 2, lapTimeMs: 100200 }),
+      lap({ sessionToken: '20261030_100000', lapNumber: 1, lapTimeMs: 103900, status: 'unknown' }),
+      lap({ sessionToken: '20261030_100000', lapNumber: 7, lapTimeMs: 100900, status: 'unknown' }),
+      lap({ sessionToken: '20261030_100000', lapNumber: 9, lapTimeMs: 99000, status: 'invalid' }),
+      lap({ sessionToken: '20261030_100000', lapNumber: 7, lapTimeMs: 100900, status: 'unknown' }),
     ]
-    const groups = groupMyLaps(laps, '20261031_170000', now)
-    expect(groups.map(g => g.bucket)).toEqual(['current', 'today', 'yesterday', 'older'])
-    const current = groups[0]!.sessions[0]!
-    expect(current.current).toBe(true)
-    expect(current.laps.map(l => l.lapNumber)).toEqual([1, 2, 3])
-    // The invalid lap 3 is faster, but the star goes to the fastest valid one.
-    expect(current.laps.filter(l => l.best).map(l => l.lapNumber)).toEqual([2])
-    expect(current.bestKey).toBe(lapKey('me', '20261031_170000', 2))
+    const rows = mySessionRows(laps, '20261031_170000', { '20261030_100000': { qualifyMs: 100901, raceMs: 103900 } })
+    // The shown session is not a row (its laps are listed above).
+    expect(rows.map(r => r.token)).toEqual(['20261030_100000', '20261001_100000'])
+    const oct30 = rows[0]!
+    expect(oct30.laps.map(l => l.lapNumber)).toEqual([1, 7, 9])
+    // Times within 1 ms; the invalid lap 9 is faster but never used.
+    expect(oct30.qualify?.lapNumber).toBe(7)
+    expect(oct30.race?.lapNumber).toBe(1)
+    expect(oct30.laps.filter(l => l.best).map(l => l.lapNumber)).toEqual([7])
+    // No summary: only the fastest valid lap.
+    expect(rows[1]!.qualify).toBeNull()
+    expect(rows[1]!.race).toBeNull()
+    expect(rows[1]!.best?.lapNumber).toBe(2)
   })
 })
 

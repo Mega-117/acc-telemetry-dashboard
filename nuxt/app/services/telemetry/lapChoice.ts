@@ -122,33 +122,35 @@ export function dateBucket(date: Date | null, now: Date): Exclude<DateBucket, 'c
   return ago <= 0 ? 'today' : ago === 1 ? 'yesterday' : ago < 7 ? 'week' : 'older'
 }
 
-export interface SessionGroup { token: string, laps: LapChoice[], bestKey: string | null, current: boolean }
-export interface DateGroup { bucket: DateBucket, sessions: SessionGroup[] }
-const BUCKETS: DateBucket[] = ['current', 'today', 'yesterday', 'week', 'older']
+/** 02/11: the best qualifying (<= 20 L) and race (> 20 L) lap time of a session, from its summary (same rule as the stints). */
+export interface SessionKindBests { qualifyMs: number | null, raceMs: number | null }
+export interface MySessionRow { token: string, laps: LapChoice[], best: LapChoice | null, qualify: LapChoice | null, race: LapChoice | null }
 
 /**
- * I miei giri: the shown session first, then Oggi / Ieri / Questa settimana / Prima, newest session first.
- * Inside a session one visible order, by lap number; the fastest valid lap carries the star.
+ * 02/11 (user, as Track Titan): one row per past session, newest first, with its best qualifying and race lap.
+ * The summary gives the times (stint departure fuel; invalid, pit-in and pit-out laps excluded); the row uses the
+ * listed lap with that time. Without a summary the row shows the fastest valid lap only.
  */
-export function groupMyLaps(laps: LapChoice[], currentToken: string | null, now: Date): DateGroup[] {
+export function mySessionRows(laps: LapChoice[], currentToken: string | null, bests: Record<string, SessionKindBests>): MySessionRow[] {
   const sessions = new Map<string, LapChoice[]>()
   for (const lap of laps) {
     const token = lap.sessionToken ?? ''
+    if (!token || token === currentToken || lap.ideal) continue
     const list = sessions.get(token) ?? []
     sessions.set(token, list)
     if (!list.some(l => l.key === lap.key)) list.push(lap)
   }
-  const groups = new Map<DateBucket, SessionGroup[]>()
-  for (const [token, list] of sessions) {
-    const sorted = [...list].sort((a, b) => (a.lapNumber ?? 0) - (b.lapNumber ?? 0))
-    const best = sorted.filter(l => l.status === 'valid').sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0] ?? null
-    const current = !!currentToken && token === currentToken
-    const bucket: DateBucket = current ? 'current' : dateBucket(sessionDate(token), now)
-    const bucketList = groups.get(bucket) ?? []
-    groups.set(bucket, bucketList)
-    bucketList.push({ token, laps: sorted.map(l => ({ ...l, best: l.key === best?.key })), bestKey: best?.key ?? null, current })
-  }
-  return BUCKETS.flatMap(bucket => { const list = groups.get(bucket); return list ? [{ bucket, sessions: list.sort((a, b) => b.token.localeCompare(a.token)) }] : [] })
+  const usable = (l: LapChoice) => l.status !== 'invalid' && l.status !== 'incomplete' && l.lapTimeMs > 0
+  const byTime = (list: LapChoice[], ms: number | null | undefined) => ms ? list.find(l => usable(l) && Math.abs(l.lapTimeMs - ms) <= 1) ?? null : null
+  return [...sessions].sort(([a], [b]) => b.localeCompare(a)).map(([token, list]) => {
+    const fastest = list.filter(l => l.status === 'valid' && l.lapTimeMs > 0).sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0] ?? null
+    const kinds = bests[token]
+    const qualify = byTime(list, kinds?.qualifyMs), race = byTime(list, kinds?.raceMs)
+    const best = [fastest, qualify, race].filter((l): l is LapChoice => !!l).sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0] ?? null
+    const sorted = [...list].sort((a, b) => (a.lapNumber ?? 0) - (b.lapNumber ?? 0)).map(l => ({ ...l, best: l.key === best?.key }))
+    const marked = (l: LapChoice | null) => l ? sorted.find(s => s.key === l.key) ?? null : null
+    return { token, laps: sorted, best: marked(best), qualify: marked(qualify), race: marked(race) }
+  })
 }
 
 /** Case, accents and spaces do not matter; a part of the nickname is enough. */

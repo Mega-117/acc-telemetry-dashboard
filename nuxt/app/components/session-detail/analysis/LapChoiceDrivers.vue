@@ -1,15 +1,18 @@
 <script setup lang="ts">
 // PIP-695: "Altri piloti": the leaderboard of best laps here (my row marked TU), a search by nickname,
 // and a driver's own laps on this track and car (their best preselected), with the way back.
+// 02/11: a shared link is pasted here ("Hai un link condiviso?"): the "Usa un link" tab is gone.
 import { computed, nextTick, ref, useId, watch } from 'vue'
 import LapChoiceRow from './LapChoiceRow.vue'
+import LapChoiceLink from './LapChoiceLink.vue'
 import { matchesDriver, type DriverRow, type LapChoice } from '~/services/telemetry/lapChoice'
 import type { LapChoiceSource } from '~/composables/useLapChoice'
 import { formatLapTime } from '~/utils/telemetryFormat'
 import { useI18n } from '~/i18n'
 
 const props = defineProps<{ source: LapChoiceSource, selectedKey: string | null, currentKey: string | null, otherKey: string | null, otherSide: string , /** 01/11: the other side's row swaps the laps. */ canSwap?: boolean }>()
-const emit = defineEmits<{ select: [choice: LapChoice], confirm: [choice: LapChoice] }>()
+const emit = defineEmits<{ select: [choice: LapChoice | null], confirm: [choice: LapChoice] }>()
+const linkOpen = ref(false)
 const { t, locale } = useI18n()
 
 const query = ref('')
@@ -56,6 +59,9 @@ function back() {
 <template>
   <div ref="listEl" class="drivers">
     <template v-if="!driver">
+      <button type="button" class="drivers__link-toggle" :aria-expanded="linkOpen" @click="linkOpen = !linkOpen">{{ linkOpen ? t('telemetry.choice.drivers.hideLink') : t('telemetry.choice.drivers.hasLink') }}</button>
+      <LapChoiceLink v-if="linkOpen" :source="source" :selected-key="selectedKey" :current-key="currentKey" :other-key="otherKey" :other-side="otherSide"
+        @select="emit('select', $event)" @confirm="emit('confirm', $event)" />
       <label class="drivers__search">
         <span>{{ t('telemetry.choice.drivers.search') }}</span>
         <input v-model="query" type="search" autocomplete="off" spellcheck="false" :aria-describedby="hintId">
@@ -94,6 +100,8 @@ function back() {
 
 <style scoped lang="scss">
 .drivers { display: grid; gap: 10px; }
+.drivers__link-toggle { justify-self: start; min-height: 36px; padding: 0 14px; border: 1px dashed #ffffff66; background: #ffffff0a; color: #fff; font: 700 13px 'Inter', sans-serif; cursor: pointer;
+  &[aria-expanded='true'] { border-style: solid; border-color: var(--c, #fff); } &:hover { border-color: #fff; } &:focus-visible { outline: 2px solid #fff; outline-offset: 1px; } }
 .drivers__search { display: grid; gap: 4px; color: #ccc; font: 600 12px 'Inter', sans-serif;
   input { height: 40px; padding: 0 12px; border: 1px solid #ffffff30; background: #ffffff04; color: #fff; font: 500 14px 'Inter', sans-serif;
     &:focus { border-color: #fff; outline: 2px solid #fff; outline-offset: 1px; } }

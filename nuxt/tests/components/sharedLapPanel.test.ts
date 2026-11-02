@@ -107,8 +107,8 @@ describe('SessionAnalysisPanel sharing and coach view', () => {
     view.unmount()
   })
 
-  // 01/11: after the ✕ the panel opens with only your lap, and a choice in Cambia gives the page its reference back.
-  it('opens without a reference after the ✕ and asks the page to remove the comparison', async () => {
+  // 01/11: after the ✕ the panel opens with only your lap. 02/11: Cambia no longer takes the reference away.
+  it('opens without a reference after the ✕, and Cambia offers no "Nessun riferimento"', async () => {
     ;(window as any).electronAPI = {
       listLapTraces: vi.fn(async (f: { sessionToken?: string }) => f?.sessionToken ? [
         { id: 'h__c/lap_20261025_175240_L005_104310ms.json.gz' },
@@ -128,13 +128,10 @@ describe('SessionAnalysisPanel sharing and coach view', () => {
     // 01/11: the ✕ left the pill: "Togli il riferimento" is in Cambia.
     await again.get('.lap-pill--ref .lap-pill__change').trigger('click')
     await flushPromises()
-    // 01/11: "Nessun riferimento" is the first suggestion.
-    const remove = document.body.querySelector<HTMLButtonElement>('.choice-none')!
-    expect(remove.textContent).toContain('Nessun riferimento')
-    remove.click()
-    await flushPromises()
-    expect(again.emitted('removeCompare')).toHaveLength(1)
-    expect(again.get('.lap-pill--ref').text()).not.toContain('G6')
+    // 02/11 (user, as Track Titan): three tabs and no "Nessun riferimento".
+    expect(document.body.querySelector('.choice-none')).toBeNull()
+    expect([...document.body.querySelectorAll('[role="tab"]')].map(e => e.textContent?.trim())).toEqual(['Suggeriti', 'I miei giri', 'Altri piloti'])
+    expect(again.emitted('removeCompare')).toBeUndefined()
     again.unmount()
   })
 

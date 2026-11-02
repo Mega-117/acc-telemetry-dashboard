@@ -58,5 +58,5 @@ export function useLapChoiceText() {
       c.grip ? t(`telemetry.choice.cond.gripShort.${c.grip}`) : '',
     ].filter(Boolean)
   }
-  return { when, status, lapLine, driver, idealNote, reason, side, conditions, conditionsShort }
+  return { when, status, lapLine, driver, idealNote, reason, side, conditions, conditionsShort, decimal }
 }
