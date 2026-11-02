@@ -105,7 +105,6 @@ export default defineConfig({
         'app/components/session-detail/analysis/SharedLapPanel.vue',
         'app/components/session-detail/analysis/SessionAnalysisPanel.vue',
         'app/composables/useSessionPickerPages.ts',
-        'app/utils/coachLessonPermissions.ts',
         'app/repositories/usageRepository.ts',
         'app/services/usage/usageClient.ts',
         // PIP-698: usage choice made at registration, applied once.
@@ -155,8 +154,6 @@ export default defineConfig({
         'app/services/telemetry/commonLive.ts',
         'app/services/telemetry/featureAvailability.ts',
         'app/services/telemetry/trainingAvailability.ts',
-        'app/services/telemetry/racePlan.ts',
-        'app/components/pages/GaraPage.vue',
         'app/services/telemetry/commonSessionAnalysis.ts',
         'app/services/spotter/audioSourceContext.ts',
         'app/services/telemetry/commonFastPresentation.ts',
@@ -484,7 +481,6 @@ export default defineConfig({
         'app/composables/useTrackBests.ts',
         // ── PIP-175: overlay HUD multipli ────────────────────────────────
         'app/composables/useHudOverlay.ts',
-        'app/components/overlay/QuickPanelLayoutToggle.vue',
         'app/components/overlay/OverlayPlacementLock.vue',
         'app/composables/useOverlayRegionApi.ts',
         'app/services/overlay/surfaceRegionBridge.ts',

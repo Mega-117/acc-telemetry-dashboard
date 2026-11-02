@@ -19,15 +19,6 @@ describe('tyre overlay minimum readability contract', () => {
     expect(page).not.toMatch(/max\((10|11)px, calc\(1[2-3]px \* var\(--hud-scale\)\)\)/)
   })
 
-  it('does not reintroduce sub-10px text at the compact tyres breakpoint', () => {
-    const advanced = source('app/components/overlay/TyreAdvancedHud.vue')
-    const setup = source('app/components/overlay/TyreSetupHud.vue')
-
-    expect(advanced).toMatch(/\.tyre-advanced__brake-axle > small\s*\{[^}]*font-size:\s*10px;[^}]*\}/)
-    expect(setup).toMatch(/\.tyre-setup__column h2\s*\{[^}]*font-size:\s*10px;[^}]*\}/)
-    expect(setup).toMatch(/\.tyre-setup__start strong\s*\{[^}]*font-size:\s*10px;[^}]*\}/)
-    expect(setup).toContain('font-size: max(10px, calc(8px * var(--hud-scale, 1)));')
-  })
 
   it('PIP-671: Race keeps the draft type sizes at scale 1 and zooms as a whole, so 0.5 stays readable', () => {
     const race = source('app/components/overlay/TyreRaceHud.vue')

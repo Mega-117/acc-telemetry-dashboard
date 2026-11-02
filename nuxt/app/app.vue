@@ -391,8 +391,6 @@ const dashboardRoutePrefixes = [
   '/test-hud',
   '/profilo',
   '/impostazioni',
-  '/preparazione',
-  '/gara',
   '/piloti',
   '/admin',
   '/admin-diagnostics',

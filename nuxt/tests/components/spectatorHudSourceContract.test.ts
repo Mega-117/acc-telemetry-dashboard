@@ -34,7 +34,6 @@ describe('spectator HUD source contract', () => {
     const dashboard = source('app/components/overlay/DashboardHud.vue')
     const dashboardPage = source('app/pages/dashboard-overlay.vue')
     const classicTyres = source('app/components/overlay/TyreSlipHud.vue')
-    const advancedTyres = source('app/components/overlay/TyreAdvancedHud.vue')
 
     expect(dashboard).toContain("'dash-pedals--unavailable': !model.inputsAvailable")
     expect(source('app/assets/scss/components/dashboard-hud.scss')).toContain('.dash-pedals--unavailable i::after')
@@ -42,8 +41,6 @@ describe('spectator HUD source contract', () => {
     expect(classicTyres).not.toContain('speedKmh')
     expect(classicTyres).toContain('hasLiveTyres && hasSlipPolicy && tyre.wheelSlip !== null')
     expect(classicTyres).toContain("typeof tyre.wheelSlip === 'number' ? tyre.wheelSlip.toFixed(1) : '--'")
-    expect(advancedTyres).toContain('resolveTyreHudStatus(props.fastState)')
-    expect(advancedTyres).toContain("'data-unavailable': 'DATA N/A'")
     expect(dashboardPage).toContain('telemetry.focusedCar.value')
     expect(dashboard).toContain('v-if="model.spectator"')
     expect(dashboard).toContain('model.spectator.timings')

@@ -27,7 +27,9 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     expect(source).toContain("const isAccQuickPanel = computed(() => simulatorPresence.gameId.value === 'acc')")
     expect(source).toContain('const usesAccLayout = computed(() => isAccQuickPanel.value || isFullQuickPanelPreview.value)')
     expect(source).toMatch(/const isHorizontalQuickPanel = computed\(\(\) => phase\.value === 'launcher' && !usesAccLayout\.value[\s\S]{0,200}?quickPanelLayout\.value === 'horizontal'\)/)
-    expect(source).toContain('<QuickPanelLayoutToggle v-else-if="!usesAccLayout"')
+    // PIP-705: the vertical/horizontal switch is gone and an old saved 'horizontal' is ignored.
+    expect(source).not.toContain('QuickPanelLayoutToggle')
+    expect(source).toContain("quickPanelLayout.value = 'vertical'")
     expect(source).toContain("'overlay-content--acc': usesAccLayout && phase === 'launcher'")
     // The old vertical rules never reach the ACC grid.
     expect(styles).toContain('.overlay-content--launcher:has(.quick-panel-automations):not(.overlay-content--horizontal, .overlay-content--acc) {')
@@ -86,19 +88,13 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     expect(block).toContain('`${outcome.tone}|${outcome.text}`')
     expect(block).not.toContain('deep: true')
   })
-  it('PIP-522/527: horizontal header column; the layout switch in the top-right corner on hover', () => {
+  it('PIP-522/527: horizontal header column (PIP-705: no layout switch any more)', () => {
+    expect(styles).not.toContain('.quick-panel-layout')
     const block = styles.slice(styles.indexOf('// PIP-522: horizontal header'), styles.indexOf('// PIP-522: lap progress'))
     expect(block).toContain('.launcher-tools { display: flex; align-items: flex-start; gap: 12px; }')
     expect(block).toMatch(/flex-direction: column;[\s\S]*?width: 66px; height: 84px;/)
-    // PIP-532: inside the panel (at -12 px the icons were clipped and not clickable).
-    expect(block).toContain('.quick-panel-layout { position: absolute; top: 0; right: 0;')
-    expect(block).toContain('.quick-panel-layout button { width: 22px; height: 14px; min-height: 0; }')
-    expect(source).toContain('<QuickPanelLayoutToggle v-else-if="!usesAccLayout" v-show="!isNotificationsOpen"')
-    expect(block).not.toMatch(/quick-panel-layout \{ position: absolute; top: -/)
     // The logo stays: the switch no longer covers it (PIP-527).
     expect(styles).not.toContain('.quick-panel-logo { opacity: 0; }')
-    // Vertical: the timer keeps the corner, the switch appears just left of it.
-    expect(styles).toContain('.quick-panel-layout { grid-column: 3; grid-row: 1; justify-self: end; }')
     // The old header widths reserved for messages over the row no longer exist.
     expect(styles).not.toContain('width: calc(100% - 226px)')
     expect(styles).not.toContain('width: calc(100% - 456px)')
@@ -175,7 +171,9 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     expect(source).toContain(`<p v-if="waitingForSimulator" class="quick-panel-waiting quick-panel-waiting--header" role="status">{{ simulatorPresence.choiceRequired.value ? t('controlK.chooseGame') : t('controlK.waiting') }}</p>`)
     expect([translate('it', 'controlK.waiting'), translate('it', 'controlK.chooseGame')]).toEqual(['In attesa del simulatore', 'Scegli il gioco nella webapp'])
     expect(translate('en', 'controlK.waiting')).toBe('Waiting for the simulator')
-    expect(source).toContain('<QuickPanelLayoutToggle v-else-if="!usesAccLayout"')
+    // PIP-705: the vertical/horizontal switch is gone and an old saved 'horizontal' is ignored.
+    expect(source).not.toContain('QuickPanelLayoutToggle')
+    expect(source).toContain("quickPanelLayout.value = 'vertical'")
     expect(source).toContain('<button v-if="!waitingForSimulator" type="button" class="launcher-tool-button quick-panel-timer"')
     expect(source).toContain('<div v-if="!waitingForSimulator" class="quick-panel-main"')
     expect(styles).toContain('.launcher-tools__header:has(.quick-panel-waiting--header)')
@@ -229,7 +227,7 @@ describe('ACC Control K single layout (PIP-556)', () => {
   })
   it('the context comes from the shared resolver and the status from one priority list', () => {
     // Through the settling tracker: weak force-feedback evidence cannot flicker the layout.
-    expect(source).toContain("const controlKContextTracker = createControlKContextTracker('pause')")
+    expect(source).toContain("const controlKContextTracker = createControlKContextTracker('pause', CONTROL_K_SETTLE_MS, (change) => {")
     expect(source).toContain('controlKContext.value = controlKContextTracker.update({')
     expect(source).toContain('const controlKStatus = computed<ControlKStatusMessage | null>(() => pickControlKStatus([')
     expect(source).toContain(':status-line="usesAccLayout" @status="onPressureTestStatus" @outcome="onPressureTestOutcome"')

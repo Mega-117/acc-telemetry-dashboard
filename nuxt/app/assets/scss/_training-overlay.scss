@@ -621,10 +621,6 @@
   .quick-panel-header-actions { display: flex; align-items: center; gap: 6px; }
   .launcher-tools__header :is(.quick-panel-training, .quick-panel-timer, .quick-panel-notifications-button) { width: 34px; height: 34px; min-height: 34px; padding: 0; display: grid; place-items: center; }
   .launcher-tools__header .quick-panel-training { display: none; }
-  .launcher-tools__header .quick-panel-layout { justify-self: center; opacity: 0; pointer-events: none; transition: opacity 120ms ease; }
-  &:hover .quick-panel-layout,
-  .overlay-pointer-surface-hovered & .quick-panel-layout { opacity: 1; pointer-events: auto; }
-  @media (prefers-reduced-motion: reduce) { .quick-panel-layout { transition: none; } }
   .launcher-tools__header > span { color: #f3f3f3; font-size: 12px; }
   .launcher-tools__header > strong { color: #aaa; font-size: 11px; font-weight: 500; }
   .launcher-tools__actions { gap: 14px; }
@@ -2554,9 +2550,6 @@ button.is-active {
   // PIP-527: the layout switch sits in the top-right corner of Ctrl+K (on hover).
   // PIP-532: inside the panel; outside it the icons were clipped and not clickable.
   // Compact (18 px tall) so it sits above the last button instead of covering it.
-  .launcher-tools__header .quick-panel-layout { position: absolute; top: 0; right: 0; justify-self: auto; z-index: 2; padding: 1px; }
-  .launcher-tools__header .quick-panel-layout button { width: 22px; height: 14px; min-height: 0; }
-  .launcher-tools__header .quick-panel-layout svg { width: 13px; height: 13px; }
   // PIP-532: timer and the notifications button side by side under the logo.
   .launcher-tools__header { width: auto; min-width: 66px; }
   .launcher-tools__actions { flex: 1 1 auto; }
@@ -2614,7 +2607,6 @@ button.is-active {
 .training-overlay--launcher .overlay-content--launcher:not(.overlay-content--horizontal, .overlay-content--acc) .launcher-tools__header {
   // The timer keeps the corner; the switch appears just left of it on hover.
   grid-template-columns: 56px minmax(0, 1fr) auto auto;
-  .quick-panel-layout { grid-column: 3; grid-row: 1; justify-self: end; }
   .quick-panel-header-actions { grid-column: 4; grid-row: 1; }
 }
 

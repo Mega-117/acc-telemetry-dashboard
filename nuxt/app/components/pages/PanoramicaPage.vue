@@ -197,10 +197,6 @@ function goToStats() {
       <aside class="racing-overview__side">
         <OverviewUpcomingRacesCard :user-id="targetUserId" :game-id="consultedGame" @loading="calendarBusy = $event" :initial-events="prepared?.events" :initial-user-id="prepared?.uid" racing />
         <CardsActivityCard class="overview-activity" :data="activityData" :practice-total="activityTotals.practice" :qualify-total="activityTotals.qualify" :race-total="activityTotals.race" :other-total="overviewProjection?.otherActivity" racing :aria-busy="isOverviewPlaceholder" :stats-link="consultedGame === 'acc'" @open-stats="goToStats" />
-        <section class="training-panel racing-panel">
-          <div><h2>{{ t('overview.training') }}</h2><p>{{ t('overview.trainingText') }}</p></div>
-          <NuxtLink to="/preparazione?scenario=tracktitan_input" class="rc-btn rc-btn--primary">{{ t('overview.trainingCta') }}<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" /></NuxtLink>
-        </section>
       </aside>
     </div>
     </GameContextTransition>
@@ -235,9 +231,6 @@ function goToStats() {
 .last-drive__actions button { flex: 0 1 auto; min-width: 150px; }
 .racing-overview__side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .overview-activity { flex: 1; }
-.training-panel { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px; }
-.training-panel h2 { font: italic 700 22px/1.2 'Racer Display', sans-serif; text-transform: uppercase; margin: 0 0 6px; }
-.training-panel p { font: italic 13px/1.4 'Segoe UI', sans-serif; text-transform: uppercase; margin: 0; color: #ccc; }
 .overview-error { color: #ffafba; padding: 12px; }
 .overview-error button { color: #fff; background: transparent; border: 1px solid #aaa; padding: 6px 12px; }
 .overview-placeholder > :not(.overview-loading-label) { visibility: hidden; }
@@ -245,16 +238,15 @@ function goToStats() {
 .overview-loading-label { position: absolute; left: 24px; top: 24px; color: #ccc; }
 @keyframes loading-pulse { to { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .overview-placeholder::after { animation: none; } }
-@media (min-width: 1500px) { .last-drive__hero { min-height: 440px; } .training-panel { padding: 22px; } }
+@media (min-width: 1500px) { .last-drive__hero { min-height: 440px; } }
 // Fit the normal desktop window through card proportions, not clipped content.
 @media (min-width: 1051px) and (max-height: 900px) {
   .racing-overview { --overview-race-min-height: 154px; --overview-chart-min-height: 140px; --overview-chart-title-gap: 18px; }
   .last-drive__hero { min-height: 300px; }
-  .training-panel { padding: 14px 18px; }
 }
-@media (max-width: 1050px) { .racing-overview { grid-template-columns: 1.2fr 1fr; gap: 12px; } .last-drive__results { padding-inline: 12px; } .performance-table td { padding-inline: 10px; } .training-panel { flex-direction: column; align-items: stretch; } .last-drive__actions { gap: 12px; } }
+@media (max-width: 1050px) { .racing-overview { grid-template-columns: 1.2fr 1fr; gap: 12px; } .last-drive__results { padding-inline: 12px; } .performance-table td { padding-inline: 10px; } .last-drive__actions { gap: 12px; } }
 // PIP-639: tablet in verticale e telefono: una colonna (due colonne strette tagliavano testi e bottoni).
-@media (max-width: 900px) { .racing-overview { grid-template-columns: 1fr; } .last-drive__hero { min-height: 340px; } .training-panel { flex-direction: row; } }
+@media (max-width: 900px) { .racing-overview { grid-template-columns: 1fr; } .last-drive__hero { min-height: 340px; } }
 // Le etichette dei tempi vanno a capo invece di finire con i puntini quando la colonna e' stretta.
 @media (max-width: 1300px) { .time-label { white-space: normal; } }
 // Tablet in orizzontale, schermo basso (barre del browser comprese): tutto in una schermata, foto piu' bassa.
@@ -262,15 +254,14 @@ function goToStats() {
   .last-drive__hero { min-height: 220px; }
   .performance-table td { padding-block: 9px; }
   .last-drive__actions { padding-top: 10px; }
-  .training-panel { padding: 8px 18px; } .training-panel h2 { font-size: 18px; margin: 0; }
+
   .racing-overview__side :deep(.activity-card--racing) { min-height: 0; padding-block: 14px; }
   .racing-overview__side :deep(.legend-dot) { height: 44px; }
   .racing-overview { --overview-race-min-height: 130px; --overview-chart-min-height: 92px; --overview-chart-title-gap: 8px; }
-  .training-panel p { display: none; }
   .racing-overview__side :deep(.race-countdown__value) { font-size: 46px; }
 }
 @media (max-width: 480px) { .last-drive__hero { min-height: 310px; }
-.last-drive__identity { left: 16px; } .performance-table td { padding-inline: 6px; } .time-label { font-size: 10px; } .grip-badge { display: block; margin: 3px 0 0; } .training-panel { flex-direction: column; }
+.last-drive__identity { left: 16px; } .performance-table td { padding-inline: 6px; } .time-label { font-size: 10px; } .grip-badge { display: block; margin: 3px 0 0; }
   // Telefono: i due bottoni uno sotto l'altro, larghi quanto la card.
   .last-drive__actions { flex-direction: column; gap: 10px; } .last-drive__actions button { width: 100%; min-width: 0; } }
 .racing-overview { @include controls.tokens; }

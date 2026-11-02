@@ -38,11 +38,10 @@ import {
   resolveAutoAdvanceSeconds,
   type OverlayOriginCorner, type OverlayOriginMode,
 } from '~/composables/useOverlaySettings'
-import { ArrowLeft, Bell, ChevronLeft, ChevronRight, CircleCheck, CircleMinus, Dumbbell, Timer, Power, Check, LoaderCircle, Target, Flag, Info, X, Volume2 } from '@lucide/vue'
+import { ArrowLeft, Bell, ChevronLeft, ChevronRight, CircleCheck, CircleMinus, Timer, Power, Check, LoaderCircle, Target, Flag, Info, X, Volume2 } from '@lucide/vue'
 import ControlKViewHeader from '~/components/overlay/ControlKViewHeader.vue'
 import QuickCountdown from '~/components/overlay/QuickCountdown.vue'
 import { useQuickCountdown } from '~/composables/useQuickCountdown'
-import QuickPanelLayoutToggle from '~/components/overlay/QuickPanelLayoutToggle.vue'
 import QuickPanelVoiceControls from '~/components/overlay/QuickPanelVoiceControls.vue'
 import PressureTestPanel from '~/components/overlay/PressureTestPanel.vue'
 import { isSpotterFeatureAllowed, resolveSpotterSessionMode, toggleCurrentSessionMode, voiceSessionType, type SpotterSessionMode } from '~/services/spotter/spotterSessionPolicy'
@@ -130,23 +129,18 @@ const overlayShortcuts = computed(() => [
 ])
 
 // ─── Core State ──────────────────────────────────────────────────────────────
+// PIP-705 (decisione utente 02/11): Preparazione e Allenamento tolti. Nessun pulsante, Ctrl+N
+// o ripresa automatica avvia piu' un allenamento; il motore resta finche' la tappa 4
+// dell'iniziativa Affidabilita' (Ctrl+K) non lo cancella con una revisione dedicata.
+const TRAINING_REMOVED = true
 const selectedTrainingId = ref<TrainingOverlayId>('tracktitan_input')
 const selectedModeId = ref<TrainingOverlayDurationModeId>('short30')
 const activeStepIndex = ref(0)
 const phase = ref<OverlayPhase>('loading')
 // Restored from the existing local Electron preferences before showing the launcher.
+// PIP-705: always vertical outside ACC (the switch is gone); the dev preview still flips it.
 const quickPanelLayout = ref<'vertical' | 'horizontal'>('vertical')
 const isAccQuickPanel = computed(() => simulatorPresence.gameId.value === 'acc')
-async function setQuickPanelLayout(value: 'vertical' | 'horizontal') {
-  if (isAccQuickPanel.value) return
-  quickPanelLayout.value = value
-  if (isFullQuickPanelPreview.value) return
-  try {
-    await getOverlayApi()?.trainingOverlaySavePreferences?.({ quickPanelLayout: value })
-  } catch (error) {
-    console.error('[CONTROL_K] Layout preference save failed:', error)
-  }
-}
 // Only the local development build exposes QA tools, never the installer build.
 // Declared before any watcher reads the layout (the preview is part of it).
 const showQuickPanelDevTools = import.meta.dev
@@ -1227,6 +1221,9 @@ function executePrimaryAction() {
   if (isSectorReferenceSetupOpen.value) { void sectorReferenceSetup.value?.submit(); return }
   if (isTargetSetupOpen.value) { void confirmInfoTarget(); return }
   if (isShortcutStopConfirmOpen.value) { executeStop(); return }
+  // PIP-705 (decisione utente 02/11): Allenamento tolto. Ctrl+N non apre ne' avvia piu' un
+  // allenamento; resta per confermare Giro obiettivo e Settori obiettivo (sopra).
+  if (TRAINING_REMOVED && (primaryAction.value === 'open-selection' || primaryAction.value === 'start')) return
   const actions: Record<PrimaryOverlayAction, () => void> = {
     'open-selection': openTrainingSelection,
     start: () => {
@@ -1413,7 +1410,8 @@ onMounted(async () => {
   const api = getOverlayApi()
   isElectronRuntime.value = !!api
   const settings = await api?.trainingOverlayGetSettings?.() as TrainingOverlaySettings | undefined
-  quickPanelLayout.value = settings?.quickPanelLayout === 'horizontal' ? 'horizontal' : 'vertical'
+  // PIP-705: the vertical/horizontal switch is gone; an old saved 'horizontal' is ignored.
+  quickPanelLayout.value = 'vertical'
   await refreshSectorReferenceState().catch(() => {})
   const targetSettings = await api?.infoTargetGetSettings?.() as InfoTargetSettings | undefined
   applyInfoTargetSettings(targetSettings)
@@ -1434,7 +1432,8 @@ onMounted(async () => {
   loadSpotterVoiceSettings()
   startLiveStatePolling()
   startFastStatePolling()
-  const checkpoint = await withRecoveryDeadline(() => Promise.resolve(api?.trainingCheckpointGet?.()), null)
+  // PIP-705: Allenamento tolto: un allenamento salvato da una versione vecchia non riparte.
+  const checkpoint = TRAINING_REMOVED ? null : await withRecoveryDeadline(() => Promise.resolve(api?.trainingCheckpointGet?.()), null)
   if (checkpoint?.version === 1 && resolveTrainingOverlayTrainingId(checkpoint.trainingId) === checkpoint.trainingId
     && resolveTrainingOverlayModeId(checkpoint.modeId) === checkpoint.modeId) {
     selectedTrainingId.value = checkpoint.trainingId; selectedModeId.value = checkpoint.modeId
@@ -1616,7 +1615,6 @@ onBeforeUnmount(() => {
                     <!-- PIP-532: the Notifiche view owns the corner (its X); the switch steps aside. -->
                     <!-- PIP-657: no game yet -> the waiting note takes the switch's place, right of the logo. -->
                     <p v-if="waitingForSimulator" class="quick-panel-waiting quick-panel-waiting--header" role="status">{{ simulatorPresence.choiceRequired.value ? t('controlK.chooseGame') : t('controlK.waiting') }}</p>
-                    <QuickPanelLayoutToggle v-else-if="!usesAccLayout" v-show="!isNotificationsOpen" :model-value="quickPanelLayout" @update:model-value="setQuickPanelLayout" />
                     <div class="quick-panel-header-actions" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
                     <!-- PIP-556: ACC Pausa keeps the four voice alerts behind one button (own view). -->
                     <button v-if="usesAccLayout && !isVoiceViewOpen" type="button" class="launcher-tool-button ck-voice-alerts" :title="t('controlK.voiceAlerts')"
@@ -1642,16 +1640,6 @@ onBeforeUnmount(() => {
                       <!-- PIP-556: the badge counts only what is new (ACC); elsewhere every card. -->
                       <small v-if="usesAccLayout ? notificationUnread > 0 : notificationCount > 0" class="quick-action-badge"
                         :class="{ 'quick-action-badge--error': notificationErrors > 0 }" aria-hidden="true">{{ usesAccLayout ? notificationUnread : notificationCount }}</small>
-                    </button>
-                    <button
-                      v-if="!hideStintWhileDriving"
-                      type="button"
-                      class="launcher-tool-button launcher-tool-button--training quick-panel-training"
-                      :title="t('controlK.training')"
-                      :aria-label="primaryActionLabel"
-                      @click="executePrimaryAction"
-                    >
-                      <Dumbbell :size="18" aria-hidden="true" />
                     </button>
                     </div>
                   </header>

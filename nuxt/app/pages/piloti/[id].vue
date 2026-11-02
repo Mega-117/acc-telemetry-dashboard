@@ -6,7 +6,6 @@
 import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { doc } from 'firebase/firestore'
 import { db } from '~/config/firebase'
-import CoachLessonsPanel from '~/components/coach/CoachLessonsPanel.vue'
 import { providePilotContext } from '~/composables/usePilotContext'
 import { useGameContext } from '~/composables/useGameContext'
 import { endFirebaseScenario, startFirebaseScenario, trackedGetDoc } from '~/composables/useFirebaseTracker'
@@ -37,7 +36,8 @@ interface PilotData {
 
 const pilot = ref<PilotData | null>(null)
 const isLoading = ref(true)
-const activeTab = ref<'panoramica' | 'sessioni' | 'piste' | 'lezioni'>('panoramica')
+// PIP-705 (decisione utente 02/11): la scheda Lezioni/calendario del coach e' stata tolta.
+const activeTab = ref<'panoramica' | 'sessioni' | 'piste'>('panoramica')
 
 // Detail view state (inline navigation within pilot context)
 const detailView = ref<'none' | 'track' | 'session' | 'stats'>('none')
@@ -55,7 +55,6 @@ const pilotTabKeys: { id: string, labelKey: TranslationKey }[] = [
   { id: 'panoramica', labelKey: 'nav.overview' },
   { id: 'sessioni', labelKey: 'nav.sessions' },
   { id: 'piste', labelKey: 'nav.tracks' },
-  { id: 'lezioni', labelKey: 'coach.pilot.tabPilot' }
 ]
 const pilotTabs = computed(() => pilotTabKeys.map(tab => ({ id: tab.id, label: t(tab.labelKey) })))
 
@@ -230,11 +229,6 @@ onBeforeUnmount(() => { window.removeEventListener('resize', measureContent); he
           <!-- Piste -->
           <div v-if="activeTab === 'piste'" class="tab-content">
             <PagesPistePage @go-to-track="handleGoToTrack" />
-          </div>
-
-          <!-- Pilota: contesto, calendario e lezioni -->
-          <div v-if="activeTab === 'lezioni'" class="tab-content">
-            <CoachLessonsPanel :pilot-id="pilotId" :pilot-name="pilotName" />
           </div>
         </template>
       </template>

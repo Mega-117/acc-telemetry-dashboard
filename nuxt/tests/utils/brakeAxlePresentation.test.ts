@@ -60,11 +60,4 @@ describe('brakeAxlePresentation', () => {
     expect(model.wearAnomaly).toBe(true)
   })
 
-  it('rende esplicito il dato asse mancante e lascia Setup sui quattro lati', () => {
-    const live = readFileSync(resolve(process.cwd(), 'app/components/overlay/TyreAdvancedHud.vue'), 'utf8')
-    const setup = readFileSync(resolve(process.cwd(), 'app/components/overlay/TyreSetupHud.vue'), 'utf8')
-    expect(live).toContain("return value === null ? '—'")
-    expect(setup).toContain('v-for=\"id in TYRE_WHEEL_IDS\"')
-    expect(setup).toContain('brakeMetric(stat)[id]')
-  })
 })
