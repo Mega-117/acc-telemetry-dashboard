@@ -43,6 +43,12 @@ const otherSideName = computed(() => text.side(props.side === 'you' ? 'ref' : 'y
 const currentKey = computed(() => props.source.currentKey(props.side))
 const otherKey = computed(() => props.source.currentKey(props.side === 'you' ? 'ref' : 'you'))
 const suggested = computed(() => props.source.suggested())
+const thisSession = computed(() => {
+  const laps = [...props.source.sessionLaps()].sort((a, b) => (a.lapNumber ?? 0) - (b.lapNumber ?? 0))
+  // ★ on the fastest valid lap of the session, as in the session table.
+  const best = laps.filter(c => c.status === 'valid' && c.lapTimeMs > 0).sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0]?.key
+  return laps.map(c => ({ ...c, best: c.key === best }))
+})
 const tabLabel = (id: Tab) => id === 'mine' && props.source.subjectName() ? t('telemetry.choice.dialog.pilotLaps', { driver: props.source.subjectName()! })
   : t(`telemetry.choice.dialog.${id}`)
 
@@ -124,7 +130,7 @@ const rowProps = (c: LapChoice) => ({ choice: c, selected: c.key === selected.va
           <div v-if="tabs.length > 1" role="tablist" :aria-label="t('telemetry.choice.dialog.tabsAria')" @keydown="onTabKey">
             <button v-for="id in tabs" :id="`${uid}-tab-${id}`" :key="id" type="button" role="tab" :data-tab="id" :aria-selected="tab === id" :aria-controls="`${uid}-panel`" :tabindex="tab === id ? 0 : -1" @click="tab = id">{{ tabLabel(id) }}</button>
           </div>
-          <h3 v-else class="choice-dialog__single">{{ tabLabel('mine') }}</h3>
+          <h3 v-else class="choice-dialog__single">{{ t('telemetry.choice.dialog.thisSession') }}</h3>
         </div>
         <p v-if="busy || message" class="choice-dialog__msg" role="status">{{ busy ? t('telemetry.choice.dialog.loadingLap') : message }}</p>
         <div :id="`${uid}-panel`" class="choice-dialog__body" :role="tabs.length > 1 ? 'tabpanel' : undefined" :aria-labelledby="tabs.length > 1 ? `${uid}-tab-${tab}` : undefined">
@@ -142,6 +148,11 @@ const rowProps = (c: LapChoice) => ({ choice: c, selected: c.key === selected.va
             </div>
             <p v-if="source.idealSame?.()" class="choice-empty">{{ t('telemetry.choice.suggested.idealSame') }}</p>
           </template>
+          <!-- 02/11 (user, as Track Titan): "Tu" picks only among the laps of this session. -->
+          <div v-else-if="side === 'you'" class="choice-list">
+            <p v-if="!thisSession.length" class="choice-empty">{{ t('telemetry.choice.dialog.noSessionLaps') }}</p>
+            <LapChoiceRow v-for="c in thisSession" :key="c.key" v-bind="rowProps(c)" hide-driver hide-when @confirm="confirm" />
+          </div>
           <LapChoiceMyLaps v-else-if="tab === 'mine'" :source="source" :selected-key="selected?.key ?? null" :current-key="currentKey" :other-key="otherKey" :other-side="otherSideName" :can-swap="!!canSwap" @select="select" @confirm="confirm" />
           <LapChoiceDrivers v-else-if="tab === 'drivers'" :source="source" :selected-key="selected?.key ?? null" :current-key="currentKey" :other-key="otherKey" :other-side="otherSideName" :can-swap="!!canSwap" @select="select" @confirm="confirm" />
           <LapChoiceLink v-else :source="source" :selected-key="selected?.key ?? null" :current-key="currentKey" :other-key="otherKey" :other-side="otherSideName"

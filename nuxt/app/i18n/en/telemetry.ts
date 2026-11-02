@@ -213,6 +213,8 @@ export default {
         close: 'Close',
         loadingLap: 'Loading the lap…',
         current: 'Current choice',
+        thisSession: 'Laps of this session',
+        noSessionLaps: 'No lap recorded in this session.',
         swapWith: 'Swap with {side}',
         noRef: 'No reference',
         noRefHint: 'Only your lap stays',

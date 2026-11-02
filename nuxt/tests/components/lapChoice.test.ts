@@ -146,24 +146,18 @@ describe('LapChoiceDialog', () => {
     await wrapper!.setProps({ open: true }); await flushPromises()
     expect(dialog()?.textContent).toContain('Giro ideale: è il tuo giro migliore, già il più veloce in tutti e tre i settori.')
   })
-  it('Tu opens on its laps only, the session open with the star, others behind "Mostra"', async () => {
+  // 02/11 (user, as Track Titan): "Tu" only among the laps of this session, in lap order; no other sessions.
+  it('Tu lists only the laps of this session, in lap order, with the star', async () => {
     openDialog('you')
     await wrapper!.setProps({ open: true }); await flushPromises()
     expect(document.body.querySelector('[role="tablist"]')).toBeNull()
-    expect(dialog()?.textContent).toContain('I miei giri')
-    expect(dialog()?.textContent).toContain('Questa sessione')
+    expect(dialog()?.textContent).toContain('Giri di questa sessione')
+    expect(dialog()?.textContent).not.toContain('Prima')
+    expect(document.body.querySelector('.my-laps__head')).toBeNull()
+    expect(rows().map(r => r.querySelector('.choice-row__lap')?.textContent)).toEqual(['Giro 1', 'Giro 2', 'Giro 3', 'Giro 5'])
     expect(dialog()?.textContent).toContain('Migliore della sessione')
-    expect(dialog()?.textContent).toContain('Prima')
-    const show = document.body.querySelector<HTMLButtonElement>('.my-laps__head[aria-expanded]')!
-    expect(show.textContent).toContain('Mostra')
-    expect(show.textContent).toContain('1 giro')
-    expect(show.textContent).not.toContain('1 giri')
-    expect(show.getAttribute('aria-expanded')).toBe('false')
-    // All these laps are mine: the rows do not repeat my name and TU.
-    expect(rows().some(r => r.textContent?.includes('Bob117') || r.querySelector('.choice-row__tag'))).toBe(false)
-    show.click(); await flushPromises()
-    expect(dialog()?.textContent).toContain('Validità non disponibile')
-    // 01/11: short tags, never "Benzina" or "Gomme".
+    // All these laps are mine: the rows do not repeat my name.
+    expect(rows().some(r => r.textContent?.includes('Bob117'))).toBe(false)
     expect(dialog()?.textContent).not.toContain('Benzina')
   })
   it('Esc keeps the comparison; the lap of the other side is refused, or swapped when it can be (01/11)', async () => {

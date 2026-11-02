@@ -213,6 +213,8 @@ export default {
         close: 'Chiudi',
         loadingLap: 'Carico il giro…',
         current: 'Scelta attuale',
+        thisSession: 'Giri di questa sessione',
+        noSessionLaps: 'Nessun giro registrato in questa sessione.',
         swapWith: 'Scambia con {side}',
         noRef: 'Nessun riferimento',
         noRefHint: 'Resta solo il tuo giro',

@@ -285,7 +285,9 @@ svg { display: block; width: 100%; touch-action: none; cursor: crosshair; }
 // Track Titan header: name on the left in white, live values on the right in the lap colours.
 // Altezza fissa: i riquadri dei valori compaiono e spariscono col cursore senza spostare nulla (niente
 // scrollbar che lampeggia nella colonna centrale).
-.chart-head { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 24px; padding: 0 0 4px 12px; }
+// 02/11 (user): the values at the cursor in the middle of the header, the channel name on the left.
+.chart-head { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px; min-height: 24px; padding: 0 0 4px 12px;
+  > .chart-values { grid-column: 2; } }
 .chart-title { color: #fff; font: italic 700 15px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; letter-spacing: .03em;
   small { color: #8a8a90; font: 500 11px 'Inter', sans-serif; text-transform: none; } }
 .chart-note { margin-left: 8px; padding: 1px 6px; border: 1px solid #ffffff2e; color: #e6e6ea; font: normal 700 11px 'Inter', sans-serif; letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums;
