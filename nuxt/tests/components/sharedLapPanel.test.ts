@@ -152,21 +152,16 @@ describe('SessionAnalysisPanel sharing and coach view', () => {
     expect(view.get('.lap-pill--ref .lap-pill__time').text()).toBe('1:44.900')
     expect(view.get('.lap-pill--ref .lap-pill__why').attributes('aria-label')).toContain('Perché questo: il tuo giro valido più veloce dopo questo')
     expect(view.get('.lap-pill--ref .lap-pill__body').attributes('title')).toContain('Gara')
-    // Both laps are mine: they can be swapped, from Cambia (01/11: the button left the bar).
     expect(view.find('.compare-swap').exists()).toBe(false)
     await view.get('.lap-pill--ref .lap-pill__change').trigger('click')
     await flushPromises()
-    // Tu's row in "I miei giri" says "Scambia con Tu" and swaps.
+    // 02/11 (user): Tu's lap (G5) is not offered as Riferimento: no "Scambia con Tu".
     ;[...document.body.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(b => b.textContent?.includes('I miei giri'))!.click()
     await flushPromises()
-    ;[...document.body.querySelectorAll<HTMLButtonElement>('.choice-row')].find(r => r.textContent?.includes('Scambia con'))!.click()
-    await flushPromises()
-    expect(document.body.querySelector('[role="dialog"]')).toBeNull()
-    expect(view.get('.lap-pill--you .lap-pill__lap').text()).toBe('G6')
-    expect(view.get('.lap-pill--ref .lap-pill__why').attributes('aria-label')).toContain('giro scelto da te')
-    await view.get('.lap-pill--ref .lap-pill__change').trigger('click')
-    await flushPromises()
-    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain('Cambia il riferimento')
+    const dialogText = document.body.querySelector('[role="dialog"]')?.textContent ?? ''
+    expect(dialogText).toContain('Cambia il riferimento')
+    expect(dialogText).not.toContain('Scambia')
+    expect([...document.body.querySelectorAll<HTMLElement>('.choice-row .choice-row__lap')].map(e => e.textContent)).not.toContain('Giro 5')
     view.unmount()
   })
 

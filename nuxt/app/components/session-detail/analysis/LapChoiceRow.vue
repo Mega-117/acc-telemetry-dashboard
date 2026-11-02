@@ -10,8 +10,6 @@ import { useLapChoiceText } from '~/composables/useLapChoiceText'
 import { useI18n } from '~/i18n'
 
 const props = defineProps<{ choice: LapChoice, selected: boolean, current?: boolean, otherSide?: string | null, idealScope?: 'session' | 'history', rank?: number | null, hideWhen?: boolean, hideDriver?: boolean,
-  /** 01/11: the row of the other side swaps the two laps (no "Scambia" button any more). */
-  swappable?: boolean,
   /** 02/11 (user, as Track Titan): name, tags and time only; the "why" only when it says something (x% faster). */
   brief?: boolean,
   /** 02/11: best qualifying / race lap of a past session (yellow / red, as the times elsewhere). */
@@ -33,7 +31,6 @@ const reasonText = computed(() => {
   return r.kind === 'stepUp' && r.pct > 0 ? t('telemetry.choice.reason.fasterShort', { pct: text.decimal(r.pct) }) : ''
 })
 const tooltip = computed(() => [props.choice.ideal ? text.idealNote(props.idealScope) : text.when(props.choice), text.conditions(props.choice.conditions)].filter(Boolean).join('\n'))
-const blocked = computed(() => !!props.otherSide && !props.swappable)
 function use() { emit('confirm', props.choice) }
 function onKey(event: KeyboardEvent) {
   if (event.key !== 'Enter') return
@@ -43,8 +40,9 @@ function onKey(event: KeyboardEvent) {
 </script>
 
 <template>
-  <button type="button" class="choice-row" :class="{ 'is-aligned': aligned, 'is-selected': selected, 'is-current': current, 'is-ideal': choice.ideal, 'is-off': choice.status === 'incomplete' || blocked }" :aria-pressed="selected"
-    :aria-current="current ? 'true' : undefined" :aria-disabled="blocked || undefined" :data-key="choice.key" :title="tooltip" @click="use" @keydown="onKey">
+  <!-- 02/11 (user): the lap already used on the other side is not listed (no "Scambia con …", no lap against itself). -->
+  <button v-if="!otherSide" type="button" class="choice-row" :class="{ 'is-aligned': aligned, 'is-selected': selected, 'is-current': current, 'is-ideal': choice.ideal, 'is-off': choice.status === 'incomplete' }" :aria-pressed="selected"
+    :aria-current="current ? 'true' : undefined" :data-key="choice.key" :title="tooltip" @click="use" @keydown="onKey">
     <span v-if="rank" class="choice-row__rank">{{ rank }}</span>
     <span class="choice-row__main">
       <span v-if="!hideDriver" class="choice-row__driver">{{ text.driver(choice) }}</span>
@@ -61,7 +59,6 @@ function onKey(event: KeyboardEvent) {
       <span v-if="reasonText" class="choice-row__reason">{{ reasonText }}</span>
       <span v-if="choice.note" class="choice-row__note">{{ choice.note }}</span>
       <span v-if="current" class="choice-row__pill">{{ t('telemetry.choice.dialog.current') }}</span>
-      <span v-if="otherSide" class="choice-row__pill" :class="{ 'is-swap': swappable }">{{ swappable ? t('telemetry.choice.dialog.swapWith', { side: otherSide }) : t('telemetry.choice.dialog.onOtherSide', { side: otherSide }) }}</span>
     </span>
     <span class="choice-row__time" :class="{ 'is-best': choice.best, 'is-invalid': choice.status === 'invalid' }">{{ formatLapTime(choice.lapTimeMs) }}</span>
   </button>

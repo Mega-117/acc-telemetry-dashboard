@@ -454,7 +454,6 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
         <LapChoiceCard side="ref" :choice="choice.refCard.value" :reason="choice.reason.value" :ideal-scope="idealScope" :pilot-name="pilotName" :disabled="!entries.length" @change="openChooser('ref')" />
       </div>
       <LapChoiceDialog :open="chooser !== null" :side="chooser ?? 'ref'" :source="choice.source" :apply="applyChoice" :variant="chooserVariant" :ideal-scope="idealScope"
-        :can-swap="choice.canSwap.value" @swap="choice.swap(); chooser = null"
         @close="chooser = null; choice.cancelPending()" />
       <span v-if="shareMessage" class="bar-note" :class="{ failed: shareState === 'error' }" role="status">{{ shareMessage }}</span>
     </div>

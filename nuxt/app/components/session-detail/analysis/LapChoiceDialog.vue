@@ -23,10 +23,8 @@ const props = defineProps<{
   variant?: 'modal' | 'panel'
   idealScope?: 'session' | 'history'
   initialTab?: Tab | null
-  /** 01/11: Tu and Riferimento can trade places (the button left the bar between the pills). */
-  canSwap?: boolean
 }>()
-const emit = defineEmits<{ close: [], swap: [] }>()
+const emit = defineEmits<{ close: [] }>()
 const { t } = useI18n()
 const text = useLapChoiceText()
 const uid = useId()
@@ -57,7 +55,6 @@ async function confirm(choice: LapChoice | null = selected.value) {
   if (busy.value) return
   if (choice) selected.value = choice
   // The lap of the other side: the two trade places (01/11: the "Scambia" button left the header).
-  if (choice && choice.key === otherKey.value && props.canSwap) { emit('swap'); close(); return }
   if (block.value) { message.value = block.value === 'none' ? t('telemetry.choice.dialog.pickFirst') : blockText.value; return }
   if (choice!.key === currentKey.value) { close(); return }
   busy.value = true
@@ -110,7 +107,7 @@ watch(() => props.open, open => {
 }, { immediate: true })
 onBeforeUnmount(() => { opener?.focus?.() })
 const rowProps = (c: LapChoice) => ({ choice: c, selected: c.key === selected.value?.key, current: c.key === currentKey.value, otherSide: c.key === otherKey.value ? otherSideName.value : null,
-  swappable: !!props.canSwap && c.key === otherKey.value, idealScope: props.idealScope })
+  idealScope: props.idealScope })
 </script>
 
 <template>
@@ -146,8 +143,8 @@ const rowProps = (c: LapChoice) => ({ choice: c, selected: c.key === selected.va
             <p v-if="!thisSession.length" class="choice-empty">{{ t('telemetry.choice.dialog.noSessionLaps') }}</p>
             <LapChoiceRow v-for="c in thisSession" :key="c.key" v-bind="rowProps(c)" hide-driver hide-when @confirm="confirm" />
           </div>
-          <LapChoiceMyLaps v-else-if="tab === 'mine'" :source="source" :selected-key="selected?.key ?? null" :current-key="currentKey" :other-key="otherKey" :other-side="otherSideName" :can-swap="!!canSwap" @select="select" @confirm="confirm" />
-          <LapChoiceDrivers v-else :source="source" :selected-key="selected?.key ?? null" :current-key="currentKey" :other-key="otherKey" :other-side="otherSideName" :can-swap="!!canSwap"
+          <LapChoiceMyLaps v-else-if="tab === 'mine'" :source="source" :selected-key="selected?.key ?? null" :current-key="currentKey" :other-key="otherKey" :other-side="otherSideName" @select="select" @confirm="confirm" />
+          <LapChoiceDrivers v-else :source="source" :selected-key="selected?.key ?? null" :current-key="currentKey" :other-key="otherKey" :other-side="otherSideName"
             @select="select" @confirm="confirm" />
         </div>
       </div>

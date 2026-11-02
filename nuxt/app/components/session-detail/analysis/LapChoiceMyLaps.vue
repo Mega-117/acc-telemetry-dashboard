@@ -10,7 +10,7 @@ import type { LapChoiceSource } from '~/composables/useLapChoice'
 import { useLapChoiceText } from '~/composables/useLapChoiceText'
 import { useI18n } from '~/i18n'
 
-const props = defineProps<{ source: LapChoiceSource, selectedKey: string | null, currentKey: string | null, otherKey: string | null, otherSide: string , /** 01/11: the other side's row swaps the laps. */ canSwap?: boolean }>()
+const props = defineProps<{ source: LapChoiceSource, selectedKey: string | null, currentKey: string | null, otherKey: string | null, otherSide: string  }>()
 const emit = defineEmits<{ select: [choice: LapChoice], confirm: [choice: LapChoice] }>()
 const { t } = useI18n()
 const text = useLapChoiceText()
@@ -53,7 +53,7 @@ async function load() {
 }
 onMounted(() => { void load() })
 const rowProps = (lap: LapChoice) => ({ choice: lap, selected: lap.key === props.selectedKey, current: lap.key === props.currentKey,
-  otherSide: lap.key === props.otherKey ? props.otherSide : null, swappable: !!props.canSwap && lap.key === props.otherKey })
+  otherSide: lap.key === props.otherKey ? props.otherSide : null })
 // One row per best lap of each past session: qualifying and race when the summary knows them, else its fastest lap.
 type PastBest = { key: string, kind: 'qualify' | 'race' | null, lap: LapChoice }
 const pastBests = computed(() => rows.value.flatMap((s: MySessionRow): PastBest[] => s.qualify || s.race

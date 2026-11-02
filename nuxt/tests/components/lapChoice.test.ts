@@ -185,27 +185,20 @@ describe('LapChoiceDialog', () => {
     expect(dialog()?.textContent).toContain('Giri di questa sessione')
     expect(dialog()?.textContent).not.toContain('Prima')
     expect(document.body.querySelector('.my-laps__head')).toBeNull()
-    expect(rows().map(r => r.querySelector('.choice-row__lap')?.textContent)).toEqual(['Giro 1', 'Giro 2', 'Giro 3', 'Giro 5'])
-    expect(dialog()?.textContent).toContain('Migliore della sessione')
+    expect(rows().map(r => r.querySelector('.choice-row__lap')?.textContent)).toEqual(['Giro 1', 'Giro 2', 'Giro 3'])
+    // Lap 5 is the Riferimento: not listed (02/11, no lap against itself).
     // All these laps are mine: the rows do not repeat my name.
     expect(rows().some(r => r.textContent?.includes('Bob117'))).toBe(false)
     expect(dialog()?.textContent).not.toContain('Benzina')
   })
-  it('Esc keeps the comparison; the lap of the other side is refused, or swapped when it can be (01/11)', async () => {
+  // 02/11 (user): the lap already used on the other side is not listed: no "Scambia con …", no lap against itself.
+  it('Esc keeps the comparison; the lap of the other side is not listed', async () => {
     const { apply } = openDialog('you')
     await wrapper!.setProps({ open: true }); await flushPromises()
-    const refRow = rows().find(r => r.dataset.key === ref.key)!
-    expect(refRow.textContent).toContain('Già usato come Riferimento')
-    refRow.click(); await flushPromises()
-    expect(dialog()?.textContent).toContain('Questo giro è già Riferimento')
+    expect(rows().some(r => r.dataset.key === ref.key)).toBe(false)
+    expect(dialog()?.textContent).not.toContain('Scambia')
     dialog()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await flushPromises()
     expect(wrapper!.emitted('close')).toHaveLength(1)
-    expect(apply).not.toHaveBeenCalled()
-    await wrapper!.setProps({ open: false, canSwap: true }); await wrapper!.setProps({ open: true }); await flushPromises()
-    const swapRow = rows().find(r => r.dataset.key === ref.key)!
-    expect(swapRow.textContent).toContain('Scambia con Riferimento')
-    swapRow.click(); await flushPromises()
-    expect(wrapper!.emitted('swap')).toHaveLength(1)
     expect(apply).not.toHaveBeenCalled()
   })
   it('an error while loading the lap is shown and the dialog stays open; Enter on a row confirms', async () => {
