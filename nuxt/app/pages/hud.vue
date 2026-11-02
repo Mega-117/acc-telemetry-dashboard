@@ -124,6 +124,7 @@ const dashboardSettings = reactive({
   gearReference: false,
   fuelCriticalFlashEnabled: false,
   fuelCriticalLapsThreshold: 0.5,
+  shiftFlashColor: 'red' as 'red' | 'blue',
 })
 const trackmapSettings = reactive<{
   showPitPrediction: boolean, showCarNumbers: boolean, circleView: boolean
@@ -317,6 +318,7 @@ async function refreshState() {
         dashboardSettings.fuelCriticalFlashEnabled = settings?.fuelCriticalFlashEnabled === true
         dashboardSettings.fuelCriticalLapsThreshold = Number.isFinite(Number(settings?.fuelCriticalLapsThreshold))
           ? Number(settings.fuelCriticalLapsThreshold) : 0.5
+        dashboardSettings.shiftFlashColor = settings?.shiftFlashColor === 'blue' ? 'blue' : 'red'
       }
       if (overlay.id === 'trackmap') {
         trackmapSettings.showPitPrediction = settings?.showPitPrediction !== false
@@ -584,7 +586,7 @@ async function toggleSectorBest() {
 
 async function saveDashboardSetting(
   key: keyof typeof dashboardSettings,
-  value: boolean | number,
+  value: boolean | number | string,
 ) {
   const api = getApi()
   if (!apiReady.value || !api?.hudOverlaySaveSettings) return
@@ -1102,6 +1104,18 @@ async function toggleTraining() {
                     />
                   </label>
                   </div>
+                  <label class="hud-control">
+                    <span><strong>{{ t('hud.dashboard.shiftColor') }}</strong></span>
+                    <select
+                      class="hud-select"
+                      :value="dashboardSettings.shiftFlashColor"
+                      :disabled="selectedSettingsDisabled"
+                      @change="saveDashboardSetting('shiftFlashColor', ($event.target as HTMLSelectElement).value === 'blue' ? 'blue' : 'red')"
+                    >
+                      <option value="red">{{ t('hud.dashboard.shiftRed') }}</option>
+                      <option value="blue">{{ t('hud.dashboard.shiftBlue') }}</option>
+                    </select>
+                  </label>
                   <label class="hud-control">
                     <span><strong>{{ t('hud.dashboard.fuelThreshold') }}</strong></span>
                     <span class="hud-number">

@@ -75,6 +75,7 @@ onUnmounted(() => {
       :model="model"
       :background-opacity="backgroundOpacity"
       :adjusting="adjusting"
+      :shift-color="overlay.settings.value?.shiftFlashColor === 'blue' ? 'blue' : 'red'"
       class="overlay-canvas"
       :style="canvasStyle"
     />

@@ -36,6 +36,8 @@ export interface HudOverlaySettings {
   showDamage?: boolean
   showTime?: boolean
   backgroundOpacity?: number
+  /** 02/11: colour of the dashboard shift flash. */
+  shiftFlashColor?: 'red' | 'blue'
   topCars?: number
   carsAhead?: number
   carsBehind?: number

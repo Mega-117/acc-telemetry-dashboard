@@ -130,13 +130,17 @@ describe('Dashboard layout (PIP-671, approved draft "Cruscotto · race" 30/10)',
 })
 
 describe('Dashboard v3 states', () => {
-  it('shift point: the whole bar turns blue and flashes in the draft blues (260 ms rhythm), SHIFT on the right', async () => {
+  // 02/11 (user): the flash is red by default (deep / light red); blue can be chosen on the HUD page.
+  it('shift point: the whole bar flashes (260 ms rhythm) in red by default or blue, SHIFT on the right', async () => {
     const html = await render({ context: { track: 'monza', car: 'ferrari_296_gt3', sessionType: 2, sessionIndex: 1, sessionUid: 's1', serverId: null }, rpm: 7400 })
-    expect(classes(html, 'dash-rpm')).toEqual(expect.arrayContaining(['dash-rpm--blue', 'dash-rpm--flash']))
+    expect(classes(html, 'dash-rpm')).toEqual(expect.arrayContaining(['dash-rpm--blue', 'dash-rpm--flash', 'dash-rpm--shift-red']))
     expect(html).toContain('<span class="dash-rpm__shift-label">SHIFT</span>')
     expect(await render()).not.toContain('dash-rpm__shift-label')
-    expect(styles()).toContain('.dash-rpm--flash .dash-rpm__fill { width: 100% !important; clip-path: none; animation: dash-shift-flash 260ms steps(1, end) infinite; }')
+    expect(styles()).toContain('.dash-rpm--flash .dash-rpm__fill { width: 100% !important; clip-path: none; animation: dash-shift-flash-red 260ms steps(1, end) infinite; }')
+    expect(styles()).toContain('@keyframes dash-shift-flash-red { 0%, 49% { background: #b8001c; } 50%, 100% { background: #ff5a6e; } }')
+    expect(styles()).toContain('.dash-rpm--flash.dash-rpm--shift-blue .dash-rpm__fill { animation-name: dash-shift-flash; }')
     expect(styles()).toContain('@keyframes dash-shift-flash { 0%, 49% { background: #0753d0; } 50%, 100% { background: #31b5ff; } }')
+    expect(source('app/pages/dashboard-overlay.vue')).toContain(":shift-color=\"overlay.settings.value?.shiftFlashColor === 'blue' ? 'blue' : 'red'\"")
   })
 
   it('pit limiter: blue bar with PIT LIMITER ON, blue gear, pulsing bar', async () => {
@@ -215,7 +219,7 @@ describe('Dashboard v3 background transparency', () => {
     const page = source('app/pages/dashboard-overlay.vue')
     expect(hud).toContain('<HudOverlayBackground :opacity="backgroundOpacity" />')
     expect(hud.match(/backgroundOpacity/g)).toHaveLength(3) // prop, default, the layer
-    expect(hud).toContain('{ backgroundOpacity: 1, adjusting: null }')
+    expect(hud).toContain("{ backgroundOpacity: 1, adjusting: null, shiftColor: 'red' }")
     expect(page).toContain("const { backgroundOpacity } = useHudOverlayBackground(overlay.settings, 'dashboard')")
     expect(page).toContain(':background-opacity="backgroundOpacity"')
     expect(styles()).toMatch(/\.dash-hud \{[^}]*background: transparent;/s)

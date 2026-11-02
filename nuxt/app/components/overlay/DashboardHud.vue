@@ -10,7 +10,9 @@ const props = withDefaults(defineProps<{
   model: DashboardPresentation
   backgroundOpacity?: number
   adjusting?: DashboardAdjustableKey | null
-}>(), { backgroundOpacity: 1, adjusting: null })
+  /** 02/11 (user): the shift flash in red (default) or blue. */
+  shiftColor?: 'red' | 'blue'
+}>(), { backgroundOpacity: 1, adjusting: null, shiftColor: 'red' })
 
 const { t } = useI18n()
 
@@ -144,7 +146,7 @@ function cellTag(cell: DashboardCell): string {
 
       <div
         class="dash-rpm"
-        :class="[`dash-rpm--${model.rpmBand}`, { 'dash-rpm--flash': model.shiftFlash, 'dash-rpm--pulse': model.rpmPulse }]"
+        :class="[`dash-rpm--${model.rpmBand}`, `dash-rpm--shift-${shiftColor}`, { 'dash-rpm--flash': model.shiftFlash, 'dash-rpm--pulse': model.rpmPulse }]"
       >
         <span class="dash-rpm__fill" :style="{ width: `${model.rpmRatio * 100}%` }" />
         <span
