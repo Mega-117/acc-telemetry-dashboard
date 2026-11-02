@@ -494,6 +494,7 @@ function readSessionBests(ownerUid: string) {
   if (!pending) {
     const own = ownerUid === comparisonCurrentUser.value?.uid
     pending = telemetryGateway.getSessionsPage(own ? undefined : ownerUid, {}, 1, 50, true).then(({ sessions }) => {
+      if (!sessions.length) throw new Error('no sessions read')
       const out: Record<string, SessionKindBests> = {}
       for (const s of sessions) {
         const token = analysisSessionToken(s.meta?.sourceSessionId, s.sessionId, s.meta?.date_start)

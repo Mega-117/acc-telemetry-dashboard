@@ -26,8 +26,16 @@ const thisSession = computed(() => {
   return laps.map(c => ({ ...c, best: c.key === best }))
 })
 const currentToken = computed(() => props.source.sessionLaps()[0]?.sessionToken ?? null)
-// The all-time best (yours, or the driver's for a coach) and the ideal lap, as suggested.
-const top = computed(() => props.source.suggested().filter(c => c.reason?.kind === 'myBest' || c.reason?.kind === 'coachBest' || c.reason?.kind === 'ideal'))
+// The all-time best of the shown driver (also when it is the lap of "Tu": the suggestions leave that one out) and the
+// ideal lap. Never the coach's own best in "Giri di …" (Codex 02/11).
+const top = computed(() => {
+  const suggested = props.source.suggested()
+  const candidates = [...suggested.filter(c => c.reason?.kind === 'myBest'), ...thisSession.value.filter(c => c.status === 'valid'),
+    ...rows.value.flatMap(r => [r.best, r.qualify, r.race]).filter((c): c is LapChoice => !!c)].filter(c => c.lapTimeMs > 0)
+  const best = candidates.sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0]
+  const ideal = suggested.find(c => c.reason?.kind === 'ideal')
+  return [best && { ...best, best: false, reason: undefined }, ideal].filter((c): c is LapChoice => !!c)
+})
 const rows = computed(() => mySessionRows(listed.value, currentToken.value, bests.value))
 const open = ref<Set<string>>(new Set())
 function toggle(token: string) {

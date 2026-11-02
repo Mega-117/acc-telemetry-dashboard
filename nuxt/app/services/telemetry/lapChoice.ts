@@ -141,11 +141,13 @@ export function mySessionRows(laps: LapChoice[], currentToken: string | null, be
     if (!list.some(l => l.key === lap.key)) list.push(lap)
   }
   const usable = (l: LapChoice) => l.status !== 'invalid' && l.status !== 'incomplete' && l.lapTimeMs > 0
-  const byTime = (list: LapChoice[], ms: number | null | undefined) => ms ? list.find(l => usable(l) && Math.abs(l.lapTimeMs - ms) <= 1) ?? null : null
+  const byTime = (list: LapChoice[], ms: number | null | undefined, not: LapChoice | null = null) =>
+    ms ? list.filter(l => usable(l) && l.key !== not?.key && Math.abs(l.lapTimeMs - ms) <= 1).sort((a, b) => Math.abs(a.lapTimeMs - ms) - Math.abs(b.lapTimeMs - ms))[0] ?? null : null
   return [...sessions].sort(([a], [b]) => b.localeCompare(a)).map(([token, list]) => {
     const fastest = list.filter(l => l.status === 'valid' && l.lapTimeMs > 0).sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0] ?? null
     const kinds = bests[token]
-    const qualify = byTime(list, kinds?.qualifyMs), race = byTime(list, kinds?.raceMs)
+    const qualify = byTime(list, kinds?.qualifyMs)
+    const race = byTime(list, kinds?.raceMs, qualify)
     const best = [fastest, qualify, race].filter((l): l is LapChoice => !!l).sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0] ?? null
     const sorted = [...list].sort((a, b) => (a.lapNumber ?? 0) - (b.lapNumber ?? 0)).map(l => ({ ...l, best: l.key === best?.key }))
     const marked = (l: LapChoice | null) => l ? sorted.find(s => s.key === l.key) ?? null : null

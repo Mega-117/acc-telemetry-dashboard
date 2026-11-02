@@ -64,6 +64,13 @@ describe('lapChoice: I miei giri', () => {
     expect(rows[1]!.race).toBeNull()
     expect(rows[1]!.best?.lapNumber).toBe(2)
   })
+  it('never gives qualifying and race the same lap', () => {
+    const t = '20261030_100000'
+    const rows = mySessionRows([lap({ sessionToken: t, lapNumber: 1, lapTimeMs: 100000 }), lap({ sessionToken: t, lapNumber: 2, lapTimeMs: 100001 })], null,
+      { [t]: { qualifyMs: 100000, raceMs: 100000 } })
+    expect(rows[0]!.qualify?.lapNumber).toBe(1)
+    expect(rows[0]!.race?.lapNumber).toBe(2)
+  })
 })
 
 describe('lapChoice: search and leaderboard', () => {
