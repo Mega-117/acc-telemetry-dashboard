@@ -101,7 +101,8 @@ def main() -> int:
                 skipped += 1
                 continue
             samples, sample_rate = model.create(
-                text_for(phrase, voice), voice=voice, speed=float(phrase.get("speed", speed)), lang=kokoro_lang(voice),
+                text_for(phrase, voice), voice=voice, speed=float(phrase.get("speed", speed)),
+                lang=kokoro_lang(voice),
             )
             write_wav(out, samples, int(sample_rate or SAMPLE_RATE))
             generated += 1

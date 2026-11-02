@@ -46,7 +46,10 @@ def wav_filename(training_id: str, mode_id: str, step_id: str, voice: str) -> st
 
 
 def load_phrases() -> tuple[list[tuple[str, str, str, dict, float | None]], dict]:
-    """Each phrase keeps its whole entry: the voice picks the Italian or the English text (PIP-667)."""
+    """Each phrase keeps its whole entry.
+
+    The voice picks the Italian or the English text (PIP-667).
+    """
     data = json.loads(VOICE_SCRIPT.read_text(encoding="utf-8"))
     phrases: list[tuple[str, str, str, dict, float | None]] = []
     for scenario in data.get("scenarios", []):

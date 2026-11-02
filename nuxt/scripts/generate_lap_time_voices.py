@@ -59,7 +59,8 @@ def italian_number(n: int) -> str:
 
 
 EN_UNITS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
-EN_TEENS = ["ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"]
+EN_TEENS = ["ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen",
+            "eighteen", "nineteen"]
 EN_TENS = {2: "twenty", 3: "thirty", 4: "forty", 5: "fifty"}
 
 
@@ -73,13 +74,17 @@ def english_number(n: int) -> str:
 
 
 def lap_time_text(tenths: int, voice: str = "if_sara") -> str:
-    """Same text as lapTimeVoiceText in lapTimeAnnouncer.ts; English voices use the radio form (PIP-667)."""
+    """Same text as lapTimeVoiceText in lapTimeAnnouncer.ts.
+
+    English voices use the radio form (PIP-667).
+    """
     total_seconds = tenths // 10
     minutes = total_seconds // 60
     seconds = total_seconds % 60
     tenth = tenths % 10
     if is_english(voice):
-        second_text = f"oh-{'oh' if seconds == 0 else EN_UNITS[seconds]}" if seconds < 10 else english_number(seconds)
+        second_text = (f"oh-{'oh' if seconds == 0 else EN_UNITS[seconds]}" if seconds < 10
+                       else english_number(seconds))
         return f"{english_number(minutes)} {second_text}, point {EN_UNITS[tenth]}."
     second_text = f"zero {italian_number(seconds)}" if seconds < 10 else italian_number(seconds)
     return f"{italian_number(minutes)}, {second_text}, punto {italian_number(tenth)}."

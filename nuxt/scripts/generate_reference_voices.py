@@ -59,13 +59,15 @@ def main() -> int:
             out = PUBLIC / web_path.lstrip("/")
             if not out.exists() or args.force:
                 out.parent.mkdir(parents=True, exist_ok=True)
-                out.write_bytes(runtime.synthesize(text_for(point, voice, "text_en"), voice, float(point.get("speed") or 1.15)))
+                speed = float(point.get("speed") or 1.15)
+                out.write_bytes(runtime.synthesize(text_for(point, voice, "text_en"), voice, speed))
                 generated += 1
                 print(f"  ok {out.name}")
             else:
                 skipped += 1
             point.setdefault("audio_paths", {})[voice] = web_path
-    DEFAULTS.write_text(json.dumps(store, indent=2, ensure_ascii=False) + ("\n" if raw.endswith("\n") else ""), encoding="utf-8")
+    ending = "\n" if raw.endswith("\n") else ""
+    DEFAULTS.write_text(json.dumps(store, indent=2, ensure_ascii=False) + ending, encoding="utf-8")
     print(f"Generated {generated}, skipped {skipped}")
     return 0
 

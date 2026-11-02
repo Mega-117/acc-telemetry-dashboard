@@ -56,7 +56,8 @@ def italian_number(n: int) -> str:
 
 
 def bricks(voice: str = "if_sara") -> list[tuple[str, str]]:
-    # PIP-667: English voices only need the invalid-lap prefix; the number bricks are unused at runtime.
+    # PIP-667: English voices only need the invalid-lap prefix;
+    # the number bricks are unused at runtime.
     if is_english(voice):
         return [("invalid", "that lap is invalid.")]
     out: list[tuple[str, str]] = [(f"num-{n}", italian_number(n)) for n in range(60)]
