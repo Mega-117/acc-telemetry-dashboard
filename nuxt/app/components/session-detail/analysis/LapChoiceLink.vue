@@ -29,7 +29,8 @@ async function check() {
     if (mine !== attempt || !answer) return
     result.value = answer
     if (answer.state === 'error') emit('select', null)
-    if (answer.state === 'lap') emit('select', answer.choice)
+    // 02/11 (user): the button says "Confronta": a lap link is used at once (a session link still lists its laps).
+    if (answer.state === 'lap') { emit('select', answer.choice); emit('confirm', answer.choice) }
     else if (answer.state === 'session') {
       const proposed = answer.choices.find(c => c.key === answer.proposedKey)
       if (proposed) emit('select', proposed)

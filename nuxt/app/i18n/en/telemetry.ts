@@ -275,7 +275,7 @@ export default {
         label: 'Paste the link you received',
         hint: 'The link of a Racer Core lap or session',
         placeholder: 'https://app.racercore.app/giro#…',
-        check: 'Check the link',
+        check: 'Compare',
         checking: 'Checking the link…',
         unknown: 'This is not the link of a Racer Core lap or session: ask whoever sent it to copy it with "Share lap".',
         preview: 'Lap received',

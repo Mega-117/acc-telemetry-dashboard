@@ -275,7 +275,7 @@ export default {
         label: 'Incolla il link che ti hanno mandato',
         hint: 'Il link di un giro o di una sessione di Racer Core',
         placeholder: 'https://app.racercore.app/giro#…',
-        check: 'Controlla il link',
+        check: 'Confronta',
         checking: 'Controllo il link…',
         unknown: 'Questo non è il link di un giro o di una sessione di Racer Core: chiedi a chi te l’ha mandato di copiarlo con "Condividi giro".',
         preview: 'Giro ricevuto',

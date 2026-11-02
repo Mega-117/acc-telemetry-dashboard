@@ -221,21 +221,23 @@ describe('LapChoiceDialog', () => {
     expect(apply).not.toHaveBeenCalled()
     expect(dialog()?.textContent).toContain('Questo giro è incompleto')
   })
-  it('a lap link shows whose lap it is before it is used', async () => {
+  // 02/11 (user): "Confronta" uses a lap link at once.
+  it('a lap link is used at once with Confronta', async () => {
     const shared: LapChoice = { ...step, key: 'shared:z', reason: { kind: 'link', driver: 'Mike83' }, driver: 'Mike83' }
-    openDialog('ref', undefined, { resolveLink: async () => ({ state: 'lap', choice: shared }) })
+    const apply = vi.fn(async () => 'Archivio giri non raggiungibile')
+    openDialog('ref', apply, { resolveLink: async () => ({ state: 'lap', choice: shared }) })
     await wrapper!.setProps({ open: true }); await flushPromises()
     button('Altri piloti').click(); await flushPromises()
     button('Hai un link condiviso?').click(); await flushPromises()
     const input = document.body.querySelector<HTMLInputElement>('.link-choice input')!
     input.value = `https://app.racercore.app/giro#${'a'.repeat(32)}.${'b'.repeat(32)}`; input.dispatchEvent(new Event('input'))
     await flushPromises()
-    button('Controlla il link').click(); await flushPromises()
-    expect(dialog()?.textContent).toContain('Giro ricevuto')
-    expect(dialog()?.textContent).toContain('Mike83')
-    expect(rows()[0]!.getAttribute('aria-pressed')).toBe('true')
+    button('Confronta').click(); await flushPromises()
+    expect(apply).toHaveBeenCalledWith('ref', expect.objectContaining({ key: 'shared:z' }))
+    // An error while loading it keeps the window open with the reason.
+    expect(dialog()?.textContent).toContain('Archivio giri non raggiungibile')
     input.value = 'ciao'; input.dispatchEvent(new Event('input')); await flushPromises()
-    button('Controlla il link').click(); await flushPromises()
+    button('Confronta').click(); await flushPromises()
     expect(dialog()?.textContent).toContain('Questo non è il link di un giro o di una sessione')
   })
 })
