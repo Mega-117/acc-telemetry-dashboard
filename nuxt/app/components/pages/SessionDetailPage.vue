@@ -222,7 +222,21 @@ onBeforeUnmount(() => setWideMain(false))
 // PIP-635: si apre sulla Telemetria quando i giri possono esserci (programma desktop, o archivio online
 // del pilota visto dal coach); altrimenti, o se poi non ci sono giri, resta Sessione. Una scelta dell'utente vince sempre.
 const tabChosen = ref(false)
-function chooseTab(tab: DetailTab) { tabChosen.value = true; detailTab.value = tab }
+// 02/11: the view that leaves fades out (150 ms), then the new one fades in. The switch moves at once
+// (pendingTab), the content changes after the exit. No wait with reduced motion.
+const pendingTab = ref<DetailTab | null>(null)
+let leaveTimer: ReturnType<typeof setTimeout> | null = null
+const VIEW_LEAVE_MS = 150
+function chooseTab(tab: DetailTab) {
+  tabChosen.value = true
+  if (leaveTimer) { clearTimeout(leaveTimer); leaveTimer = null }
+  const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  if (tab === detailTab.value || reduced || typeof window === 'undefined') { pendingTab.value = null; detailTab.value = tab; return }
+  pendingTab.value = tab
+  leaveTimer = setTimeout(() => { leaveTimer = null; detailTab.value = tab; pendingTab.value = null }, VIEW_LEAVE_MS)
+}
+const shownTab = computed(() => pendingTab.value ?? detailTab.value)
+onBeforeUnmount(() => { if (leaveTimer) clearTimeout(leaveTimer) })
 // A lap clicked in the Sessione table opens Telemetria with that lap as "Tu" (Garage 61's lap list).
 const analysisLap = ref<number | null>(null)
 function openLapTelemetry(lap: { lap?: number, lapNumber?: number }) {
@@ -2476,7 +2490,7 @@ const gripZones = computed(() => {
     </Transition>
   </Teleport>
   <!-- 01/11: in Telemetria the page also takes the free space right of the centred column (wider charts). -->
-  <LayoutPageContainer class="session-detail-page session-detail-page--wide">
+  <LayoutPageContainer class="session-detail-page session-detail-page--wide" :class="{ 'is-view-leaving': pendingTab !== null }">
     <!-- NAV -->
     <div v-if="!headerBack" class="nav-bar">
       <button v-if="!headerBack" class="nav-btn" @click="emit('back')">
@@ -2523,7 +2537,7 @@ const gripZones = computed(() => {
         <!-- 02/11: no Confronta / Condividi here: another session is put beside from the stint list ("Affianca"). -->
         <span v-if="panelMounted && !isEvoSession" v-show="lapView" id="session-head-share" class="head-share" />
         <div v-if="!isEvoSession" v-rc-switch class="detail-tabs rc-switch" role="tablist" :aria-label="t('sessionDetail.header.viewAria')" @keydown="onTabKey">
-          <button v-for="tab in DETAIL_TABS" :key="tab.id" type="button" role="tab" :aria-selected="detailTab === tab.id" :tabindex="detailTab === tab.id ? 0 : -1" :class="{ active: detailTab === tab.id }" :title="t(tab.title)" @click="chooseTab(tab.id)">{{ t(tab.label) }}</button>
+          <button v-for="tab in DETAIL_TABS" :key="tab.id" type="button" role="tab" :aria-selected="shownTab === tab.id" :tabindex="shownTab === tab.id ? 0 : -1" :class="{ active: shownTab === tab.id }" :title="t(tab.title)" @click="chooseTab(tab.id)">{{ t(tab.label) }}</button>
         </div>
       </div>
     </header>
@@ -3380,7 +3394,12 @@ const gripZones = computed(() => {
 
 // MASTER / DETAIL
 .master-detail { display: grid; grid-template-columns: 380px 1fr; gap: 32px; flex: 1; min-height: 0; align-items: start; animation: rc-view-in 200ms ease-out; }
-// 02/11: switching Sessione / Telemetria fades the new view in instead of a hard cut (shown again = played again).
+// 02/11: switching Sessione / Telemetria: the leaving view fades out, then the new one fades in (shown again =
+// played again).
+.session-detail-page.is-view-leaving {
+  .master-detail, .session-header--compact .header-id, .session-header--compact .header-laps, :deep(.analysis) {
+    opacity: 0; transform: translateY(-4px); transition: opacity 150ms ease-in, transform 150ms ease-in; pointer-events: none; }
+}
 @keyframes rc-view-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .master-detail, .session-header--compact .header-id, .session-header--compact .header-laps { animation: none; } }
 
