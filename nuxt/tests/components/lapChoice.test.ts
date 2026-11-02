@@ -175,6 +175,15 @@ describe('LapChoiceDialog', () => {
     past[1]!.click(); await flushPromises()
     expect(apply).toHaveBeenCalledWith('ref', expect.objectContaining({ key: r.key }))
   })
+  // 02/11 (user): this session's laps say which best they are too (from the session summary).
+  it('Questa sessione marks the session best qualifying / race lap', async () => {
+    openDialog('ref', undefined, { sessionBests: async () => ({ [today]: { qualifyMs: 100000, raceMs: null } }) })
+    await wrapper!.setProps({ open: true }); await flushPromises()
+    button('I miei giri').click(); await flushPromises()
+    const kindOfLap = (n: number) => rows().find(r => r.dataset.key === lapKey('me', today, n))?.querySelector('.choice-row__kind:not(.is-none)')?.textContent ?? null
+    expect(kindOfLap(5)).toBe('Best qualifica')
+    expect(kindOfLap(1)).toBeNull()
+  })
   it('says why there is no ideal lap when it is the best lap itself (01/11)', async () => {
     openDialog('ref', undefined, { idealSame: () => true })
     await wrapper!.setProps({ open: true }); await flushPromises()
