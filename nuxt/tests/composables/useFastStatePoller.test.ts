@@ -235,7 +235,7 @@ describe('useFastStatePoller', () => {
       serverId: null,
     })
     expect(fastState.value.info?.delta).toEqual({
-      ms: -456, available: true, side: 'negative', ratio: 1, purple: true,
+      ms: -456, available: true, absent: false, side: 'negative', ratio: 1, purple: true,
     })
     expect(fastState.value.info?.fuelNeededL).toBe(2.7)
     expect(fastState.value.info?.fuelLeftReferenceLapMs).toBe(90_000)
