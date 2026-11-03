@@ -55,17 +55,21 @@ const liveModel = stableComputed(() => buildDashboardPresentation(
 const canvasStyle = computed(() => ({ 'transform': `scale(${overlay.scale.value})`, '--hud-frame-unit': `${1 / overlay.scale.value}px` }))
 const retainedModel = useHudPresentationMemory(liveModel, telemetry.fastState)
 const model = computed(() => withoutStaleShiftFlash(retainedModel.value, liveModel.value))
+// PIP-713: the standings roster, the truth for the view on another car.
+const spectator = useSpectatorCheck(getApi, telemetry)
 // PIP-711: the numbers this window drew from and the texts it shows, compared in main (hud.check 'values').
 useHudValuesReport('dashboard', telemetry.fastState, () => {
   const state = telemetry.fastState.value
   const shown = model.value
+  const own = spectator.readOwn(state.localDriver?.carIndex)
   return {
     inputs: { gear: state.gear, speedKmh: state.speedKmh, fuelL: state.fuelL, brakeBiasPct: state.brakeBiasPct,
       engineMap: state.engineMap, tractionControl: state.tractionControl, abs: state.abs,
-      fuelPerLapL: state.fuelPerLapL, fuelLapsRemaining: state.fuelLapsRemaining, fuelLeftMs: state.fuelLeftTimeMs },
+      fuelPerLapL: state.fuelPerLapL, fuelLapsRemaining: state.fuelLapsRemaining, fuelLeftMs: state.fuelLeftTimeMs,
+      ...own?.inputs },
     shown: { gear: shown.gear, speed: shown.speed, fuel: shown.fuel, brakeBias: shown.brakeBias,
       engineMap: shown.engineMap, tc: shown.tractionControl, abs: shown.abs,
-      fuelPerLap: shown.fuelPerLap, lapsLeft: shown.lapsLeft, fuelLeft: shown.fuelLeft },
+      fuelPerLap: shown.fuelPerLap, lapsLeft: shown.lapsLeft, fuelLeft: shown.fuelLeft, ...own?.shown },
   }
 }, () => {
   // PIP-713: the view on the car ACC's camera is on, against the standings roster - a feed apart
@@ -96,9 +100,7 @@ useHudValuesReport('dashboard', telemetry.fastState, () => {
     })
   }
   return { inputs, shown }
-})
-// PIP-713: the standings roster, the truth for the view on another car.
-const spectator = useSpectatorCheck(getApi, telemetry)
+}, spectator.roster.state)
 // The box being adjusted (TC, TC2, ABS, MAP, BB) is highlighted for 1.5 s; local live telemetry only.
 const adjustmentEnabled = computed(() => {
   const state = telemetry.fastState.value

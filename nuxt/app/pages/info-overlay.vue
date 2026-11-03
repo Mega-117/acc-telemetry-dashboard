@@ -54,9 +54,12 @@ const liveModel = stableComputed(() => buildInfoPresentation(telemetry.fastState
 const model = useHudPresentationMemory(liveModel, telemetry.fastState)
 // PIP-711: the numbers this window drew from and the texts it shows, compared in main (hud.check 'values').
 // Rows the driver turned off are not on screen, so they are not sent.
+// PIP-713: the standings roster, the truth for the view on another car.
+const spectator = useSpectatorCheck(getApi, telemetry)
 useHudValuesReport('info', telemetry.fastState, () => {
   const info = telemetry.fastState.value.info
-  const shown: Record<string, string> = {}
+  const own = spectator.readOwn(telemetry.fastState.value.localDriver?.carIndex)
+  const shown: Record<string, string> = { ...own?.shown }
   if (model.value.delta.visible) shown.delta = model.value.delta.value
   for (const row of model.value.rows) {
     if (['best', 'optimal', 'incidents', 'stint', 'fuel-left'].includes(row.id)) shown[row.id] = row.value
@@ -65,7 +68,8 @@ useHudValuesReport('info', telemetry.fastState, () => {
     inputs: { deltaMs: info?.delta.ms ?? null, deltaAvailable: info?.delta.available ?? null,
       deltaAbsent: info?.delta.absent ?? false, bestLapMs: info?.bestLapTimeMs ?? null,
       optimalLapMs: info?.optimalLapTimeMs ?? null, incidents: info?.incidents ?? null,
-      stintMs: info?.stintTimeLeftMs ?? info?.stintTimeElapsedMs ?? null, fuelLeftMs: info?.fuelLeftTimeMs ?? null },
+      stintMs: info?.stintTimeLeftMs ?? info?.stintTimeElapsedMs ?? null, fuelLeftMs: info?.fuelLeftTimeMs ?? null,
+      ...own?.inputs },
     shown,
   }
 }, () => {
@@ -81,8 +85,7 @@ useHudValuesReport('info', telemetry.fastState, () => {
     shown.best = best.value
   }
   return { inputs, shown }
-})
-const spectator = useSpectatorCheck(getApi, telemetry)
+}, spectator.roster.state)
 const localTimeValue = computed(() => formatInfoLocalTime(clockMs.value))
 
 // PIP-704: the delta on screen dropping out for a moment while driving (own car, on track,

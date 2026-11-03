@@ -64,20 +64,32 @@ export interface SpectatorReading extends SpectatorTruth {
 export function useSpectatorCheck(getApi: Parameters<typeof useStandingsState>[0], source: SpectatorSource,
   roster: Pick<ReturnType<typeof useStandingsState>, 'state' | 'start' | 'stop'> = useStandingsState(getApi)) {
   const since = useCameraSince(() => roster.state.value.snapshot, () => source.focusedCar.value)
+  // Time the view has been on old data while the game runs: a pause (or a replay) restarts it, so
+  // resuming before the focused feed does is not a frozen view (Codex 03/11).
+  const isRunning = () => source.localFastState.value.isFresh === true && source.localFastState.value.isLive === true
   let staleSince: number | null = null
-  watch(source.fastState, (state) => {
-    if (state.dataSource === 'focused' && !state.isFresh) staleSince ??= Date.now()
+  watch([source.fastState, source.localFastState], ([state]) => {
+    if (state.dataSource === 'focused' && !state.isFresh && isRunning()) staleSince ??= Date.now()
     else staleSince = null
   }, { immediate: true })
   onMounted(() => roster.start())
   onUnmounted(() => roster.stop())
 
+  /** While the HUD shows the own car: ACC's camera settled on another car is a view on the wrong
+   *  car (Codex 03/11: the routing stuck on the local car passed every check). */
+  function readOwn(localCarIndex: number | null | undefined, nowMs = Date.now()): SpectatorReading | null {
+    const focusIndex = roster.state.value.snapshot?.session?.focused_car_index
+    if (typeof localCarIndex !== 'number' || typeof focusIndex !== 'number' || focusIndex === localCarIndex
+      || nowMs - since.value < SPECTATOR_CAMERA_SETTLE_MS || !isRunning()) return null
+    return { car: null, samePacket: false, settled: true,
+      inputs: { specCar: focusIndex }, shown: { specCar: String(localCarIndex) } }
+  }
+
   function read(nowMs = Date.now()): SpectatorReading | null {
     const viewed = source.focusedCar.value
     const truth = spectatorTruth(roster.state.value.snapshot, viewed, since.value, nowMs)
-    const local = source.localFastState.value
     const staleMs = staleSince === null ? 0 : nowMs - staleSince
-    const running = local.isFresh === true && local.isLive === true
+    const running = isRunning()
     const wrongCar = truth.settled && truth.car !== null && !!viewed && viewed.car_index !== truth.car.car_index
     const frozen = running && staleMs > SPECTATOR_FROZEN_MS
     if (!truth.samePacket && !wrongCar && !frozen) return null
@@ -89,7 +101,7 @@ export function useSpectatorCheck(getApi: Parameters<typeof useStandingsState>[0
     }
     return { ...truth, inputs, shown }
   }
-  return { roster, read }
+  return { roster, read, readOwn }
 }
 
 /** When the roster's camera or the car on screen last changed (wall clock). */

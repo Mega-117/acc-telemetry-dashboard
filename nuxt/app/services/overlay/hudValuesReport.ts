@@ -84,12 +84,15 @@ export function cleanValues(values: Record<string, unknown>): HudValues {
 
 export function useHudValuesReport(hud: 'info' | 'dashboard' | 'tyres' | 'standings' | 'trackmap', fastState: Readonly<Ref<FastOverlayState>>,
   read: () => { inputs: Record<string, unknown>, shown: HudTexts },
-  readFocused?: () => { inputs: Record<string, unknown>, shown: HudTexts } | null) {
+  readFocused?: () => { inputs: Record<string, unknown>, shown: HudTexts } | null,
+  /** Another feed the view on another car is compared with: its updates also trigger a read, so a
+   *  check waiting on it is not left for the next own frame (Codex 03/11: never sent at all). */
+  alsoOn?: Readonly<Ref<unknown>>) {
   const reporter = createHudValuesReporter((inputs, shown) => reportHudTrace('hud.values', { hud, inputs, shown }))
   // Every new frame (the reporter decides when to send: at the line, or once a minute). After the
   // render (flush 'post'): the tyre page reads its texts from the DOM, and before the render they
   // still showed the previous frame - the first live run (03/11) logged a false KO on all wheels.
-  watch(() => fastState.value, () => {
+  watch(() => [fastState.value, alsoOn?.value], () => {
     const state = fastState.value
     reporter.feed({ now: Date.now(), laps: state.lapsCompleted, fresh: state.isFresh === true,
       live: state.isLive === true, focused: state.dataSource === 'focused' }, () => {

@@ -106,3 +106,37 @@ describe('useSpectatorCheck - frozen view', () => {
     expect(check.read(at)).toBeNull()
   })
 })
+
+describe('Codex 03/11 second review', () => {
+  it('a pause restarts the frozen clock; the own car shown while the camera sits on another is named', async () => {
+    const { nextTick, ref } = await import('vue')
+    const { useSpectatorCheck } = await import('~/services/overlay/spectatorTruth')
+    const fastState = ref({ dataSource: 'focused', isFresh: false, isLive: true } as never)
+    const localFastState = ref({ isFresh: true, isLive: false } as never)            // paused
+    const rosterState = ref({ snapshot: snapshot(7, [car(7, 2000)]) })
+    const check = useSpectatorCheck(() => null, { fastState, focusedCar: ref(null), localFastState } as never,
+      { state: rosterState, start: () => {}, stop: () => {} } as never)
+    await nextTick()
+    localFastState.value = { isFresh: true, isLive: true } as never                   // resumed, feed not yet
+    await nextTick()
+    expect(check.read(Date.now() + 1000)).toBeNull()                                  // not frozen: just resumed
+    const later = Date.now() + 4000
+    expect(check.readOwn(3, later)).toMatchObject({ inputs: { specCar: 7 }, shown: { specCar: '3' } })
+    expect(check.readOwn(7, later)).toBeNull()                                         // camera on the own car
+    expect(check.readOwn(3, Date.now())).toBeNull()                                    // camera just moved
+  })
+
+  it('updates of the other feed also trigger a read', async () => {
+    const { nextTick, ref } = await import('vue')
+    const { useHudValuesReport } = await import('~/services/overlay/hudValuesReport')
+    const fastState = ref({ dataSource: 'focused', isFresh: true, isLive: true, lapsCompleted: 1 } as never)
+    const other = ref(0)
+    let reads = 0
+    useHudValuesReport('info', fastState, () => ({ inputs: {}, shown: {} }), () => { reads += 1; return null }, other)
+    other.value = 1
+    await nextTick()
+    other.value = 2
+    await nextTick()
+    expect(reads).toBe(2)
+  })
+})
