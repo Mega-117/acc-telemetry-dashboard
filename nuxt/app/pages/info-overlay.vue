@@ -14,8 +14,7 @@ import InfoHud from '~/components/overlay/InfoHud.vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
 import { useOverlayTelemetrySource } from '~/composables/useOverlayTelemetrySource'
 import { useHudOverlay } from '~/composables/useHudOverlay'
-import { useStandingsState } from '~/composables/useStandingsState'
-import { rosterLapMs, spectatorTruth, useCameraSince } from '~/services/overlay/spectatorTruth'
+import { rosterLapMs, useSpectatorCheck } from '~/services/overlay/spectatorTruth'
 import { useHudOverlayBackground } from '~/composables/useHudOverlayBackground'
 import {
   buildInfoPresentation,
@@ -70,18 +69,20 @@ useHudValuesReport('info', telemetry.fastState, () => {
     shown,
   }
 }, () => {
-  // PIP-713: on another car Info draws its best lap and stint from the focused-car feed; the truth is
-  // the standings roster, compared when both carry the same UDP packet (services/overlay/spectatorTruth).
-  const { car, samePacket } = spectatorTruth(roster.state.value.snapshot, telemetry.focusedCar.value, cameraSince.value, Date.now())
-  if (!car || !samePacket) return { inputs: {}, shown: {} }
-  const shown: Record<string, string> = {}
-  for (const row of model.value.rows) if (['best', 'stint'].includes(row.id)) shown[row.id] = row.value
-  return { inputs: { bestLapMs: rosterLapMs(car.best_lap?.time_ms, car.best_lap_ms), stintMs: car.stint_elapsed_ms ?? null }, shown }
+  // PIP-713: on another car Info draws its best lap from the focused-car feed; the truth is the
+  // standings roster, compared when both carry the same UDP packet (services/overlay/spectatorTruth).
+  // Not the stint: the logger refreshes it on session packets, apart from the car's (Codex 03/11).
+  const reading = spectator.read()
+  if (!reading) return null
+  const { car, samePacket, inputs, shown } = reading
+  const best = model.value.rows.find(row => row.id === 'best')
+  if (car && samePacket && best) {
+    inputs.bestLapMs = rosterLapMs(car.best_lap?.time_ms, car.best_lap_ms)
+    shown.best = best.value
+  }
+  return { inputs, shown }
 })
-const roster = useStandingsState(getApi)
-const cameraSince = useCameraSince(() => roster.state.value.snapshot)
-onMounted(() => roster.start())
-onUnmounted(() => roster.stop())
+const spectator = useSpectatorCheck(getApi, telemetry)
 const localTimeValue = computed(() => formatInfoLocalTime(clockMs.value))
 
 // PIP-704: the delta on screen dropping out for a moment while driving (own car, on track,

@@ -101,6 +101,8 @@ export function useOverlayTelemetrySource(
     source,
     sectorHud,
     focusedCar,
+    /** The own car's shared memory, also while the view is on another car (PIP-713: is the game running?). */
+    localFastState: local.fastState,
     startFastStatePolling,
     stopFastStatePolling,
   }

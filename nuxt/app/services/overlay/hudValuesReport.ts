@@ -20,8 +20,10 @@ export interface HudValuesFrame {
   live: boolean
   focused: boolean
 }
-/** Read only when a report is due: the tyre page reads its texts from the DOM. */
-export type HudValuesRead = () => { inputs: HudValues, shown: HudTexts }
+/** Read only when a report is due: the tyre page reads its texts from the DOM. A view on another
+ *  car may answer null, "nothing comparable yet": the report stays due and the next frame retries
+ *  (Codex 03/11: the roster a moment behind used up the minute with an empty pass). */
+export type HudValuesRead = () => { inputs: HudValues, shown: HudTexts } | null
 
 export const HUD_VALUES_PERIOD_MS = 60_000
 
@@ -49,10 +51,17 @@ export function createHudValuesReporter(report: (inputs: HudValues, shown: HudTe
       lastFocused = frame.focused
       const lapDone = frame.laps !== null && lastLaps !== null && frame.laps > lastLaps
       if (frame.laps !== null) lastLaps = frame.laps
-      if (!frame.fresh || !frame.live || (frame.focused && !readFocused)) return false
+      // A view on another car is read even when its feed went stale: a view kept on old data while
+      // the game runs is exactly what it must catch (Codex 03/11). Its reader decides.
+      if (frame.focused ? !readFocused : !frame.fresh || !frame.live) return false
       const due = lastSentAt === null || frame.now - lastSentAt >= periodMs
       if (!lapDone && !due) return false
-      const { inputs, shown } = frame.focused && readFocused ? readFocused() : read()
+      const reading = frame.focused && readFocused ? readFocused() : read()
+      if (!reading) {
+        if (lapDone) lastSentAt = frame.now - periodMs   // keep the lap's check due for the next frame
+        return false
+      }
+      const { inputs, shown } = reading
       // Sent even with nothing on screen (every row hidden): the main process counts it, so a valid
       // setting is not mistaken for a silent spy (Codex 03/11).
       lastSentAt = frame.now
@@ -75,7 +84,7 @@ export function cleanValues(values: Record<string, unknown>): HudValues {
 
 export function useHudValuesReport(hud: 'info' | 'dashboard' | 'tyres' | 'standings' | 'trackmap', fastState: Readonly<Ref<FastOverlayState>>,
   read: () => { inputs: Record<string, unknown>, shown: HudTexts },
-  readFocused?: () => { inputs: Record<string, unknown>, shown: HudTexts }) {
+  readFocused?: () => { inputs: Record<string, unknown>, shown: HudTexts } | null) {
   const reporter = createHudValuesReporter((inputs, shown) => reportHudTrace('hud.values', { hud, inputs, shown }))
   // Every new frame (the reporter decides when to send: at the line, or once a minute). After the
   // render (flush 'post'): the tyre page reads its texts from the DOM, and before the render they
@@ -87,8 +96,8 @@ export function useHudValuesReport(hud: 'info' | 'dashboard' | 'tyres' | 'standi
       const { inputs, shown } = read()
       return { inputs: cleanValues(inputs), shown }
     }, readFocused && (() => {
-      const { inputs, shown } = readFocused()
-      return { inputs: cleanValues({ ...inputs, specMode: true }), shown }
+      const reading = readFocused()
+      return reading && { inputs: cleanValues({ ...reading.inputs, specMode: true }), shown: reading.shown }
     }))
   }, { flush: 'post' })
   return reporter

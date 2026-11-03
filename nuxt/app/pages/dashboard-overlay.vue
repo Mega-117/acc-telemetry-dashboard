@@ -17,8 +17,7 @@ import {
   useOverlayTelemetrySource,
 } from '~/composables/useOverlayTelemetrySource'
 import { useHudOverlay } from '~/composables/useHudOverlay'
-import { useStandingsState } from '~/composables/useStandingsState'
-import { rosterLapMs, spectatorTruth, useCameraSince } from '~/services/overlay/spectatorTruth'
+import { rosterLapMs, useSpectatorCheck } from '~/services/overlay/spectatorTruth'
 import { useHudOverlayBackground } from '~/composables/useHudOverlayBackground'
 import { useDashboardAdjustment } from '~/composables/useDashboardAdjustment'
 import {
@@ -71,20 +70,14 @@ useHudValuesReport('dashboard', telemetry.fastState, () => {
 }, () => {
   // PIP-713: the view on the car ACC's camera is on, against the standings roster - a feed apart
   // from the focused-car feed it is drawn from. Values only when both carry the same UDP packet of
-  // that car; the car itself once the camera has stayed on it for a few seconds.
+  // that car; the car itself once the camera has stayed on it for a few seconds (spectatorTruth).
   const spec = model.value.spectator
-  const viewed = telemetry.focusedCar.value
-  if (!spec || !roster.state.value.snapshot) return { inputs: {}, shown: {} }
-  const { car: truth, samePacket, settled } = spectatorTruth(roster.state.value.snapshot, viewed, cameraSince.value, Date.now())
-  const inputs: Record<string, unknown> = {}
-  const shown: Record<string, string> = {}
+  const reading = spec ? spectator.read() : null
+  if (!spec || !reading) return null
+  const { car: truth, samePacket, settled, inputs, shown } = reading
   if (truth && settled) {
     inputs.specNumber = truth.race_number ?? null
     shown.specNumber = spec.carLabel
-  }
-  if (viewed && typeof viewed.realtime_updated_at_ms === 'number') {
-    inputs.specAgeMs = roster.nowMs.value - viewed.realtime_updated_at_ms
-    shown.specLive = spec.session
   }
   if (truth && samePacket) {
     const bestSplits = Array.isArray(truth.best_lap?.splits_ms) ? truth.best_lap.splits_ms : []
@@ -104,11 +97,8 @@ useHudValuesReport('dashboard', telemetry.fastState, () => {
   }
   return { inputs, shown }
 })
-// PIP-713: the standings roster, the truth for the view on another car; when the camera last moved.
-const roster = useStandingsState(getApi)
-const cameraSince = useCameraSince(() => roster.state.value.snapshot)
-onMounted(() => roster.start())
-onUnmounted(() => roster.stop())
+// PIP-713: the standings roster, the truth for the view on another car.
+const spectator = useSpectatorCheck(getApi, telemetry)
 // The box being adjusted (TC, TC2, ABS, MAP, BB) is highlighted for 1.5 s; local live telemetry only.
 const adjustmentEnabled = computed(() => {
   const state = telemetry.fastState.value

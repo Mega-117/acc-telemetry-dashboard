@@ -41,7 +41,7 @@ describe('useCameraSince', () => {
     const { nextTick, ref } = await import('vue')
     const { useCameraSince } = await import('~/services/overlay/spectatorTruth')
     const roster = ref<{ session: { focused_car_index: number } } | null>({ session: { focused_car_index: 1 } })
-    const since = useCameraSince(() => roster.value as never)
+    const since = useCameraSince(() => roster.value as never, () => null)
     const first = since.value
     await new Promise(resolve => setTimeout(resolve, 5))
     roster.value = { session: { focused_car_index: 1 } }
@@ -50,5 +50,59 @@ describe('useCameraSince', () => {
     roster.value = { session: { focused_car_index: 2 } }
     await nextTick()
     expect(since.value).toBeGreaterThan(first)
+  })
+})
+
+describe('the reporter retries when a view has nothing to judge yet (Codex 03/11)', () => {
+  it('a null reading keeps the check due', () => {
+    const sent: unknown[] = []
+    const reporter = createHudValuesReporter(inputs => sent.push(inputs), 60_000)
+    const frame = (now: number, laps: number) => ({ now, laps, fresh: false, live: true, focused: true })
+    let ready = false
+    const other = () => (ready ? { inputs: { other: 1 }, shown: {} } : null)
+    expect(reporter.feed(frame(0, 3), () => null, other)).toBe(false)
+    ready = true
+    expect(reporter.feed(frame(200, 3), () => null, other)).toBe(true)        // stale view still read
+    ready = false
+    expect(reporter.feed(frame(1000, 4), () => null, other)).toBe(false)      // lap done, nothing yet
+    ready = true
+    expect(reporter.feed(frame(1200, 4), () => null, other)).toBe(true)       // retried on the next frame
+    expect(sent).toHaveLength(2)
+  })
+})
+
+describe('useSpectatorCheck', () => {
+  it('judges the car once settled, a frozen view only while the game runs, else nothing', async () => {
+    const { ref } = await import('vue')
+    const { useSpectatorCheck } = await import('~/services/overlay/spectatorTruth')
+    const fastState = ref({ dataSource: 'focused', isFresh: true, isLive: true } as never)
+    const focusedCar = ref(car(7, 2000) as never)
+    const localFastState = ref({ isFresh: true, isLive: true } as never)
+    const rosterState = ref({ snapshot: snapshot(7, [car(7, 2000, { race_number: 88 })]) })
+    const check = useSpectatorCheck(() => null, { fastState, focusedCar, localFastState } as never,
+      { state: rosterState, start: () => {}, stop: () => {} } as never)
+    const now = Date.now()
+    expect(check.read(now)).toMatchObject({ samePacket: true, settled: false, shown: { specLive: 'live' } })
+    expect(check.read(now + 4000)).toMatchObject({ settled: true, inputs: { specCar: 7 }, shown: { specCar: '7' } })
+    focusedCar.value = car(7, 1500) as never                                   // a poll behind: nothing yet
+    expect(check.read(now + 100)).toBeNull()
+  })
+})
+
+describe('useSpectatorCheck - frozen view', () => {
+  it('a view kept on old data is frozen only while the game runs', async () => {
+    const { nextTick, ref } = await import('vue')
+    const { useSpectatorCheck } = await import('~/services/overlay/spectatorTruth')
+    const fastState = ref({ dataSource: 'focused', isFresh: true, isLive: true } as never)
+    const localFastState = ref({ isFresh: true, isLive: true } as never)
+    const rosterState = ref({ snapshot: snapshot(7, [car(7, 2000)]) })
+    const check = useSpectatorCheck(() => null, { fastState, focusedCar: ref(null), localFastState } as never,
+      { state: rosterState, start: () => {}, stop: () => {} } as never)
+    fastState.value = { dataSource: 'focused', isFresh: false, isLive: true } as never
+    await nextTick()
+    const at = Date.now() + 7000
+    expect(check.read(at)).toMatchObject({ inputs: { specGameRunning: true }, shown: { specLive: 'stale' } })
+    localFastState.value = { isFresh: true, isLive: false } as never                   // paused
+    expect(check.read(at)).toBeNull()
   })
 })
