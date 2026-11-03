@@ -56,6 +56,13 @@ describe('Info presentation', () => {
     common.info.delta.available = true
     expect(buildInfoPresentation(common).delta.value).toBe('+0.000')
   })
+  it('03/11 ACC: a delta the game does not give (lap after a stop) is "-", a brief level zero stays +0.000', () => {
+    const acc = (delta: Record<string, unknown>) => buildInfoPresentation({ ...state, commonLive: { gameId: 'acc' },
+      info: { ...state.info, delta: { ms: 0, available: true, side: 'zero', ratio: 0, purple: false, ...delta } } } as any).delta
+    expect(acc({ available: false, absent: true })).toMatchObject({ value: '—', side: 'zero', ratio: 0 })
+    expect(acc({})).toMatchObject({ value: '+0.000' })
+    expect(acc({ available: false })).toMatchObject({ value: '+0.000' })   // ACC: no best yet, pit lane - unchanged
+  })
   it('formatta delta e tempi come il riferimento', () => {
     expect(formatInfoDelta(-245)).toBe('-0.245')
     expect(formatInfoDelta(0)).toBe('+0.000')

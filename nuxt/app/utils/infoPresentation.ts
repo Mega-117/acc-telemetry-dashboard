@@ -188,8 +188,8 @@ export function buildInfoPresentation(
       [key, enabled && hudSettingSupported(state.commonLive!.gameId, 'info', key)])) as unknown as InfoOptions
   }
   const info: FastStateInfo | null = state.info
-  const unknownCommonDelta = hudSourcePolicy(state).explicitDeltaAvailability
-    && info?.delta.available !== true
+  const unknownCommonDelta = (hudSourcePolicy(state).explicitDeltaAvailability
+    && info?.delta.available !== true) || info?.delta.absent === true
   const traffic = trafficValue(info?.pitExitTraffic ?? null)
   const rows: Array<Omit<InfoRow, 'caution'>> = []
   if (options.showStint) rows.push({ id: 'stint', label: 'Stint:', value: formatInfoStintDuration(info?.stintTimeLeftMs ?? info?.stintTimeElapsedMs), tone: 'default' })

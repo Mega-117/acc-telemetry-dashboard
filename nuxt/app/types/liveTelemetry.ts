@@ -105,6 +105,8 @@ export interface FastStateInfo {
   delta: {
     ms: number
     available: boolean
+    // 03/11 (ACC): the game gives no delta at all for over a second (lap after a stop): show "-".
+    absent?: boolean
     side: 'negative' | 'positive' | 'zero'
     ratio: number
     purple: boolean

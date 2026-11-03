@@ -52,6 +52,7 @@ function normalizeInfo(raw: any): FastStateInfo | null {
     delta: {
       ms: toNumber(delta.ms) ?? 0,
       available: delta.available === true,
+      absent: delta.absent === true,
       side,
       ratio: Math.min(Math.max(toNumber(delta.ratio) ?? 0, 0), 1),
       purple: delta.purple === true,
