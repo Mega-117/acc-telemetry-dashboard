@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from '~/i18n'
 import { useHudPresentationMemory } from '~/services/overlay/hudPresentationMemory'
+import { useHudValuesReport } from '~/services/overlay/hudValuesReport'
 import { usesLegacyHudInput } from '~/services/sim/hudSourceAdapter'
 
 import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
@@ -77,6 +78,26 @@ const liveModel = stableComputed(() => buildStandingsPresentation(
   getPublicPath,
 ))
 const model = useHudPresentationMemory(liveModel, fastState.fastState)
+// PIP-714: per visible row (top to bottom), the position, last/best lap and stint drawn, with the
+// car's numbers they come from; compared in main (hud.check 'values'). The local row's stint comes
+// from another source and is left out.
+useHudValuesReport('standings', fastState.fastState, () => {
+  const inputs: Record<string, unknown> = {}
+  const shown: Record<string, string> = {}
+  const cars = scopedStandings.value.snapshot?.cars ?? []
+  // The same choice the standings make: the detailed lap time when valid, else the legacy one.
+  const pick = (detailed: unknown, legacy: unknown) =>
+    (typeof detailed === 'number' && detailed > 0 && detailed < 2147483647 ? detailed : legacy ?? null)
+  model.value.rows.slice(0, 20).forEach((row, index) => {
+    const car = cars.find(entry => entry.car_index === row.carIndex)
+    if (!car || row.carIndex === null) return
+    shown[`pos${index}`] = row.position === null ? '' : String(row.position)
+    if (model.value.columns.lastLap) { shown[`last${index}`] = row.lastLap ?? ''; inputs[`last${index}`] = pick(car.last_lap?.time_ms, car.last_lap_ms) }
+    if (model.value.columns.bestLap) { shown[`best${index}`] = row.bestLap ?? ''; inputs[`best${index}`] = pick(car.best_lap?.time_ms, car.best_lap_ms) }
+    if (model.value.columns.stint && !row.local) { shown[`stint${index}`] = row.stintTime ?? ''; inputs[`stint${index}`] = row.stintTime === null ? null : car.stint_elapsed_ms ?? null }
+  })
+  return { inputs, shown }
+})
 const canvasStyle = computed(() => ({
   width: `${model.value.layout.width}px`,
   height: `${model.value.layout.height}px`,

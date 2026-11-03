@@ -60,7 +60,7 @@ export function cleanValues(values: Record<string, unknown>): HudValues {
   return clean
 }
 
-export function useHudValuesReport(hud: 'info' | 'dashboard' | 'tyres', fastState: Readonly<Ref<FastOverlayState>>,
+export function useHudValuesReport(hud: 'info' | 'dashboard' | 'tyres' | 'standings', fastState: Readonly<Ref<FastOverlayState>>,
   read: () => { inputs: Record<string, unknown>, shown: HudTexts }) {
   const reporter = createHudValuesReporter((inputs, shown) => reportHudTrace('hud.values', { hud, inputs, shown }))
   // Every new frame (the reporter decides when to send: at the line, or once a minute). After the
