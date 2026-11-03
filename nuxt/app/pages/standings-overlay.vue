@@ -88,13 +88,25 @@ useHudValuesReport('standings', fastState.fastState, () => {
   // The same choice the standings make: the detailed lap time when valid, else the legacy one.
   const pick = (detailed: unknown, legacy: unknown) =>
     (typeof detailed === 'number' && detailed > 0 && detailed < 2147483647 ? detailed : legacy ?? null)
+  const snapshot = scopedStandings.value.snapshot
+  const nowMs = standings.nowMs.value
+  const fresh = (entry: typeof cars[number]) => typeof entry.realtime_updated_at_ms === 'number' && !!snapshot
+    && nowMs - entry.realtime_updated_at_ms >= -1000 && nowMs - entry.realtime_updated_at_ms <= snapshot.freshness.ttl_ms
   model.value.rows.slice(0, 20).forEach((row, index) => {
     const car = cars.find(entry => entry.car_index === row.carIndex)
     if (!car || row.carIndex === null) return
     shown[`pos${index}`] = row.position === null ? '' : String(row.position)
+    // Class rank counted here, apart from the presentation (Codex 03/11): cars of the same class,
+    // fresh, ahead on overall position.
+    const overall = Number(car.position)
+    if (Number.isInteger(overall) && overall > 0) {
+      inputs[`rank${index}`] = 1 + cars.filter(other => other.car_class === car.car_class && other.has_realtime === true
+        && fresh(other) && Number(other.position) > 0 && Number(other.position) < overall).length
+    }
+    inputs[`fresh${index}`] = fresh(car)
     if (model.value.columns.lastLap) { shown[`last${index}`] = row.lastLap ?? ''; inputs[`last${index}`] = pick(car.last_lap?.time_ms, car.last_lap_ms) }
     if (model.value.columns.bestLap) { shown[`best${index}`] = row.bestLap ?? ''; inputs[`best${index}`] = pick(car.best_lap?.time_ms, car.best_lap_ms) }
-    if (model.value.columns.stint && !row.local) { shown[`stint${index}`] = row.stintTime ?? ''; inputs[`stint${index}`] = row.stintTime === null ? null : car.stint_elapsed_ms ?? null }
+    if (model.value.columns.stint && !row.local) { shown[`stint${index}`] = row.stintTime ?? ''; inputs[`stint${index}`] = car.stint_elapsed_ms ?? null }
   })
   return { inputs, shown }
 })
