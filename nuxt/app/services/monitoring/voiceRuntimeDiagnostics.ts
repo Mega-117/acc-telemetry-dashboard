@@ -11,6 +11,8 @@ export type VoiceRuntimeDiagnosticKind =
   | 'cue_created'
   /** PIP-716: what the audio window decided for a completed lap (announce / off / out_of_range). */
   | 'lap_decision'
+  /** PIP-716: what the audio window did with an automation or Pitwall outcome (announce / none / off). */
+  | 'cue_decision'
   | VoicePlaybackQueueEventKind
 
 export interface VoiceRuntimeDiagnosticInput {

@@ -361,14 +361,22 @@ const finishLineVoiceRuntime = createFinishLineVoiceRuntime({
 })
 
 onMounted(async () => {
+  // PIP-716: an outcome sent with a check id gets an answer (announce / none / off): a listener that
+  // never ran shows in the diary as voice.missing.
+  const answer = (event: unknown, source: 'setup-automation' | 'pit-strategy', outcome: 'announce' | 'none' | 'off') => {
+    const id = (event as { voiceCheckId?: unknown } | null)?.voiceCheckId
+    if (typeof id === 'string') voiceRuntimeDiagnostics.record({ kind: 'cue_decision', correlationId: id, source, outcome })
+  }
   removeSetupCompletionListener = getRuntimeApi()?.onSetupAutomationCompleted?.((event: unknown) => {
-    if (!canRunSpotterAudio.value) return
+    if (!canRunSpotterAudio.value) { answer(event, 'setup-automation', 'off'); return }
     const cue = setupAutomationCompletedCue(event, selectedVoice.value)
+    answer(event, 'setup-automation', cue ? 'announce' : 'none')
     if (cue) voiceQueue.enqueue({ ...cue, canPlay: () => canRunSpotterAudio.value })
   })
   removePitStrategyListener = getRuntimeApi()?.onPitwallOrderOutcome?.((event: unknown) => {
-    if (!canRunSpotterAudio.value) return
+    if (!canRunSpotterAudio.value) { answer(event, 'pit-strategy', 'off'); return }
     const cue = pitStrategyAppliedCue(event, selectedVoice.value)
+    answer(event, 'pit-strategy', cue ? 'announce' : 'none')
     if (cue) voiceQueue.enqueue({ ...cue, canPlay: () => canRunSpotterAudio.value })
   })
   loadSpotterVoiceSettings()
