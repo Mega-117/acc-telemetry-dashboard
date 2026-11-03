@@ -326,9 +326,16 @@ function tickTrackVoiceReferences() {
 }
 
 function announceLapTime(id: string, timeMs: number, valid: boolean) {
-  if (!canRunSpotterAudio.value || !lapTimesAllowedForSession.value) return
+  // PIP-716: one decision per completed lap, whatever it is, so the main process can tell a voice
+  // switched off from a voice never produced, and read back the time the chosen WAV says.
+  const decide = (outcome: 'announce' | 'off' | 'out_of_range', wav?: string) => voiceRuntimeDiagnostics.record({
+    kind: 'lap_decision', correlationId: id, source: 'lap-time', outcome, scenarioId: wav, reason: valid ? 'valid' : 'invalid',
+  })
+  if (!canRunSpotterAudio.value || !lapTimesAllowedForSession.value) { decide('off'); return }
   // The time is spoken only when its full WAV exists; out of range stays silent.
   const paths = lapTimeAnnouncementPaths(timeMs, valid, selectedVoice.value)
+  const timeWav = paths.map(path => path.split('/').pop() ?? '').find(name => name.startsWith('lap-time-'))
+  decide(timeWav ? 'announce' : 'out_of_range', timeWav)
   paths.forEach((path, index) => enqueueAudioPath(path, {
     source: 'lap-time', id: `${id}-${index}`, correlationId: id,
   }))
@@ -421,7 +428,7 @@ watch(canRunSpotterAudio, (canRun) => {
   finishLineVoiceRuntime.reset()
   targetLapVoiceRuntime.reset()
   tickTrackVoiceReferences()
-})
+}, { immediate: true })   // PIP-716: the main process learns the state at start, not only on a change
 
 watch(() => fastState.value.trackReferencePhase, async (phase, previousPhase) => {
   if (phase !== 'active' || previousPhase === 'active') return

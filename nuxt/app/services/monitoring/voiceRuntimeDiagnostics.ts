@@ -9,6 +9,8 @@ export type VoiceRuntimeDiagnosticKind =
   | 'recommendation_received'
   | 'finish_crossing_received'
   | 'cue_created'
+  /** PIP-716: what the audio window decided for a completed lap (announce / off / out_of_range). */
+  | 'lap_decision'
   | VoicePlaybackQueueEventKind
 
 export interface VoiceRuntimeDiagnosticInput {
