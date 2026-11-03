@@ -144,8 +144,10 @@ useHudValuesReport('trackmap', telemetry.fastState, () => {
   const at = (svg?.querySelector('.track-map__item--local') as SVGElement | null)?.style.transform
     .match(/translate\(\s*(-?[\d.]+)px,\s*(-?[\d.]+)px\)/)
   // Right after a jump on the lap (ESC -> back to pits: Oulton 03/11, read 0.4 s after) the dot
-  // reappears in place on the next animation frame: no verdict for a moment.
-  if (expected && at && Date.now() - localJumpAt >= LOCAL_JUMP_SETTLE_MS) {
+  // reappears in place on the next animation frame: no verdict for a moment - and no report either,
+  // so the check stays due and runs as soon as the moment has passed (Codex 03/11: not a minute later).
+  if (expected && at && Date.now() - localJumpAt < LOCAL_JUMP_SETTLE_MS) return null
+  if (expected && at) {
     inputs.mapLocalX = expected.x
     inputs.mapLocalY = expected.y
     shown.mapLocalAt = `${Math.round(Number(at[1]))},${Math.round(Number(at[2]))}`

@@ -83,7 +83,8 @@ export function cleanValues(values: Record<string, unknown>): HudValues {
 }
 
 export function useHudValuesReport(hud: 'info' | 'dashboard' | 'tyres' | 'standings' | 'trackmap', fastState: Readonly<Ref<FastOverlayState>>,
-  read: () => { inputs: Record<string, unknown>, shown: HudTexts },
+  /** May answer null ("not now"): the check stays due and the next frame reads again. */
+  read: () => { inputs: Record<string, unknown>, shown: HudTexts } | null,
   readFocused?: () => { inputs: Record<string, unknown>, shown: HudTexts } | null,
   /** Another feed the view on another car is compared with: its updates also trigger a read, so a
    *  check waiting on it is not left for the next own frame (Codex 03/11: never sent at all). */
@@ -96,8 +97,8 @@ export function useHudValuesReport(hud: 'info' | 'dashboard' | 'tyres' | 'standi
     const state = fastState.value
     reporter.feed({ now: Date.now(), laps: state.lapsCompleted, fresh: state.isFresh === true,
       live: state.isLive === true, focused: state.dataSource === 'focused' }, () => {
-      const { inputs, shown } = read()
-      return { inputs: cleanValues(inputs), shown }
+      const reading = read()
+      return reading && { inputs: cleanValues(reading.inputs), shown: reading.shown }
     }, readFocused && (() => {
       const reading = readFocused()
       return reading && { inputs: cleanValues({ ...reading.inputs, specMode: true }), shown: reading.shown }

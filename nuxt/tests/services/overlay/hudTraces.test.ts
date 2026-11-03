@@ -257,7 +257,22 @@ describe('Oulton 03/11: the minimap dot right after a teleport', () => {
   it('no verdict on the local dot for a moment after a jump on the lap', async () => {
     const { readFileSync } = await import('node:fs')
     const page = readFileSync('app/pages/trackmap-overlay.vue', 'utf8')
-    expect(page).toContain('Date.now() - localJumpAt >= LOCAL_JUMP_SETTLE_MS')
+    expect(page).toContain('if (expected && at && Date.now() - localJumpAt < LOCAL_JUMP_SETTLE_MS) return null')
     expect(page).toContain('if (Math.min(step, 1 - step) > 0.02) localJumpAt = Date.now()')
+  })
+})
+
+describe('Codex 03/11: a check skipped right after a teleport runs once it has settled', () => {
+  it('a null own-car reading keeps the check due for the next frame', async () => {
+    const { createHudValuesReporter } = await import('~/services/overlay/hudValuesReport')
+    const sent: unknown[] = []
+    const reporter = createHudValuesReporter(inputs => sent.push(inputs), 60_000)
+    const frame = (now: number) => ({ now, laps: 3, fresh: true, live: true, focused: false })
+    let settled = false
+    const read = () => (settled ? { inputs: { a: 1 }, shown: {} } : null)
+    expect(reporter.feed(frame(0), read)).toBe(false)        // teleport just now: nothing sent
+    settled = true
+    expect(reporter.feed(frame(2100), read)).toBe(true)      // 2 s later, not a minute later
+    expect(sent).toHaveLength(1)
   })
 })
