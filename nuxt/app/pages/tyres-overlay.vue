@@ -9,7 +9,7 @@ import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 // Overlay HUD Gomme (PIP-175): finestra Electron indipendente. Dimensione decisa
 // dal FORMATO (small/medium/large) lato Electron; qui si applica la scala dei
 // font e lo stato di posizionamento. Riusa TyreSlipHud + il poller esistente.
-import { computed, onBeforeUnmount, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useOverlayTelemetrySource } from '~/composables/useOverlayTelemetrySource'
 import { useHudOverlay } from '~/composables/useHudOverlay'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
@@ -35,7 +35,7 @@ useHudShownReport('tyres', fastState)
 // PIP-711: per wheel, the PSI and core temperature this window draws, read from the page itself
 // (the race layout formats them inside its components), against the numbers it drew them from.
 // Nothing is sent when the race tyre page is not on screen (classic layout, damage page).
-useHudValuesReport('tyres', fastState, () => {
+const tyresValues = useHudValuesReport('tyres', fastState, () => {
   const inputs: Record<string, unknown> = {}
   const shown: Record<string, string> = {}
   for (const tyre of fastState.value.tyres ?? []) {
@@ -89,6 +89,8 @@ const variant = computed<'classic' | 'race'>(() => {
 const { backgroundOpacity } = useHudOverlayBackground(settings, 'tyres')
 const racePager = useRaceHudPage(fastState)
 const { activePage: racePage, damageFlash: raceDamageFlash } = racePager
+// PIP-711: the damage page appears for a few seconds after a hit: check it while it is on screen.
+watch(racePage, () => tyresValues.forceNext(), { flush: 'post' })
 
 // PIP-270: la Race non si spegne piu'. Nascondere l'intera sezione lasciava
 // visibile il solo pannello opaco, cioe' il rettangolo nero segnalato dal

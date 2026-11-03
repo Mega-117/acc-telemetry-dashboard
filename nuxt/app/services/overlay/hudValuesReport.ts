@@ -30,6 +30,9 @@ export function createHudValuesReporter(report: (inputs: HudValues, shown: HudTe
   let lastLaps: number | null = null
   let lastSentAt: number | null = null
   return {
+    /** The next frame reports at once: a page that just appeared (the damage page shows for
+     *  12 s after a hit) is checked while it is on screen, not at the next line (Codex 03/11). */
+    forceNext() { lastSentAt = null },
     feed(frame: HudValuesFrame, read: HudValuesRead) {
       const lapDone = frame.laps !== null && lastLaps !== null && frame.laps > lastLaps
       if (frame.laps !== null) lastLaps = frame.laps
@@ -37,7 +40,8 @@ export function createHudValuesReporter(report: (inputs: HudValues, shown: HudTe
       const due = lastSentAt === null || frame.now - lastSentAt >= periodMs
       if (!lapDone && !due) return false
       const { inputs, shown } = read()
-      if (Object.keys(shown).length === 0) return false   // nothing of this window on screen right now
+      // Sent even with nothing on screen (every row hidden): the main process counts it, so a valid
+      // setting is not mistaken for a silent spy (Codex 03/11).
       lastSentAt = frame.now
       report(inputs, shown)
       return true

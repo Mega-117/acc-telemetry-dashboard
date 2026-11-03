@@ -223,15 +223,16 @@ describe('PIP-711 hud.values', () => {
     expect(sent).toEqual([])
   })
 
-  it('a window with nothing on screen sends nothing, and reads only when a report is due', async () => {
+  it('reads only when a report is due; nothing on screen is still reported; forceNext reports at once', async () => {
     const { createHudValuesReporter } = await import('~/services/overlay/hudValuesReport')
     const sent: unknown[] = []
     let reads = 0
-    const reporter = createHudValuesReporter(() => sent.push(1), 60_000)
-    reporter.feed(frame(0, 4), () => { reads += 1; return { inputs: {}, shown: {} } })
-    reporter.feed(frame(1, 4), () => { reads += 1; return read() })
-    reporter.feed(frame(2, 4), () => { reads += 1; return read() })   // not due: not read
-    expect(sent).toHaveLength(1)
+    const reporter = createHudValuesReporter((_inputs, shown) => sent.push(shown), 60_000)
+    reporter.feed(frame(0, 4), () => { reads += 1; return { inputs: {}, shown: {} } })   // every row hidden
+    reporter.feed(frame(1, 4), () => { reads += 1; return read() })   // not due: not read
+    reporter.forceNext()                                              // the damage page just appeared
+    reporter.feed(frame(2, 4), () => { reads += 1; return read() })
+    expect(sent).toEqual([{}, { gear: '3' }])
     expect(reads).toBe(2)
   })
 
