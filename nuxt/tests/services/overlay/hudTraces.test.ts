@@ -244,7 +244,7 @@ describe('PIP-711 hud.values', () => {
 
   it('the Info and Dashboard pages report what they draw', async () => {
     const { readFileSync } = await import('node:fs')
-    for (const page of ['info-overlay.vue', 'dashboard-overlay.vue', 'tyres-overlay.vue']) {
+    for (const page of ['info-overlay.vue', 'dashboard-overlay.vue', 'tyres-overlay.vue', 'standings-overlay.vue', 'trackmap-overlay.vue']) {
       const source = readFileSync(`app/pages/${page}`, 'utf8')
       expect(source).toContain("useHudValuesReport('")
     }

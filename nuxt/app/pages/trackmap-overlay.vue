@@ -2,7 +2,8 @@
 import { useI18n } from '~/i18n'
 import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
 import { useHudPresentationMemory } from '~/services/overlay/hudPresentationMemory'
-import { hudTrackMapScene, hudSourcePolicy } from '~/services/sim/hudSourceAdapter'
+import { hudTrackMapScene, hudSourcePolicy, usesLegacyHudInput } from '~/services/sim/hudSourceAdapter'
+import { useHudValuesReport } from '~/services/overlay/hudValuesReport'
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { stableComputed } from '~/services/overlay/stableTelemetry'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
@@ -84,6 +85,44 @@ const liveView = stableComputed(() => {
   })
 })
 const view = useHudPresentationMemory(liveView, telemetry.fastState)
+
+// PIP-714: what the minimap draws, counted on the page, against the cars it should draw - counted
+// here with the plain rule (fresh UDP row with a place on the lap, the local car also from shared
+// memory), not through the scene that drew them. ACC only: other simulators use another feed.
+useHudValuesReport('trackmap', telemetry.fastState, () => {
+  const fast = telemetry.fastState.value
+  const svg = document.querySelector('.track-map')
+  if (!usesLegacyHudInput(fast.commonLive) || outline.value.length === 0 || !svg) return { inputs: {}, shown: {} }
+  const snapshot = standings.state.value.snapshot as {
+    cars?: AccStandingsCar[], freshness?: { ttl_ms?: number }, session?: { focused_car_index?: number | null }
+  } | null
+  const nowMs = standings.nowMs.value
+  const ttl = snapshot?.freshness?.ttl_ms
+  const local = fast.localDriver?.carIndex ?? null
+  const onLap = (value: unknown) => typeof value === 'number' && value >= 0 && value <= 2
+  const localOnLap = fast.isLive === true && onLap(fast.normalizedCarPosition)
+  const drawn = new Set<number>()
+  for (const car of snapshot?.cars ?? []) {
+    const updated = car.realtime_updated_at_ms
+    const fresh = typeof ttl !== 'number' || !(ttl > 0)
+      || (typeof updated === 'number' && nowMs - updated >= -1000 && nowMs - updated <= ttl)
+    if (typeof car.car_index !== 'number' || car.has_realtime === false || !fresh) continue
+    if (onLap(car.spline_position) || (car.car_index === local && localOnLap)) drawn.add(car.car_index)
+  }
+  if (local !== null && localOnLap) drawn.add(local)
+  const focused = snapshot?.session?.focused_car_index ?? local
+  const pit = overlay.settings.value?.showPitPrediction !== false && (local === null || focused === local)
+    && fast.pitPrediction?.available === true && typeof fast.pitPrediction?.spline === 'number'
+  const markers = svg.querySelectorAll('[class*="track-map__marker--"]').length
+  return {
+    inputs: { mapCars: drawn.size, mapLocal: local !== null && drawn.has(local), mapPit: pit },
+    shown: {
+      mapCars: String(svg.querySelectorAll('.track-map__item').length - markers),
+      mapLocal: String(svg.querySelectorAll('.track-map__item--local').length),
+      mapPit: String(svg.querySelectorAll('.track-map__marker--pit').length),
+    },
+  }
+})
 const displayOutline = useHudPresentationMemory(outline, telemetry.fastState)
 const displayRotation = useHudPresentationMemory(rotationDeg, telemetry.fastState)
 const canvasStyle = computed(() => ({
