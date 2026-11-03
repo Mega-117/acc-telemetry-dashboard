@@ -493,6 +493,7 @@ export default defineConfig({
         'app/services/overlay/shiftTrace.ts',
         'app/services/overlay/valueEpisodes.ts',
         'app/services/overlay/hudShownReport.ts',
+        'app/services/overlay/hudValuesReport.ts',
         'app/composables/useRaceHudPage.ts',
         'app/composables/useOverlayInteractionRegions.ts',
         'app/composables/useOverlayInteractionContract.ts',

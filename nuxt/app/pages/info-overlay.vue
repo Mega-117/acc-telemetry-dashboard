@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useHudShownReport } from '~/services/overlay/hudShownReport'
+import { useHudValuesReport } from '~/services/overlay/hudValuesReport'
 import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
 import { useHudPresentationMemory } from '~/services/overlay/hudPresentationMemory'
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
@@ -50,6 +51,23 @@ const options = computed(() => ({
 }))
 const liveModel = stableComputed(() => buildInfoPresentation(telemetry.fastState.value, options.value))
 const model = useHudPresentationMemory(liveModel, telemetry.fastState)
+// PIP-711: the numbers this window drew from and the texts it shows, compared in main (hud.check 'values').
+// Rows the driver turned off are not on screen, so they are not sent.
+useHudValuesReport('info', telemetry.fastState, () => {
+  const info = telemetry.fastState.value.info
+  const shown: Record<string, string> = {}
+  if (model.value.delta.visible) shown.delta = model.value.delta.value
+  for (const row of model.value.rows) {
+    if (['best', 'optimal', 'incidents', 'stint', 'fuel-left'].includes(row.id)) shown[row.id] = row.value
+  }
+  return {
+    inputs: { deltaMs: info?.delta.ms ?? null, deltaAvailable: info?.delta.available ?? null,
+      deltaAbsent: info?.delta.absent ?? false, bestLapMs: info?.bestLapTimeMs ?? null,
+      optimalLapMs: info?.optimalLapTimeMs ?? null, incidents: info?.incidents ?? null,
+      stintMs: info?.stintTimeLeftMs ?? info?.stintTimeElapsedMs ?? null, fuelLeftMs: info?.fuelLeftTimeMs ?? null },
+    shown,
+  }
+})
 const localTimeValue = computed(() => formatInfoLocalTime(clockMs.value))
 
 // PIP-704: the delta on screen dropping out for a moment while driving (own car, on track,

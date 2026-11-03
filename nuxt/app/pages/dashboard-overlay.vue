@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useHudShownReport } from '~/services/overlay/hudShownReport'
+import { useHudValuesReport } from '~/services/overlay/hudValuesReport'
 import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
 import { useHudPresentationMemory } from '~/services/overlay/hudPresentationMemory'
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
@@ -53,6 +54,19 @@ const liveModel = stableComputed(() => buildDashboardPresentation(
 const canvasStyle = computed(() => ({ 'transform': `scale(${overlay.scale.value})`, '--hud-frame-unit': `${1 / overlay.scale.value}px` }))
 const retainedModel = useHudPresentationMemory(liveModel, telemetry.fastState)
 const model = computed(() => withoutStaleShiftFlash(retainedModel.value, liveModel.value))
+// PIP-711: the numbers this window drew from and the texts it shows, compared in main (hud.check 'values').
+useHudValuesReport('dashboard', telemetry.fastState, () => {
+  const state = telemetry.fastState.value
+  const shown = model.value
+  return {
+    inputs: { gear: state.gear, speedKmh: state.speedKmh, fuelL: state.fuelL, brakeBiasPct: state.brakeBiasPct,
+      engineMap: state.engineMap, tractionControl: state.tractionControl, abs: state.abs,
+      fuelPerLapL: state.fuelPerLapL, fuelLapsRemaining: state.fuelLapsRemaining, fuelLeftMs: state.fuelLeftTimeMs },
+    shown: { gear: shown.gear, speed: shown.speed, fuel: shown.fuel, brakeBias: shown.brakeBias,
+      engineMap: shown.engineMap, tc: shown.tractionControl, abs: shown.abs,
+      fuelPerLap: shown.fuelPerLap, lapsLeft: shown.lapsLeft, fuelLeft: shown.fuelLeft },
+  }
+})
 // The box being adjusted (TC, TC2, ABS, MAP, BB) is highlighted for 1.5 s; local live telemetry only.
 const adjustmentEnabled = computed(() => {
   const state = telemetry.fastState.value

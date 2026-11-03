@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useHudShownReport } from '~/services/overlay/hudShownReport'
+import { useHudValuesReport } from '~/services/overlay/hudValuesReport'
 import { useI18n } from '~/i18n'
 import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
 import { useHudPresentationMemory } from '~/services/overlay/hudPresentationMemory'
@@ -31,6 +32,21 @@ const route = useRoute()
 const { fastState, startFastStatePolling, stopFastStatePolling } = useOverlayTelemetrySource(getApi)
 // PIP-710: which lap this window shows and for how long it held retained data (hud.shown).
 useHudShownReport('tyres', fastState)
+// PIP-711: per wheel, the PSI and core temperature this window draws, read from the page itself
+// (the race layout formats them inside its components), against the numbers it drew them from.
+// Nothing is sent when the race tyre page is not on screen (classic layout, damage page).
+useHudValuesReport('tyres', fastState, () => {
+  const inputs: Record<string, unknown> = {}
+  const shown: Record<string, string> = {}
+  for (const tyre of fastState.value.tyres ?? []) {
+    const corner = typeof document === 'undefined' ? null : document.querySelector(`.tyre-race [data-wheel="${tyre.id}"]`)
+    const psi = corner?.querySelector('.tyre-race__primary')?.textContent?.trim()
+    const core = corner?.querySelector('.tyre-race__temperature')?.textContent?.trim()
+    if (psi !== undefined) { inputs[`psi${tyre.id}`] = tyre.pressurePsi; shown[`psi${tyre.id}`] = psi }
+    if (core !== undefined) { inputs[`core${tyre.id}`] = tyre.coreTempC; shown[`core${tyre.id}`] = core }
+  }
+  return { inputs, shown }
+})
 const displayFastState = useHudPresentationMemory(fastState, fastState)
 const overlay = useHudOverlay('tyres', getApi)
 const {

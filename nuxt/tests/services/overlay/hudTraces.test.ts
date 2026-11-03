@@ -194,3 +194,60 @@ describe('PIP-710 hud.shown', () => {
     expect(reports).toEqual([])
   })
 })
+
+describe('PIP-711 hud.values', () => {
+  const frame = (now: number, laps: number, extra: Record<string, unknown> = {}) => ({
+    now, laps, fresh: true, live: true, focused: false, ...extra,
+  })
+  const read = () => ({ inputs: { gear: 3 }, shown: { gear: '3' } })
+
+  it('sends at once, at every completed lap and at most once a minute in between', async () => {
+    const { createHudValuesReporter } = await import('~/services/overlay/hudValuesReport')
+    const sent: unknown[] = []
+    const reporter = createHudValuesReporter((inputs, shown) => sent.push({ inputs, shown }), 60_000)
+    reporter.feed(frame(0, 4), read)            // first frame
+    reporter.feed(frame(10_000, 4), read)       // too soon
+    reporter.feed(frame(20_000, 5), read)       // the line
+    reporter.feed(frame(50_000, 5), read)       // too soon
+    reporter.feed(frame(80_001, 5), read)       // a minute after the last
+    expect(sent).toHaveLength(3)
+  })
+
+  it('never while retained, not live or showing another car', async () => {
+    const { createHudValuesReporter } = await import('~/services/overlay/hudValuesReport')
+    const sent: unknown[] = []
+    const reporter = createHudValuesReporter(() => sent.push(1), 60_000)
+    reporter.feed(frame(0, 4, { fresh: false }), read)
+    reporter.feed(frame(1, 5, { live: false }), read)
+    reporter.feed(frame(2, 6, { focused: true }), read)
+    expect(sent).toEqual([])
+  })
+
+  it('a window with nothing on screen sends nothing, and reads only when a report is due', async () => {
+    const { createHudValuesReporter } = await import('~/services/overlay/hudValuesReport')
+    const sent: unknown[] = []
+    let reads = 0
+    const reporter = createHudValuesReporter(() => sent.push(1), 60_000)
+    reporter.feed(frame(0, 4), () => { reads += 1; return { inputs: {}, shown: {} } })
+    reporter.feed(frame(1, 4), () => { reads += 1; return read() })
+    reporter.feed(frame(2, 4), () => { reads += 1; return read() })   // not due: not read
+    expect(sent).toHaveLength(1)
+    expect(reads).toBe(2)
+  })
+
+  it('cleans the inputs: only finite numbers, booleans and null go out', async () => {
+    const { cleanValues } = await import('~/services/overlay/hudValuesReport')
+    expect(cleanValues({ a: 1, b: Number.NaN, c: 'x', d: undefined, e: null, f: true }))
+      .toEqual({ a: 1, d: null, e: null, f: true })
+  })
+
+  it('the Info and Dashboard pages report what they draw', async () => {
+    const { readFileSync } = await import('node:fs')
+    for (const page of ['info-overlay.vue', 'dashboard-overlay.vue', 'tyres-overlay.vue']) {
+      const source = readFileSync(`app/pages/${page}`, 'utf8')
+      expect(source).toContain("useHudValuesReport('")
+    }
+    // The texts are read after the render (03/11: before it, the DOM still showed the previous frame).
+    expect(readFileSync('app/services/overlay/hudValuesReport.ts', 'utf8')).toContain("{ flush: 'post' }")
+  })
+})
