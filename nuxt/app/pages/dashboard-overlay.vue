@@ -17,6 +17,8 @@ import {
   useOverlayTelemetrySource,
 } from '~/composables/useOverlayTelemetrySource'
 import { useHudOverlay } from '~/composables/useHudOverlay'
+import { useStandingsState } from '~/composables/useStandingsState'
+import { rosterLapMs, spectatorTruth, useCameraSince } from '~/services/overlay/spectatorTruth'
 import { useHudOverlayBackground } from '~/composables/useHudOverlayBackground'
 import { useDashboardAdjustment } from '~/composables/useDashboardAdjustment'
 import {
@@ -66,7 +68,47 @@ useHudValuesReport('dashboard', telemetry.fastState, () => {
       engineMap: shown.engineMap, tc: shown.tractionControl, abs: shown.abs,
       fuelPerLap: shown.fuelPerLap, lapsLeft: shown.lapsLeft, fuelLeft: shown.fuelLeft },
   }
+}, () => {
+  // PIP-713: the view on the car ACC's camera is on, against the standings roster - a feed apart
+  // from the focused-car feed it is drawn from. Values only when both carry the same UDP packet of
+  // that car; the car itself once the camera has stayed on it for a few seconds.
+  const spec = model.value.spectator
+  const viewed = telemetry.focusedCar.value
+  if (!spec || !roster.state.value.snapshot) return { inputs: {}, shown: {} }
+  const { car: truth, samePacket, settled } = spectatorTruth(roster.state.value.snapshot, viewed, cameraSince.value, Date.now())
+  const inputs: Record<string, unknown> = {}
+  const shown: Record<string, string> = {}
+  if (truth && settled) {
+    inputs.specNumber = truth.race_number ?? null
+    shown.specNumber = spec.carLabel
+  }
+  if (viewed && typeof viewed.realtime_updated_at_ms === 'number') {
+    inputs.specAgeMs = roster.nowMs.value - viewed.realtime_updated_at_ms
+    shown.specLive = spec.session
+  }
+  if (truth && samePacket) {
+    const bestSplits = Array.isArray(truth.best_lap?.splits_ms) ? truth.best_lap.splits_ms : []
+    Object.assign(inputs, {
+      specPosition: truth.position ?? null, specLaps: truth.laps ?? null,
+      specLastMs: rosterLapMs(truth.last_lap?.time_ms, truth.last_lap_ms),
+      specBestMs: rosterLapMs(truth.best_lap?.time_ms, truth.best_lap_ms),
+      specBestS1Ms: bestSplits[0] ?? null, specBestS2Ms: bestSplits[1] ?? null, specBestS3Ms: bestSplits[2] ?? null,
+      gear: truth.gear ?? null, speedKmh: truth.kmh ?? null,
+    })
+    const [, last, best] = spec.timings
+    Object.assign(shown, {
+      specPos: spec.position, specLaps: spec.laps, specLast: last.lapTime, specBest: best.lapTime,
+      specBestS1: best.splits[0], specBestS2: best.splits[1], specBestS3: best.splits[2],
+      gear: model.value.gear, speed: model.value.speed,
+    })
+  }
+  return { inputs, shown }
 })
+// PIP-713: the standings roster, the truth for the view on another car; when the camera last moved.
+const roster = useStandingsState(getApi)
+const cameraSince = useCameraSince(() => roster.state.value.snapshot)
+onMounted(() => roster.start())
+onUnmounted(() => roster.stop())
 // The box being adjusted (TC, TC2, ABS, MAP, BB) is highlighted for 1.5 s; local live telemetry only.
 const adjustmentEnabled = computed(() => {
   const state = telemetry.fastState.value

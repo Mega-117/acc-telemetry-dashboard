@@ -494,6 +494,7 @@ export default defineConfig({
         'app/services/overlay/valueEpisodes.ts',
         'app/services/overlay/hudShownReport.ts',
         'app/services/overlay/hudValuesReport.ts',
+        'app/services/overlay/spectatorTruth.ts',
         'app/composables/useRaceHudPage.ts',
         'app/composables/useOverlayInteractionRegions.ts',
         'app/composables/useOverlayInteractionContract.ts',
