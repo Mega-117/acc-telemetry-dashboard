@@ -252,3 +252,12 @@ describe('PIP-711 hud.values', () => {
     expect(readFileSync('app/services/overlay/hudValuesReport.ts', 'utf8')).toContain("{ flush: 'post' }")
   })
 })
+
+describe('Oulton 03/11: the minimap dot right after a teleport', () => {
+  it('no verdict on the local dot for a moment after a jump on the lap', async () => {
+    const { readFileSync } = await import('node:fs')
+    const page = readFileSync('app/pages/trackmap-overlay.vue', 'utf8')
+    expect(page).toContain('Date.now() - localJumpAt >= LOCAL_JUMP_SETTLE_MS')
+    expect(page).toContain('if (Math.min(step, 1 - step) > 0.02) localJumpAt = Date.now()')
+  })
+})

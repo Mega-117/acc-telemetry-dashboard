@@ -87,6 +87,20 @@ const liveView = stableComputed(() => {
 })
 const view = useHudPresentationMemory(liveView, telemetry.fastState)
 
+// The local car's last place on the lap, and when it last jumped (a teleport, not driving: at
+// 20 Hz a car moves well under 1% of a lap per frame).
+const LOCAL_JUMP_SETTLE_MS = 2000
+let lastLocalPosition: number | null = null
+let localJumpAt = 0
+watch(() => telemetry.fastState.value.normalizedCarPosition, (position) => {
+  if (typeof position !== 'number') return
+  if (lastLocalPosition !== null) {
+    const step = Math.abs(position - lastLocalPosition) % 1
+    if (Math.min(step, 1 - step) > 0.02) localJumpAt = Date.now()
+  }
+  lastLocalPosition = position
+}, { flush: 'sync' })
+
 // PIP-714: what the minimap draws, counted on the page, against the cars it should draw - counted
 // here with the plain rule (fresh UDP row with a place on the lap, the local car also from shared
 // memory), not through the scene that drew them. ACC only: other simulators use another feed.
@@ -129,7 +143,9 @@ useHudValuesReport('trackmap', telemetry.fastState, () => {
     : null
   const at = (svg?.querySelector('.track-map__item--local') as SVGElement | null)?.style.transform
     .match(/translate\(\s*(-?[\d.]+)px,\s*(-?[\d.]+)px\)/)
-  if (expected && at) {
+  // Right after a jump on the lap (ESC -> back to pits: Oulton 03/11, read 0.4 s after) the dot
+  // reappears in place on the next animation frame: no verdict for a moment.
+  if (expected && at && Date.now() - localJumpAt >= LOCAL_JUMP_SETTLE_MS) {
     inputs.mapLocalX = expected.x
     inputs.mapLocalY = expected.y
     shown.mapLocalAt = `${Math.round(Number(at[1]))},${Math.round(Number(at[2]))}`
