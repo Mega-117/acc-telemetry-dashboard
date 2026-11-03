@@ -45,6 +45,27 @@ useHudValuesReport('tyres', fastState, () => {
     if (psi !== undefined) { inputs[`psi${tyre.id}`] = tyre.pressurePsi; shown[`psi${tyre.id}`] = psi }
     if (core !== undefined) { inputs[`core${tyre.id}`] = tyre.coreTempC; shown[`core${tyre.id}`] = core }
   }
+  // Weather cells: the rain category each one draws and the letter of its icon ("3|M").
+  const cells = typeof document === 'undefined' ? [] : Array.from(document.querySelectorAll('.tyre-race__weather-cell'))
+  const rain: Record<string, unknown> = { 0: fastState.value.rainIntensity, 10: fastState.value.rainIntensity10Min,
+    30: fastState.value.rainIntensity30Min }
+  for (const cell of cells) {
+    const minutes = (cell.querySelector('strong')?.textContent ?? '').replace(/\D/g, '')
+    if (!(minutes in rain)) continue
+    inputs[`rain${minutes}`] = rain[minutes]
+    shown[`weather${minutes}`] = `${cell.getAttribute('data-rain-intensity') ?? ''}|${(cell.querySelector('span')?.textContent ?? '').trim()}`
+  }
+  // Damage page (when on screen): percentage and repair time of each body zone.
+  const body = fastState.value.damage?.body
+  for (const zone of ['front', 'rear', 'left', 'right'] as const) {
+    const group = typeof document === 'undefined' ? null : document.querySelector(`.damage-race__body--${zone}`)
+    if (!group) continue
+    const name = zone[0]!.toUpperCase() + zone.slice(1)
+    inputs[`damage${name}`] = body?.[zone].percentage ?? null
+    shown[`damage${name}`] = (group.querySelector('.damage-race__percentage')?.textContent ?? '').trim()
+    inputs[`repair${name}`] = body?.[zone].repairTimeMs ?? null
+    shown[`repair${name}`] = (group.querySelector('.damage-race__time')?.textContent ?? '').trim()
+  }
   return { inputs, shown }
 })
 const displayFastState = useHudPresentationMemory(fastState, fastState)
