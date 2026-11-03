@@ -10,7 +10,7 @@
  * - `hud.sector_state`: end-of-lap colours of the sectors HUD checked against the rules;
  * - `hud.value_episode`: a shown value that went blank for a moment while its data was there.
  */
-export type HudTraceEvent = 'ctrlk.context' | 'hud.shift' | 'hud.sector_state' | 'hud.value_episode'
+export type HudTraceEvent = 'ctrlk.context' | 'hud.shift' | 'hud.shift_health' | 'hud.sector_state' | 'hud.value_episode'
 export type HudTraceFields = Record<string, string | number | boolean | null | Array<string | number | null>>
 
 type HudTraceApi = { reportHudTrace?: (event: HudTraceEvent, fields: HudTraceFields) => Promise<unknown> }

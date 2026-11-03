@@ -156,3 +156,17 @@ describe('PIP-704 hud.sector_state', () => {
     expect(sectorLapTrace({ mode: 'running', lap: 4, lapValid: true, sectors: [] }, 'bestSector')).toBeNull()
   })
 })
+
+describe('02/11 hud.shift health', () => {
+  it('says why no hud.shift arrives: frames skipped by reason, upshifts seen, reports sent', () => {
+    const trace = createShiftTraceAggregator(() => {}, 2)
+    const feed = (gear: number, extra: Partial<ShiftTraceFrame> = {}) =>
+      trace.feed({ now: 0, car: 'ferrari_296_gt3', gear, rpm: 7000, flash: false, targetRpm: 7300, ...extra })
+    feed(2, { targetRpm: null })
+    feed(2, { car: null })
+    feed(2, { rpm: null })
+    feed(2); feed(3); feed(4)
+    expect(trace.takeHealth()).toEqual({ frames: 6, noCar: 1, noTarget: 1, noGearOrRpm: 1, upshifts: 2, reports: 1 })
+    expect(trace.takeHealth().frames).toBe(0)
+  })
+})

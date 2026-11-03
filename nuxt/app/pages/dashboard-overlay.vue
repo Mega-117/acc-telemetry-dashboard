@@ -59,7 +59,17 @@ const { active: adjusting } = useDashboardAdjustment(model, adjustmentEnabled)
 
 // PIP-704: flash onset vs real upshift, every 10 upshifts, for the diary (own car only).
 const shiftTrace = createShiftTraceAggregator(summary => reportHudTrace('hud.shift', { ...summary }))
+// 02/11: the trace stayed silent for ~70 laps; every 5 minutes its health says why (frames fed,
+// skipped by reason, upshifts seen, reports sent). Nothing is sent while nothing was fed.
+let shiftHealthAt = Date.now()
+function reportShiftHealth(now: number) {
+  if (now - shiftHealthAt < 5 * 60_000) return
+  shiftHealthAt = now
+  const health = shiftTrace.takeHealth()
+  if (health.frames > 0) reportHudTrace('hud.shift_health', { ...health })
+}
 watch(liveModel, (live) => {
+  reportShiftHealth(Date.now())
   const state = telemetry.fastState.value
   const own = state.dataSource !== 'focused' && state.isFresh && state.isLive
   shiftTrace.feed({
