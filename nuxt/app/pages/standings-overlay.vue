@@ -92,16 +92,26 @@ useHudValuesReport('standings', fastState.fastState, () => {
   const nowMs = standings.nowMs.value
   const fresh = (entry: typeof cars[number]) => typeof entry.realtime_updated_at_ms === 'number' && !!snapshot
     && nowMs - entry.realtime_updated_at_ms >= -1000 && nowMs - entry.realtime_updated_at_ms <= snapshot.freshness.ttl_ms
+  // The driver's own overall position comes from shared memory, ahead of UDP after an overtake
+  // (product rule; Codex 03/11: ranking on UDP alone gave a false KO on both rows).
+  const localIndex = localDriver.value?.carIndex ?? null
+  const localPosition = Number(localDriver.value?.position)
+  const overallOf = (entry: typeof cars[number]) => (entry.car_index === localIndex && Number.isInteger(localPosition)
+    && localPosition > 0 ? localPosition : Number(entry.position))
+  const counts = (entry: typeof cars[number]) => entry.car_index === localIndex || (entry.has_realtime === true && fresh(entry))
   model.value.rows.slice(0, 20).forEach((row, index) => {
     const car = cars.find(entry => entry.car_index === row.carIndex)
     if (!car || row.carIndex === null) return
     shown[`pos${index}`] = row.position === null ? '' : String(row.position)
     // Class rank counted here, apart from the presentation (Codex 03/11): cars of the same class,
-    // fresh, ahead on overall position.
-    const overall = Number(car.position)
+    // fresh, ahead on overall position (same position: lower car index first, as the list does).
+    const overall = overallOf(car)
     if (Number.isInteger(overall) && overall > 0) {
-      inputs[`rank${index}`] = 1 + cars.filter(other => other.car_class === car.car_class && other.has_realtime === true
-        && fresh(other) && Number(other.position) > 0 && Number(other.position) < overall).length
+      inputs[`rank${index}`] = 1 + cars.filter((other) => {
+        const ahead = overallOf(other)
+        return other.car_index !== car.car_index && other.car_class === car.car_class && counts(other) && ahead > 0
+          && (ahead < overall || (ahead === overall && other.car_index < car.car_index))
+      }).length
     }
     inputs[`fresh${index}`] = fresh(car)
     if (model.value.columns.lastLap) { shown[`last${index}`] = row.lastLap ?? ''; inputs[`last${index}`] = pick(car.last_lap?.time_ms, car.last_lap_ms) }

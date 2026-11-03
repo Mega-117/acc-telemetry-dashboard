@@ -21,6 +21,7 @@ import {
   TRACK_MAP_CIRCLE_KEY,
   buildTrackMapView,
   normalizeTrackOutline,
+  pointAtSpline,
   type TrackMapPoint,
 } from '~/services/overlay/trackMapPresentation'
 // L'UNICO punto della minimappa che conosce un simulatore: l'adattatore traduce
@@ -91,8 +92,10 @@ const view = useHudPresentationMemory(liveView, telemetry.fastState)
 // memory), not through the scene that drew them. ACC only: other simulators use another feed.
 useHudValuesReport('trackmap', telemetry.fastState, () => {
   const fast = telemetry.fastState.value
+  // A loaded map with no drawing is drawn as empty, never skipped (Codex 03/11).
+  if (!usesLegacyHudInput(fast.commonLive) || outline.value.length === 0) return { inputs: {}, shown: {} }
   const svg = document.querySelector('.track-map')
-  if (!usesLegacyHudInput(fast.commonLive) || outline.value.length === 0 || !svg) return { inputs: {}, shown: {} }
+  const count = (selector: string) => svg?.querySelectorAll(selector).length ?? 0
   const snapshot = standings.state.value.snapshot as {
     cars?: AccStandingsCar[], freshness?: { ttl_ms?: number }, session?: { focused_car_index?: number | null }
   } | null
@@ -113,15 +116,25 @@ useHudValuesReport('trackmap', telemetry.fastState, () => {
   const focused = snapshot?.session?.focused_car_index ?? local
   const pit = overlay.settings.value?.showPitPrediction !== false && (local === null || focused === local)
     && fast.pitPrediction?.available === true && typeof fast.pitPrediction?.spline === 'number'
-  const markers = svg.querySelectorAll('[class*="track-map__marker--"]').length
-  return {
-    inputs: { mapCars: drawn.size, mapLocal: local !== null && drawn.has(local), mapPit: pit },
-    shown: {
-      mapCars: String(svg.querySelectorAll('.track-map__item').length - markers),
-      mapLocal: String(svg.querySelectorAll('.track-map__item--local').length),
-      mapPit: String(svg.querySelectorAll('.track-map__marker--pit').length),
-    },
+  const inputs: Record<string, unknown> = { mapCars: drawn.size, mapLocal: local !== null && drawn.has(local), mapPit: pit }
+  const shown: Record<string, string> = {
+    mapCars: String(count('.track-map__item') - count('[class*="track-map__marker--"]')),
+    mapLocal: String(count('.track-map__item--local')),
+    mapPit: String(count('.track-map__marker--pit')),
   }
+  // Where the local dot is drawn against where shared memory puts the car (Codex 03/11: a dot frozen
+  // after "back to pits" passed on counts alone). The drawing glides along the line: some slack.
+  const expected = localOnLap
+    ? pointAtSpline(outline.value, Number(fast.normalizedCarPosition) % 1, hudSourcePolicy(fast).interpolateMap)
+    : null
+  const at = (svg?.querySelector('.track-map__item--local') as SVGElement | null)?.style.transform
+    .match(/translate\(\s*(-?[\d.]+)px,\s*(-?[\d.]+)px\)/)
+  if (expected && at) {
+    inputs.mapLocalX = expected.x
+    inputs.mapLocalY = expected.y
+    shown.mapLocalAt = `${Math.round(Number(at[1]))},${Math.round(Number(at[2]))}`
+  }
+  return { inputs, shown }
 })
 const displayOutline = useHudPresentationMemory(outline, telemetry.fastState)
 const displayRotation = useHudPresentationMemory(rotationDeg, telemetry.fastState)
