@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHudShownReport } from '~/services/overlay/hudShownReport'
 import { useI18n } from '~/i18n'
 import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
 import { useHudPresentationMemory } from '~/services/overlay/hudPresentationMemory'
@@ -28,6 +29,8 @@ const getApi = useOverlayRegionApi()
 
 const route = useRoute()
 const { fastState, startFastStatePolling, stopFastStatePolling } = useOverlayTelemetrySource(getApi)
+// PIP-710: which lap this window shows and for how long it held retained data (hud.shown).
+useHudShownReport('tyres', fastState)
 const displayFastState = useHudPresentationMemory(fastState, fastState)
 const overlay = useHudOverlay('tyres', getApi)
 const {

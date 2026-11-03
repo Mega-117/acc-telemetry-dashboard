@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHudShownReport } from '~/services/overlay/hudShownReport'
 import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
 import { useHudPresentationMemory } from '~/services/overlay/hudPresentationMemory'
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
@@ -26,6 +27,8 @@ const getApi = useOverlayRegionApi()
 const overlay = useHudOverlay('info', getApi)
 const { backgroundOpacity } = useHudOverlayBackground(overlay.settings)
 const telemetry = useOverlayTelemetrySource(getApi)
+// PIP-710: which lap this window shows and for how long it held retained data (hud.shown).
+useHudShownReport('info', telemetry.fastState)
 const canvasElement = ref<HTMLDivElement | null>(null)
 const clockMs = ref(Date.now())
 const clockActivity = usePresentationInterval(() => { clockMs.value = Date.now() }, 1000)

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHudShownReport } from '~/services/overlay/hudShownReport'
 import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
 import { useHudPresentationMemory } from '~/services/overlay/hudPresentationMemory'
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
@@ -31,6 +32,8 @@ const getApi = useOverlayRegionApi()
 const overlay = useHudOverlay('dashboard', getApi)
 const { backgroundOpacity } = useHudOverlayBackground(overlay.settings, 'dashboard')
 const telemetry = useOverlayTelemetrySource(getApi, FOCUSED_CAR_FEED_INTERVAL_MS)
+// PIP-710: which lap this window shows and for how long it held retained data (hud.shown).
+useHudShownReport('dashboard', telemetry.fastState)
 const options = computed(() => ({
   electronicsReference: overlay.settings.value?.electronicsReference ?? DEFAULT_DASHBOARD_OPTIONS.electronicsReference,
   rpmReference: overlay.settings.value?.rpmReference ?? DEFAULT_DASHBOARD_OPTIONS.rpmReference,

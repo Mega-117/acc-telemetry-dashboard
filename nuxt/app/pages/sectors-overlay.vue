@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHudShownReport } from '~/services/overlay/hudShownReport'
 import { useHudPresentationMemory } from '~/services/overlay/hudPresentationMemory'
 import { hudSourcePolicy } from '~/services/sim/hudSourceAdapter'
 
@@ -55,6 +56,8 @@ const getApi = useOverlayRegionApi()
 
 const route = useRoute()
 const telemetry = useOverlayTelemetrySource(getApi)
+// PIP-710: which lap this window shows and for how long it held retained data (hud.shown).
+useHudShownReport('sectors', telemetry.fastState)
 const { fastState, startFastStatePolling, stopFastStatePolling } = telemetry
 const {
   heldLap: focusedHeldLap,

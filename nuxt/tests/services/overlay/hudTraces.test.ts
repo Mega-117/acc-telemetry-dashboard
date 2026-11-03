@@ -170,3 +170,27 @@ describe('02/11 hud.shift health', () => {
     expect(trace.takeHealth().frames).toBe(0)
   })
 })
+
+describe('PIP-710 hud.shown', () => {
+  it('at every completed lap says which lap it shows and how long it held retained data', async () => {
+    const { createHudShownTracker } = await import('~/services/overlay/hudShownReport')
+    const reports: unknown[] = []
+    const tracker = createHudShownTracker(r => reports.push(r))
+    tracker.feed({ now: 0, laps: 4, fresh: true, live: true, focused: false })
+    tracker.feed({ now: 1_000, laps: 4, fresh: false, live: true, focused: false })   // retained from here
+    tracker.feed({ now: 5_200, laps: 5, fresh: false, live: true, focused: false })
+    tracker.feed({ now: 6_000, laps: 5, fresh: true, live: true, focused: false })
+    tracker.feed({ now: 99_000, laps: 6, fresh: true, live: true, focused: false })
+    expect(reports).toEqual([{ laps: 5, retainedMs: 4_200, focused: false }, { laps: 6, retainedMs: 0, focused: false }])
+  })
+
+  it('no report when the lap count does not move or the game is not live', async () => {
+    const { createHudShownTracker } = await import('~/services/overlay/hudShownReport')
+    const reports: unknown[] = []
+    const tracker = createHudShownTracker(r => reports.push(r))
+    tracker.feed({ now: 0, laps: 4, fresh: true, live: true, focused: false })
+    tracker.feed({ now: 1, laps: 4, fresh: true, live: true, focused: false })
+    tracker.feed({ now: 2, laps: 5, fresh: true, live: false, focused: false })
+    expect(reports).toEqual([])
+  })
+})
