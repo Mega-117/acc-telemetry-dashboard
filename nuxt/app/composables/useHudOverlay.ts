@@ -61,6 +61,8 @@ export const HUD_SCALE_MIN_BY_OVERLAY: Readonly<Record<string, number>> = {
   // PIP-624: Gomme ancora piu' piccolo su richiesta dei tester; stesso valore in desktop-app hudOverlays.js.
   tyres: 0.35,
   standings: 0.3,
+  // PIP-725 (04/11): Dashboard smaller on Claudione's request; same value in desktop-app hudOverlays.js.
+  dashboard: 0.4,
 }
 export const HUD_SCALE_MAX_BY_OVERLAY: Readonly<Record<string, number>> = {
   standings: 3,
