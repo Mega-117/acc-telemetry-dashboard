@@ -33,7 +33,10 @@ const EMPTY_POINTER_STATE: OverlayPointerState = {
   cursor: 'default',
 }
 
-const LAYOUT_SETTLED_EVENTS = ['transitionend', 'transitioncancel', 'animationend', 'animationcancel'] as const
+// 4x the main heartbeat (overlayInteractionCoordinator POINTER_HEARTBEAT_MS).
+export const POINTER_STALE_MS = 800
+
+const LAYOUT_SETTLED_EVENTS =['transitionend', 'transitioncancel', 'animationend', 'animationcancel'] as const
 
 function rectPayload(element: Element) {
   const rect = element.getBoundingClientRect()
@@ -66,6 +69,7 @@ export function useOverlayInteractionContract(options: OverlayInteractionContrac
   let mutationObserver: MutationObserver | null = null
   let removePointerListener: (() => void) | null = null
   let scheduledFrame: number | null = null
+  let staleTimer: ReturnType<typeof setTimeout> | null = null
   let started = false
 
   function api(): any | null {
@@ -103,9 +107,25 @@ export function useOverlayInteractionContract(options: OverlayInteractionContrac
     )
   }
 
+  function clearStaleTimer() {
+    if (staleTimer !== null) clearTimeout(staleTimer)
+    staleTimer = null
+  }
+
+  // 03/11: main re-sends a still arrow every 200 ms. Without updates the drawn
+  // arrow is stale (main stall, lost tick): hide it and give the system cursor
+  // back instead of leaving a frozen "ghost" over the panel.
+  function hideStalePointer() {
+    staleTimer = null
+    pointerState.cursorVisible = false
+    applyDocumentPointerClasses()
+  }
+
   function applyPointerState(next: Partial<OverlayPointerState>) {
     Object.assign(pointerState, EMPTY_POINTER_STATE, next)
     applyDocumentPointerClasses()
+    clearStaleTimer()
+    if (pointerState.cursorVisible) staleTimer = setTimeout(hideStalePointer, POINTER_STALE_MS)
   }
 
   function publishContract() {

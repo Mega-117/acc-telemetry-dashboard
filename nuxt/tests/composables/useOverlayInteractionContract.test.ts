@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useOverlayInteractionContract } from '~/composables/useOverlayInteractionContract'
+import { POINTER_STALE_MS, useOverlayInteractionContract } from '~/composables/useOverlayInteractionContract'
 
 class FakeElement {
   rect: { x: number, y: number, width: number, height: number }
@@ -226,5 +226,33 @@ describe('useOverlayInteractionContract', () => {
     expect(() => fakeWindow.dispatch('pointerdown', { target: surface })).not.toThrow()
     expect(api.overlayInteractionPointerButton).not.toHaveBeenCalled()
     interaction.stop()
+  })
+
+  // 03/11: a drawn arrow that stops receiving updates must not stay as a ghost.
+  it('nasconde la freccia disegnata se gli aggiornamenti si fermano', () => {
+    vi.useFakeTimers()
+    try {
+      const { classList } = installDom()
+      const { api, emitPointer } = makeApi()
+      const interaction = useOverlayInteractionContract({ getApi: () => api })
+      interaction.start({ surfaceSelector: '.surface', controlSelector: '.control' })
+      const shown = { overlayKey: 'training', cursorVisible: true, surfaceHovered: true, controlHovered: false, placementActive: false, x: 20, y: 20, cursor: 'default' }
+      emitPointer(shown)
+      vi.advanceTimersByTime(POINTER_STALE_MS - 100)
+      emitPointer(shown) // heartbeat keeps a still arrow alive
+      vi.advanceTimersByTime(POINTER_STALE_MS - 100)
+      expect(interaction.pointerState.cursorVisible).toBe(true)
+      expect(classList.contains('overlay-software-cursor-active')).toBe(true)
+      vi.advanceTimersByTime(200) // no update for POINTER_STALE_MS
+      expect(interaction.pointerState.cursorVisible).toBe(false)
+      expect(classList.contains('overlay-software-cursor-active')).toBe(false)
+      emitPointer(shown) // updates resume: shown again
+      expect(interaction.pointerState.cursorVisible).toBe(true)
+      interaction.stop()
+      vi.advanceTimersByTime(POINTER_STALE_MS * 2)
+      expect(interaction.pointerState.cursorVisible).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
