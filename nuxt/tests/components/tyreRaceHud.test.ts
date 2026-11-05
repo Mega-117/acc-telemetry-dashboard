@@ -117,7 +117,7 @@ describe('Race HUD components', () => {
     expect(damage).toContain('stroke="#ffd400"')
   })
 
-  it('PIP-671: the pressure-drop event and an overheated tyre show the caution look on that wheel only', async () => {
+  it('PIP-671: the pressure-drop event is red on that wheel only; an overheated tyre keeps the palette', async () => {
     const state = fastState()
     state.tyres[0]!.racePressure = { variationPsi: -0.72, eventSeq: 3, eventTs: Date.now() / 1000 } as any
     state.tyres[1]!.coreTempC = 104
@@ -126,13 +126,15 @@ describe('Race HUD components', () => {
       const at = html.indexOf(`tyre-race__corner--${id}`)
       return html.slice(at, html.indexOf('"', at))
     }
-    // PIP-734 (owner 05/11): the pressure drop is red, the overheated tyre stays amber.
+    // PIP-734 (owner 05/11): the pressure drop is red; above 100 degrees no amber look, the ACC
+    // Drive temperature palette simply goes on (owner 05/11 afternoon).
     expect(corner('fl')).toContain('tyre-race__corner--loss')
-    expect(corner('fl')).not.toContain('tyre-race__corner--warn')
-    expect(corner('fr')).toContain('tyre-race__corner--warn')
+    expect(corner('fr')).not.toMatch(/--warn|--loss/)
     expect(corner('rl')).not.toMatch(/--warn|--loss/)
-    expect(html.match(/tyre-race__corner--warn/g)).toHaveLength(1)
+    expect(html).not.toContain('tyre-race__corner--warn')
     expect(html.match(/tyre-race__corner--loss/g)).toHaveLength(1)
+    // "104°" on one line: digits and a narrow degree sign that never wraps.
+    expect(html).toMatch(/class="tyre-race__degree"[^>]*>(°|&#176;)<\/span>/)
     // An old event never re-lights the red (the 2 s flash is over).
     state.tyres[0]!.racePressure = { variationPsi: -0.72, eventSeq: 3, eventTs: Date.now() / 1000 - 10 } as any
     state.tyres[1]!.coreTempC = 99
@@ -140,6 +142,8 @@ describe('Race HUD components', () => {
     const source = readFileSync(resolve(process.cwd(), 'app/components/overlay/TyreRaceHud.vue'), 'utf8')
     expect(source).toMatch(/\.tyre-race__corner--loss \{[^}]*background: \$tyre-loss-red/)
     expect(source).toMatch(/:is\(\.tyre-race__primary, \.tyre-race__loss\) \{ color: \$tyre-loss-red; \}/)
+    expect(source).toMatch(/\.tyre-race__temperature \{[^}]*white-space: nowrap; --hud-glyph-digit: 0\.62em; \}/)
+    expect(source).not.toContain('tyre-race__corner--warn')
   })
 
   it('rende sagoma GT3, quattro body zone, sospensioni e totali', async () => {

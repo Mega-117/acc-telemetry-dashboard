@@ -4,7 +4,7 @@ import { hudSourcePolicy } from '~/services/sim/hudSourceAdapter'
 
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { FastOverlayState, FastStateTyre } from '~/composables/useFastStatePoller'
-import { tyreTemperatureColor, tyreTemperatureOverheated, temperatureTargetColor } from '~/utils/tyreTemperaturePresentation'
+import { tyreTemperatureColor, temperatureTargetColor } from '~/utils/tyreTemperaturePresentation'
 import { brakeTemperatureColor } from '~/utils/brakeTemperaturePresentation'
 import { raceSlipFill, raceNumber, racePressureFlash, raceAxleBrake, raceTyreValueOrder, type RaceTyreValueKind } from '~/utils/raceTyrePresentation'
 import { raceDamageSummary, raceDamageZoneTime } from '~/utils/raceDamagePresentation'
@@ -35,11 +35,9 @@ const tyres = computed(() => ids.map((id, index) => {
   } as FastStateTyre
   const rear = index > 1
   const slip = hasCompoundTyrePolicy.value ? raceSlipFill(tyre.wheelSlipRaw ?? tyre.wheelSlip) : { ratio: 0, color: '#6b7280' }
-  // Existing alarms in the draft's caution look: the pressure-drop event (2 s, the former red
-  // flash) and a tyre in the top band of the ACC Drive temperature scale.
+  // The pressure-drop event (2 s, red). An overheated tyre has no look of its own: owner 05/11,
+  // the ACC Drive temperature palette simply goes on above 100 degrees.
   const pressureWarning = hasPhysics.value && racePressureFlash(tyre, Math.max(clockMs.value, Date.now())) !== null
-  const temperatureWarning = hasPhysics.value && hasCompoundTyrePolicy.value
-    && tyreTemperatureOverheated(tyre.coreTempC, compoundKind.value)
   return {
     ...tyre,
     rear,
@@ -51,7 +49,6 @@ const tyres = computed(() => ids.map((id, index) => {
     average: hasPhysics.value && props.fastState.lapPressureAverage.status === 'available'
       ? props.fastState.lapPressureAverage.values[id] : null,
     pressureWarning,
-    temperatureWarning,
   }
 }))
 watch(() => tyres.value.some(tyre => tyre.pressureWarning), active => {
@@ -104,8 +101,7 @@ const { t } = useI18n()
             :class="[
               `tyre-race__corner--${tyre.id.toLowerCase()}`,
               tyre.right ? 'tyre-race__corner--right' : 'tyre-race__corner--left',
-              { 'tyre-race__corner--rear': tyre.rear, 'tyre-race__corner--loss': tyre.pressureWarning,
-                'tyre-race__corner--warn': tyre.temperatureWarning && !tyre.pressureWarning },
+              { 'tyre-race__corner--rear': tyre.rear, 'tyre-race__corner--loss': tyre.pressureWarning },
             ]"
             :data-wheel="tyre.id"
             :aria-label="tyre.id"
@@ -120,7 +116,7 @@ const { t } = useI18n()
             </div>
             <div class="tyre-race__hardware">
               <i class="tyre-race__slip"><b :style="{ height: `${tyre.slip.ratio * 100}%`, background: tyre.slip.color }" /></i>
-              <span class="tyre-race__tyre" :style="{ '--t': tyre.color }"><span class="tyre-race__temperature"><HudFixedDigits :value="raceNumber(tyre.coreTempC)" />&#176;</span></span>
+              <span class="tyre-race__tyre" :style="{ '--t': tyre.color }"><span class="tyre-race__temperature"><HudFixedDigits :value="raceNumber(tyre.coreTempC)" /><span class="tyre-race__degree">&#176;</span></span></span>
               <i class="tyre-race__brake" :class="`tyre-race__brake--${tyre.rear ? 'rear' : 'front'}`" :style="{ background: tyre.brakeColor }" />
             </div>
           </div>
@@ -226,7 +222,11 @@ $wheel-height: 112px;
   background: var(--t);
 }
 // The shadow keeps the white number readable on the light palette colours (yellow, light green).
-.tyre-race__temperature { color: #fff; font: 800 34px/1 var(--hud-gauge-num); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 4px rgba(0, 0, 0, 0.7); }
+.tyre-race__temperature { color: #fff; font: 800 34px/1 var(--hud-gauge-num); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 4px rgba(0, 0, 0, 0.7); white-space: nowrap; --hud-glyph-digit: 0.62em; }
+// Owner 05/11: "101°" on one line inside the 80px tyre (72px inside the frame), not a wider tyre:
+// digit slots of 0.62em (21px; the widest Chakra Petch digit draws 20px) and a half-size raised
+// degree sign. Measured in the browser with the real face: any three digits + degree = 70.4px.
+.tyre-race__degree { display: inline-block; margin-left: 1px; font-size: 0.5em; vertical-align: top; }
 .tyre-race__brake {
   position: absolute;
   top: 20px;
@@ -251,12 +251,6 @@ $tyre-loss-border: #ff3b30;
   .tyre-race__tyre { border-color: $tyre-loss-border; background: $tyre-loss-red; }
   .tyre-race__temperature { color: #fff; }
   :is(.tyre-race__primary, .tyre-race__loss) { color: $tyre-loss-red; }
-}
-
-// Caution (overheated tyre): the wheel's tyre and readings turn amber.
-.tyre-race__corner--warn {
-  .tyre-race__tyre { border-color: $hud-caution; background: $hud-caution-bg; }
-  :is(.tyre-race__temperature, .tyre-race__primary, .tyre-race__loss) { color: $hud-caution; }
 }
 
 // Axle brake: the temperature on the wheel centre line, the pad life mirrored around it.
