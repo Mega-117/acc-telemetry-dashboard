@@ -10,7 +10,7 @@ import { ref, type Ref } from 'vue'
 import { listFastestLaps, listOwnLaps, type LapDescriptor, type LapOrigin, type LapSource, type LocalLapBridge } from '~/services/telemetry/lapSources'
 import { normalizeLapTrace, type LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { channelAt, sectorBounds } from '~/services/telemetry/lapAnalysis'
-import { stitchIdealLap } from '~/services/telemetry/idealLap'
+import { MAX_JOIN_KMH, segmentBounds, stitchIdealLap } from '~/services/telemetry/idealLap'
 import { formatLapTime } from '~/utils/telemetryFormat'
 import { fetchLibraryLap, listLibrary, type LapsArchiveDeps, type LibraryEntry } from '~/services/telemetry/lapsArchiveClient'
 import { pickReferences, type ReferenceConditions } from '~/services/telemetry/referencePick'
@@ -120,9 +120,10 @@ export function useReferenceLibrary(o: {
     const pool = o.entries.value.filter(e => e.valid && e.complete && (e.origin === 'local' || e.origin === 'pilot'))
     const best = [...pool].sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0]
     const bestTrace = best && o.traces.value[best.id]
-    const bounds = bestTrace ? sectorBounds(bestTrace, o.sectorTimesOf(best)?.map(t => t ?? 0)) : null
+    // dev.10 (user 05/11): one segment per corner (TrackTitan's theoretical lap), the sectors as fallback.
+    const bounds = bestTrace ? segmentBounds(bestTrace, sectorBounds(bestTrace, o.sectorTimesOf(best)?.map(t => t ?? 0))) : null
     const laps = bestTrace ? [bestTrace, ...pool.filter(e => e !== best).map(e => o.traces.value[e.id]).filter((t): t is LapTraceView => !!t), ...historyTraces] : []
-    const ideal = bounds ? stitchIdealLap(laps, bounds) : null
+    const ideal = bounds ? stitchIdealLap(laps, bounds, MAX_JOIN_KMH) : null
     // Like for like (review): the potential is measured on the traces, start to finish, as the ideal lap is;
     // the official times of a lap and its trace can differ by a few hundredths at the line.
     const measured = laps.map(t => (channelAt(t, 'time_s', 1) ?? Infinity) - (channelAt(t, 'time_s', 0) ?? 0))
