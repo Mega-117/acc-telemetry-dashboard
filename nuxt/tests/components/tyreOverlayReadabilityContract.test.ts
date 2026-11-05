@@ -31,7 +31,7 @@ describe('tyre overlay minimum readability contract', () => {
     expect(race).toContain('.tyre-race__primary { font: 800 36px/1 var(--hud-gauge-num); }')
     expect(race).toContain('.tyre-race__average { color: #d4dce2; font: 700 27px/1.1 var(--hud-gauge-label); }')
     expect(race).toContain('.tyre-race__loss { color: #ffa500; font: 700 29px/1.1 var(--hud-gauge-num); }')
-    expect(race).toContain('.tyre-race__temperature { color: #fff; font: 800 34px/1 var(--hud-gauge-num); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 4px rgba(0, 0, 0, 0.7); }')
+    expect(race).toContain('.tyre-race__temperature { color: #fff; font: 800 34px/1 var(--hud-gauge-num); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 4px rgba(0, 0, 0, 0.7); white-space: nowrap; --hud-glyph-digit: 0.62em; }')
     expect(race).toMatch(/\.tyre-race__brake-temp \{[^}]*font: 700 34px\/1 var\(--hud-gauge-num\);/)
     expect(race).toMatch(/\.tyre-race__pad \{[^}]*font: 700 30px\/1 var\(--hud-gauge-num\);/)
     expect(race).toMatch(/\.tyre-race__compound-set \{[^}]*font: 700 28px\/34px var\(--hud-gauge-num\);/)
