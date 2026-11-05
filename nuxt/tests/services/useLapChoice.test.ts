@@ -40,7 +40,7 @@ describe('useLapChoice', () => {
     s.library.suggestedId.value = 'library:x'
     s.c.applyDefault()
     expect(s.refId.value).toBe('library:x')
-    expect(s.c.reason.value).toEqual({ kind: 'stepUp', driver: 'RICO117', pct: 1 })
+    expect(s.c.reason.value).toEqual({ kind: 'stepUp', driver: 'RICO117', pct: 1, relaxed: null })
     // …but never after a choice of mine.
     s.c.propose('L1', { kind: 'picked' })
     s.library.suggestedId.value = null

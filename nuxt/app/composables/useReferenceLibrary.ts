@@ -1,4 +1,11 @@
-import { lapKind, sameKindFirst, type LapKind } from '~/services/telemetry/lapChoice'
+import { sameKindFirst, traceClass, type LapClass, type LapKind, type Relaxed } from '~/services/telemetry/lapChoice'
+import { parseCoachIndex, pickCoachLaps, type CoachIndex } from '~/services/telemetry/coachLaps'
+
+async function readJson(url: string): Promise<unknown> {
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`${response.status}`)
+  return response.json()
+}
 import { ref, type Ref } from 'vue'
 import { listFastestLaps, listOwnLaps, type LapDescriptor, type LapOrigin, type LapSource, type LocalLapBridge } from '~/services/telemetry/lapSources'
 import { normalizeLapTrace, type LapTraceView } from '~/services/telemetry/lapTraceChart'
@@ -18,6 +25,16 @@ export interface Entry {
   driver?: string | null, ownerUid?: string | null, recordedAt?: string | null, validUnknown?: boolean
   /** The ideal lap: stitched from this session only, or also from your faster laps here. */
   idealScope?: 'session' | 'history'
+  /** dev.10: a coach lap's replay session (practice / qualifying) and whether it is another car of the class. */
+  coachSession?: string | null
+  coachOtherCar?: boolean
+}
+
+/** The site's base path for a file of `public/` (GitHub Pages prefix, `racercore://app` in the program). */
+function publicPath(path: string): string {
+  let base = '/'
+  try { base = useRuntimeConfig().app.baseURL || '/' } catch { /* tests and non-Nuxt callers */ }
+  return `${base.endsWith('/') ? base : `${base}/`}${path.replace(/^\//, '')}`
 }
 type Loaded = { trace: LapTraceView, entry: Entry }
 
@@ -46,6 +63,10 @@ export function useReferenceLibrary(o: {
   const libraryList = ref<LibraryEntry[]>([])
   const libraryState = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
   const suggestedId = ref<string | null>(null), fastestId = ref<string | null>(null)
+  /** dev.10: how far the suggested lap had to move from your class (null = your own class). */
+  const suggestedRelaxed = ref<Relaxed | null>(null)
+  /** dev.10: the coach laps offered for this lap, best match first. */
+  const coachIds = ref<string[]>([])
   /** 01/11: the ideal lap was built but is your best lap itself (already the fastest in every sector). */
   const idealSameAsBest = ref(false)
   function add(loaded: Loaded[]) {
@@ -126,12 +147,12 @@ export function useReferenceLibrary(o: {
    * a step above your best in the closest conditions, and the fastest. Shown with the driver's nickname.
    */
   async function loadOtherDrivers(isCurrent: () => boolean, deps: LapsArchiveDeps & { loadNickname?: (uid: string) => Promise<string | null> },
-    where: { game: string, track: string, car: string, variant: string | null }, ctx: { myUid: string | null, myBestMs: number | null, mine: ReferenceConditions }): Promise<string | null> {
+    where: { game: string, track: string, car: string, variant: string | null }, ctx: { myUid: string | null, myBestMs: number | null, mine: ReferenceConditions, cls?: LapClass | null }): Promise<string | null> {
     libraryState.value = 'loading'
     try {
       const list = await listLibrary(where, deps)
       if (isCurrent()) { libraryList.value = list; libraryState.value = 'ready' }
-      const { suggested, fastest } = pickReferences(list, ctx)
+      const { suggested, fastest, relaxed } = pickReferences(list, ctx)
       const nickname = deps.loadNickname ?? loadPublicNickname
       const picked = [[suggested, useI18n().t('telemetry.labels.suggested')], [fastest, useI18n().t('telemetry.labels.fastest')]] as const
       const same = (a: string | null | undefined, b: string | null | undefined) => (a ?? '').trim().toLowerCase() === (b ?? '').trim().toLowerCase()
@@ -160,6 +181,7 @@ export function useReferenceLibrary(o: {
       if (offered) noteFeatureUse({ event: 'laps.library_loaded', laps: usable, rejected: offered - usable })
       // The suggested lap's id, so the page can propose it as the reference (user decision: automatic).
       suggestedId.value = suggested && ok.some(r => r.entry.id === `library:${suggested.libId}`) ? `library:${suggested.libId}` : null
+      suggestedRelaxed.value = suggestedId.value ? relaxed : null
       fastestId.value = fastest && ok.some(r => r.entry.id === `library:${fastest.libId}`) ? `library:${fastest.libId}` : null
       return suggestedId.value
     } catch {
@@ -196,15 +218,44 @@ export function useReferenceLibrary(o: {
       add(ok)
       // 01/11: the proposed lap is the best of the same kind as "Tu" (race with race), else the best one.
       // The kind of "Tu" now, after the download: Tu may have changed meanwhile.
-      return sameKindFirst(ok, r => lapKind(r.trace.fuelL), youKind())[0]?.entry.id ?? null
+      return sameKindFirst(ok, r => traceClass(r.trace).kind, youKind())[0]?.entry.id ?? null
     } catch { return null }
   }
   function clearCompareSession() { o.entries.value = o.entries.value.filter(e => e.origin !== 'compare') }
 
   /** PIP-695: one lap read on demand (a lap of another session or driver picked in "Cambia"). */
   function addLoaded(entry: Entry, trace: LapTraceView) { add([{ entry, trace }]) }
-  function resetLibrary() { libraryList.value = []; libraryState.value = 'idle'; suggestedId.value = null; fastestId.value = null; idealSameAsBest.value = false }
 
-  return { loadOwnLaps, loadBestLaps, refreshIdeal, loadOtherDrivers, loadCompareSession, clearCompareSession, addLoaded, resetLibrary,
-    libraryList, libraryState, suggestedId, fastestId, idealSameAsBest }
+  /**
+   * dev.10 (user 05/11): the coach laps shipped with the program for this track: the same car first,
+   * else the same class (with a note), the session kind and weather closest to your lap.
+   */
+  let coachIndex: Promise<CoachIndex | null> | null = null
+  async function loadCoachLaps(isCurrent: () => boolean, where: { track: string, car: string }, mine: LapClass | null, read: (url: string) => Promise<unknown> = readJson) {
+    try {
+      coachIndex ??= read(publicPath('/coach-laps/index.json')).then(parseCoachIndex).catch(() => null)
+      const index = await coachIndex
+      const picks = pickCoachLaps(index, where, mine)
+      const loaded = await Promise.all(picks.map(async ({ lap, otherCar }): Promise<Loaded | null> => {
+        try {
+          const trace = normalizeLapTrace(await read(publicPath(`/coach-laps/${lap.id}.json`)))
+          if (!trace || !trace.complete || !index) return null
+          return { trace: { ...trace, coach: index.coach }, entry: { id: `coach:${lap.id}`, lapNumber: 0, lapTimeMs: lap.lapTimeMs, valid: true, complete: true, origin: 'coach',
+            sessionToken: '', driver: index.coach, recordedAt: null, coachSession: lap.session, coachOtherCar: otherCar, note: otherCar ? carMismatchNote() : undefined,
+            label: `${useI18n().t('telemetry.labels.coach', { coach: index.coach })} · ${formatLapTime(lap.lapTimeMs)}` } }
+        } catch { return null }
+      }))
+      if (!isCurrent()) return
+      const ok = loaded.filter((r): r is Loaded => r !== null)
+      add(ok)
+      coachIds.value = ok.map(r => r.entry.id)
+    } catch { /* the coach laps are an extra */ }
+  }
+  function resetLibrary() { libraryList.value = []; libraryState.value = 'idle'; suggestedId.value = null; fastestId.value = null; idealSameAsBest.value = false
+    suggestedRelaxed.value = null; coachIds.value = []
+    // Codex 05/11: the laps of the previous track must never feed the ideal lap of the next one.
+    historyTraces = [] }
+
+  return { loadOwnLaps, loadBestLaps, refreshIdeal, loadOtherDrivers, loadCompareSession, clearCompareSession, addLoaded, resetLibrary, loadCoachLaps,
+    libraryList, libraryState, suggestedId, fastestId, idealSameAsBest, suggestedRelaxed, coachIds }
 }

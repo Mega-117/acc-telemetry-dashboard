@@ -29,8 +29,12 @@ const reasonText = computed(() => {
   const r = props.choice.reason
   if (!r) return ''
   if (!props.brief) return text.reason(r)
+  // dev.10: a coach lap says its session and that its fuel is unknown, even in the short list.
+  if (r.kind === 'coach') return [r.session ? t(`telemetry.choice.reason.coachSession.${r.session}`) : '', t('telemetry.choice.reason.coachFuel'),
+    r.otherCar ? t('telemetry.choice.reason.coachClass') : ''].filter(Boolean).join(' · ')
   return r.kind === 'stepUp' && r.pct > 0 ? t('telemetry.choice.reason.fasterShort', { pct: text.decimal(r.pct) }) : ''
 })
+const coach = computed(() => props.choice.reason?.kind === 'coach')
 const tooltip = computed(() => [props.choice.ideal ? text.idealNote(props.idealScope) : text.when(props.choice), text.conditions(props.choice.conditions)].filter(Boolean).join('\n'))
 function use() { emit('confirm', props.choice) }
 function onKey(event: KeyboardEvent) {
@@ -47,6 +51,7 @@ function onKey(event: KeyboardEvent) {
     <span v-if="rank" class="choice-row__rank">{{ rank }}</span>
     <span class="choice-row__main">
       <span v-if="!hideDriver" class="choice-row__driver">{{ text.driver(choice) }}</span>
+      <span v-if="coach" class="choice-row__coach">{{ t('telemetry.choice.coachTag') }}</span>
       <span v-if="lapLabel" class="choice-row__lap">{{ lapLabel }}</span>
       <span v-if="when" class="choice-row__when">{{ when }}</span>
     </span>
@@ -87,6 +92,8 @@ function onKey(event: KeyboardEvent) {
   .choice-row__kind { flex: 0 0 128px; box-sizing: border-box; }
   .choice-row__tags span { box-sizing: border-box; text-align: center; &:nth-child(1) { width: 50px; } &:nth-child(2) { width: 66px; } &:nth-child(3) { width: 66px; } &:nth-child(4) { width: 46px; }
     &.is-empty { visibility: hidden; } } }
+// dev.10: the coach's laps carry a teal COACH pill (the Pitwall coach colour), never mistaken for a driver.
+.choice-row__coach { flex: none; padding: 1px 6px; border: 1px solid #2dd4bf; color: #2dd4bf; font: 800 11px/16px 'Inter', sans-serif; letter-spacing: .06em; }
 .choice-row__tags { display: flex; gap: 4px; flex: none; span { padding: 1px 6px; border: 1px solid #ffffff24; color: #c8c8cc; font: 600 12px/18px 'Inter', sans-serif; font-variant-numeric: tabular-nums; } }
 .choice-row__badges { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; flex: 1; font: 600 13px 'Inter', sans-serif; color: #9a9aa0; }
 .choice-row__status { font-size: 15px; &.is-incomplete, &.is-unknown { color: #b3b3b8; } }

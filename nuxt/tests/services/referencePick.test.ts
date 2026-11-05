@@ -28,7 +28,7 @@ describe('pickReferences (PIP-650)', () => {
     expect(top.fastest?.uid).toBe('u1')
   })
   it('never suggests your own lap, and does not repeat the fastest when it is the suggestion', () => {
-    expect(pickReferences([e('a', 'me', 100000)], { myUid: 'me', myBestMs: 101000, mine })).toEqual({ suggested: null, fastest: null })
+    expect(pickReferences([e('a', 'me', 100000)], { myUid: 'me', myBestMs: 101000, mine })).toEqual({ suggested: null, fastest: null, relaxed: null })
     const one = pickReferences([e('a', 'u1', 100500)], { myUid: 'me', myBestMs: 101000, mine })
     expect(one.suggested?.uid).toBe('u1')
     expect(one.fastest).toBeNull()

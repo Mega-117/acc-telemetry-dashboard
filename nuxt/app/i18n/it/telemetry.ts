@@ -72,6 +72,7 @@ export default {
       ideal: 'Giro ideale · {time} · {gap} sul tuo migliore',
       suggested: 'consigliato',
       fastest: 'il più veloce',
+      coach: 'Coach {coach}',
     },
     rows: {
       delta: 'Delta',
@@ -185,6 +186,7 @@ export default {
         unknown: 'Validità non disponibile',
         best: 'Migliore della sessione',
       },
+      coachTag: 'COACH',
       reason: {
         prefix: 'Perché questo: {text}',
         myBest: 'il tuo giro valido più veloce con questa auto',
@@ -192,6 +194,19 @@ export default {
         nextBest: 'il tuo giro valido più veloce dopo questo',
         sessionBest: 'l’unico altro giro completo',
         stepUp: 'un passo avanti: {driver}, {pct}% più veloce',
+        relaxed: {
+          band: 'altra fascia di benzina: nessuno nella tua',
+          weather: 'altro meteo: nessuno con il tuo',
+          kind: 'altro tipo di giro: nessuno del tuo',
+        },
+        coach: 'giro del coach {driver}',
+        coachSession: {
+          practice: 'prove',
+          qualifying: 'qualifica',
+          race: 'gara',
+        },
+        coachFuel: 'benzina non nota',
+        coachClass: 'altra auto della stessa classe',
         ideal: 'i tuoi settori migliori messi insieme',
         fastest: 'il più veloce qui: {driver}',
         coachBest: 'il tuo giro più veloce qui',

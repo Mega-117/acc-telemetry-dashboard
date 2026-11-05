@@ -13,7 +13,9 @@ export type RefReason =
   | { kind: 'myBest' }
   | { kind: 'nextBest' }
   | { kind: 'sessionBest' }
-  | { kind: 'stepUp', driver: string | null, pct: number }
+  | { kind: 'stepUp', driver: string | null, pct: number, relaxed?: Relaxed | null, band?: FuelBand | null }
+  /** dev.10: a coach lap from a replay (`session`: the replay's session; fuel never known). */
+  | { kind: 'coach', driver: string | null, session: 'practice' | 'qualifying' | 'race' | null, otherCar?: string | null }
   | { kind: 'ideal' }
   | { kind: 'fastest', driver: string | null }
   | { kind: 'coachBest' }
@@ -248,6 +250,40 @@ export type LapKind = 'qualify' | 'race'
 export function lapKind(fuelL: number | null | undefined): LapKind | null {
   return typeof fuelL === 'number' && Number.isFinite(fuelL) && fuelL > 0 ? (fuelL <= 20 ? 'qualify' : 'race') : null
 }
+
+/** dev.10 (user 05/11): the fuel bands of the library and of the suggestion (departure fuel of the stint). */
+export type FuelBand = 'qualify' | '20-40' | '40-60' | '60-80' | '80-100' | '100+'
+export const FUEL_BANDS: readonly FuelBand[] = ['qualify', '20-40', '40-60', '60-80', '80-100', '100+']
+export function fuelBand(fuelL: number | null | undefined): FuelBand | null {
+  if (typeof fuelL !== 'number' || !Number.isFinite(fuelL) || fuelL <= 0) return null
+  return fuelL <= 20 ? 'qualify' : fuelL <= 40 ? '20-40' : fuelL <= 60 ? '40-60' : fuelL <= 80 ? '60-80' : fuelL <= 100 ? '80-100' : '100+'
+}
+/** How far apart two bands are (0 = the same); unknown counts as far. */
+export const bandDistance = (a: FuelBand | null, b: FuelBand | null) => a === null || b === null ? 9 : Math.abs(FUEL_BANDS.indexOf(a) - FUEL_BANDS.indexOf(b))
+export const isWetGrip = (grip: string | null | undefined) => typeof grip === 'string' && /damp|wet|flood/i.test(grip)
+
+/** What a lap was: qualifying or race, its fuel band, wet or dry (null = unknown). */
+export interface LapClass { kind: LapKind | null, band: FuelBand | null, wet: boolean | null }
+/**
+ * dev.10 (Codex 05/11): the kind comes from the stint's departure fuel (a race stint's 12th lap with 12 L
+ * left is still a race lap); the lap's own fuel only when that is all a lap carries. A replay knows none.
+ */
+export function traceClass(trace: { stintFuelL?: number | null, fuelL: number | null, fuelUncertain?: boolean, tyreCompound?: 'dry' | 'wet' | null,
+  conditions: { grip?: string | null } | null } | null | undefined, row?: LapSessionRow | null): LapClass {
+  if (!trace) return { kind: null, band: null, wet: null }
+  const departure = typeof trace.stintFuelL === 'number' ? trace.stintFuelL : typeof row?.stint_fuel === 'number' ? row.stint_fuel : trace.fuelUncertain ? null : trace.fuelL
+  const band = fuelBand(departure)
+  const grip = trace.conditions?.grip ?? row?.track_grip_status ?? null
+  const wet = trace.tyreCompound === 'wet' || isWetGrip(grip) ? true : grip || trace.tyreCompound === 'dry' ? false : null
+  return { kind: band === null ? null : band === 'qualify' ? 'qualify' : 'race', band, wet }
+}
+/** The same for a library entry (the Worker's slot when it gave one, else its fuel and grip). */
+export function libraryClass(e: LibraryLapLike & { wet?: boolean | null }): LapClass {
+  const band = fuelBand(libraryFuel(e)) ?? (e.kind === 'qualify' || libraryFuel(e) === null ? 'qualify' : null)
+  return { kind: band === 'qualify' ? 'qualify' : band ? 'race' : libraryKind(e), band, wet: typeof e.wet === 'boolean' ? e.wet : e.grip ? isWetGrip(e.grip) : null }
+}
+/** dev.10: how far a suggestion had to move from your lap's class, said in the reason ("never empty"). */
+export type Relaxed = 'band' | 'weather' | 'kind'
 /** The laps of the same kind as `you` when there is at least one; otherwise all of them. */
 export function sameKindFirst<T>(laps: T[], kindOf: (lap: T) => LapKind | null, you: LapKind | null): T[] {
   if (!you) return laps
@@ -261,23 +297,32 @@ export function pctFaster(fasterMs: number, slowerMs: number): number {
 }
 
 /**
- * The reference on open (user decision 31/10): my best valid lap here with this car if it beats "Tu";
- * otherwise the driver a step ahead (the library's suggestion); otherwise my next best lap. Always a reason.
+ * The reference on open. dev.10 (user 05/11, as Track Titan's personalised lap): a step ahead of you in
+ * your class first (another driver 1-2% quicker, same kind, weather and fuel band, the ladder said in the
+ * reason); then the coach lap if it is quicker than "Tu"; then your best valid lap of the same kind if it
+ * beats "Tu"; then your theoretical lap; then your next best lap. Always a reason.
+ * (Until 31/10 your own best lap came first: the user chose the step ahead on 05/11.)
  */
 export function chooseDefaultReference(o: { you: LapEntryLike | null, mine: LapEntryLike[], stepUp: LapEntryLike | null, stepUpDriver?: string | null,
+  stepUpRelaxed?: Relaxed | null, coach?: (LapEntryLike & { coachSession?: string | null, coachOtherCar?: boolean }) | null, ideal?: LapEntryLike | null,
   kindOf?: (id: string) => LapKind | null }): { id: string, reason: RefReason } | null {
   const you = o.you
   const kindOf = (e: LapEntryLike) => o.kindOf?.(e.id) ?? null
+  const quicker = (e: LapEntryLike | null | undefined): e is LapEntryLike => !!e && e.id !== you?.id && (!you || e.lapTimeMs < you.lapTimeMs)
+  if (o.stepUp && o.stepUp.id !== you?.id) return { id: o.stepUp.id, reason: { kind: 'stepUp', driver: o.stepUpDriver ?? o.stepUp.driver ?? null,
+    pct: you ? pctFaster(o.stepUp.lapTimeMs, you.lapTimeMs) : 0, relaxed: o.stepUpRelaxed ?? null } }
+  if (quicker(o.coach)) return { id: o.coach.id, reason: { kind: 'coach', driver: o.coach.driver ?? null, session: coachSessionOf(o.coach.coachSession), otherCar: o.coach.coachOtherCar ? 'class' : null } }
   // 01/11: your laps of the same kind as "Tu" first (race with race, qualifying with qualifying).
   const valid = sameKindFirst(o.mine.filter(e => e.valid && e.complete && !e.note && e.id !== you?.id), kindOf, you ? kindOf(you) : null)
     .sort((a, b) => a.lapTimeMs - b.lapTimeMs)
   const best = valid[0]
   if (best && (!you || best.lapTimeMs < you.lapTimeMs)) return { id: best.id, reason: { kind: 'myBest' } }
-  if (o.stepUp && o.stepUp.id !== you?.id) return { id: o.stepUp.id, reason: { kind: 'stepUp', driver: o.stepUpDriver ?? o.stepUp.driver ?? null, pct: you ? pctFaster(o.stepUp.lapTimeMs, you.lapTimeMs) : 0 } }
+  if (quicker(o.ideal)) return { id: o.ideal.id, reason: { kind: 'ideal' } }
   if (best) return { id: best.id, reason: { kind: 'nextBest' } }
   const any = o.mine.find(e => e.complete && e.id !== you?.id)
   return any ? { id: any.id, reason: { kind: 'sessionBest' } } : null
 }
+export const coachSessionOf = (s: string | null | undefined) => s === 'practice' || s === 'qualifying' || s === 'race' ? s : null
 
 /** A row may become this side: whole laps only, never the lap already on the other side. */
 export function choiceBlock(choice: LapChoice | null, otherKey: string | null): 'none' | 'incomplete' | 'sameLap' | null {

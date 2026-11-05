@@ -15,7 +15,7 @@ import LapChoiceCard from './LapChoiceCard.vue'
 import LapChoiceDialog from './LapChoiceDialog.vue'
 import TraceStripHead, { type DeltaPlace } from './TraceStripHead.vue'
 import { useLapChoice } from '~/composables/useLapChoice'
-import type { LapSide, SessionKindBests } from '~/services/telemetry/lapChoice'
+import { traceClass, type LapSide, type SessionKindBests } from '~/services/telemetry/lapChoice'
 import { electronLapSource, pilotLapSource, type LapSource, type LocalLapBridge } from '~/services/telemetry/lapSources'
 import { useReferenceLibrary, type Entry } from '~/composables/useReferenceLibrary'
 import { LapsArchiveError } from '~/services/telemetry/lapsArchiveClient'
@@ -191,7 +191,10 @@ async function load() {
     const bestTrace = traces.value[(best ?? last).id]
     if (first) void library.loadOtherDrivers(isCurrent, archiveDeps, { game: first.gameId, track: first.track, car: first.car, variant: first.variant },
       { myUid: pilot ?? currentUser.value?.uid ?? null, myBestMs: best ? best.lapTimeMs : null,
-        mine: { grip: bestTrace?.conditions?.grip ?? null, airC: bestTrace?.conditions?.airC ?? null, roadC: bestTrace?.conditions?.roadC ?? null, fuelL: bestTrace?.fuelL ?? null } })
+        mine: { grip: bestTrace?.conditions?.grip ?? null, airC: bestTrace?.conditions?.airC ?? null, roadC: bestTrace?.conditions?.roadC ?? null, fuelL: bestTrace?.fuelL ?? null },
+        // dev.10: the class of your lap (kind, fuel band, dry/wet) picks the same class first.
+        cls: traceClass(bestTrace, sessionRow(best ?? last)) })
+    if (first) void library.loadCoachLaps(isCurrent, { track: first.track, car: first.car }, traceClass(bestTrace, sessionRow(best ?? last)))
   } catch (e) {
     if (isCurrent()) error.value = e instanceof LapsArchiveError ? e.message : t('telemetry.errors.read')
   } finally {

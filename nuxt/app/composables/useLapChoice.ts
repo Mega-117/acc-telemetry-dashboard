@@ -8,7 +8,7 @@ import { fetchLibraryLap, fetchPilotLap, LapsArchiveError, listPilotTrackLaps, t
 import { loadSharedLapLink } from '~/services/telemetry/sharedLapLoad'
 import { loadPublicNickname } from '~/repositories/publicProfileRepository'
 import {
-  chooseDefaultReference, classifyLink, IDEAL_KEY, lapKey, lapKind, lapStatus, driverBestRows, gripOf, libraryFuel, parseSessionLink, pctFaster, runConditions, type LapSessionRow, sameTrackName,
+  chooseDefaultReference, classifyLink, coachSessionOf, IDEAL_KEY, lapKey, lapStatus, traceClass, driverBestRows, gripOf, libraryFuel, parseSessionLink, pctFaster, runConditions, type LapSessionRow, sameTrackName,
   type DriverBestRow, type LapChoice, type LapSide, type RefReason,
   type SessionKindBests,
 } from '~/services/telemetry/lapChoice'
@@ -109,8 +109,9 @@ export function useLapChoice(o: {
     if (e.origin === 'shared') return { kind: 'link', driver: e.driver ?? nick(e.ownerUid) }
     if (e.origin === 'ideal') return { kind: 'ideal' }
     if (e.origin === 'own') return { kind: 'coachBest' }
+    if (e.origin === 'coach') return { kind: 'coach', driver: e.driver ?? null, session: coachSessionOf(e.coachSession), otherCar: e.coachOtherCar ? 'class' : null }
     if (e.origin === 'library') return e.id === o.library.suggestedId.value && lapEntry.value
-      ? { kind: 'stepUp', driver: e.driver ?? null, pct: pctFaster(e.lapTimeMs, lapEntry.value.lapTimeMs) } : { kind: 'fastest', driver: e.driver ?? null }
+      ? { kind: 'stepUp', driver: e.driver ?? null, pct: pctFaster(e.lapTimeMs, lapEntry.value.lapTimeMs), relaxed: o.library.suggestedRelaxed.value } : { kind: 'fastest', driver: e.driver ?? null }
     return { kind: 'picked' }
   }
   const reason = computed<RefReason | null>(() => refReason.value && refReason.value.id === o.refId.value ? refReason.value.reason : inferReason(refEntry.value))
@@ -133,7 +134,10 @@ export function useLapChoice(o: {
     if (userChose.value) return
     const mine = o.entries.value.filter(e => (YOU_ORIGINS as readonly string[]).includes(e.origin) && e.origin !== 'history')
     const stepUp = o.library.suggestedId.value ? byId(o.library.suggestedId.value) : null
-    const pick = chooseDefaultReference({ you: lapEntry.value, mine, stepUp, kindOf: id => lapKind(o.traces.value[id]?.fuelL) })
+    const coach = o.library.coachIds.value.map(byId).find(e => !!e) ?? null
+    const ideal = o.entries.value.find(e => e.origin === 'ideal') ?? null
+    const kindOf = (id: string) => { const e = byId(id); return traceClass(o.traces.value[id], e ? o.sessionRow?.(e) : null).kind }
+    const pick = chooseDefaultReference({ you: lapEntry.value, mine, stepUp, stepUpRelaxed: o.library.suggestedRelaxed.value, coach, ideal, kindOf })
     if (pick && (pick.id !== o.refId.value || refReason.value?.id !== pick.id)) setRef(pick.id, pick.reason, false)
   }
   function reset() { userChose.value = false; refReason.value = null; o.library.resetLibrary() }
@@ -201,19 +205,25 @@ export function useLapChoice(o: {
   function suggested(): LapChoice[] {
     const you = lapEntry.value
     const out: LapChoice[] = []
+    // dev.10 (user 05/11): the step ahead in your class, your theoretical lap, your best, the coach, the fastest.
+    const step = o.library.suggestedId.value ? byId(o.library.suggestedId.value) : null
+    if (step) out.push(entryChoice(step, { kind: 'stepUp', driver: step.driver ?? null, pct: you ? pctFaster(step.lapTimeMs, you.lapTimeMs) : 0, relaxed: o.library.suggestedRelaxed.value }))
+    const ideal = o.entries.value.find(e => e.origin === 'ideal')
+    if (ideal) out.push(entryChoice(ideal, { kind: 'ideal' }))
     const myBest = fastestValid(realLaps(YOU_ORIGINS).filter(e => e.id !== you?.id))
     if (myBest) out.push(entryChoice(myBest, { kind: 'myBest' }))
     const coachBest = o.pilotUid() ? fastestValid(realLaps(['own'])) : null
     if (coachBest) out.push(entryChoice(coachBest, { kind: 'coachBest' }))
-    const step = o.library.suggestedId.value ? byId(o.library.suggestedId.value) : null
-    if (step) out.push(entryChoice(step, { kind: 'stepUp', driver: step.driver ?? null, pct: you ? pctFaster(step.lapTimeMs, you.lapTimeMs) : 0 }))
-    const ideal = o.entries.value.find(e => e.origin === 'ideal')
-    if (ideal) out.push(entryChoice(ideal, { kind: 'ideal' }))
+    for (const id of o.library.coachIds.value) {
+      const lap = byId(id)
+      if (lap) out.push(entryChoice(lap, { kind: 'coach', driver: lap.driver ?? null, session: coachSessionOf(lap.coachSession), otherCar: lap.coachOtherCar ? 'class' : null }))
+    }
     const fastest = o.library.fastestId.value ? byId(o.library.fastestId.value) : null
-    if (fastest && out.length < 4) out.push(entryChoice(fastest, { kind: 'fastest', driver: fastest.driver ?? null }))
+    if (fastest) out.push(entryChoice(fastest, { kind: 'fastest', driver: fastest.driver ?? null }))
     // 01/11 (Codex): the laps of the session compared with "Confronta" are choosable too, fastest first.
-    const compared = o.entries.value.filter(e => e.origin === 'compare' && !out.some(c => c.key === entryKey(e))).sort((a, b) => a.lapTimeMs - b.lapTimeMs).slice(0, 8)
-    return [...out.slice(0, 4), ...compared.map(e => entryChoice(e, { kind: 'compare', label: e.label ?? '' }))]
+    const unique = out.filter((c, i) => out.findIndex(x => x.key === c.key) === i).slice(0, 6)
+    const compared = o.entries.value.filter(e => e.origin === 'compare' && !unique.some(c => c.key === entryKey(e))).sort((a, b) => a.lapTimeMs - b.lapTimeMs).slice(0, 8)
+    return [...unique, ...compared.map(e => entryChoice(e, { kind: 'compare', label: e.label ?? '' }))]
   }
   const sessionLaps = () => o.entries.value.filter(e => (SESSION_ORIGINS as readonly string[]).includes(e.origin)).map(e => entryChoice(e))
 

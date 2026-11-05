@@ -22,6 +22,12 @@ export interface LapTraceView {
   complete: boolean
   valid: boolean | null
   fuelL: number | null
+  /** dev.10: the departure fuel of the lap's stint (`meta.extra.stint_fuel_l`): what makes a lap qualifying or race. */
+  stintFuelL?: number | null
+  /** dev.10: the source has no fuel at all (replays, MoTeC): a lap of unknown kind, said so. */
+  fuelUncertain?: boolean
+  /** dev.10: a coach lap from a replay: the coach's nickname (`meta.extra.coach`). */
+  coach?: string | null
   /** 01/11: dry or wet tyres of the lap (`meta.tyre_compound`), null when unknown. */
   tyreCompound?: 'dry' | 'wet' | null
   /** PIP-619: aria/asfalto dal file della sessione, grip anche dal giro stesso. */
@@ -94,8 +100,13 @@ export function normalizeLapTrace(raw: unknown): LapTraceView | null {
     complete: meta.complete === true,
     valid: typeof meta.valid === 'boolean' ? meta.valid : null,
     fuelL: typeof meta.fuel_l === 'number' && Number.isFinite(meta.fuel_l) ? meta.fuel_l : null,
+    stintFuelL: typeof meta.extra?.stint_fuel_l === 'number' && Number.isFinite(meta.extra.stint_fuel_l) && meta.extra.stint_fuel_l >= 0 ? meta.extra.stint_fuel_l : null,
+    fuelUncertain: meta.fuel_uncertain === true && meta.fuel_l == null,
+    coach: typeof meta.extra?.coach === 'string' && /^[\w .'-]{1,40}$/.test(meta.extra.coach) ? meta.extra.coach : null,
     tyreCompound: typeof meta.tyre_compound === 'string' ? (/wet/i.test(meta.tyre_compound) ? 'wet' : /dry/i.test(meta.tyre_compound) ? 'dry' : null) : null,
-    conditions: lapConditions({ air: meta.extra?.conditions?.air_c, road: meta.extra?.conditions?.road_c, grip: meta.extra?.conditions?.grip ?? meta.grip_status }),
+    // dev.10: a coach lap from a replay knows the air and track at the start of the replay.
+    conditions: lapConditions({ air: meta.extra?.conditions?.air_c ?? meta.extra?.weather_start?.air_c, road: meta.extra?.conditions?.road_c ?? meta.extra?.weather_start?.track_c,
+      grip: meta.extra?.conditions?.grip ?? meta.grip_status }),
     gridStepM: gridStep,
     lengthM: (length! - 1) * gridStep,
     channels: out,

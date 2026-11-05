@@ -126,7 +126,7 @@ describe('lapChoice: default reference', () => {
   it('when Tu is already my best: the driver a step ahead, with how much faster', () => {
     const you = entry('y', 100000)
     const pick = chooseDefaultReference({ you, mine: [you, entry('s', 100400)], stepUp: entry('library:x', 98800, { driver: 'RICO117', origin: 'library' }) })
-    expect(pick).toEqual({ id: 'library:x', reason: { kind: 'stepUp', driver: 'RICO117', pct: 1.2 } })
+    expect(pick).toEqual({ id: 'library:x', reason: { kind: 'stepUp', driver: 'RICO117', pct: 1.2, relaxed: null } })
   })
   it('else my next best lap, else any other whole lap, else nothing', () => {
     const you = entry('y', 100000)

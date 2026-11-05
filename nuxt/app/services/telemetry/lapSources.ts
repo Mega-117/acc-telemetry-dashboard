@@ -6,7 +6,8 @@ import { listPilotLaps, fetchPilotLap, type LapsArchiveDeps } from './lapsArchiv
 
 /** PIP-646: 'best' = your fastest laps on the track from every session, 'ideal' = the stitched best sectors. */
 // PIP-695: 'history' = a lap of another session of the shown driver, 'driver' = another driver's lap, both picked in "Cambia".
-export type LapOrigin = 'local' | 'pilot' | 'own' | 'shared' | 'best' | 'ideal' | 'library' | 'compare' | 'history' | 'driver'
+// dev.10: 'coach' = a coach lap shipped with the program (from the coach's replays, fuel unknown).
+export type LapOrigin = 'local' | 'pilot' | 'own' | 'shared' | 'best' | 'ideal' | 'library' | 'compare' | 'history' | 'driver' | 'coach'
 
 export interface LapDescriptor {
   id: string

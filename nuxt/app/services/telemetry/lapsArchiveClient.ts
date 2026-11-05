@@ -213,7 +213,9 @@ export async function fetchPilotLap(pilotUid: string, sessionToken: string, lapI
 /** PIP-650: one entry of the reference library (another driver's best lap here, with its conditions). */
 export interface LibraryEntry { libId: string, uid: string, lapTimeMs: number, recordedAt: string | null, grip: string | null, airC: number | null, roadC: number | null, fuelL: number | null,
   /** 02/11: the stint departure fuel and the Worker's slot (older entries have neither). */
-  stintFuelL?: number | null, kind?: 'qualify' | 'race' | null }
+  stintFuelL?: number | null, kind?: 'qualify' | 'race' | null,
+  /** dev.10: the Worker's fuel band (0..4 = 20-40 .. 100+ for race laps) and dry/wet place. */
+  band?: number | null, wet?: boolean | null }
 
 export async function listLibrary(where: { game: string, track: string, car: string, variant: string | null }, deps: LapsArchiveDeps): Promise<LibraryEntry[]> {
   const q = new URLSearchParams({ game: where.game, track: where.track, car: where.car, variant: where.variant ?? '' })

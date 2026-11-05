@@ -29,11 +29,17 @@ export function useLapChoiceText() {
   function reason(r: RefReason | null | undefined, o: { pilotName?: string | null } = {}): string {
     if (!r) return ''
     const who = (name: string | null) => name || t('telemetry.choice.driver')
+    // dev.10: a suggestion outside your class says what changed ("never empty", user 05/11); a coach lap
+    // says its session and that its fuel is unknown, and another car of the class when it is one.
     const text = r.kind === 'myBest' && o.pilotName ? t('telemetry.choice.reason.pilotBest', { driver: o.pilotName })
-      : r.kind === 'stepUp' ? t('telemetry.choice.reason.stepUp', { driver: who(r.driver), pct: decimal(r.pct) })
-        : r.kind === 'fastest' || r.kind === 'link' ? t(`telemetry.choice.reason.${r.kind}`, { driver: who(r.driver) })
-          : r.kind === 'compare' ? t('telemetry.choice.reason.compare', { label: r.label })
-            : t(`telemetry.choice.reason.${r.kind}`)
+      : r.kind === 'stepUp' ? [t('telemetry.choice.reason.stepUp', { driver: who(r.driver), pct: decimal(r.pct) }),
+          r.relaxed ? t(`telemetry.choice.reason.relaxed.${r.relaxed}`) : ''].filter(Boolean).join(' · ')
+        : r.kind === 'coach' ? [t('telemetry.choice.reason.coach', { driver: who(r.driver) }),
+            r.session ? t(`telemetry.choice.reason.coachSession.${r.session}`) : '', t('telemetry.choice.reason.coachFuel'),
+            r.otherCar ? t('telemetry.choice.reason.coachClass') : ''].filter(Boolean).join(' · ')
+          : r.kind === 'fastest' || r.kind === 'link' ? t(`telemetry.choice.reason.${r.kind}`, { driver: who(r.driver) })
+            : r.kind === 'compare' ? t('telemetry.choice.reason.compare', { label: r.label })
+              : t(`telemetry.choice.reason.${r.kind}`)
     return t('telemetry.choice.reason.prefix', { text })
   }
   const side = (s: 'you' | 'ref') => t(s === 'you' ? 'telemetry.you' : 'telemetry.reference')

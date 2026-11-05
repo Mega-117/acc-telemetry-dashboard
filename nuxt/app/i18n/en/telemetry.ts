@@ -73,6 +73,7 @@ export default {
       ideal: 'Ideal lap · {time} · {gap} on your best',
       suggested: 'suggested',
       fastest: 'fastest',
+      coach: 'Coach {coach}',
     },
     rows: {
       delta: 'Delta',
@@ -185,6 +186,7 @@ export default {
         unknown: 'Validity not available',
         best: 'Best of the session',
       },
+      coachTag: 'COACH',
       reason: {
         prefix: 'Why this one: {text}',
         myBest: 'your fastest valid lap with this car',
@@ -192,6 +194,19 @@ export default {
         nextBest: 'your fastest valid lap after this one',
         sessionBest: 'the only other complete lap',
         stepUp: 'one step ahead: {driver}, {pct}% faster',
+        relaxed: {
+          band: 'another fuel band: nobody in yours',
+          weather: 'other weather: nobody in yours',
+          kind: 'another kind of lap: nobody of yours',
+        },
+        coach: 'coach lap by {driver}',
+        coachSession: {
+          practice: 'practice',
+          qualifying: 'qualifying',
+          race: 'race',
+        },
+        coachFuel: 'fuel unknown',
+        coachClass: 'another car of the same class',
         ideal: 'your best sectors put together',
         fastest: 'the fastest here: {driver}',
         coachBest: 'your fastest lap here',
