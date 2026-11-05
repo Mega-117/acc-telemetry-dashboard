@@ -1,5 +1,5 @@
 import { sameKindFirst, traceClass, type LapClass, type LapKind, type Relaxed } from '~/services/telemetry/lapChoice'
-import { parseCoachIndex, pickCoachLaps, type CoachIndex } from '~/services/telemetry/coachLaps'
+import { coachSessionLabel, parseCoachIndex, pickCoachLaps, type CoachIndex } from '~/services/telemetry/coachLaps'
 
 async function readJson(url: string): Promise<unknown> {
   const response = await fetch(url)
@@ -28,6 +28,8 @@ export interface Entry {
   /** dev.10: a coach lap's replay session (practice / qualifying) and whether it is another car of the class. */
   coachSession?: string | null
   coachOtherCar?: boolean
+  /** dev.11: the coach lap's fuel is known (Track Titan); the reason then does not say "fuel unknown". */
+  coachFuelKnown?: boolean
 }
 
 /** The site's base path for a file of `public/` (GitHub Pages prefix, `racercore://app` in the program). */
@@ -245,7 +247,8 @@ export function useReferenceLibrary(o: {
           const trace = normalizeLapTrace(await read(publicPath(`/coach-laps/${lap.id}.json`)))
           if (!trace || !trace.complete || !index) return null
           return { trace: { ...trace, coach: index.coach }, entry: { id: `coach:${lap.id}`, lapNumber: 0, lapTimeMs: lap.lapTimeMs, valid: true, complete: true, origin: 'coach',
-            sessionToken: '', driver: index.coach, recordedAt: null, coachSession: lap.session, coachOtherCar: otherCar, note: otherCar ? carMismatchNote() : undefined,
+            // dev.11: what the lap was by its fuel (Track Titan), not the replay's "practice".
+            sessionToken: '', driver: index.coach, recordedAt: null, coachSession: coachSessionLabel(lap), coachOtherCar: otherCar, coachFuelKnown: lap.stintFuelL != null || lap.fuelL != null, note: otherCar ? carMismatchNote() : undefined,
             label: `${useI18n().t('telemetry.labels.coach', { coach: index.coach })} · ${formatLapTime(lap.lapTimeMs)}` } }
         } catch { return null }
       }))

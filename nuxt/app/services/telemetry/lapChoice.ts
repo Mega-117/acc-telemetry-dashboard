@@ -15,7 +15,7 @@ export type RefReason =
   | { kind: 'sessionBest' }
   | { kind: 'stepUp', driver: string | null, pct: number, relaxed?: Relaxed | null, band?: FuelBand | null }
   /** dev.10: a coach lap from a replay (`session`: the replay's session; fuel never known). */
-  | { kind: 'coach', driver: string | null, session: 'practice' | 'qualifying' | 'race' | null, otherCar?: string | null }
+  | { kind: 'coach', driver: string | null, session: 'practice' | 'qualifying' | 'race' | null, otherCar?: string | null, fuelKnown?: boolean }
   | { kind: 'ideal' }
   | { kind: 'fastest', driver: string | null }
   | { kind: 'coachBest' }
@@ -304,7 +304,7 @@ export function pctFaster(fasterMs: number, slowerMs: number): number {
  * (Until 31/10 your own best lap came first: the user chose the step ahead on 05/11.)
  */
 export function chooseDefaultReference(o: { you: LapEntryLike | null, mine: LapEntryLike[], stepUp: LapEntryLike | null, stepUpDriver?: string | null,
-  stepUpRelaxed?: Relaxed | null, coach?: (LapEntryLike & { coachSession?: string | null, coachOtherCar?: boolean }) | null, ideal?: LapEntryLike | null,
+  stepUpRelaxed?: Relaxed | null, coach?: (LapEntryLike & { coachSession?: string | null, coachOtherCar?: boolean, coachFuelKnown?: boolean }) | null, ideal?: LapEntryLike | null,
   kindOf?: (id: string) => LapKind | null }): { id: string, reason: RefReason } | null {
   const you = o.you
   const kindOf = (e: LapEntryLike) => o.kindOf?.(e.id) ?? null
@@ -317,7 +317,7 @@ export function chooseDefaultReference(o: { you: LapEntryLike | null, mine: LapE
   // Codex 05/11: a driver of another kind (the ladder's last step) never beats your own quicker lap of Tu's kind.
   if (o.stepUp && o.stepUp.id !== you?.id && !(o.stepUpRelaxed === 'kind' && bestOfMyKind)) return { id: o.stepUp.id, reason: { kind: 'stepUp', driver: o.stepUpDriver ?? o.stepUp.driver ?? null,
     pct: you ? pctFaster(o.stepUp.lapTimeMs, you.lapTimeMs) : 0, relaxed: o.stepUpRelaxed ?? null } }
-  if (quicker(o.coach)) return { id: o.coach.id, reason: { kind: 'coach', driver: o.coach.driver ?? null, session: coachSessionOf(o.coach.coachSession), otherCar: o.coach.coachOtherCar ? 'class' : null } }
+  if (quicker(o.coach)) return { id: o.coach.id, reason: { kind: 'coach', driver: o.coach.driver ?? null, session: coachSessionOf(o.coach.coachSession), otherCar: o.coach.coachOtherCar ? 'class' : null, fuelKnown: o.coach.coachFuelKnown === true } }
   if (best && (!you || best.lapTimeMs < you.lapTimeMs)) return { id: best.id, reason: { kind: 'myBest' } }
   if (quicker(o.ideal)) return { id: o.ideal.id, reason: { kind: 'ideal' } }
   if (best) return { id: best.id, reason: { kind: 'nextBest' } }

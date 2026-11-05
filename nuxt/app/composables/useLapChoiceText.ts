@@ -35,7 +35,7 @@ export function useLapChoiceText() {
       : r.kind === 'stepUp' ? [t('telemetry.choice.reason.stepUp', { driver: who(r.driver), pct: decimal(r.pct) }),
           r.relaxed ? t(`telemetry.choice.reason.relaxed.${r.relaxed}`) : ''].filter(Boolean).join(' · ')
         : r.kind === 'coach' ? [t('telemetry.choice.reason.coach', { driver: who(r.driver) }),
-            r.session ? t(`telemetry.choice.reason.coachSession.${r.session}`) : '', t('telemetry.choice.reason.coachFuel'),
+            r.session ? t(`telemetry.choice.reason.coachSession.${r.session}`) : '', r.fuelKnown ? '' : t('telemetry.choice.reason.coachFuel'),
             r.otherCar ? t('telemetry.choice.reason.coachClass') : ''].filter(Boolean).join(' · ')
           : r.kind === 'fastest' || r.kind === 'link' ? t(`telemetry.choice.reason.${r.kind}`, { driver: who(r.driver) })
             : r.kind === 'compare' ? t('telemetry.choice.reason.compare', { label: r.label })

@@ -5,10 +5,30 @@
  * (GT3/GT4, said in the reason); among them the coach lap of your session kind when known (a
  * qualifying replay for qualifying), then the closest weather, then the quickest.
  */
-import type { LapClass } from './lapChoice'
+import { bandDistance, fuelBand, type LapClass } from './lapChoice'
 
+/**
+ * dev.11: `fuelL` / `stintFuelL` / `wet` come from the coach's Track Titan session matched to the replay
+ * by exact lap times (absent when no session was found): the coach practises race and qualifying runs
+ * in one "practice" replay, so the fuel, not the replay's session, says what the lap was.
+ */
 export interface CoachLap { id: string, track: string, car: string, carClass: string, lapTimeMs: number, session: string,
-  airC: number | null, roadC: number | null, rain: number | null, steer: boolean }
+  airC: number | null, roadC: number | null, rain: number | null, steer: boolean,
+  fuelL?: number | null, stintFuelL?: number | null, wet?: boolean | null }
+
+/** The session word for the reason ("qualifying"/"race" from the fuel; else the replay's own). */
+export const coachSessionLabel = (l: CoachLap): string => {
+  const kind = fuelBand(l.stintFuelL ?? null)
+  return kind === null ? l.session : kind === 'qualify' ? 'qualifying' : 'race'
+}
+
+/** The coach lap's class: from its run's departure fuel when known, else from the replay's session. */
+export function coachLapClass(l: CoachLap): LapClass {
+  const band = fuelBand(l.stintFuelL ?? null)
+  const wet = typeof l.wet === 'boolean' ? l.wet : (l.rain ?? 0) > 0.1
+  if (band) return { kind: band === 'qualify' ? 'qualify' : 'race', band, wet }
+  return { kind: l.session === 'qualifying' ? 'qualify' : l.session === 'race' ? 'race' : null, band: null, wet }
+}
 export interface CoachIndex { coach: string, laps: CoachLap[] }
 
 export const COACH_INDEX_SCHEMA = 'racercore.coach_laps.v1'
@@ -22,7 +42,8 @@ export function parseCoachIndex(raw: unknown): CoachIndex | null {
   const laps = (data.laps as Record<string, unknown>[]).flatMap((l) => typeof l?.id === 'string' && SAFE_ID.test(l.id) && typeof l.track === 'string' && typeof l.car === 'string'
     && typeof l.lapTimeMs === 'number' && l.lapTimeMs > 0
     ? [{ id: l.id, track: l.track, car: l.car, carClass: String(l.carClass ?? ''), lapTimeMs: l.lapTimeMs, session: String(l.session ?? ''),
-        airC: num(l.airC), roadC: num(l.roadC), rain: num(l.rain), steer: l.steer !== false }] : [])
+        airC: num(l.airC), roadC: num(l.roadC), rain: num(l.rain), steer: l.steer !== false,
+        fuelL: num(l.fuelL), stintFuelL: num(l.stintFuelL), wet: typeof l.wet === 'boolean' ? l.wet : null }] : [])
   return { coach: data.coach.slice(0, 40), laps }
 }
 
@@ -42,10 +63,16 @@ export function pickCoachLaps(index: CoachIndex | null, where: { track: string, 
   const sameCar = here.filter(l => norm(l.car) === norm(where.car))
   const myClass = carClassOf(where.car)
   const pool = sameCar.length || !myClass ? sameCar : here.filter(l => (l.carClass || carClassOf(l.car)) === myClass)
-  const wantQualify = mine?.kind === 'qualify'
-  const wet = (l: CoachLap) => (l.rain ?? 0) > 0.1
-  const score = (l: CoachLap) => (mine?.kind ? (wantQualify === (l.session === 'qualifying') ? 0 : 1) : 0)
-    + (mine?.wet === null || mine?.wet === undefined ? 0 : wet(l) === mine.wet ? 0 : 2)
+  // dev.11: kind first (a qualifying coach lap for your qualifying lap), then weather, then the
+  // closest fuel band; an unknown kind or band neither helps nor hurts beyond what it cannot say.
+  const score = (l: CoachLap) => {
+    const c = coachLapClass(l)
+    const kind = !mine?.kind ? 0 : c.kind === null ? 1 : c.kind === mine.kind ? 0 : 2
+    const weather = mine?.wet === null || mine?.wet === undefined || c.wet === null ? 0 : c.wet === mine.wet ? 0 : 4
+    // Codex 05/11: an unknown band is not an exact match: it ranks after the neighbouring band.
+    const band = !mine?.band ? 0 : c.band ? Math.min(bandDistance(c.band, mine.band), 5) / 10 : 0.25
+    return kind * 10 + weather + band
+  }
   return [...pool].sort((a, b) => score(a) - score(b) || a.lapTimeMs - b.lapTimeMs).slice(0, limit)
     .map(lap => ({ lap, otherCar: !sameCar.length }))
 }

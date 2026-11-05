@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import { bandDistance, chooseDefaultReference, fuelBand, libraryClass, referencePickNote, traceClass, type LapEntryLike } from '~/services/telemetry/lapChoice'
 import { pickReferences, type ReferenceConditions } from '~/services/telemetry/referencePick'
-import { carClassOf, parseCoachIndex, pickCoachLaps, COACH_INDEX_SCHEMA } from '~/services/telemetry/coachLaps'
+import { carClassOf, coachLapClass, coachSessionLabel, parseCoachIndex, pickCoachLaps, COACH_INDEX_SCHEMA } from '~/services/telemetry/coachLaps'
 import { normalizeLapTrace } from '~/services/telemetry/lapTraceChart'
 import type { LibraryEntry } from '~/services/telemetry/lapsArchiveClient'
 
@@ -95,6 +95,28 @@ describe('coach laps (dev.10)', () => {
     expect(pickCoachLaps(index, { track: 'spa', car: 'ferrari_296_gt3' }, null)).toEqual([])
     expect(carClassOf('alpine_a110_gt4')).toBe('GT4')
   })
+  it('dev.11: the Track Titan fuel says what a "practice" coach lap was, and the closest band wins', () => {
+    // Nürburgring 11/05 (coach's Track Titan session): qualifying 1:52.642 on 7.4 L, race 1:53.200 on 114.5 L.
+    const nur = parseCoachIndex({ schema: COACH_INDEX_SCHEMA, coach: 'michaelromagnoli', laps: [
+      { id: 'd'.repeat(16), track: 'nurburgring', car: 'ferrari_296_gt3', carClass: 'GT3', lapTimeMs: 112_642, session: 'practice', fuelL: 4.5, stintFuelL: 7.4, wet: false },
+      { id: 'e'.repeat(16), track: 'nurburgring', car: 'ferrari_296_gt3', carClass: 'GT3', lapTimeMs: 113_200, session: 'practice', fuelL: 103, stintFuelL: 114.5, wet: false },
+      { id: 'f'.repeat(16), track: 'nurburgring', car: 'ferrari_296_gt3', carClass: 'GT3', lapTimeMs: 113_100, session: 'practice', fuelL: 50, stintFuelL: 55, wet: false },
+    ] })
+    const where = { track: 'nurburgring', car: 'ferrari_296_gt3' }
+    expect(pickCoachLaps(nur, where, { kind: 'qualify', band: 'qualify', wet: false })[0]?.lap.id[0]).toBe('d')
+    expect(pickCoachLaps(nur, where, { kind: 'race', band: '100+', wet: false })[0]?.lap.id[0]).toBe('e')
+    expect(pickCoachLaps(nur, where, { kind: 'race', band: '40-60', wet: false })[0]?.lap.id[0]).toBe('f')
+    expect(coachLapClass(nur!.laps[0]!)).toEqual({ kind: 'qualify', band: 'qualify', wet: false })
+    expect(nur!.laps.map(coachSessionLabel)).toEqual(['qualifying', 'race', 'race'])
+    // Codex 05/11: a lap without fuel ranks after a measured neighbouring band, even when quicker.
+    const mixed = parseCoachIndex({ schema: COACH_INDEX_SCHEMA, coach: 'c', laps: [
+      { id: 'a'.repeat(16), track: 'spa', car: 'ferrari_296_gt3', carClass: 'GT3', lapTimeMs: 130_000, session: 'race' },
+      { id: 'b'.repeat(16), track: 'spa', car: 'ferrari_296_gt3', carClass: 'GT3', lapTimeMs: 136_000, session: 'practice', fuelL: 95, stintFuelL: 95, wet: false },
+    ] })
+    expect(pickCoachLaps(mixed, { track: 'spa', car: 'ferrari_296_gt3' }, { kind: 'race', band: '100+', wet: false })[0]?.lap.id[0]).toBe('b')
+    // Without a Track Titan session the replay's session still decides.
+    expect(coachLapClass({ ...nur!.laps[1]!, stintFuelL: null, session: 'qualifying' }).kind).toBe('qualify')
+  })
 })
 
 describe('Codex review 05/11', () => {
@@ -141,7 +163,9 @@ describe('default reference order (dev.10)', () => {
     const step = e('library:x', 101_800, { driver: 'Bob' })
     expect(chooseDefaultReference({ you, mine, stepUp: step, stepUpRelaxed: 'band' })?.reason).toEqual({ kind: 'stepUp', driver: 'Bob', pct: 1.2, relaxed: 'band' })
     const coach = { ...e('coach:a', 101_000, { driver: 'michaelromagnoli' }), coachSession: 'qualifying', coachOtherCar: false }
-    expect(chooseDefaultReference({ you, mine, stepUp: null, coach })?.reason).toEqual({ kind: 'coach', driver: 'michaelromagnoli', session: 'qualifying', otherCar: null })
+    expect(chooseDefaultReference({ you, mine, stepUp: null, coach })?.reason).toEqual({ kind: 'coach', driver: 'michaelromagnoli', session: 'qualifying', otherCar: null, fuelKnown: false })
+    // dev.11: a coach lap with its Track Titan fuel does not say "fuel unknown".
+    expect(chooseDefaultReference({ you, mine, stepUp: null, coach: { ...coach, coachFuelKnown: true } })?.reason).toMatchObject({ kind: 'coach', fuelKnown: true })
     expect(chooseDefaultReference({ you, mine, stepUp: null, coach: { ...coach, lapTimeMs: 104_000 } })?.id).toBe('best')
     expect(chooseDefaultReference({ you: e('you', 102_000), mine: [e('you', 102_000), e('s', 102_400)], stepUp: null, ideal: e('ideal', 101_700) })?.reason.kind).toBe('ideal')
   })

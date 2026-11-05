@@ -30,7 +30,7 @@ const reasonText = computed(() => {
   if (!r) return ''
   if (!props.brief) return text.reason(r)
   // dev.10: a coach lap says its session and that its fuel is unknown, even in the short list.
-  if (r.kind === 'coach') return [r.session ? t(`telemetry.choice.reason.coachSession.${r.session}`) : '', t('telemetry.choice.reason.coachFuel'),
+  if (r.kind === 'coach') return [r.session ? t(`telemetry.choice.reason.coachSession.${r.session}`) : '', r.fuelKnown ? '' : t('telemetry.choice.reason.coachFuel'),
     r.otherCar ? t('telemetry.choice.reason.coachClass') : ''].filter(Boolean).join(' · ')
   return r.kind === 'stepUp' && r.pct > 0 ? t('telemetry.choice.reason.fasterShort', { pct: text.decimal(r.pct) }) : ''
 })

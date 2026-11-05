@@ -12,19 +12,10 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": true
-  },
-  {
-   "id": "bb7fac1e9f960cad",
-   "track": "barcelona",
-   "car": "ferrari_296_gt3",
-   "carClass": "GT3",
-   "lapTimeMs": 104090,
-   "session": "practice",
-   "airC": 23.0,
-   "roadC": 27.0,
-   "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 114.8,
+   "stintFuelL": 114.8,
+   "wet": false
   },
   {
    "id": "ed55735d70a56b71",
@@ -48,7 +39,10 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "fuelL": 24.0,
+   "stintFuelL": 26.4,
+   "wet": false
   },
   {
    "id": "c79d1dcc73dc6282",
@@ -60,7 +54,10 @@
    "airC": 25.0,
    "roadC": 31.0,
    "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "fuelL": 4.1,
+   "stintFuelL": 6.0,
+   "wet": false
   },
   {
    "id": "9602a7b796db9d40",
@@ -72,7 +69,10 @@
    "airC": 25.0,
    "roadC": 31.0,
    "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "fuelL": 65.0,
+   "stintFuelL": 68.9,
+   "wet": false
   },
   {
    "id": "b30e20c0822d1625",
@@ -84,7 +84,10 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "fuelL": 24.1,
+   "stintFuelL": 29.9,
+   "wet": false
   },
   {
    "id": "97590f58721e55c3",
@@ -96,7 +99,10 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 114.0,
+   "stintFuelL": 114.0,
+   "wet": false
   },
   {
    "id": "179d161451f9818e",
@@ -108,19 +114,25 @@
    "airC": 26.0,
    "roadC": 33.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 42.2,
+   "stintFuelL": 48.6,
+   "wet": false
   },
   {
-   "id": "77fb4a5111d67a30",
+   "id": "d9367380e287d4e8",
    "track": "cota",
    "car": "ford_mustang_gt3",
    "carClass": "GT3",
-   "lapTimeMs": 124600,
+   "lapTimeMs": 124840,
    "session": "practice",
    "airC": 26.0,
    "roadC": 33.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 35.8,
+   "stintFuelL": 35.8,
+   "wet": false
   },
   {
    "id": "3baa1d040f276c7a",
@@ -132,7 +144,40 @@
    "airC": null,
    "roadC": null,
    "rain": null,
-   "steer": true
+   "steer": true,
+   "fuelL": 2.9,
+   "stintFuelL": 5.3,
+   "wet": false
+  },
+  {
+   "id": "8852b7100a72d1fc",
+   "track": "donington",
+   "car": "amr_v8_vantage_gt3",
+   "carClass": "GT3",
+   "lapTimeMs": 86405,
+   "session": "qualifying",
+   "airC": null,
+   "roadC": null,
+   "rain": null,
+   "steer": true,
+   "fuelL": 96.4,
+   "stintFuelL": 101.3,
+   "wet": false
+  },
+  {
+   "id": "99c140244a4c3dac",
+   "track": "donington",
+   "car": "amr_v8_vantage_gt3",
+   "carClass": "GT3",
+   "lapTimeMs": 87760,
+   "session": "qualifying",
+   "airC": null,
+   "roadC": null,
+   "rain": null,
+   "steer": true,
+   "fuelL": 86.0,
+   "stintFuelL": 86.0,
+   "wet": false
   },
   {
    "id": "74295b9e3c3aa82a",
@@ -144,7 +189,10 @@
    "airC": 27.0,
    "roadC": 34.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 0.1,
+   "stintFuelL": 5.1,
+   "wet": false
   },
   {
    "id": "40a3cee5e5184014",
@@ -156,7 +204,25 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 76.2,
+   "stintFuelL": 76.2,
+   "wet": false
+  },
+  {
+   "id": "339c3c9344b00c63",
+   "track": "donington",
+   "car": "mercedes_amg_gt3_evo",
+   "carClass": "GT3",
+   "lapTimeMs": 86657,
+   "session": "practice",
+   "airC": 23.0,
+   "roadC": 27.0,
+   "rain": 0.0,
+   "steer": true,
+   "fuelL": 71.6,
+   "stintFuelL": 81.0,
+   "wet": false
   },
   {
    "id": "6aa4e26172e3f426",
@@ -168,7 +234,25 @@
    "airC": 25.0,
    "roadC": 31.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 86.2,
+   "stintFuelL": 105.0,
+   "wet": false
+  },
+  {
+   "id": "9b06a74afba2fece",
+   "track": "hungaroring",
+   "car": "amr_v8_vantage_gt3",
+   "carClass": "GT3",
+   "lapTimeMs": 103197,
+   "session": "practice",
+   "airC": 25.0,
+   "roadC": 31.0,
+   "rain": 0.0,
+   "steer": true,
+   "fuelL": 88.8,
+   "stintFuelL": 88.8,
+   "wet": false
   },
   {
    "id": "ba7ac863dcaba4dc",
@@ -180,7 +264,10 @@
    "airC": 25.0,
    "roadC": 30.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 115.2,
+   "stintFuelL": 117.6,
+   "wet": false
   },
   {
    "id": "069eb7afdd57a935",
@@ -192,7 +279,25 @@
    "airC": 25.0,
    "roadC": 31.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 86.3,
+   "stintFuelL": 91.7,
+   "wet": false
+  },
+  {
+   "id": "6ee7c67f4db62d1d",
+   "track": "hungaroring",
+   "car": "ford_mustang_gt3",
+   "carClass": "GT3",
+   "lapTimeMs": 102910,
+   "session": "practice",
+   "airC": 25.0,
+   "roadC": 31.0,
+   "rain": 0.0,
+   "steer": true,
+   "fuelL": 94.3,
+   "stintFuelL": 105.0,
+   "wet": false
   },
   {
    "id": "d1a6d474a480dc16",
@@ -228,7 +333,25 @@
    "airC": 21.0,
    "roadC": 26.31,
    "rain": 0.15,
-   "steer": false
+   "steer": false,
+   "fuelL": 13.8,
+   "stintFuelL": 13.8,
+   "wet": true
+  },
+  {
+   "id": "f86ff0c2df0433ab",
+   "track": "hungaroring",
+   "car": "mercedes_amg_gt4",
+   "carClass": "GT4",
+   "lapTimeMs": 116267,
+   "session": "practice",
+   "airC": 21.0,
+   "roadC": 26.31,
+   "rain": 0.15,
+   "steer": false,
+   "fuelL": 62.8,
+   "stintFuelL": 62.8,
+   "wet": true
   },
   {
    "id": "a9baf0e75fa06714",
@@ -240,19 +363,10 @@
    "airC": 21.0,
    "roadC": 26.31,
    "rain": 0.15,
-   "steer": false
-  },
-  {
-   "id": "df3371d515982cb7",
-   "track": "hungaroring",
-   "car": "mercedes_amg_gt4",
-   "carClass": "GT4",
-   "lapTimeMs": 116600,
-   "session": "practice",
-   "airC": 21.0,
-   "roadC": 26.31,
-   "rain": 0.15,
-   "steer": false
+   "steer": false,
+   "fuelL": 60.5,
+   "stintFuelL": 60.5,
+   "wet": true
   },
   {
    "id": "e48f0feaa95eb70a",
@@ -276,7 +390,25 @@
    "airC": 22.98,
    "roadC": 26.22,
    "rain": 0.33,
-   "steer": true
+   "steer": true,
+   "fuelL": 99.4,
+   "stintFuelL": 102.3,
+   "wet": true
+  },
+  {
+   "id": "ee43ef591f547b9e",
+   "track": "imola",
+   "car": "amr_v8_vantage_gt3",
+   "carClass": "GT3",
+   "lapTimeMs": 111725,
+   "session": "qualifying",
+   "airC": 22.98,
+   "roadC": 26.22,
+   "rain": 0.33,
+   "steer": true,
+   "fuelL": 116.0,
+   "stintFuelL": 116.0,
+   "wet": false
   },
   {
    "id": "1de9f64ff16c9e22",
@@ -300,7 +432,25 @@
    "airC": 16.0,
    "roadC": 16.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 67.4,
+   "stintFuelL": 76.1,
+   "wet": false
+  },
+  {
+   "id": "1f873b1a18750e19",
+   "track": "imola",
+   "car": "ford_mustang_gt3",
+   "carClass": "GT3",
+   "lapTimeMs": 100805,
+   "session": "practice",
+   "airC": 16.0,
+   "roadC": 16.0,
+   "rain": 0.0,
+   "steer": true,
+   "fuelL": 84.5,
+   "stintFuelL": 105.0,
+   "wet": false
   },
   {
    "id": "9ec4281d9dc817f1",
@@ -312,7 +462,10 @@
    "airC": 27.0,
    "roadC": 35.0,
    "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "fuelL": 54.9,
+   "stintFuelL": 58.9,
+   "wet": false
   },
   {
    "id": "bdfcae7bb4b7f125",
@@ -324,7 +477,10 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 67.8,
+   "stintFuelL": 72.7,
+   "wet": false
   },
   {
    "id": "6427d538c37ec114",
@@ -336,19 +492,25 @@
    "airC": null,
    "roadC": null,
    "rain": null,
-   "steer": false
+   "steer": false,
+   "fuelL": 2.6,
+   "stintFuelL": 6.8,
+   "wet": false
   },
   {
-   "id": "d66132635d6ce7ae",
+   "id": "6fa985efd79e95da",
    "track": "indianapolis",
    "car": "mercedes_amg_gt4",
    "carClass": "GT4",
-   "lapTimeMs": 102602,
+   "lapTimeMs": 102682,
    "session": "practice",
    "airC": 23.0,
    "roadC": 23.0,
    "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "fuelL": 62.6,
+   "stintFuelL": 64.9,
+   "wet": false
   },
   {
    "id": "0b91928be95b2b56",
@@ -360,7 +522,10 @@
    "airC": 27.0,
    "roadC": 35.0,
    "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "fuelL": 56.7,
+   "stintFuelL": 69.8,
+   "wet": false
   },
   {
    "id": "b9ba4a88d57d1170",
@@ -372,7 +537,25 @@
    "airC": 23.0,
    "roadC": 23.0,
    "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "fuelL": 39.3,
+   "stintFuelL": 41.6,
+   "wet": false
+  },
+  {
+   "id": "b8282b1a4125ffdc",
+   "track": "kyalami",
+   "car": "alpine_a110_gt4",
+   "carClass": "GT4",
+   "lapTimeMs": 109412,
+   "session": "practice",
+   "airC": 23.0,
+   "roadC": 23.0,
+   "rain": 0.0,
+   "steer": false,
+   "fuelL": 33.1,
+   "stintFuelL": 39.9,
+   "wet": false
   },
   {
    "id": "dfa000ed14e7cdc6",
@@ -408,7 +591,10 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 58.0,
+   "stintFuelL": 63.2,
+   "wet": false
   },
   {
    "id": "a1ef1822d93ef8ba",
@@ -420,7 +606,10 @@
    "airC": 21.0,
    "roadC": 21.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 109.3,
+   "stintFuelL": 117.3,
+   "wet": false
   },
   {
    "id": "8bf4b38a4fe78c64",
@@ -432,7 +621,10 @@
    "airC": 23.0,
    "roadC": 23.0,
    "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "fuelL": 37.9,
+   "stintFuelL": 44.9,
+   "wet": false
   },
   {
    "id": "86d99c681bbd1853",
@@ -444,7 +636,10 @@
    "airC": 24.0,
    "roadC": 24.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 88.6,
+   "stintFuelL": 96.1,
+   "wet": false
   },
   {
    "id": "ffe7dc2b377ae9db",
@@ -456,7 +651,10 @@
    "airC": 24.0,
    "roadC": 24.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 5.9,
+   "stintFuelL": 5.9,
+   "wet": false
   },
   {
    "id": "3568093a589759e8",
@@ -468,7 +666,10 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "fuelL": 24.7,
+   "stintFuelL": 26.8,
+   "wet": false
   },
   {
    "id": "b9ea6e79f1b98b94",
@@ -480,7 +681,10 @@
    "airC": 26.0,
    "roadC": 32.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 6.7,
+   "stintFuelL": 9.8,
+   "wet": false
   },
   {
    "id": "9e4e451855f7b8dd",
@@ -492,7 +696,25 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 36.1,
+   "stintFuelL": 42.8,
+   "wet": false
+  },
+  {
+   "id": "3035a94f6a3e080e",
+   "track": "monza",
+   "car": "mercedes_amg_gt3_evo",
+   "carClass": "GT3",
+   "lapTimeMs": 107527,
+   "session": "practice",
+   "airC": 23.0,
+   "roadC": 27.0,
+   "rain": 0.0,
+   "steer": true,
+   "fuelL": 83.3,
+   "stintFuelL": 86.6,
+   "wet": false
   },
   {
    "id": "d91e7c9ce8612574",
@@ -504,7 +726,10 @@
    "airC": 26.0,
    "roadC": 35.0,
    "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "fuelL": 26.8,
+   "stintFuelL": 29.6,
+   "wet": false
   },
   {
    "id": "14ef2c83b1bf9d8f",
@@ -516,7 +741,10 @@
    "airC": 21.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 45.3,
+   "stintFuelL": 52.7,
+   "wet": false
   },
   {
    "id": "900c3a69dde1c0d1",
@@ -528,7 +756,25 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 4.5,
+   "stintFuelL": 7.4,
+   "wet": false
+  },
+  {
+   "id": "f5a5096e5c3fa379",
+   "track": "nurburgring",
+   "car": "ferrari_296_gt3",
+   "carClass": "GT3",
+   "lapTimeMs": 113200,
+   "session": "practice",
+   "airC": 23.0,
+   "roadC": 27.0,
+   "rain": 0.0,
+   "steer": true,
+   "fuelL": 103.0,
+   "stintFuelL": 114.5,
+   "wet": false
   },
   {
    "id": "fa9ab3e324dc6123",
@@ -540,7 +786,10 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 105.9,
+   "stintFuelL": 114.5,
+   "wet": false
   },
   {
    "id": "44d141034e9bcc7d",
@@ -552,19 +801,25 @@
    "airC": 26.0,
    "roadC": 33.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 42.8,
+   "stintFuelL": 45.9,
+   "wet": false
   },
   {
-   "id": "c4bad3c44d3bf734",
+   "id": "12418702099b9a04",
    "track": "nurburgring",
    "car": "ford_mustang_gt3",
    "carClass": "GT3",
-   "lapTimeMs": 113805,
+   "lapTimeMs": 113775,
    "session": "practice",
    "airC": 26.0,
    "roadC": 33.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 33.6,
+   "stintFuelL": 33.6,
+   "wet": false
   },
   {
    "id": "a95535d93bc202b2",
@@ -576,19 +831,25 @@
    "airC": 27.0,
    "roadC": 35.0,
    "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "fuelL": 97.9,
+   "stintFuelL": 104.0,
+   "wet": false
   },
   {
-   "id": "d87c3504edb7adb6",
+   "id": "0ba2b03778de787c",
    "track": "nurburgring",
    "car": "nissan_gt_r_gt3_2018",
    "carClass": "GT3",
-   "lapTimeMs": 114372,
+   "lapTimeMs": 114895,
    "session": "qualifying",
    "airC": 27.0,
    "roadC": 35.0,
    "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "fuelL": 91.9,
+   "stintFuelL": 91.9,
+   "wet": false
   },
   {
    "id": "ad1e7c44caa96136",
@@ -600,19 +861,10 @@
    "airC": 18.0,
    "roadC": 24.0,
    "rain": 0.0,
-   "steer": true
-  },
-  {
-   "id": "84fa694862c015c7",
-   "track": "oulton_park",
-   "car": "amr_v8_vantage_gt3",
-   "carClass": "GT3",
-   "lapTimeMs": 93555,
-   "session": "practice",
-   "airC": 18.0,
-   "roadC": 24.0,
-   "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 115.0,
+   "stintFuelL": 117.5,
+   "wet": false
   },
   {
    "id": "2c9105f0c99ea995",
@@ -624,31 +876,10 @@
    "airC": 18.0,
    "roadC": 24.0,
    "rain": 0.0,
-   "steer": true
-  },
-  {
-   "id": "962345d540945951",
-   "track": "oulton_park",
-   "car": "ferrari_296_gt3",
-   "carClass": "GT3",
-   "lapTimeMs": 93137,
-   "session": "practice",
-   "airC": 18.0,
-   "roadC": 24.0,
-   "rain": 0.0,
-   "steer": true
-  },
-  {
-   "id": "d5320bfce0e4c4d9",
-   "track": "oulton_park",
-   "car": "ferrari_296_gt3",
-   "carClass": "GT3",
-   "lapTimeMs": 93287,
-   "session": "practice",
-   "airC": 18.0,
-   "roadC": 24.0,
-   "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 115.4,
+   "stintFuelL": 117.7,
+   "wet": false
   },
   {
    "id": "58f032c0ce68b567",
@@ -660,7 +891,10 @@
    "airC": 23.0,
    "roadC": 30.0,
    "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "fuelL": 51.8,
+   "stintFuelL": 56.9,
+   "wet": false
   },
   {
    "id": "35300e0e1b8c3e36",
@@ -672,7 +906,10 @@
    "airC": 19.98,
    "roadC": 21.96,
    "rain": 0.25,
-   "steer": false
+   "steer": false,
+   "fuelL": 52.0,
+   "stintFuelL": 62.0,
+   "wet": true
   },
   {
    "id": "196c8bc2f9e77136",
@@ -684,7 +921,10 @@
    "airC": 27.0,
    "roadC": 36.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 6.9,
+   "stintFuelL": 6.9,
+   "wet": false
   },
   {
    "id": "3fe991c163d85998",
@@ -696,7 +936,10 @@
    "airC": 27.0,
    "roadC": 36.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 7.6,
+   "stintFuelL": 7.6,
+   "wet": false
   },
   {
    "id": "b6758686bb9f4d5e",
@@ -708,19 +951,40 @@
    "airC": 23.0,
    "roadC": 30.0,
    "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "fuelL": 59.7,
+   "stintFuelL": 59.7,
+   "wet": false
   },
   {
-   "id": "6a32d03cc3535814",
+   "id": "d599e4f36a751ca6",
    "track": "paul_ricard",
    "car": "mercedes_amg_gt4",
    "carClass": "GT4",
-   "lapTimeMs": 129712,
+   "lapTimeMs": 122962,
+   "session": "practice",
+   "airC": 23.0,
+   "roadC": 30.0,
+   "rain": 0.0,
+   "steer": false,
+   "fuelL": 57.2,
+   "stintFuelL": 65.0,
+   "wet": false
+  },
+  {
+   "id": "7eac31b895df1535",
+   "track": "paul_ricard",
+   "car": "mercedes_amg_gt4",
+   "carClass": "GT4",
+   "lapTimeMs": 129720,
    "session": "practice",
    "airC": 19.98,
    "roadC": 21.96,
    "rain": 0.25,
-   "steer": false
+   "steer": false,
+   "fuelL": 57.0,
+   "stintFuelL": 65.0,
+   "wet": true
   },
   {
    "id": "59906818a5a7bc95",
@@ -732,7 +996,10 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 10.3,
+   "stintFuelL": 10.3,
+   "wet": false
   },
   {
    "id": "31ec8e5801b52fe4",
@@ -744,7 +1011,10 @@
    "airC": 18.0,
    "roadC": 18.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 41.2,
+   "stintFuelL": 43.8,
+   "wet": false
   },
   {
    "id": "c94d25f22551e9ea",
@@ -756,7 +1026,10 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 113.6,
+   "stintFuelL": 116.8,
+   "wet": false
   },
   {
    "id": "81ad4b65be9fc70d",
@@ -768,7 +1041,10 @@
    "airC": 22.39,
    "roadC": 27.1,
    "rain": 0.3,
-   "steer": true
+   "steer": true,
+   "fuelL": 86.1,
+   "stintFuelL": 105.5,
+   "wet": true
   },
   {
    "id": "78758aac4c7a7c16",
@@ -780,19 +1056,25 @@
    "airC": 22.93,
    "roadC": 26.93,
    "rain": 0.3,
-   "steer": true
+   "steer": true,
+   "fuelL": 89.1,
+   "stintFuelL": 95.5,
+   "wet": true
   },
   {
-   "id": "9d4e51e84ad5dab1",
+   "id": "5a078bfdfaacc41b",
    "track": "silverstone",
    "car": "amr_v8_vantage_gt3",
    "carClass": "GT3",
-   "lapTimeMs": 130175,
+   "lapTimeMs": 130782,
    "session": "practice",
    "airC": 22.93,
    "roadC": 26.93,
    "rain": 0.3,
-   "steer": true
+   "steer": true,
+   "fuelL": 105.0,
+   "stintFuelL": 105.0,
+   "wet": true
   },
   {
    "id": "86411f9932817d75",
@@ -804,7 +1086,10 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 113.8,
+   "stintFuelL": 116.9,
+   "wet": false
   },
   {
    "id": "d9df09434dd2a5b2",
@@ -816,19 +1101,40 @@
    "airC": 15.0,
    "roadC": 15.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 44.9,
+   "stintFuelL": 48.2,
+   "wet": false
   },
   {
-   "id": "2649350f0cf2f17d",
+   "id": "60f7693dc8a2c858",
    "track": "silverstone",
    "car": "ford_mustang_gt3",
    "carClass": "GT3",
-   "lapTimeMs": 129480,
+   "lapTimeMs": 129580,
    "session": "practice",
    "airC": 19.52,
    "roadC": 19.69,
    "rain": 0.3,
-   "steer": true
+   "steer": true,
+   "fuelL": 84.9,
+   "stintFuelL": 95.0,
+   "wet": true
+  },
+  {
+   "id": "6b424fcb94f7a91e",
+   "track": "silverstone",
+   "car": "ford_mustang_gt3",
+   "carClass": "GT3",
+   "lapTimeMs": 131462,
+   "session": "practice",
+   "airC": 19.52,
+   "roadC": 19.69,
+   "rain": 0.3,
+   "steer": true,
+   "fuelL": 105.0,
+   "stintFuelL": 105.0,
+   "wet": true
   },
   {
    "id": "5bda55924dec9266",
@@ -840,7 +1146,25 @@
    "airC": 20.0,
    "roadC": 30.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 5.9,
+   "stintFuelL": 9.8,
+   "wet": false
+  },
+  {
+   "id": "7fda8db81b16f616",
+   "track": "spa",
+   "car": "amr_v8_vantage_gt3",
+   "carClass": "GT3",
+   "lapTimeMs": 136050,
+   "session": "practice",
+   "airC": 20.0,
+   "roadC": 30.0,
+   "rain": 0.0,
+   "steer": true,
+   "fuelL": 62.0,
+   "stintFuelL": 62.0,
+   "wet": false
   },
   {
    "id": "6d0267c02bc5615c",
@@ -852,7 +1176,10 @@
    "airC": null,
    "roadC": null,
    "rain": null,
-   "steer": true
+   "steer": true,
+   "fuelL": 101.0,
+   "stintFuelL": 104.8,
+   "wet": false
   },
   {
    "id": "3adc874c11c2475d",
@@ -864,7 +1191,10 @@
    "airC": 19.65,
    "roadC": 24.53,
    "rain": 0.29,
-   "steer": true
+   "steer": true,
+   "fuelL": 97.2,
+   "stintFuelL": 104.8,
+   "wet": true
   },
   {
    "id": "81bc362e5db67532",
@@ -876,7 +1206,25 @@
    "airC": 25.0,
    "roadC": 34.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 74.4,
+   "stintFuelL": 78.4,
+   "wet": false
+  },
+  {
+   "id": "49636577104abd0a",
+   "track": "spa",
+   "car": "ford_mustang_gt3",
+   "carClass": "GT3",
+   "lapTimeMs": 137875,
+   "session": "qualifying",
+   "airC": 25.0,
+   "roadC": 34.0,
+   "rain": 0.0,
+   "steer": true,
+   "fuelL": 84.0,
+   "stintFuelL": 84.0,
+   "wet": false
   },
   {
    "id": "445f33c937f6b455",
@@ -888,7 +1236,10 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 9.1,
+   "stintFuelL": 9.1,
+   "wet": false
   },
   {
    "id": "5fd8f59f27d5e655",
@@ -900,7 +1251,10 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 110.5,
+   "stintFuelL": 116.8,
+   "wet": false
   },
   {
    "id": "89aaffacb29da77b",
@@ -912,7 +1266,10 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 113.8,
+   "stintFuelL": 116.9,
+   "wet": false
   },
   {
    "id": "05f001ebee72618d",
@@ -924,7 +1281,25 @@
    "airC": 22.0,
    "roadC": 29.0,
    "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "fuelL": 36.2,
+   "stintFuelL": 44.0,
+   "wet": false
+  },
+  {
+   "id": "0505f226a560953d",
+   "track": "valencia",
+   "car": "alpine_a110_gt4",
+   "carClass": "GT4",
+   "lapTimeMs": 98640,
+   "session": "practice",
+   "airC": 22.0,
+   "roadC": 29.0,
+   "rain": 0.0,
+   "steer": false,
+   "fuelL": 37.1,
+   "stintFuelL": 37.1,
+   "wet": false
   },
   {
    "id": "0fc36f5ad6b88e5f",
@@ -936,7 +1311,10 @@
    "airC": 36.0,
    "roadC": 47.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 102.1,
+   "stintFuelL": 102.1,
+   "wet": false
   },
   {
    "id": "e1150dcb7f112bb8",
@@ -948,7 +1326,10 @@
    "airC": 36.0,
    "roadC": 47.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 97.6,
+   "stintFuelL": 100.1,
+   "wet": false
   },
   {
    "id": "5a48d21d1ef7a8ab",
@@ -960,7 +1341,25 @@
    "airC": 22.0,
    "roadC": 29.0,
    "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "fuelL": 35.0,
+   "stintFuelL": 45.0,
+   "wet": false
+  },
+  {
+   "id": "ee3d607c48c684d0",
+   "track": "valencia",
+   "car": "mercedes_amg_gt4",
+   "carClass": "GT4",
+   "lapTimeMs": 98277,
+   "session": "practice",
+   "airC": 22.0,
+   "roadC": 29.0,
+   "rain": 0.0,
+   "steer": false,
+   "fuelL": 38.0,
+   "stintFuelL": 38.0,
+   "wet": false
   },
   {
    "id": "a9b28124c7d09f9e",
@@ -972,7 +1371,25 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 54.4,
+   "stintFuelL": 60.0,
+   "wet": false
+  },
+  {
+   "id": "c10d1ce239f7176c",
+   "track": "watkins_glen",
+   "car": "ferrari_296_gt3",
+   "carClass": "GT3",
+   "lapTimeMs": 103500,
+   "session": "practice",
+   "airC": 23.0,
+   "roadC": 27.0,
+   "rain": 0.0,
+   "steer": true,
+   "fuelL": 62.3,
+   "stintFuelL": 65.2,
+   "wet": false
   },
   {
    "id": "43209b9908430bb2",
@@ -984,7 +1401,10 @@
    "airC": 28.0,
    "roadC": 29.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 38.4,
+   "stintFuelL": 50.8,
+   "wet": false
   },
   {
    "id": "ad5b9fd9a863b61d",
@@ -996,7 +1416,25 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 3.0,
+   "stintFuelL": 5.3,
+   "wet": false
+  },
+  {
+   "id": "6b30f1b8b67cb066",
+   "track": "zandvoort",
+   "car": "ferrari_296_gt3",
+   "carClass": "GT3",
+   "lapTimeMs": 95192,
+   "session": "practice",
+   "airC": 23.0,
+   "roadC": 27.0,
+   "rain": 0.0,
+   "steer": true,
+   "fuelL": 113.0,
+   "stintFuelL": 115.3,
+   "wet": false
   },
   {
    "id": "832913c8a23a9555",
@@ -1008,7 +1446,10 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "fuelL": 108.0,
+   "stintFuelL": 115.2,
+   "wet": false
   },
   {
    "id": "0221f56d98391045",
@@ -1020,19 +1461,10 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": false
-  },
-  {
-   "id": "02bc9a8ca2e0bc63",
-   "track": "zandvoort",
-   "car": "mercedes_amg_gt4",
-   "carClass": "GT4",
-   "lapTimeMs": 103127,
-   "session": "practice",
-   "airC": 23.0,
-   "roadC": 27.0,
-   "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "fuelL": 25.7,
+   "stintFuelL": 25.7,
+   "wet": false
   },
   {
    "id": "86e5a0d39895dabc",
@@ -1044,7 +1476,10 @@
    "airC": 24.0,
    "roadC": 30.0,
    "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "fuelL": 4.8,
+   "stintFuelL": 6.9,
+   "wet": false
   },
   {
    "id": "7223773a5a227150",
@@ -1056,7 +1491,10 @@
    "airC": 24.0,
    "roadC": 30.0,
    "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "fuelL": 69.9,
+   "stintFuelL": 69.9,
+   "wet": false
   }
  ]
 }

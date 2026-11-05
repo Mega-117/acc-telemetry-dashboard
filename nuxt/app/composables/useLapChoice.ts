@@ -110,7 +110,7 @@ export function useLapChoice(o: {
     if (e.origin === 'shared') return { kind: 'link', driver: e.driver ?? nick(e.ownerUid) }
     if (e.origin === 'ideal') return { kind: 'ideal' }
     if (e.origin === 'own') return { kind: 'coachBest' }
-    if (e.origin === 'coach') return { kind: 'coach', driver: e.driver ?? null, session: coachSessionOf(e.coachSession), otherCar: e.coachOtherCar ? 'class' : null }
+    if (e.origin === 'coach') return { kind: 'coach', driver: e.driver ?? null, session: coachSessionOf(e.coachSession), otherCar: e.coachOtherCar ? 'class' : null, fuelKnown: e.coachFuelKnown === true }
     if (e.origin === 'library') return e.id === o.library.suggestedId.value && lapEntry.value
       ? { kind: 'stepUp', driver: e.driver ?? null, pct: pctFaster(e.lapTimeMs, lapEntry.value.lapTimeMs), relaxed: o.library.suggestedRelaxed.value } : { kind: 'fastest', driver: e.driver ?? null }
     return { kind: 'picked' }
@@ -228,7 +228,7 @@ export function useLapChoice(o: {
     if (coachBest) out.push(entryChoice(coachBest, { kind: 'coachBest' }))
     for (const id of o.library.coachIds.value) {
       const lap = byId(id)
-      if (lap) out.push(entryChoice(lap, { kind: 'coach', driver: lap.driver ?? null, session: coachSessionOf(lap.coachSession), otherCar: lap.coachOtherCar ? 'class' : null }))
+      if (lap) out.push(entryChoice(lap, { kind: 'coach', driver: lap.driver ?? null, session: coachSessionOf(lap.coachSession), otherCar: lap.coachOtherCar ? 'class' : null, fuelKnown: lap.coachFuelKnown === true }))
     }
     const fastest = o.library.fastestId.value ? byId(o.library.fastestId.value) : null
     if (fastest) out.push(entryChoice(fastest, { kind: 'fastest', driver: fastest.driver ?? null }))
