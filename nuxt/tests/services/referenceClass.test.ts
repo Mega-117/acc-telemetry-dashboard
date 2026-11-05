@@ -111,6 +111,7 @@ describe('Codex review 05/11', () => {
       { id: 'a'.repeat(16), track: 'monza', car: 'ferrari_296_gt3', carClass: 'GT3', lapTimeMs: 106_000, session: 'practice' }] })
     expect(carClassOf('porsche_992_gt3_cup')).toBeNull()
     expect(carClassOf('bmw_m4_gt3')).toBe('GT3')
+    expect(['audi_r8_lms_evo_ii', 'jaguar_g3', 'lamborghini_gallardo_rex'].map(carClassOf)).toEqual(['GT3', 'GT3', 'GT3'])
     expect(carClassOf('porsche_935_gt2')).toBeNull()
     expect(pickCoachLaps(index, { track: 'monza', car: 'porsche_935_gt2' }, null)).toEqual([])
   })

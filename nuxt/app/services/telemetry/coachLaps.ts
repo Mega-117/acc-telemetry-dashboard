@@ -27,7 +27,9 @@ export function parseCoachIndex(raw: unknown): CoachIndex | null {
 }
 
 /** GT3 or GT4 from an ACC model id; null for any other car (Cup, GT2, TCX: Codex 05/11), which gets same-car coach laps only. */
-export const carClassOf = (car: string): 'GT3' | 'GT4' | null => /cup|gt2|tcx/i.test(car) ? null : /gt4/i.test(car) ? 'GT4' : /gt3/i.test(car) ? 'GT3' : null
+export const carClassOf = (car: string): 'GT3' | 'GT4' | null => /cup|gt2|tcx/i.test(car) ? null : /gt4/i.test(car) ? 'GT4'
+  // ACC GT3 models whose id does not say it (Codex 05/11): Audi R8 LMS, Jaguar G3, Gallardo REX.
+  : /gt3|^audi_r8_lms|jaguar_g3|lamborghini_gallardo_rex/i.test(car) ? 'GT3' : null
 
 /**
  * The coach laps to offer for your lap: the best match first. `otherCar` when only a lap of the same

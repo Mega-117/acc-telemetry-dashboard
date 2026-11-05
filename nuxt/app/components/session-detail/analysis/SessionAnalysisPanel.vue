@@ -188,8 +188,15 @@ async function load() {
     const bestTrace = traces.value[(best ?? last).id]
     const youEntry = entries.value.find(e => e.id === lapId.value) ?? best ?? last
     const youClass = () => traceClass(traces.value[youEntry.id], sessionRow(youEntry))
+    // Codex 05/11: the step ahead is measured from your best valid lap of Tu's kind (a quicker qualifying
+    // lap must not hide the race laps a step ahead of your race lap); Tu's own time when it is the only one.
+    const myClassBestMs = () => {
+      const kind = youClass().kind
+      const same = usable.filter(e => e.valid && (!kind || traceClass(traces.value[e.id], sessionRow(e)).kind === kind))
+      return same.length ? Math.min(...same.map(e => e.lapTimeMs)) : youEntry.lapTimeMs
+    }
     if (first) void library.loadOtherDrivers(isCurrent, archiveDeps, { game: first.gameId, track: first.track, car: first.car, variant: first.variant },
-      { myUid: pilot ?? currentUser.value?.uid ?? null, myBestMs: best ? best.lapTimeMs : null,
+      { myUid: pilot ?? currentUser.value?.uid ?? null, myBestMs: myClassBestMs(),
         mine: { grip: bestTrace?.conditions?.grip ?? null, airC: bestTrace?.conditions?.airC ?? null, roadC: bestTrace?.conditions?.roadC ?? null, fuelL: bestTrace?.fuelL ?? null },
         // dev.10: the class of Tu (kind, fuel band, dry/wet) picks the same class first (Codex 05/11: Tu, not the session's best).
         cls: youClass() })
