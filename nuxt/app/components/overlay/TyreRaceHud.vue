@@ -104,7 +104,8 @@ const { t } = useI18n()
             :class="[
               `tyre-race__corner--${tyre.id.toLowerCase()}`,
               tyre.right ? 'tyre-race__corner--right' : 'tyre-race__corner--left',
-              { 'tyre-race__corner--rear': tyre.rear, 'tyre-race__corner--warn': tyre.pressureWarning || tyre.temperatureWarning },
+              { 'tyre-race__corner--rear': tyre.rear, 'tyre-race__corner--loss': tyre.pressureWarning,
+                'tyre-race__corner--warn': tyre.temperatureWarning && !tyre.pressureWarning },
             ]"
             :data-wheel="tyre.id"
             :aria-label="tyre.id"
@@ -242,7 +243,17 @@ $wheel-height: 112px;
   .tyre-race__brake { right: auto; left: 0; }
 }
 
-// Caution (pressure drop event, overheated tyre): the wheel's tyre and readings turn amber.
+// Pressure drop event (2 s, then the normal wheel again): red, owner 05/11 (PIP-734, sample B):
+// full red tyre with a white temperature, the pressure in that red on the normal background.
+$tyre-loss-red: #c8231a;
+$tyre-loss-border: #ff3b30;
+.tyre-race__corner--loss {
+  .tyre-race__tyre { border-color: $tyre-loss-border; background: $tyre-loss-red; }
+  .tyre-race__temperature { color: #fff; }
+  :is(.tyre-race__primary, .tyre-race__loss) { color: $tyre-loss-red; }
+}
+
+// Caution (overheated tyre): the wheel's tyre and readings turn amber.
 .tyre-race__corner--warn {
   .tyre-race__tyre { border-color: $hud-caution; background: $hud-caution-bg; }
   :is(.tyre-race__temperature, .tyre-race__primary, .tyre-race__loss) { color: $hud-caution; }

@@ -126,14 +126,20 @@ describe('Race HUD components', () => {
       const at = html.indexOf(`tyre-race__corner--${id}`)
       return html.slice(at, html.indexOf('"', at))
     }
-    expect(corner('fl')).toContain('tyre-race__corner--warn')
+    // PIP-734 (owner 05/11): the pressure drop is red, the overheated tyre stays amber.
+    expect(corner('fl')).toContain('tyre-race__corner--loss')
+    expect(corner('fl')).not.toContain('tyre-race__corner--warn')
     expect(corner('fr')).toContain('tyre-race__corner--warn')
-    expect(corner('rl')).not.toContain('tyre-race__corner--warn')
-    expect(html.match(/tyre-race__corner--warn/g)).toHaveLength(2)
-    // An old event never re-lights the caution.
+    expect(corner('rl')).not.toMatch(/--warn|--loss/)
+    expect(html.match(/tyre-race__corner--warn/g)).toHaveLength(1)
+    expect(html.match(/tyre-race__corner--loss/g)).toHaveLength(1)
+    // An old event never re-lights the red (the 2 s flash is over).
     state.tyres[0]!.racePressure = { variationPsi: -0.72, eventSeq: 3, eventTs: Date.now() / 1000 - 10 } as any
     state.tyres[1]!.coreTempC = 99
-    expect(await renderRace(state)).not.toContain('tyre-race__corner--warn')
+    expect(await renderRace(state)).not.toMatch(/tyre-race__corner--(warn|loss)/)
+    const source = readFileSync(resolve(process.cwd(), 'app/components/overlay/TyreRaceHud.vue'), 'utf8')
+    expect(source).toMatch(/\.tyre-race__corner--loss \{[^}]*background: \$tyre-loss-red/)
+    expect(source).toMatch(/:is\(\.tyre-race__primary, \.tyre-race__loss\) \{ color: \$tyre-loss-red; \}/)
   })
 
   it('rende sagoma GT3, quattro body zone, sospensioni e totali', async () => {
