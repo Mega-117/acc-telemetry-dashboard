@@ -11,6 +11,7 @@ export type FeatureUseNote =
   | { event: 'laps.reference_pick', origin: number, relaxed: number, kindWrong: number }
   | { event: 'laps.coach_loaded', laps: number, otherCar: number, failed: number }
   | { event: 'laps.ideal_built', segments: number, joinsSkipped: number, gainTenthsPct: number }
+  | { event: 'laps.stint_card', kind: number, reference: number, bestMismatch: number }
 
 type Bridge = { noteFeatureUse?: (note: FeatureUseNote) => void }
 

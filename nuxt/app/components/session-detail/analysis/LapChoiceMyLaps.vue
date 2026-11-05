@@ -5,7 +5,8 @@
 // Qualifica / Gara); never the whole list of a past session.
 import { computed, onMounted, ref } from 'vue'
 import LapChoiceRow from './LapChoiceRow.vue'
-import { mySessionRows, type LapChoice, type MySessionRow, type SessionKindBests } from '~/services/telemetry/lapChoice'
+import StintLapGroups from './StintLapGroups.vue'
+import { mySessionRows, sessionStintKind, type LapChoice, type MySessionRow, type SessionKindBests } from '~/services/telemetry/lapChoice'
 import type { LapChoiceSource } from '~/composables/useLapChoice'
 import { useLapChoiceText } from '~/composables/useLapChoiceText'
 import { useI18n } from '~/i18n'
@@ -60,7 +61,8 @@ const rowProps = (lap: LapChoice) => ({ choice: lap, selected: lap.key === props
 // all-time best of another session takes the label of its row there, else of its departure fuel.
 function kindOf(lap: LapChoice): 'qualify' | 'race' | null {
   // A lap of the shown session: the kind of its stint (departure fuel, 20 L), whatever the lap.
-  if (typeof lap.stintFuelL === 'number') return lap.stintFuelL <= 20 ? 'qualify' : 'race'
+  const own = sessionStintKind(lap)   // dev.11: one rule with "Cambia il tuo giro" and the stint headings
+  if (own) return own
   const token = lap.sessionToken
   const kinds = token ? bests.value[token] : undefined
   const near = (ms: number | null | undefined) => !!ms && Math.abs(lap.lapTimeMs - ms) <= 1
@@ -90,9 +92,12 @@ const pastBests = computed(() => rows.value.flatMap((s: MySessionRow): PastBest[
     </section>
     <section v-if="thisSession.length" class="my-laps__block">
       <h4>{{ t('telemetry.choice.mine.current') }}</h4>
-      <div class="choice-list">
-        <LapChoiceRow v-for="lap in thisSession" :key="lap.key" v-bind="rowProps(lap)" :kind="kindOf(lap)" hide-when hide-driver aligned @select="emit('select', $event)" @confirm="emit('confirm', $event)" />
-      </div>
+      <!-- dev.11 (user 05/11): this session's laps under one heading per stint; the rest of the tab as it was. -->
+      <StintLapGroups :laps="thisSession">
+        <template #default="{ lap }">
+          <LapChoiceRow v-bind="rowProps(lap)" :kind="kindOf(lap)" hide-when hide-driver aligned @select="emit('select', $event)" @confirm="emit('confirm', $event)" />
+        </template>
+      </StintLapGroups>
     </section>
     <section class="my-laps__block">
       <h4>{{ t('telemetry.choice.mine.sessions') }}</h4>

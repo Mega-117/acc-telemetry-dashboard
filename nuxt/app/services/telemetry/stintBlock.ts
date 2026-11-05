@@ -75,3 +75,28 @@ export function stintFacts(rows: StintLapRow[], lapNumber: number | null, theore
     roadC: mean(laps.map(r => num(r.road_temp)).filter((v): v is number => v !== null)),
   }
 }
+
+/**
+ * dev.11 (user 05/11): the Sessione page's own numbers for one stint, handed to the Telemetria so the
+ * block under the minimap says exactly what that page says (one source: SessionDetailPage computes
+ * them, here they are only compared). `refBestMs` / `refAvgMs` are its RIFERIMENTO column: your
+ * historical best (and race average) saved with that fuel and grip; a qualifying stint has no average.
+ */
+export interface StintSummary {
+  kind: LapKind
+  bestMs: number | null
+  avgMs: number | null
+  refBestMs: number | null
+  refAvgMs: number | null
+}
+
+export interface StintVerdictLine { which: 'best' | 'avg', ms: number, refMs: number, diffMs: number }
+
+/** "How did you do": the stint's best (and race average) against your historical reference; only the known pairs. */
+export function stintVerdict(summary: StintSummary | null | undefined): StintVerdictLine[] {
+  if (!summary) return []
+  const pairs: [StintVerdictLine['which'], number | null, number | null][] = [['best', summary.bestMs, summary.refBestMs],
+    ...(summary.kind === 'race' ? [['avg', summary.avgMs, summary.refAvgMs] as [StintVerdictLine['which'], number | null, number | null]] : [])]
+  return pairs.flatMap(([which, ms, refMs]) => typeof ms === 'number' && ms > 0 && typeof refMs === 'number' && refMs > 0
+    ? [{ which, ms, refMs, diffMs: ms - refMs }] : [])
+}

@@ -63,3 +63,33 @@ describe('AnalysisMap corner times stay inside the map (01/11, Codex)', () => {
     view.unmount()
   })
 })
+
+describe('AnalysisMap with a reference without coordinates (dev.11)', () => {
+  it('draws your lap alone instead of no map, and says nothing about your lap', () => {
+    const old = trace()
+    delete (old.channels as Record<string, unknown>).pos_x
+    delete (old.channels as Record<string, unknown>).pos_z
+    const view = mount(AnalysisMap, { props: { lap: trace(), reference: old, corners, cursor: 0.3 } })
+    expect(view.find('svg.map').exists()).toBe(true)
+    expect(view.find('.map-none').exists()).toBe(false)
+    view.unmount()
+    // Your lap without coordinates: then the map really is unavailable for this lap.
+    const none = mount(AnalysisMap, { props: { lap: old, reference: null, corners, cursor: null } })
+    expect(none.find('.map-none').exists()).toBe(true)
+    none.unmount()
+  })
+})
+
+describe('AnalysisMap reference line (Codex 05/11)', () => {
+  it('never draws a reference line for a reference without coordinates', () => {
+    const old = trace()
+    delete (old.channels as Record<string, unknown>).pos_x
+    delete (old.channels as Record<string, unknown>).pos_z
+    const view = mount(AnalysisMap, { props: { lap: trace(), reference: old, corners, cursor: null, colorMode: 'laps' } })
+    expect(view.find('.map-ref').exists()).toBe(false)
+    view.unmount()
+    const both = mount(AnalysisMap, { props: { lap: trace(), reference: trace(), corners, cursor: null, colorMode: 'laps' } })
+    expect(both.find('.map-ref').exists()).toBe(true)
+    both.unmount()
+  })
+})

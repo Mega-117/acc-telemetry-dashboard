@@ -40,7 +40,11 @@ const at = fractions(POINTS)
 const W = computed(() => props.size)
 const H = computed(() => Math.round(props.size * 0.8))
 // The reference draws the frame when present: both lines share scale and offset.
-const frame = computed(() => props.reference ?? props.lap)
+// dev.11 (05/11): a reference without coordinates (laps saved before late October) used to hide the
+// whole map, with a message blaming your lap. It now gives way: the map follows your lap alone.
+const hasPositions = (trace: LapTraceView | null | undefined) => !!trace?.channels.pos_x && !!trace?.channels.pos_z
+const mapRef = computed(() => hasPositions(props.reference) ? props.reference! : null)
+const frame = computed(() => mapRef.value ?? props.lap)
 const base = computed(() => mapPoints(frame.value, at, W.value, H.value, 18))
 // Edges through the same transform as the laps: they line up with no adjustment of their own.
 const edgePaths = computed(() => {
@@ -51,7 +55,7 @@ const edgePaths = computed(() => {
   const right = props.edges.right.map(([x, z]) => project(x, z))
   return { left: path(left), right: path(right), surface: path([...left, ...[...right].reverse()]) }
 })
-const lapPoints = computed(() => props.reference ? mapPoints(props.lap, at, W.value, H.value, 18, props.reference) : base.value)
+const lapPoints = computed(() => mapRef.value ? mapPoints(props.lap, at, W.value, H.value, 18, mapRef.value) : base.value)
 const zoomed = computed(() => props.zoom && props.selected !== null && !!props.corners[props.selected - 1])
 const lapsMode = computed(() => props.colorMode === 'laps')
 const focusRange = computed<[number, number] | null>(() => {
@@ -95,7 +99,7 @@ const lapArrow = computed(() => {
   const a = points[i]!, b = points[i + 1]!
   return { x: a.x, y: a.y, angle: (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI }
 })
-const refDot = computed(() => props.reference ? dot(base.value, props.refCursor ?? props.cursor) : null)
+const refDot = computed(() => mapRef.value ? dot(base.value, props.refCursor ?? props.cursor) : null)
 // Only for the cursor moved on the charts: on the map itself the pointer is already where you look.
 // PIP-635: zoomed in, the dot stays centred and the map glides to it frame by frame (Track Titan).
 let glide = 0
@@ -296,7 +300,7 @@ function onMove(event: PointerEvent) {
     <polyline v-else :points="path(base)" class="map-track" />
     <polyline v-if="sector" :points="sector.path" class="map-sector" />
     <template v-if="zoomed || lapsMode">
-      <polyline v-if="reference" :points="path(base)" class="map-ref" />
+      <polyline v-if="mapRef" :points="path(base)" class="map-ref" />
       <polyline :points="path(lapPoints)" class="map-lap-line" />
     </template>
     <line v-for="(s, i) in segments" :key="i" :x1="s.x1" :y1="s.y1" :x2="s.x2" :y2="s.y2" :stroke="s.color" :stroke-opacity="s.opacity" class="map-lap" />

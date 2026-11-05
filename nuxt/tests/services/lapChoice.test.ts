@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   chooseDefaultReference, choiceBlock, classifyLink, dateBucket, mySessionRows, sessionKindBests, lapKey, lapStatus, driverBestRows, runConditions, lapKind, sameKindFirst, matchesDriver, normalizeSearch,
-  parseSessionLink, pctFaster, sameTrackName, sessionDate, whenParts, type LapChoice, type LapEntryLike,
+  parseSessionLink, pctFaster, sameTrackName, sessionDate, whenParts, groupByStint, sessionStintKind, type LapChoice, type LapEntryLike,
 } from '~/services/telemetry/lapChoice'
 
 const now = new Date(2026, 9, 31, 18, 0, 0)
@@ -183,5 +183,21 @@ describe('lapChoice: same lap and links', () => {
     expect(runConditions({ fuelL: null, conditions: null }, { track_grip_status: 'Opt' })).toEqual({ fuelL: null, tyre: null, airC: null, roadC: null, grip: 'optimum' })
     expect(runConditions({ fuelL: null, conditions: null })).toBeNull()
     expect(runConditions(null)).toBeNull()
+  })
+})
+
+describe('dev.11: the laps of this session grouped by stint', () => {
+  // Monza 05/11 race: stint 1 (33 L) laps 1-3, stint 2 (43.2 L) laps 4-9; given out of order.
+  const lap = (n: number, stint: number | null, stintFuelL: number | null) => ({ key: `l${n}`, lapNumber: n, stint, stintFuelL })
+  it('one group per stint, in lap order, with its kind and departure fuel', () => {
+    const groups = groupByStint([lap(5, 2, 43.2), lap(1, 1, 33), lap(3, 1, 33), lap(2, 1, 33), lap(4, 2, 43.2), lap(9, 2, 43.2)])
+    expect(groups.map(g => [g.stint, g.kind, g.startFuelL, g.laps.map(l => l.lapNumber)])).toEqual([
+      [1, 'race', 33, [1, 2, 3]], [2, 'race', 43.2, [4, 5, 9]]])
+  })
+  it('a qualifying stint (20 L or less) and laps without a stint (one group, no heading)', () => {
+    expect(groupByStint([lap(1, 1, 6.9)])[0]).toMatchObject({ stint: 1, kind: 'qualify' })
+    expect(groupByStint([lap(1, null, null), lap(2, null, null)])).toEqual([{ stint: null, kind: null, startFuelL: null, laps: [lap(1, null, null), lap(2, null, null)] }])
+    expect(sessionStintKind({ stintFuelL: 0 })).toBeNull()
+    expect(sessionStintKind({ stintFuelL: 20 })).toBe('qualify')
   })
 })

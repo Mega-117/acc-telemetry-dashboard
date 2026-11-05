@@ -49,7 +49,7 @@ export function gripOf(value: unknown): LapGrip | null {
   return (GRIPS as readonly string[]).includes(key) ? key as LapGrip : null
 }
 /** This session's row of the lap (the table): fills what the lap file does not carry. */
-export interface LapSessionRow { air_temp?: number | null, road_temp?: number | null, track_grip_status?: string | null, stint_fuel?: number | null }
+export interface LapSessionRow { air_temp?: number | null, road_temp?: number | null, track_grip_status?: string | null, stint_fuel?: number | null, stint?: number | null }
 
 /** The conditions of a lap trace (and its session row), or null when nothing is known. */
 export function runConditions(trace: { fuelL: number | null, tyreCompound?: 'dry' | 'wet' | null, conditions: { airC: number | null, roadC: number | null, grip?: string | null } | null } | null | undefined,
@@ -83,6 +83,8 @@ export interface LapChoice {
   conditions?: LapRunConditions | null
   /** 02/11: the departure fuel of the lap's stint, for laps of the shown session. */
   stintFuelL?: number | null
+  /** dev.11: the lap's stint number, for laps of the shown session (the lists are grouped by stint). */
+  stint?: number | null
 }
 
 /** 02/11: a library lap (the Worker keeps one best qualifying and one best race lap per driver). */
@@ -361,4 +363,25 @@ export function sameTrackName(a: string | null | undefined, b: string | null | u
   const n = (s: string | null | undefined) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '_')
   const x = n(a), y = n(b)
   return !!x && !!y && (x.includes(y) || y.includes(x))
+}
+
+/** dev.11: the kind of a lap of the shown session: its stint's departure fuel (20 L), as the Sessione page. */
+export const sessionStintKind = (lap: { stintFuelL?: number | null }): 'qualify' | 'race' | null =>
+  typeof lap.stintFuelL === 'number' && lap.stintFuelL > 0 ? (lap.stintFuelL <= 20 ? 'qualify' : 'race') : null
+
+export interface StintGroup<T> { stint: number | null, kind: 'qualify' | 'race' | null, startFuelL: number | null, laps: T[] }
+/**
+ * dev.11 (user 05/11): the laps of this session under one heading per stint ("Stint 2 · Stint gara ·
+ * 43 L · 6 laps"), in lap order; the rows themselves stay as they are. Laps without a stint (not of
+ * this session) form one group without a heading.
+ */
+export function groupByStint<T extends { stint?: number | null, stintFuelL?: number | null, lapNumber?: number | null }>(laps: T[]): StintGroup<T>[] {
+  const groups: StintGroup<T>[] = []
+  for (const lap of [...laps].sort((a, b) => (a.lapNumber ?? 0) - (b.lapNumber ?? 0))) {
+    const stint = typeof lap.stint === 'number' ? lap.stint : null
+    const last = groups[groups.length - 1]
+    if (last && last.stint === stint) { last.laps.push(lap); continue }
+    groups.push({ stint, kind: sessionStintKind(lap), startFuelL: typeof lap.stintFuelL === 'number' && lap.stintFuelL > 0 ? lap.stintFuelL : null, laps: [lap] })
+  }
+  return groups
 }

@@ -15,7 +15,8 @@ import LapChoiceCard from './LapChoiceCard.vue'
 import LapChoiceDialog from './LapChoiceDialog.vue'
 import TraceStripHead, { type DeltaPlace } from './TraceStripHead.vue'
 import StintBlock from './StintBlock.vue'
-import { stintFacts } from '~/services/telemetry/stintBlock'
+import { stintFacts, stintVerdict, type StintSummary } from '~/services/telemetry/stintBlock'
+import { noteFeatureUse } from '~/services/usage/featureUseNote'
 import { useLapChoice } from '~/composables/useLapChoice'
 import { traceClass, type LapSide, type SessionKindBests } from '~/services/telemetry/lapChoice'
 import { electronLapSource, pilotLapSource, type LapSource, type LocalLapBridge } from '~/services/telemetry/lapSources'
@@ -37,6 +38,7 @@ const props = defineProps<{
   laps: { lap_number: number, lap_time_ms: number | null, is_valid: boolean | null, sector_times_ms?: (number | null)[] | null, air_temp?: number | null, road_temp?: number | null, track_grip_status?: string | null, stint_fuel?: number | null,
     /** dev.10: for the stint block under the map. */
     stint?: number | null, fuel_used?: number | null, fuel_remaining?: number | null, has_pit_stop?: boolean | null, pit_out_lap?: boolean | null }[]
+  stintSummaries?: Record<number, StintSummary> // dev.11: the Sessione page's best, average, RIFERIMENTO per stint
   /** Lap to open as "Tu", when the driver picked it in the Sessione table. */
   initialLap?: number | null
   /** PIP-623: coach view of a linked pilot: the laps come from the online archive. */
@@ -372,6 +374,11 @@ const stintBlock = computed(() => {
   const ideal = entries.value.find(e => e.origin === 'ideal')
   return stintFacts(props.laps, you.lapNumber, ideal ? ideal.lapTimeMs : null)
 })
+// dev.11: the Sessione page's own numbers for that stint (none for a foreign or shared session). Spy (PIP-720), once per
+// change of what is shown (Codex: not per refresh): the best shown must be one of that stint's laps (exclusions allowed).
+const stintSummary = computed(() => stintBlock.value ? props.stintSummaries?.[stintBlock.value.stint] ?? null : null)
+watch(() => { const s = stintSummary.value; return s ? JSON.stringify([stintBlock.value?.stint, s.kind, s.bestMs, s.refBestMs, s.avgMs, s.refAvgMs]) : '' }, (k) => { const s = stintSummary.value; if (!k || !s) return
+  noteFeatureUse({ event: 'laps.stint_card', kind: s.kind === 'qualify' ? 1 : 0, reference: stintVerdict(s).length, bestMismatch: s.bestMs !== null && !props.laps.some(r => (r.stint ?? 1) === stintBlock.value?.stint && r.lap_time_ms === s.bestMs) ? 1 : 0 }) }, { immediate: true })
 // PIP-646: any reference gets sector times, measured at the same points of the lap.
 const { sectorList, sectorGaps } = useSectorCompare({ lap, reference, lapTimes: computed(() => sectorTimes(lapEntry.value)), refTimes: computed(() => sectorTimes(refEntry.value)) })
 const selectedSector = ref<number | null>(null)
@@ -532,7 +539,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
           <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null && !sessionColours" :focus="selectedSector !== null ? range : null" :color-mode="sessionColours ? 'delta' : 'laps'" :zone-colors="sessionColours ? zones.colors.value : null" zoom-controls :size="deltaPlace === 'top' ? 420 : 320" :corner-deltas="cornerDeltas" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>
         <!-- dev.10 (user 05/11): the stint of Tu under the map (pace, valid laps, best, theoretical, fuel). -->
-        <StintBlock v-if="stintBlock" :facts="stintBlock" />
+        <StintBlock v-if="stintBlock" :facts="stintBlock" :summary="stintSummary" />
         <div v-if="reference && deltaPlace === 'centre'" ref="deltaWrap">
           <AnalysisCharts :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaHeight" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
         </div>

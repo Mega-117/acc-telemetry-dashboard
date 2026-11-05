@@ -1,6 +1,6 @@
 // dev.10 (user 05/11): the stint of "Tu" under the Telemetria map.
 import { describe, expect, it } from 'vitest'
-import { stintFacts, type StintLapRow } from '~/services/telemetry/stintBlock'
+import { stintFacts, stintVerdict, type StintLapRow } from '~/services/telemetry/stintBlock'
 
 // Monza 04/11 race, stint 1 (the real values of the session): 7 laps, lap 4 invalid, lap 7 into the pits.
 const monza: StintLapRow[] = [
@@ -34,5 +34,24 @@ describe('stint block (dev.10)', () => {
     const quali = stintFacts([{ lap_number: 1, lap_time_ms: 101000, is_valid: true, stint_fuel: 9 }], 1)!
     expect(quali).toMatchObject({ stint: 1, kind: 'qualify', endFuelL: null, fuelPerLapL: null, airC: null })
     expect(stintFacts(monza, 99)).toBeNull()
+  })
+})
+
+describe('stintVerdict (dev.11): the Sessione page RIFERIMENTO against the stint', () => {
+  // Monza 05/11 race, stint 2 (the Sessione page): best 1:47.012 vs 1:46.377, average 1:47.348 vs 1:47.448.
+  const race = { kind: 'race' as const, bestMs: 107_012, avgMs: 107_348, refBestMs: 106_377, refAvgMs: 107_448 }
+  it('a race stint gives best and average, each with its own reference', () => {
+    expect(stintVerdict(race)).toEqual([
+      { which: 'best', ms: 107_012, refMs: 106_377, diffMs: 635 },
+      { which: 'avg', ms: 107_348, refMs: 107_448, diffMs: -100 },
+    ])
+  })
+  it('a qualifying stint gives the best only, even when an average is passed', () => {
+    expect(stintVerdict({ ...race, kind: 'qualify' }).map(l => l.which)).toEqual(['best'])
+  })
+  it('a missing reference or time leaves its line out; nothing known, nothing shown', () => {
+    expect(stintVerdict({ ...race, refAvgMs: null }).map(l => l.which)).toEqual(['best'])
+    expect(stintVerdict({ ...race, refBestMs: null, avgMs: null })).toEqual([])
+    expect(stintVerdict(null)).toEqual([])
   })
 })

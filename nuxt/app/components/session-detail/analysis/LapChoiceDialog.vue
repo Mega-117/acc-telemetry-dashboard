@@ -8,7 +8,8 @@ import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 import LapChoiceRow from './LapChoiceRow.vue'
 import LapChoiceMyLaps from './LapChoiceMyLaps.vue'
 import LapChoiceDrivers from './LapChoiceDrivers.vue'
-import { choiceBlock, lapKind, type LapChoice, type LapSide } from '~/services/telemetry/lapChoice'
+import StintLapGroups from './StintLapGroups.vue'
+import { choiceBlock, lapKind, sessionStintKind, type LapChoice, type LapSide } from '~/services/telemetry/lapChoice'
 import type { LapChoiceSource } from '~/composables/useLapChoice'
 import { useLapChoiceText } from '~/composables/useLapChoiceText'
 import { useI18n } from '~/i18n'
@@ -142,9 +143,14 @@ const rowProps = (c: LapChoice) => ({ choice: c, selected: c.key === selected.va
             <p v-if="source.idealSame?.()" class="choice-empty">{{ t('telemetry.choice.suggested.idealSame') }}</p>
           </template>
           <!-- 02/11 (user, as Track Titan): "Tu" picks only among the laps of this session. -->
-          <div v-else-if="side === 'you'" class="choice-list">
+          <!-- dev.11 (user 05/11): grouped by stint, each row with its stint kind, as in I miei giri. -->
+          <div v-else-if="side === 'you'">
             <p v-if="!thisSession.length" class="choice-empty">{{ t('telemetry.choice.dialog.noSessionLaps') }}</p>
-            <LapChoiceRow v-for="c in thisSession" :key="c.key" v-bind="rowProps(c)" hide-driver hide-when @confirm="confirm" />
+            <StintLapGroups v-else :laps="thisSession">
+              <template #default="{ lap }">
+                <LapChoiceRow v-bind="rowProps(lap)" :kind="sessionStintKind(lap)" hide-driver hide-when aligned @confirm="confirm" />
+              </template>
+            </StintLapGroups>
           </div>
           <LapChoiceMyLaps v-else-if="tab === 'mine'" :source="source" :selected-key="selected?.key ?? null" :current-key="currentKey" :other-key="otherKey" :other-side="otherSideName" @select="select" @confirm="confirm" />
           <LapChoiceDrivers v-else :source="source" :selected-key="selected?.key ?? null" :current-key="currentKey" :other-key="otherKey" :other-side="otherSideName"

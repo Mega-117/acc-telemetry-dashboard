@@ -82,6 +82,7 @@ import SessionAnalysisPanel from '~/components/session-detail/analysis/SessionAn
 import { analysisSessionToken } from '~/services/telemetry/lapAnalysis'
 import { stintDepartureFuel } from '~/services/telemetry/raceFuelClassification'
 import { sessionKindBests, type SessionKindBests } from '~/services/telemetry/lapChoice'
+import type { StintSummary } from '~/services/telemetry/stintBlock'
 import type { CompareTarget } from '~/composables/useCompareTargets'
 import { useI18n } from '~/i18n'
 import { parseTelemetryDate } from '~/utils/telemetryFormat'
@@ -254,7 +255,9 @@ const analysisToken = computed(() => analysisSessionToken(
 ))
 // 02/11: each lap knows its stint's departure fuel (PIP-649 rule): "Stint qualifica" / "Stint gara" in Cambia.
 // dev.10: + the stint, the lap's fuel used and the pit flags, for the stint block under the Telemetria map.
-const analysisLaps = computed(() => (fullSession.value?.stints ?? []).flatMap((stint, index) => (stint.laps ?? []).map(lap => ({ lap, stintFuel: stintDepartureFuel(stint), stint: index + 1 })))
+// dev.11 (Codex): the stint is this page's own stint number (session.stints, same order), the key of its stint
+// table and of stintSummaries: one numbering, whatever the file stored (0, missing). The logger never repeats one.
+const analysisLaps = computed(() => (fullSession.value?.stints ?? []).flatMap((stint, index) => (stint.laps ?? []).map(lap => ({ lap, stintFuel: stintDepartureFuel(stint), stint: session.value?.stints?.[index]?.number ?? index + 1 })))
   .map(({ lap, stintFuel, stint }) => ({ stint_fuel: stintFuel, stint, lap_number: lap.lap_number, lap_time_ms: lap.lap_time_ms ?? null, is_valid: lap.is_valid ?? null, sector_times_ms: lap.sectors_reliable ? lap.sector_times_ms ?? null : null,
     air_temp: lap.air_temp ?? null, road_temp: lap.road_temp ?? null, track_grip_status: lap.track_grip_status ?? null,
     fuel_used: typeof lap.fuel_start === 'number' && typeof lap.fuel_remaining === 'number' ? Math.round((lap.fuel_start - lap.fuel_remaining) * 100) / 100 : null,
@@ -2280,6 +2283,26 @@ function getStintDeltaVsTheo(stint: typeof session.value.stints[0]): string {
   return `${delta >= 0 ? '+' : ''}${delta.toFixed(3)}`
 }
 
+// dev.11 (user 05/11): this page's STINT and RIFERIMENTO numbers for every stint, handed to the
+// Telemetria's block under the minimap, so the two places never disagree (same laps, same exclusions,
+// same historical reference as getStintDeltaVsTheo and the stint table).
+const stintSummaries = computed<Record<number, StintSummary>>(() => Object.fromEntries((session.value?.stints ?? []).map((stint, index) => {
+  const reference = stintTheoreticals.value[`a:${stint.number}`]
+  const points = normalizeLapSeries({ laps: session.value.lapsData[stint.number] || [], source: 'a', strategy: 'A', stintNumber: stint.number })
+  // The stint list's rule (getStintDeltaVsTheo): your exclusions on the shown stint, the standard ones elsewhere and
+  // in a comparison (Codex 05/11: the comparison view mixes two sides; the block follows this one list, by decision).
+  const exclusions = stint.number === effectiveStintNumber.value && !isAnyComparison.value ? excludedLaps.value : buildBoundaryLapExclusions(points)
+  const metrics = buildIncludedLapSummary(filterIncludedLapPoints(points, exclusions))
+  const qualify = stint.type === 'Q'
+  return [stint.number ?? index + 1, {
+    kind: qualify ? 'qualify' : 'race',
+    bestMs: metrics.bestMs ?? null,
+    avgMs: qualify || metrics.avgWarning ? null : metrics.avgMs ?? null,
+    refBestMs: (qualify ? reference?.theoQualy : reference?.theoRace) ?? null,
+    refAvgMs: qualify ? null : reference?.theoAvgRace ?? null,
+  } satisfies StintSummary]
+})))
+
 // For colored dots in comparison box
 function getDeltaDotClass(d: string | undefined) {
   if (!d) return 'dot--neutral'
@@ -2571,7 +2594,7 @@ const gripZones = computed(() => {
       </div>
     </header>
 
-    <SessionAnalysisPanel v-if="panelMounted && !isEvoSession" v-show="lapView" :active="lapView" :session-token="analysisToken" :laps="analysisLaps" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" :compare-with="compareTarget" :pending-lap-link="pendingLapLink" :session-type="session?.type ?? null" :read-session="readLinkedSession" :read-session-bests="readSessionBests" @unavailable="onTelemetryUnavailable" @lap-link-handled="pendingLapLink = null" @remove-compare="removeCompare" :reference-removed="referenceRemoved" @reference-chosen="referenceRemoved = false" head-target="#session-head-laps" share-target="#session-head-share" />
+    <SessionAnalysisPanel v-if="panelMounted && !isEvoSession" v-show="lapView" :active="lapView" :session-token="analysisToken" :laps="analysisLaps" :stint-summaries="stintSummaries" :initial-lap="analysisLap" :pilot-uid="externalUserId || (targetUserId && !externalUserId ? targetUserId : null)" :shared-session-id="externalUserId ? props.sessionId : null" :foreign="!!externalUserId" :compare-with="compareTarget" :pending-lap-link="pendingLapLink" :session-type="session?.type ?? null" :read-session="readLinkedSession" :read-session-bests="readSessionBests" @unavailable="onTelemetryUnavailable" @lap-link-handled="pendingLapLink = null" @remove-compare="removeCompare" :reference-removed="referenceRemoved" @reference-chosen="referenceRemoved = false" head-target="#session-head-laps" share-target="#session-head-share" />
 
     <!-- ========================================== -->
     <!-- MASTER / DETAIL LAYOUT -->
