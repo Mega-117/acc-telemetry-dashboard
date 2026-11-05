@@ -14,6 +14,8 @@ import { useSectorCompare } from '~/composables/useSectorCompare'
 import LapChoiceCard from './LapChoiceCard.vue'
 import LapChoiceDialog from './LapChoiceDialog.vue'
 import TraceStripHead, { type DeltaPlace } from './TraceStripHead.vue'
+import StintBlock from './StintBlock.vue'
+import { stintFacts } from '~/services/telemetry/stintBlock'
 import { useLapChoice } from '~/composables/useLapChoice'
 import { traceClass, type LapSide, type SessionKindBests } from '~/services/telemetry/lapChoice'
 import { electronLapSource, pilotLapSource, type LapSource, type LocalLapBridge } from '~/services/telemetry/lapSources'
@@ -32,7 +34,9 @@ import { useI18n } from '~/i18n'
 
 const props = defineProps<{
   sessionToken: string | null
-  laps: { lap_number: number, lap_time_ms: number | null, is_valid: boolean | null, sector_times_ms?: (number | null)[] | null, air_temp?: number | null, road_temp?: number | null, track_grip_status?: string | null, stint_fuel?: number | null }[]
+  laps: { lap_number: number, lap_time_ms: number | null, is_valid: boolean | null, sector_times_ms?: (number | null)[] | null, air_temp?: number | null, road_temp?: number | null, track_grip_status?: string | null, stint_fuel?: number | null,
+    /** dev.10: for the stint block under the map. */
+    stint?: number | null, fuel_used?: number | null, has_pit_stop?: boolean | null, pit_out_lap?: boolean | null }[]
   /** Lap to open as "Tu", when the driver picked it in the Sessione table. */
   initialLap?: number | null
   /** PIP-623: coach view of a linked pilot: the laps come from the online archive. */
@@ -62,18 +66,11 @@ const props = defineProps<{
 
 // 01/11: one layout left (Dove migliorare's 'pilota' view was removed); the name stays for the checks below.
 type Layout = 'tracce'
-// Per-viewer preferences: remembered, never required.
-function remembered<T extends string>(key: string, values: readonly T[], fallback: T) {
-  const value = ref<T>(fallback)
-  onMounted(() => { try { const saved = localStorage.getItem(key) as T | null; if (saved && values.includes(saved)) value.value = saved } catch { /* default */ } })
-  watch(value, v => { try { localStorage.setItem(key, v) } catch { /* Storage can be disabled. */ } })
-  return value
-}
 // The page chooses the view: Telemetria = Tracce (Garage 61 + Track Titan + VRS), Dove migliorare = Pilota.
 const layout = computed<Layout>(() => 'tracce')
-// 01/11 (user decision, a trial): the delta as the first chart on the right, fixed while the charts scroll,
-// or under the map as before. The switch stays until the drivers have tried both.
-const deltaPlace = remembered<DeltaPlace>('rc:analysis:delta', ['top', 'centre'], 'top')
+// 01/11 (a trial) -> dev.10 (user 05/11): the delta always first on the right, fixed while the charts scroll;
+// under the map goes the stint block. The switch is gone (a saved 'centre' is ignored).
+const deltaPlace = ref<DeltaPlace>('top')
 const allChannels = ref(false)
 
 // PIP-623: every lap carries its origin. Only laps of the shown session ("local" on the PC,
@@ -359,6 +356,13 @@ function onZoom(next: [number, number] | null) { if (next) zoomRange.value = nex
 // Sector times exist only for laps of the shown session (not for "own" or "shared" references).
 const sessionRow = (e: Entry) => (e.origin === 'local' || e.origin === 'pilot') && e.sessionToken === props.sessionToken ? props.laps.find(l => l.lap_number === e.lapNumber) : undefined
 const sectorTimes = (e: Entry | null) => e ? sessionRow(e)?.sector_times_ms ?? null : null
+// dev.10: the stint of Tu, only for a lap of the shown session; the theoretical lap when it is built.
+const stintBlock = computed(() => {
+  const you = lapEntry.value
+  if (!you || !sessionRow(you)) return null
+  const ideal = entries.value.find(e => e.origin === 'ideal')
+  return stintFacts(props.laps, you.lapNumber, ideal ? ideal.lapTimeMs : null)
+})
 // PIP-646: any reference gets sector times, measured at the same points of the lap.
 const { sectorList, sectorGaps } = useSectorCompare({ lap, reference, lapTimes: computed(() => sectorTimes(lapEntry.value)), refTimes: computed(() => sectorTimes(refEntry.value)) })
 const selectedSector = ref<number | null>(null)
@@ -518,7 +522,8 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
         <div class="panel">
           <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null && !sessionColours" :focus="selectedSector !== null ? range : null" :color-mode="sessionColours ? 'delta' : 'laps'" :zone-colors="sessionColours ? zones.colors.value : null" zoom-controls :size="deltaPlace === 'top' ? 420 : 320" :corner-deltas="cornerDeltas" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>
-        <!-- 01/11 (from Dove migliorare): the opened corner's advice under the map, only when the delta is not there. -->
+        <!-- dev.10 (user 05/11): the stint of Tu under the map (pace, valid laps, best, theoretical, fuel). -->
+        <StintBlock v-if="stintBlock" :facts="stintBlock" />
         <div v-if="reference && deltaPlace === 'centre'" ref="deltaWrap">
           <AnalysisCharts :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaHeight" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
         </div>
@@ -530,7 +535,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
         <div class="tracce-strip">
           <TraceStripHead v-model:delta-place="deltaPlace" v-model:all-channels="allChannels" :view-label="viewLabel" :whole-view="wholeView"
             :stepping="selectedCorner !== null && !zoomRange" :focus="focusCorner ? { number: focusCorner.corner.number, lostS: focusCorner.timeLostS } : null"
-            :show-delta-switch="!!reference" @step="goCorner" @whole="wholeLap" @open-focus="selectCorner" />
+            :show-delta-switch="false" @step="goCorner" @whole="wholeLap" @open-focus="selectCorner" />
           <div v-if="sectorList.length" class="strip-row strip-row--sectors">
             <button v-for="s in visibleSectors" :key="s.index" type="button" :class="{ active: selectedSector === s.index }" :style="{ left: `${s.left}%`, width: `${s.width}%` }" :title="t('telemetry.sectorStripTitle', { n: s.index + 1 })" @click="selectSector(s.index)">S{{ s.index + 1 }}</button>
           </div>

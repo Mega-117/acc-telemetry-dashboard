@@ -253,9 +253,12 @@ const analysisToken = computed(() => analysisSessionToken(
   originalSession.value?.session_info?.date_start ?? fullSession.value?.session_info?.date_start,
 ))
 // 02/11: each lap knows its stint's departure fuel (PIP-649 rule): "Stint qualifica" / "Stint gara" in Cambia.
-const analysisLaps = computed(() => (fullSession.value?.stints ?? []).flatMap(stint => (stint.laps ?? []).map(lap => ({ lap, stintFuel: stintDepartureFuel(stint) })))
-  .map(({ lap, stintFuel }) => ({ stint_fuel: stintFuel, lap_number: lap.lap_number, lap_time_ms: lap.lap_time_ms ?? null, is_valid: lap.is_valid ?? null, sector_times_ms: lap.sectors_reliable ? lap.sector_times_ms ?? null : null,
-    air_temp: lap.air_temp ?? null, road_temp: lap.road_temp ?? null, track_grip_status: lap.track_grip_status ?? null })))
+// dev.10: + the stint, the lap's fuel used and the pit flags, for the stint block under the Telemetria map.
+const analysisLaps = computed(() => (fullSession.value?.stints ?? []).flatMap((stint, index) => (stint.laps ?? []).map(lap => ({ lap, stintFuel: stintDepartureFuel(stint), stint: index + 1 })))
+  .map(({ lap, stintFuel, stint }) => ({ stint_fuel: stintFuel, stint, lap_number: lap.lap_number, lap_time_ms: lap.lap_time_ms ?? null, is_valid: lap.is_valid ?? null, sector_times_ms: lap.sectors_reliable ? lap.sector_times_ms ?? null : null,
+    air_temp: lap.air_temp ?? null, road_temp: lap.road_temp ?? null, track_grip_status: lap.track_grip_status ?? null,
+    fuel_used: typeof lap.fuel_start === 'number' && typeof lap.fuel_remaining === 'number' ? Math.round((lap.fuel_start - lap.fuel_remaining) * 100) / 100 : null,
+    has_pit_stop: lap.has_pit_stop ?? null, pit_out_lap: lap.pit_out_lap ?? null })))
 // PIP-632: traccia d'uso nel diario quando si apre la Telemetria (solo il numero di giri).
 watch(detailTab, (tab, before) => { if (tab !== 'sessione' && before === 'sessione' && !isEvoSession.value) noteFeatureUse({ event: 'telemetry.opened', laps: analysisLaps.value.length }) })
 

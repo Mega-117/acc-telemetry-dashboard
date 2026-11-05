@@ -363,6 +363,7 @@ export default defineConfig({
         'app/services/telemetry/referencePick.ts',
         // dev.10: coach laps shipped with the program (index, choice).
         'app/services/telemetry/coachLaps.ts',
+        'app/services/telemetry/stintBlock.ts',
         // PIP-695: scelta di "Tu" e "Riferimento" (schede e finestra "Cambia").
         'app/services/telemetry/lapChoice.ts',
         'app/composables/useLapChoice.ts',

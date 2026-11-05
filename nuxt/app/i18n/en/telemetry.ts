@@ -67,6 +67,18 @@ export default {
       disabled: 'Sharing not available in this version.',
       failed: 'Sharing failed: try again.',
     },
+    stintBlock: {
+      stint: 'Stint {n}',
+      kind: { qualify: 'Qualifying', race: 'Race' },
+      pace: 'Average pace {time} ({n} clean laps)',
+      paceFew: 'Average pace: needs 5 clean laps ({n} so far)',
+      best: 'Best',
+      theoretical: 'Theoretical',
+      valid: 'Valid',
+      invalid: 'Invalid',
+      fuel: 'Fuel/lap',
+      temps: 'Air / track',
+    },
     labels: {
       mine: 'Mine',
       lapOf: 'Lap {lap} of {day}',

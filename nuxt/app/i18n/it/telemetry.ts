@@ -66,6 +66,18 @@ export default {
       disabled: 'Condivisione non disponibile in questa versione.',
       failed: 'Condivisione non riuscita: riprova.',
     },
+    stintBlock: {
+      stint: 'Stint {n}',
+      kind: { qualify: 'Qualifica', race: 'Gara' },
+      pace: 'Passo medio {time} ({n} giri puliti)',
+      paceFew: 'Passo medio: servono 5 giri puliti ({n} finora)',
+      best: 'Migliore',
+      theoretical: 'Teorico',
+      valid: 'Validi',
+      invalid: 'Non validi',
+      fuel: 'Benzina/giro',
+      temps: 'Aria / pista',
+    },
     labels: {
       mine: 'Mio',
       lapOf: 'Giro {lap} del {day}',
