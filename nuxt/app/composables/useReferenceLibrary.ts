@@ -139,6 +139,9 @@ export function useReferenceLibrary(o: {
       return
     }
     const ms = Math.round(fastestMs + potentialS * 1000)
+    // dev.10 spy: segments, joins skipped and the gain on your best (KO over 3%: badly stitched).
+    if (Number.isFinite(fastestMs) && fastestMs > 0) noteFeatureUse({ event: 'laps.ideal_built', segments: bounds!.length - 1, joinsSkipped: ideal.joinsSkipped,
+      gainTenthsPct: Math.max(0, Math.round(-potentialS * 1000 / fastestMs * 1000)) })
     add([{ trace: { ...ideal.trace, lapTimeS: ms / 1000 }, entry: { id: IDEAL_ID, lapNumber: 0, lapTimeMs: ms, valid: true, complete: true, origin: 'ideal', sessionToken: '', idealScope: historyTraces.length ? 'history' : 'session',
       label: useI18n().t('telemetry.labels.ideal', { time: formatLapTime(ms), gap: seconds(potentialS) }) } }])
   }
@@ -250,6 +253,8 @@ export function useReferenceLibrary(o: {
       const ok = loaded.filter((r): r is Loaded => r !== null)
       add(ok)
       coachIds.value = ok.map(r => r.entry.id)
+      // dev.10 spy: coach laps offered (exposure; nothing when the track has none).
+      if (ok.length) noteFeatureUse({ event: 'laps.coach_loaded', laps: ok.length, otherCar: ok.some(r => r.entry.coachOtherCar) ? 1 : 0 })
     } catch { /* the coach laps are an extra */ }
   }
   function resetLibrary() { libraryList.value = []; libraryState.value = 'idle'; suggestedId.value = null; fastestId.value = null; idealSameAsBest.value = false

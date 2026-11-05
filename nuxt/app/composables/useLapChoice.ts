@@ -8,13 +8,14 @@ import { fetchLibraryLap, fetchPilotLap, LapsArchiveError, listPilotTrackLaps, t
 import { loadSharedLapLink } from '~/services/telemetry/sharedLapLoad'
 import { loadPublicNickname } from '~/repositories/publicProfileRepository'
 import {
-  chooseDefaultReference, classifyLink, coachSessionOf, IDEAL_KEY, lapKey, lapStatus, traceClass, driverBestRows, gripOf, libraryFuel, parseSessionLink, pctFaster, runConditions, type LapSessionRow, sameTrackName,
+  chooseDefaultReference, classifyLink, coachSessionOf, IDEAL_KEY, lapKey, lapStatus, libraryClass, referencePickNote, traceClass, driverBestRows, gripOf, libraryFuel, parseSessionLink, pctFaster, runConditions, type LapSessionRow, sameTrackName,
   type DriverBestRow, type LapChoice, type LapSide, type RefReason,
   type SessionKindBests,
 } from '~/services/telemetry/lapChoice'
 import { carMismatchNote, type Entry, type useReferenceLibrary } from './useReferenceLibrary'
 import { sharedLapEntry } from './useCompareTargets'
 import { useI18n } from '~/i18n'
+import { noteFeatureUse } from '~/services/usage/featureUseNote'
 
 export type LinkResult =
   | { state: 'lap', choice: LapChoice }
@@ -138,7 +139,18 @@ export function useLapChoice(o: {
     const ideal = o.entries.value.find(e => e.origin === 'ideal') ?? null
     const kindOf = (id: string) => { const e = byId(id); return traceClass(o.traces.value[id], e ? o.sessionRow?.(e) : null).kind }
     const pick = chooseDefaultReference({ you: lapEntry.value, mine, stepUp, stepUpRelaxed: o.library.suggestedRelaxed.value, coach, ideal, kindOf })
-    if (pick && (pick.id !== o.refId.value || refReason.value?.id !== pick.id)) setRef(pick.id, pick.reason, false)
+    if (pick && (pick.id !== o.refId.value || refReason.value?.id !== pick.id)) {
+      setRef(pick.id, pick.reason, false)
+      // dev.10 spy: what was proposed, against Tu's kind and whether a quicker lap of that kind was there.
+      const you = lapEntry.value
+      const youKind = you ? kindOf(you.id) : null
+      const libraryKindOf = (id: string) => { const e = o.library.libraryList.value.find(l => `library:${l.libId}` === id); return e ? libraryClass(e).kind : null }
+      const pickKind = pick.id.startsWith('library:') ? libraryKindOf(pick.id) : pick.id.startsWith('coach:') || pick.id === IDEAL_KEY ? null : kindOf(pick.id)
+      const quicker = (ms: number) => !you || ms < you.lapTimeMs
+      const available = !!youKind && (o.library.libraryList.value.some(l => libraryClass(l).kind === youKind && quicker(l.lapTimeMs))
+        || mine.some(e => e.id !== you?.id && e.valid && quicker(e.lapTimeMs) && kindOf(e.id) === youKind))
+      noteFeatureUse(referencePickNote(pick.reason, youKind, pickKind, available))
+    }
   }
   function reset() { userChose.value = false; refReason.value = null; o.library.resetLibrary() }
   function swap() {

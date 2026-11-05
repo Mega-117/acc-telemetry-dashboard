@@ -7,6 +7,10 @@ export type FeatureUseNote =
   | { event: 'laps.share_pasted', laps: number }
   /** PIP-650: other drivers' laps loaded as references, and those discarded as not believable. */
   | { event: 'laps.library_loaded', laps: number, rejected: number }
+  /** dev.10 spies (the program's list says what each number means). */
+  | { event: 'laps.reference_pick', origin: number, relaxed: number, kindWrong: number }
+  | { event: 'laps.coach_loaded', laps: number, otherCar: number }
+  | { event: 'laps.ideal_built', segments: number, joinsSkipped: number, gainTenthsPct: number }
 
 type Bridge = { noteFeatureUse?: (note: FeatureUseNote) => void }
 

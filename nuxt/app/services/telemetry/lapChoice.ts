@@ -322,7 +322,18 @@ export function chooseDefaultReference(o: { you: LapEntryLike | null, mine: LapE
   const any = o.mine.find(e => e.complete && e.id !== you?.id)
   return any ? { id: any.id, reason: { kind: 'sessionBest' } } : null
 }
-export const coachSessionOf = (s: string | null | undefined) => s === 'practice' || s === 'qualifying' || s === 'race' ? s : null
+/**
+ * dev.10 (PIP-720 spy): the numbers the diary keeps about a proposed reference. KO when its kind differs
+ * from Tu's while a quicker lap of Tu's kind was there (`kindAvailable`). Unknown kinds never mismatch.
+ */
+export function referencePickNote(reason: RefReason, youKind: LapKind | null, pickKind: LapKind | null, kindAvailable: boolean) {
+  const ORIGIN: Partial<Record<RefReason['kind'], number>> = { stepUp: 1, coach: 2, myBest: 3, ideal: 4, nextBest: 5 }
+  const RELAXED: Record<Relaxed, number> = { band: 1, weather: 2, kind: 3 }
+  const relaxed = reason.kind === 'stepUp' && reason.relaxed ? RELAXED[reason.relaxed] : 0
+  return { event: 'laps.reference_pick' as const, origin: ORIGIN[reason.kind] ?? 6, relaxed,
+    kindWrong: youKind && pickKind && youKind !== pickKind && kindAvailable ? 1 : 0 }
+}
+export const coachSessionOf =(s: string | null | undefined) => s === 'practice' || s === 'qualifying' || s === 'race' ? s : null
 
 /** A row may become this side: whole laps only, never the lap already on the other side. */
 export function choiceBlock(choice: LapChoice | null, otherKey: string | null): 'none' | 'incomplete' | 'sameLap' | null {

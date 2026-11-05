@@ -1,7 +1,7 @@
 // dev.10 (user 05/11): the reference is chosen by the lap's class (kind, fuel band, weather), never empty,
 // and the coach laps shipped with the program join the suggestions.
 import { describe, expect, it } from 'vitest'
-import { bandDistance, chooseDefaultReference, fuelBand, libraryClass, traceClass, type LapEntryLike } from '~/services/telemetry/lapChoice'
+import { bandDistance, chooseDefaultReference, fuelBand, libraryClass, referencePickNote, traceClass, type LapEntryLike } from '~/services/telemetry/lapChoice'
 import { pickReferences, type ReferenceConditions } from '~/services/telemetry/referencePick'
 import { carClassOf, parseCoachIndex, pickCoachLaps, COACH_INDEX_SCHEMA } from '~/services/telemetry/coachLaps'
 import { normalizeLapTrace } from '~/services/telemetry/lapTraceChart'
@@ -94,6 +94,17 @@ describe('coach laps (dev.10)', () => {
     expect(pickCoachLaps(index, { track: 'monza', car: 'alpine_a110_gt4' }, null)[0]?.lap.car).toBe('mercedes_amg_gt4')
     expect(pickCoachLaps(index, { track: 'spa', car: 'ferrari_296_gt3' }, null)).toEqual([])
     expect(carClassOf('alpine_a110_gt4')).toBe('GT4')
+  })
+})
+
+describe('reference spy (dev.10, PIP-735)', () => {
+  it('KO only when the kind differs from Tu while a lap of Tu\'s kind was there; unknown kinds never', () => {
+    const step = { kind: 'stepUp' as const, driver: 'Bob', pct: 1, relaxed: 'kind' as const }
+    expect(referencePickNote(step, 'race', 'qualify', true)).toEqual({ event: 'laps.reference_pick', origin: 1, relaxed: 3, kindWrong: 1 })
+    expect(referencePickNote(step, 'race', 'qualify', false).kindWrong).toBe(0)
+    expect(referencePickNote(step, 'race', null, true).kindWrong).toBe(0)
+    expect(referencePickNote({ kind: 'coach', driver: 'c', session: null }, 'race', null, true)).toMatchObject({ origin: 2, relaxed: 0, kindWrong: 0 })
+    expect(referencePickNote({ kind: 'picked' }, null, null, false).origin).toBe(6)
   })
 })
 
