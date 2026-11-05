@@ -97,6 +97,30 @@ describe('coach laps (dev.10)', () => {
   })
 })
 
+describe('Codex review 05/11', () => {
+  const e = (id: string, ms: number, extra: Partial<LapEntryLike> = {}): LapEntryLike => ({ id, lapNumber: 1, lapTimeMs: ms, valid: true, complete: true, origin: 'local', sessionToken: 't', ...extra })
+  it('a driver of another kind never beats your own quicker lap of Tu\'s kind', () => {
+    const you = e('you', 103_000), mine = [you, e('race', 102_500)]
+    const kindOf = (id: string) => id === 'library:q' ? 'qualify' as const : 'race' as const
+    const pick = chooseDefaultReference({ you, mine, stepUp: e('library:q', 101_800), stepUpRelaxed: 'kind', kindOf })
+    expect(pick).toEqual({ id: 'race', reason: { kind: 'myBest' } })
+    expect(chooseDefaultReference({ you, mine, stepUp: e('library:q', 101_800), stepUpRelaxed: 'band', kindOf })?.id).toBe('library:q')
+  })
+  it('no coach of "the same class" for a car whose class is not known (Cup, GT2)', () => {
+    const index = parseCoachIndex({ schema: COACH_INDEX_SCHEMA, coach: 'c', laps: [
+      { id: 'a'.repeat(16), track: 'monza', car: 'ferrari_296_gt3', carClass: 'GT3', lapTimeMs: 106_000, session: 'practice' }] })
+    expect(carClassOf('porsche_992_gt3_cup')).toBeNull()
+    expect(carClassOf('bmw_m4_gt3')).toBe('GT3')
+    expect(carClassOf('porsche_935_gt2')).toBeNull()
+    expect(pickCoachLaps(index, { track: 'monza', car: 'porsche_935_gt2' }, null)).toEqual([])
+  })
+  it('a lap whose steering is unknown has no steering channel (never a straight wheel)', () => {
+    const trace = normalizeLapTrace(view({ steer_missing: true }, { source: 'replay' }))!
+    expect(trace.channels.steer_deg).toBeUndefined()
+    expect(normalizeLapTrace(view())!.channels.steer_deg).toBeDefined()
+  })
+})
+
 describe('reference spy (dev.10, PIP-735)', () => {
   it('KO only when the kind differs from Tu while a lap of Tu\'s kind was there; unknown kinds never', () => {
     const step = { kind: 'stepUp' as const, driver: 'Bob', pct: 1, relaxed: 'kind' as const }

@@ -26,8 +26,8 @@ export function parseCoachIndex(raw: unknown): CoachIndex | null {
   return { coach: data.coach.slice(0, 40), laps }
 }
 
-/** GT3 or GT4 from an ACC model id (the coach's index says it for its own cars). */
-export const carClassOf = (car: string) => /gt4/i.test(car) ? 'GT4' : 'GT3'
+/** GT3 or GT4 from an ACC model id; null for any other car (Cup, GT2, TCX: Codex 05/11), which gets same-car coach laps only. */
+export const carClassOf = (car: string): 'GT3' | 'GT4' | null => /cup|gt2|tcx/i.test(car) ? null : /gt4/i.test(car) ? 'GT4' : /gt3/i.test(car) ? 'GT3' : null
 
 /**
  * The coach laps to offer for your lap: the best match first. `otherCar` when only a lap of the same
@@ -38,7 +38,8 @@ export function pickCoachLaps(index: CoachIndex | null, where: { track: string, 
   if (!index) return []
   const here = index.laps.filter(l => norm(l.track) === norm(where.track))
   const sameCar = here.filter(l => norm(l.car) === norm(where.car))
-  const pool = sameCar.length ? sameCar : here.filter(l => (l.carClass || carClassOf(l.car)) === carClassOf(where.car))
+  const myClass = carClassOf(where.car)
+  const pool = sameCar.length || !myClass ? sameCar : here.filter(l => (l.carClass || carClassOf(l.car)) === myClass)
   const wantQualify = mine?.kind === 'qualify'
   const wet = (l: CoachLap) => (l.rain ?? 0) > 0.1
   const score = (l: CoachLap) => (mine?.kind ? (wantQualify === (l.session === 'qualifying') ? 0 : 1) : 0)

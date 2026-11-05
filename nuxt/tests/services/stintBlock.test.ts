@@ -18,6 +18,10 @@ describe('stint block (dev.10)', () => {
     expect(f.endFuelL).toBeCloseTo(41 - 17.83, 2)
     expect(f.fuelPerLapL).toBeCloseTo((2.99 + 3.0 + 2.99 + 2.97) / 4, 3)   // clean laps that burned something
   })
+  it('Codex 05/11: the end fuel is the last lap\'s own reading (the uncounted out lap burned too)', () => {
+    const rows: StintLapRow[] = [{ lap_number: 1, lap_time_ms: 101000, is_valid: true, stint_fuel: 50, fuel_used: 3, fuel_remaining: 44 }]
+    expect(stintFacts(rows, 1)!.endFuelL).toBe(44)
+  })
   it('fewer than 5 clean laps: no average (as the Sessione page); a theoretical lap slower than the best is not shown', () => {
     const f = stintFacts(monza.slice(0, 4), 2, 109_000)!
     expect(f.avgMs).toBeNull()

@@ -253,8 +253,10 @@ export function useReferenceLibrary(o: {
       const ok = loaded.filter((r): r is Loaded => r !== null)
       add(ok)
       coachIds.value = ok.map(r => r.entry.id)
-      // dev.10 spy: coach laps offered (exposure; nothing when the track has none).
-      if (ok.length) noteFeatureUse({ event: 'laps.coach_loaded', laps: ok.length, otherCar: ok.some(r => r.entry.coachOtherCar) ? 1 : 0 })
+      // dev.10 spy: coach laps offered and failed (Codex 05/11: an index or a lap that does not load is a KO,
+      // never silence); nothing when the track simply has none.
+      const failed = (index ? 0 : 1) + picks.length - ok.length
+      if (ok.length || failed) noteFeatureUse({ event: 'laps.coach_loaded', laps: ok.length, otherCar: ok.some(r => r.entry.coachOtherCar) ? 1 : 0, failed })
     } catch { /* the coach laps are an extra */ }
   }
   function resetLibrary() { libraryList.value = []; libraryState.value = 'idle'; suggestedId.value = null; fastestId.value = null; idealSameAsBest.value = false

@@ -9,7 +9,7 @@ export type FeatureUseNote =
   | { event: 'laps.library_loaded', laps: number, rejected: number }
   /** dev.10 spies (the program's list says what each number means). */
   | { event: 'laps.reference_pick', origin: number, relaxed: number, kindWrong: number }
-  | { event: 'laps.coach_loaded', laps: number, otherCar: number }
+  | { event: 'laps.coach_loaded', laps: number, otherCar: number, failed: number }
   | { event: 'laps.ideal_built', segments: number, joinsSkipped: number, gainTenthsPct: number }
 
 type Bridge = { noteFeatureUse?: (note: FeatureUseNote) => void }

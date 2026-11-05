@@ -53,4 +53,19 @@ describe('theoretical lap by corner segments (dev.10)', () => {
     expect(strict.joinsSkipped).toBeGreaterThan(0)
     expect(loose.joinsSkipped).toBe(0)
   })
+  it('Codex 05/11: the quickest whole path, not the quickest piece first (A 29/40/40 joins with nobody, B 30/30/30, C 40/29/29)', () => {
+    // Three segments of equal length at constant speed; A runs 60 km/h faster, so it joins with nobody.
+    const flat = (secs: number[], kmh: number): LapTraceView => {
+      const n = 301, time: number[] = []
+      for (let i = 0; i < n; i++) {
+        const f = i / (n - 1), s = Math.min(2, Math.floor(f * 3))
+        const before = secs.slice(0, s).reduce((a, b) => a + b, 0)
+        time.push(before + (f * 3 - s) * secs[s]!)
+      }
+      return { ...lap(), lapTimeS: secs.reduce((a, b) => a + b, 0), channels: { time_s: time, speed_kmh: time.map(() => kmh), throttle_pct: time.map(() => 100), brake_pct: time.map(() => 0) } }
+    }
+    const ideal = stitchIdealLap([flat([29, 40, 40], 260), flat([30, 30, 30], 200), flat([40, 29, 29], 200)], [0, 1 / 3, 2 / 3, 1], 12)!
+    expect(ideal.trace.lapTimeS).toBeCloseTo(88, 5)
+    expect(ideal.sources).toEqual([1, 2, 2])
+  })
 })

@@ -258,7 +258,7 @@ const analysisLaps = computed(() => (fullSession.value?.stints ?? []).flatMap((s
   .map(({ lap, stintFuel, stint }) => ({ stint_fuel: stintFuel, stint, lap_number: lap.lap_number, lap_time_ms: lap.lap_time_ms ?? null, is_valid: lap.is_valid ?? null, sector_times_ms: lap.sectors_reliable ? lap.sector_times_ms ?? null : null,
     air_temp: lap.air_temp ?? null, road_temp: lap.road_temp ?? null, track_grip_status: lap.track_grip_status ?? null,
     fuel_used: typeof lap.fuel_start === 'number' && typeof lap.fuel_remaining === 'number' ? Math.round((lap.fuel_start - lap.fuel_remaining) * 100) / 100 : null,
-    has_pit_stop: lap.has_pit_stop ?? null, pit_out_lap: lap.pit_out_lap ?? null })))
+    has_pit_stop: lap.has_pit_stop ?? null, pit_out_lap: lap.pit_out_lap ?? null, fuel_remaining: typeof lap.fuel_remaining === 'number' ? lap.fuel_remaining : null })))
 // PIP-632: traccia d'uso nel diario quando si apre la Telemetria (solo il numero di giri).
 watch(detailTab, (tab, before) => { if (tab !== 'sessione' && before === 'sessione' && !isEvoSession.value) noteFeatureUse({ event: 'telemetry.opened', laps: analysisLaps.value.length }) })
 

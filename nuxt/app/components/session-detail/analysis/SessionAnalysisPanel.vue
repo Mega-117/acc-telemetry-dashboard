@@ -36,7 +36,7 @@ const props = defineProps<{
   sessionToken: string | null
   laps: { lap_number: number, lap_time_ms: number | null, is_valid: boolean | null, sector_times_ms?: (number | null)[] | null, air_temp?: number | null, road_temp?: number | null, track_grip_status?: string | null, stint_fuel?: number | null,
     /** dev.10: for the stint block under the map. */
-    stint?: number | null, fuel_used?: number | null, has_pit_stop?: boolean | null, pit_out_lap?: boolean | null }[]
+    stint?: number | null, fuel_used?: number | null, fuel_remaining?: number | null, has_pit_stop?: boolean | null, pit_out_lap?: boolean | null }[]
   /** Lap to open as "Tu", when the driver picked it in the Sessione table. */
   initialLap?: number | null
   /** PIP-623: coach view of a linked pilot: the laps come from the online archive. */
@@ -186,12 +186,14 @@ async function load() {
     else if (!pilot && first) void choice.loadArchiveBest(isCurrent)
     // PIP-650: other drivers' laps here, a step above this session's best in the closest conditions.
     const bestTrace = traces.value[(best ?? last).id]
+    const youEntry = entries.value.find(e => e.id === lapId.value) ?? best ?? last
+    const youClass = () => traceClass(traces.value[youEntry.id], sessionRow(youEntry))
     if (first) void library.loadOtherDrivers(isCurrent, archiveDeps, { game: first.gameId, track: first.track, car: first.car, variant: first.variant },
       { myUid: pilot ?? currentUser.value?.uid ?? null, myBestMs: best ? best.lapTimeMs : null,
         mine: { grip: bestTrace?.conditions?.grip ?? null, airC: bestTrace?.conditions?.airC ?? null, roadC: bestTrace?.conditions?.roadC ?? null, fuelL: bestTrace?.fuelL ?? null },
-        // dev.10: the class of your lap (kind, fuel band, dry/wet) picks the same class first.
-        cls: traceClass(bestTrace, sessionRow(best ?? last)) })
-    if (first) void library.loadCoachLaps(isCurrent, { track: first.track, car: first.car }, traceClass(bestTrace, sessionRow(best ?? last)))
+        // dev.10: the class of Tu (kind, fuel band, dry/wet) picks the same class first (Codex 05/11: Tu, not the session's best).
+        cls: youClass() })
+    if (first) void library.loadCoachLaps(isCurrent, { track: first.track, car: first.car }, youClass())
   } catch (e) {
     if (isCurrent()) error.value = e instanceof LapsArchiveError ? e.message : t('telemetry.errors.read')
   } finally {

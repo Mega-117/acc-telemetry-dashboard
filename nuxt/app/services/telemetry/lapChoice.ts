@@ -309,13 +309,15 @@ export function chooseDefaultReference(o: { you: LapEntryLike | null, mine: LapE
   const you = o.you
   const kindOf = (e: LapEntryLike) => o.kindOf?.(e.id) ?? null
   const quicker = (e: LapEntryLike | null | undefined): e is LapEntryLike => !!e && e.id !== you?.id && (!you || e.lapTimeMs < you.lapTimeMs)
-  if (o.stepUp && o.stepUp.id !== you?.id) return { id: o.stepUp.id, reason: { kind: 'stepUp', driver: o.stepUpDriver ?? o.stepUp.driver ?? null,
-    pct: you ? pctFaster(o.stepUp.lapTimeMs, you.lapTimeMs) : 0, relaxed: o.stepUpRelaxed ?? null } }
-  if (quicker(o.coach)) return { id: o.coach.id, reason: { kind: 'coach', driver: o.coach.driver ?? null, session: coachSessionOf(o.coach.coachSession), otherCar: o.coach.coachOtherCar ? 'class' : null } }
   // 01/11: your laps of the same kind as "Tu" first (race with race, qualifying with qualifying).
   const valid = sameKindFirst(o.mine.filter(e => e.valid && e.complete && !e.note && e.id !== you?.id), kindOf, you ? kindOf(you) : null)
     .sort((a, b) => a.lapTimeMs - b.lapTimeMs)
   const best = valid[0]
+  const bestOfMyKind = best && you && kindOf(best) !== null && kindOf(best) === kindOf(you) && best.lapTimeMs < you.lapTimeMs ? best : null
+  // Codex 05/11: a driver of another kind (the ladder's last step) never beats your own quicker lap of Tu's kind.
+  if (o.stepUp && o.stepUp.id !== you?.id && !(o.stepUpRelaxed === 'kind' && bestOfMyKind)) return { id: o.stepUp.id, reason: { kind: 'stepUp', driver: o.stepUpDriver ?? o.stepUp.driver ?? null,
+    pct: you ? pctFaster(o.stepUp.lapTimeMs, you.lapTimeMs) : 0, relaxed: o.stepUpRelaxed ?? null } }
+  if (quicker(o.coach)) return { id: o.coach.id, reason: { kind: 'coach', driver: o.coach.driver ?? null, session: coachSessionOf(o.coach.coachSession), otherCar: o.coach.coachOtherCar ? 'class' : null } }
   if (best && (!you || best.lapTimeMs < you.lapTimeMs)) return { id: best.id, reason: { kind: 'myBest' } }
   if (quicker(o.ideal)) return { id: o.ideal.id, reason: { kind: 'ideal' } }
   if (best) return { id: best.id, reason: { kind: 'nextBest' } }

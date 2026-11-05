@@ -54,21 +54,34 @@ export interface IdealLap {
 export function stitchIdealLap(laps: LapTraceView[], bounds: number[], maxJoinKmh = Infinity): IdealLap | null {
   const timed = laps.map(t => measureSectorTimes(t, bounds))
   const sectors = bounds.length - 1
-  const sources: number[] = []
-  let joinsSkipped = 0
   const speed = (i: number, f: number) => channelAt(laps[i]!, 'speed_kmh', f)
+  const joins = (from: number, to: number, f: number) => from === to || Math.abs((speed(to, f) ?? 0) - (speed(from, f) ?? 0)) <= maxJoinKmh
+  // dev.10 (Codex 05/11): the quickest whole path, not the quickest piece at each step (a greedy choice could
+  // lose the theoretical lap): best[s][i] = quickest time to the end of segment s with segment s from lap i,
+  // the joins allowed only where the speeds match (staying on the same lap always joins).
+  const best: number[][] = [], back: number[][] = []
   for (let s = 0; s < sectors; s++) {
-    const order = timed.map((times, i) => ({ i, t: times?.[s] })).filter((c): c is { i: number, t: number } => typeof c.t === 'number')
-      .sort((a, b) => a.t - b.t)
-    if (!order.length) return null
-    // dev.10 (Codex 05/11): the quickest segment whose entry speed matches the exit of the one before.
-    const prev = sources[s - 1]
-    const joins = (i: number) => prev === undefined || i === prev
-      || Math.abs((speed(i, bounds[s]!) ?? 0) - (speed(prev, bounds[s]!) ?? 0)) <= maxJoinKmh
-    const pick = order.find(c => joins(c.i)) ?? order.find(c => c.i === prev) ?? order[0]!
-    if (pick.i !== order[0]!.i) joinsSkipped++
-    sources.push(pick.i)
+    best.push([]); back.push([])
+    for (let i = 0; i < laps.length; i++) {
+      const t = timed[i]?.[s]
+      let cost = Infinity, from = -1
+      if (typeof t === 'number') {
+        if (s === 0) cost = t
+        else for (let j = 0; j < laps.length; j++) {
+          const c = best[s - 1]![j]! + t
+          if (c < cost && joins(j, i, bounds[s]!)) { cost = c; from = j }
+        }
+      }
+      best[s]!.push(cost); back[s]!.push(from)
+    }
   }
+  let end = -1
+  best[sectors - 1]!.forEach((c, i) => { if (Number.isFinite(c) && (end < 0 || c < best[sectors - 1]![end]!)) end = i })
+  if (end < 0) return null
+  const sources: number[] = new Array(sectors)
+  for (let s = sectors - 1, i = end; s >= 0; i = back[s]![i]!, s--) sources[s] = i
+  // Segments where the quickest piece was left out for its join.
+  const joinsSkipped = sources.filter((lap, s) => timed.some(times => typeof times?.[s] === 'number' && (times[s] as number) < (timed[lap]![s] as number))).length
   const sectorTimesS = sources.map((lap, s) => timed[lap]![s] as number)
   const base = laps[0]!
   const n = base.channels.time_s?.length ?? 0

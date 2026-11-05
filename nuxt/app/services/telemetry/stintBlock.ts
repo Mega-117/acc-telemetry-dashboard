@@ -17,6 +17,8 @@ export interface StintLapRow {
   stint?: number | null
   stint_fuel?: number | null
   fuel_used?: number | null
+  /** The fuel left at the end of the lap (Codex 05/11: the stint's end, the out lap included). */
+  fuel_remaining?: number | null
   has_pit_stop?: boolean | null
   pit_out_lap?: boolean | null
   air_temp?: number | null
@@ -59,7 +61,7 @@ export function stintFacts(rows: StintLapRow[], lapNumber: number | null, theore
     stint,
     kind: band === null ? null : band === 'qualify' ? 'qualify' : 'race',
     startFuelL,
-    endFuelL: startFuelL !== null && burned.length ? Math.max(0, startFuelL - burned.reduce((s, v) => s + v, 0)) : null,
+    endFuelL: num(laps[laps.length - 1]?.fuel_remaining) ?? (startFuelL !== null && burned.length ? Math.max(0, startFuelL - burned.reduce((s, v) => s + v, 0)) : null),
     laps: laps.length,
     valid: laps.filter(r => r.is_valid === true && !pit(r)).length,
     invalid: laps.filter(r => r.is_valid === false && !pit(r)).length,

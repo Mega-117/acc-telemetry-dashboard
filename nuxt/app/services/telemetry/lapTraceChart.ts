@@ -89,6 +89,9 @@ export function normalizeLapTrace(raw: unknown): LapTraceView | null {
   for (const required of data.schema === LAP_TRACE_SCHEMA ? CORE_CHANNELS : ['time_s']) {
     if (!out[required]) return null
   }
+  // dev.10 (Codex 05/11): a lap whose steering is unknown (a car without a known steering lock) carries
+  // zeros only to fill the contract: not drawn, never a straight wheel through the corners.
+  if (meta.extra?.steer_missing === true) delete out.steer_deg
   return {
     gameId,
     variant: meta.track_variant ?? null,
