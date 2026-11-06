@@ -1,1 +1,0 @@
-import{bI as r,cV as o,dX as s,aA as u,cL as i}from"./CF6I-Svt.js";const n=Symbol("pilotContext");function c(e){const t=o(e);return i(n,t),t}function a(){return r(n,o(null))}function p(){const{profileUser:e}=s(),t=a();return u(()=>t.value||e.value?.uid||null)}export{p as a,c as p,a as u};
