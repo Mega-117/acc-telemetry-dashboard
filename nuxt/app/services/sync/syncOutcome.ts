@@ -18,6 +18,8 @@ export const STUCK_AFTER_CYCLES = 2
 
 export function syncOutcomeCounts(results: SyncOutcomeResult[], streaks: Map<string, number>, offline: boolean): SyncOutcomeCounts {
   const counts: SyncOutcomeCounts = { uploaded: 0, unchanged: 0, skipped: 0, errors: 0, stuck: 0, offline: offline ? 1 : 0 }
+  // An offline cycle breaks every run of online failures, also when it has no per-file result (Codex 06/11).
+  if (offline) streaks.clear()
   for (const result of results) {
     const name = result.fileName || ''
     if (result.status === 'error') {

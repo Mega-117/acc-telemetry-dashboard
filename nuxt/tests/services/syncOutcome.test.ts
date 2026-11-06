@@ -30,6 +30,13 @@ describe('sync outcome spy (PIP-740)', () => {
     expect(syncOutcomeCounts([{ status: 'error', fileName: 'e' }], other, false).stuck).toBe(0)
   })
 
+  it('Codex 06/11: a whole cycle failed offline (no per-file result) also breaks the run', () => {
+    const streaks = new Map<string, number>()
+    syncOutcomeCounts([{ status: 'error', fileName: 'a' }], streaks, false)
+    syncOutcomeCounts([], streaks, true)
+    expect(syncOutcomeCounts([{ status: 'error', fileName: 'a' }], streaks, false).stuck).toBe(0)
+  })
+
   it('failures with the PC offline never make a session stuck', () => {
     const streaks = new Map<string, number>()
     for (let i = 0; i < 3; i++) expect(syncOutcomeCounts([{ status: 'error', fileName: 'e' }], streaks, true)).toMatchObject({ stuck: 0, offline: 1, errors: 1 })

@@ -161,6 +161,21 @@ function reconcileSelection(saved?: Selection) {
   if (!stints.value.some(s => s.stint_number === stintNumber.value)) stintNumber.value = saved?.stint && stints.value.some(s => s.stint_number === saved.stint) ? saved.stint : stints.value.at(-1)?.stint_number ?? 0
   if (!laps.value.some(l => l.lap_number === lapNumber.value)) lapNumber.value = saved?.lap && laps.value.some(l => l.lap_number === saved.lap) ? saved.lap : laps.value.at(-1)?.lap_number ?? 0
 }
+// PIP-743: the laps drawn against the logger's counters and the list's summary. Only a settled
+// session (the list and the detail are the same save, none in the last 10 minutes): date_end moves at
+// every save, so a session being driven is left out. Run on open and on every refresh, once per save
+// (Codex 06/11: a session that settles while the page is open is checked too).
+const checkedSaves = new Set<string>()
+function runDataCheck(id: string, result: FullSession | null) {
+  const listed = sessions.value.find(s => s.sessionId === id)
+  const end = result?.session_info?.date_end
+  if (!sessionSettled(listed?.meta?.date_end, end, Date.now())) return
+  const key = `${id}|${end}`
+  if (checkedSaves.has(key)) return
+  checkedSaves.add(key)
+  const check = sessionDataCheck(result, listed?.summary)
+  if (check) noteFeatureUse({ event: 'data.session_check', ...check })
+}
 async function selectSession(id: string, restore = false) {
   const request = ++revision, uid = profileUser.value?.uid
   sessionId.value = id; full.value = null; stintNumber.value = 0; lapNumber.value = 0
@@ -170,13 +185,7 @@ async function selectSession(id: string, restore = false) {
     if (request !== revision || uid !== profileUser.value?.uid) return
     full.value = result
     if (!result) error.value = t('data.errors.detail')
-    // PIP-743: the laps drawn against the logger's counters and the list's summary. Only a settled
-    // session (the list and the detail are the same save, none in the last 10 minutes): date_end moves at
-    // every save, so a session being driven is left out (Codex 06/11).
-    const listed = sessions.value.find(s => s.sessionId === id)
-    const check = sessionSettled(listed?.meta?.date_end, result?.session_info?.date_end, Date.now())
-      ? sessionDataCheck(result, listed?.summary) : null
-    if (check) noteFeatureUse({ event: 'data.session_check', ...check })
+    runDataCheck(id, result)
     reconcileSelection(restore ? remembered() : undefined); saveSelection()
     updatedAt.value = new Date().toLocaleTimeString(intlLocale.value)
   } catch { if (request === revision) error.value = t('data.errors.session') }
@@ -220,6 +229,7 @@ async function refreshLocal() {
       const result = await gateway.getSessionDetail(sessionId.value, uid, { warmupSessions: false })
       if (request !== revision || uid !== profileUser.value?.uid) return
       full.value = result
+      runDataCheck(sessionId.value, result)
       // Only if the pilot did not pick another lap while the file was loading.
       if (onLast && stintNumber.value === watched.stint && lapNumber.value === watched.lap) { stintNumber.value = stints.value.at(-1)?.stint_number ?? 0; lapNumber.value = stints.value.at(-1)?.laps.at(-1)?.lap_number ?? 0 }
       reconcileSelection(); saveSelection()
