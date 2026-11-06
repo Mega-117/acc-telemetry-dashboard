@@ -39,9 +39,18 @@ const emit = defineEmits<{
 
 const displayValue = computed(() => props.value == null ? '—' : props.value.toFixed(props.decimals).replace('.', ','))
 
+// 06/11 (user: Pitwall needs min/max on the inputs): a typed value was sent as typed (999 L, a negative pressure);
+// only + and − respected the limits. It is now kept inside min..max and on the field's step; text that is not a
+// number puts the previous value back.
 function onInput(event: Event) {
-  const parsed = Number((event.target as HTMLInputElement).value.replace(',', '.'))
-  if (Number.isFinite(parsed)) emit('update:value', parsed)
+  const input = event.target as HTMLInputElement
+  const parsed = Number(input.value.trim().replace(',', '.'))
+  if (input.value.trim() === '' || !Number.isFinite(parsed)) { input.value = displayValue.value; return }
+  const stepped = Math.round((parsed - props.min) / props.step) * props.step + props.min
+  const clamped = Math.min(props.max, Math.max(props.min, stepped))
+  const value = Number(clamped.toFixed(Math.max(props.decimals, 0)))
+  emit('update:value', value)
+  input.value = value.toFixed(props.decimals).replace('.', ',')
 }
 </script>
 
