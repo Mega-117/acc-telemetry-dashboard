@@ -7,6 +7,7 @@
  */
 import type { LapTraceView } from './lapTraceChart'
 import { useI18n } from '~/i18n'
+import { hasMapPositions } from './mapPositions'
 
 /** Levels have no values in between: the logger stores them as steps (PIP-617). */
 const DISCRETE = new Set(['gear', 'engine_map', 'traction_control', 'traction_control_2', 'abs'])
@@ -413,26 +414,6 @@ function turn(x: number, z: number, degrees: number): MapPoint {
   const r = (degrees * Math.PI) / 180
   // Screen coordinates (y down): a positive angle turns clockwise.
   return { x: x * Math.cos(r) - z * Math.sin(r), y: x * Math.sin(r) + z * Math.cos(r) }
-}
-
-// The smallest track drawn: below this the lap stayed in one place (06/11: a frame whose
-// coordinates were all equal squeezed the whole map into its centre, labels piled up there).
-const MIN_MAP_EXTENT_M = 50
-
-/** True when the lap has coordinates that draw a track: spread over at least 50 m. */
-export function hasMapPositions(trace: LapTraceView | null | undefined): boolean {
-  const xs = trace?.channels.pos_x, zs = trace?.channels.pos_z
-  if (!xs?.length || !zs?.length) return false
-  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity
-  for (let i = 0; i < Math.min(xs.length, zs.length); i++) {
-    const x = xs[i], z = zs[i]
-    if (typeof x !== 'number' || typeof z !== 'number' || !Number.isFinite(x) || !Number.isFinite(z)) continue
-    if (x < minX) minX = x
-    if (x > maxX) maxX = x
-    if (z < minZ) minZ = z
-    if (z > maxZ) maxZ = z
-  }
-  return Math.max(maxX - minX, maxZ - minZ) >= MIN_MAP_EXTENT_M
 }
 
 /**

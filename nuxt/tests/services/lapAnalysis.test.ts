@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { analysisSessionToken, bodySlipDeg, channelAt, compareCorners, cornerAt, focusAdvice, focusInStretch, glideFrame, stepCorner, stretchDelta, finishLine, timeSyncedFraction, cornerAdvice, deltaTrend, detectCorners, formatDelta, fractions, lapDelta, mapPoints, hasMapPositions, worldToMap } from '~/services/telemetry/lapAnalysis'
+import { analysisSessionToken, bodySlipDeg, channelAt, compareCorners, cornerAt, focusAdvice, focusInStretch, glideFrame, stepCorner, stretchDelta, finishLine, timeSyncedFraction, cornerAdvice, deltaTrend, detectCorners, formatDelta, fractions, lapDelta, mapPoints, worldToMap } from '~/services/telemetry/lapAnalysis'
+import { hasMapPositions } from '~/services/telemetry/mapPositions'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
 const STEP = 2

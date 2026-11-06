@@ -4,7 +4,8 @@
 // Corner zoom: the two racing lines, yours blue and the reference amber.
 // Two dots follow the cursor: you (blue, filled) and the reference (amber, hollow).
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { deltaTrend, finishLine, glideFrame, fractions, hasMapPositions, lapDelta, mapPoints, worldToMap, type Corner, type MapPoint } from '~/services/telemetry/lapAnalysis'
+import { deltaTrend, finishLine, glideFrame, fractions, lapDelta, mapPoints, worldToMap, type Corner, type MapPoint } from '~/services/telemetry/lapAnalysis'
+import { hasMapPositions } from '~/services/telemetry/mapPositions'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { placeMapLabels } from '~/services/telemetry/mapLabelPlacement'
 import { useI18n } from '~/i18n'
