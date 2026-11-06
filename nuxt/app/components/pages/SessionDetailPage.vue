@@ -2529,7 +2529,7 @@ const gripZones = computed(() => {
 <template>
   <CommonSessionDetail v-if="commonSession" :session="commonSession" :owner-id="externalUserId">
   </CommonSessionDetail>
-  <div v-else class="session-detail-wrapper">
+  <div v-else class="session-detail-wrapper" :class="{ 'session-detail-wrapper--telemetry': detailTab === 'avanzata' }">
   <!-- PIP-653: the share outcome goes to the site's notification column (useAppNotifications); this one keeps
        its "Cambia" action, so it joins the same column with the same racing-toast look. -->
   <Teleport defer to="#app-toast-slot">
@@ -3323,6 +3323,10 @@ const gripZones = computed(() => {
 @use '@/assets/scss/racing-settings' as racing;
 
 .session-detail-page { display: flex; flex-direction: column; height: 100%; }
+// 06/11 (user): in Telemetria the page itself does not scroll on a normal window (its columns do), so the 15 px
+// kept for a page scrollbar was an empty strip on the right (39 px of margin against 24 on the left). The space
+// is no longer kept there; on a narrow window, where the columns stack, the page still scrolls.
+.session-detail-wrapper.session-detail-wrapper--telemetry { scrollbar-gutter: auto; }
 // The left edge stays with the menu; the right edge goes to the window edge (minus a small margin) when the window
 // is wider than the centred column.
 // 01/11: Telemetria uses the whole window in every view (pilot, coach, admin): the main column opens
