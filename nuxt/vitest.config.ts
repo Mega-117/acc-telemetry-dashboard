@@ -47,6 +47,8 @@ export default defineConfig({
       include: [
         // PIP-740: spy for sessions that do not reach Firebase.
         'app/services/sync/syncOutcome.ts',
+        // PIP-742: slow pages spy.
+        'app/services/monitoring/pageTiming.ts',
         'app/services/session-detail/sessionDataPresentation.ts',
         'app/utils/usageMetrics.ts',
         // PIP-591: esito del salvataggio attrezzatura.

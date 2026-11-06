@@ -16,6 +16,8 @@ export type FeatureUseNote =
   | { event: 'laps.segments', segments: number, badBounds: number }
   | { event: 'overview.remembered', changed: number, older: number }
   /** dev.14: one sync cycle towards Firebase (stuck: a session failing two cycles in a row while online). */
+  /** PIP-742: a page of the main window appearing after a click (page: closed list of codes). */
+  | { event: 'page.shown' | 'page.slow', page: number, ms: number }
   | { event: 'sync.sessions', uploaded: number, unchanged: number, skipped: number, errors: number, stuck: number, offline: number, cycleFailed?: number }
 
 type Bridge = { noteFeatureUse?: (note: FeatureUseNote) => void }
