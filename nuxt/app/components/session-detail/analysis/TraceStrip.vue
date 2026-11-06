@@ -52,7 +52,7 @@ const tone = (s: number | null | undefined) => s === null || s === undefined ? '
 
 <style scoped lang="scss">
 // The rows start over the charts' 42 px axis; the ◀ sits in that gutter, the ▶ over the right end.
-.trace-strip { position: relative; display: grid; gap: 2px; padding: 4px 9px 4px 43px; }
+.trace-strip { position: relative; display: grid; gap: 2px; padding: 4px 0 4px 43px; }
 // A dark track under each row, so the gaps between boxes read as the lap, not as holes.
 .strip-row { position: relative; height: 24px; background: #ffffff06;
   // 06/11 (user: "you hardly see they are clickable, nor where one ends"): a light line between the boxes (not a dark

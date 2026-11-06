@@ -277,7 +277,7 @@ function onDouble() {
 .charts { display: grid; gap: 6px; min-width: 0; }
 .bands { display: block; width: calc(100% - 51px); margin-left: 43px; height: 18px;
   .band { cursor: pointer; rect { fill: #ffffff0d; stroke: #ffffff1f; stroke-width: 1; vector-effect: non-scaling-stroke; } text { fill: #b3b3b8; font: 700 11px 'Inter', sans-serif; text-anchor: middle; } &:hover rect { fill: #ff002426; } } }
-.chart { display: grid; grid-template-columns: 42px minmax(0, 1fr); grid-template-rows: auto auto 16px; padding: 6px 8px 2px 0;
+.chart { display: grid; grid-template-columns: 42px minmax(0, 1fr); grid-template-rows: auto auto 16px; padding: 6px 0 2px 0;
   // 06/11 (user: "they look glued together", as Track Titan): no box per chart, only a thin line under each one.
   border-bottom: 1px solid #ffffff17; &:last-child { border-bottom: 0; } }
 .chart-yaxis { position: relative;

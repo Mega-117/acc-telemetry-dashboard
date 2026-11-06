@@ -3327,6 +3327,10 @@ const gripZones = computed(() => {
 // kept for a page scrollbar was an empty strip on the right (39 px of margin against 24 on the left). The space
 // is no longer kept there; on a narrow window, where the columns stack, the page still scrolls.
 .session-detail-wrapper.session-detail-wrapper--telemetry { scrollbar-gutter: auto; }
+// 06/11 (user): while the skeleton loads, the page was a few pixels taller than the window: a scrollbar showed for
+// a moment and everything jumped 15 px right when the laps arrived. With the columns side by side (above 1100 px,
+// SessionAnalysisPanel) the page fits the window and never scrolls; below that the columns stack and it does.
+@media (min-width: 1101px) { .session-detail-wrapper.session-detail-wrapper--telemetry { overflow-y: hidden; } }
 // The left edge stays with the menu; the right edge goes to the window edge (minus a small margin) when the window
 // is wider than the centred column.
 // 01/11: Telemetria uses the whole window in every view (pilot, coach, admin): the main column opens
