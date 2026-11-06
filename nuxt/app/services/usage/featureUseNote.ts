@@ -15,6 +15,8 @@ export type FeatureUseNote =
   /** PIP-737 (dev.12): segments moved before the braking, and the Panoramica entered with the last visit's data. */
   | { event: 'laps.segments', segments: number, badBounds: number }
   | { event: 'overview.remembered', changed: number, older: number }
+  /** dev.14: one sync cycle towards Firebase (stuck: a session failing two cycles in a row while online). */
+  | { event: 'sync.sessions', uploaded: number, unchanged: number, skipped: number, errors: number, stuck: number, offline: number, cycleFailed?: number }
 
 type Bridge = { noteFeatureUse?: (note: FeatureUseNote) => void }
 

@@ -29,6 +29,8 @@ import {
 } from '~/services/sync/autoSyncController'
 import { createSyncScanService, type PendingSyncFile, type TelemetryFileDescriptor, type SyncScanResult } from '~/services/sync/syncScanService'
 import { createSyncQueueService } from '~/services/sync/syncQueueService'
+import { syncOutcomeCounts } from '~/services/sync/syncOutcome'
+import { noteFeatureUse } from '~/services/usage/featureUseNote'
 import {
     createSyncMutationJournal,
     recoverPartialSyncMutations,
@@ -86,6 +88,9 @@ async function setDoc(ref: any, data: any, options?: any) {
 const CHUNK_SIZE = 400000
 
 let localRegistryCache: Record<string, RegistryCacheEntry> | null = null
+// Point 2 of the dev.14 plan: how many cycles in a row each session failed to reach Firebase.
+const sessionFailureStreaks = new Map<string, number>()
+const isOffline = () => typeof navigator !== 'undefined' && navigator.onLine === false
 let deferredChangedFiles: TelemetryFileDescriptor[] = []
 let lastFullAutoScanCompletedAt = 0
 const runtimeBootstrapCoordinator = createRuntimeBootstrapCoordinator()
@@ -670,6 +675,9 @@ export function useElectronSync() {
             const skipped = allResults.filter((r) => r.status === 'skipped').length
             const errors = allResults.filter((r) => r.status === 'error').length
             console.log(`[SYNC] Trigger ${trigger} complete: ${created} created, ${updated} updated, ${unchanged} unchanged, ${skipped} skipped, ${errors} errors`)
+            const outcome = syncOutcomeCounts(allResults, sessionFailureStreaks, isOffline())
+            // Cycles with nothing sent and nothing failed stay out: the diary keeps 20 lines an hour per event.
+            if (outcome.uploaded + outcome.errors > 0) noteFeatureUse({ event: 'sync.sessions', ...outcome })
 
             return allResults
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
@@ -712,6 +720,7 @@ export function useElectronSync() {
                 console.warn(`[SYNC] Partial mutation recovery failed for ${trigger}:`, recoveryError)
             }
             const result = [{ status: 'error' as const, fileName: trigger, error: error?.message || 'sync_trigger_failed' }]
+            noteFeatureUse({ event: 'sync.sessions', ...syncOutcomeCounts([], sessionFailureStreaks, isOffline()), cycleFailed: 1 })
             syncResults.value = result
             return result
         } finally {

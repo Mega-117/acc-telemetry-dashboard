@@ -45,6 +45,8 @@ export default defineConfig({
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
+        // PIP-740: spy for sessions that do not reach Firebase.
+        'app/services/sync/syncOutcome.ts',
         'app/services/session-detail/sessionDataPresentation.ts',
         'app/utils/usageMetrics.ts',
         // PIP-591: esito del salvataggio attrezzatura.
