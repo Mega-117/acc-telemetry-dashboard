@@ -126,6 +126,7 @@ export default defineConfig({
         'app/utils/boxEngineer.ts',
         'app/i18n/index.ts',
         'app/services/telemetry/lapAnalysis.ts',
+        'app/services/telemetry/mapPositions.ts',
         'app/services/telemetry/segmentApproach.ts',
         'app/components/overlay/ControlKNumberField.vue',
         'app/services/auth/dashboardEntryRecovery.ts',
