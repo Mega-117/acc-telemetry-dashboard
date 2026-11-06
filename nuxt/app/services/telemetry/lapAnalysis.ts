@@ -415,12 +415,32 @@ function turn(x: number, z: number, degrees: number): MapPoint {
   return { x: x * Math.cos(r) - z * Math.sin(r), y: x * Math.sin(r) + z * Math.cos(r) }
 }
 
+// The smallest track drawn: below this the lap stayed in one place (06/11: a frame whose
+// coordinates were all equal squeezed the whole map into its centre, labels piled up there).
+const MIN_MAP_EXTENT_M = 50
+
+/** True when the lap has coordinates that draw a track: spread over at least 50 m. */
+export function hasMapPositions(trace: LapTraceView | null | undefined): boolean {
+  const xs = trace?.channels.pos_x, zs = trace?.channels.pos_z
+  if (!xs?.length || !zs?.length) return false
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity
+  for (let i = 0; i < Math.min(xs.length, zs.length); i++) {
+    const x = xs[i], z = zs[i]
+    if (typeof x !== 'number' || typeof z !== 'number' || !Number.isFinite(x) || !Number.isFinite(z)) continue
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+    if (z < minZ) minZ = z
+    if (z > maxZ) maxZ = z
+  }
+  return Math.max(maxX - minX, maxZ - minZ) >= MIN_MAP_EXTENT_M
+}
+
 /**
  * Track map from the world coordinates (pos_x, pos_z), fitted in a box with the
- * same scale on both axes. Null when the lap has no coordinates.
+ * same scale on both axes. Null when the lap or the frame has no coordinates that draw a track.
  */
 export function mapPoints(trace: LapTraceView, at: number[], width: number, height: number, padding = 10, frame: LapTraceView = trace, rotationDeg = ACC_MAP_ROTATION_DEG): MapPoint[] | null {
-  if (!trace.channels.pos_x || !trace.channels.pos_z || !frame.channels.pos_x || !frame.channels.pos_z) return null
+  if (!hasMapPositions(trace) || !hasMapPositions(frame)) return null
   const raw = at.map(f => turn(channelAt(trace, 'pos_x', f)!, channelAt(trace, 'pos_z', f)!, rotationDeg))
   // The frame (usually the reference) fixes scale and offset, so two laps overlay exactly.
   const bounds = frame === trace ? raw : at.map(f => turn(channelAt(frame, 'pos_x', f)!, channelAt(frame, 'pos_z', f)!, rotationDeg))
@@ -437,7 +457,7 @@ export function mapPoints(trace: LapTraceView, at: number[], width: number, heig
  * not a lap (track edges): one transform for laps and edges, never fitted separately.
  */
 export function worldToMap(frame: LapTraceView, at: number[], width: number, height: number, padding = 10, rotationDeg = ACC_MAP_ROTATION_DEG): ((x: number, z: number) => MapPoint) | null {
-  if (!frame.channels.pos_x || !frame.channels.pos_z) return null
+  if (!hasMapPositions(frame)) return null
   const bounds = at.map(f => turn(channelAt(frame, 'pos_x', f)!, channelAt(frame, 'pos_z', f)!, rotationDeg))
   const xs = bounds.map(p => p.x), ys = bounds.map(p => p.y)
   const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys)

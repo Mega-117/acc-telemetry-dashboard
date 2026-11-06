@@ -4,7 +4,7 @@
 // Corner zoom: the two racing lines, yours blue and the reference amber.
 // Two dots follow the cursor: you (blue, filled) and the reference (amber, hollow).
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { deltaTrend, finishLine, glideFrame, fractions, lapDelta, mapPoints, worldToMap, type Corner, type MapPoint } from '~/services/telemetry/lapAnalysis'
+import { deltaTrend, finishLine, glideFrame, fractions, hasMapPositions, lapDelta, mapPoints, worldToMap, type Corner, type MapPoint } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { placeMapLabels } from '~/services/telemetry/mapLabelPlacement'
 import { useI18n } from '~/i18n'
@@ -43,8 +43,8 @@ const H = computed(() => Math.round(props.size * 0.8))
 // The reference draws the frame when present: both lines share scale and offset.
 // dev.11 (05/11): a reference without coordinates (laps saved before late October) used to hide the
 // whole map, with a message blaming your lap. It now gives way: the map follows your lap alone.
-const hasPositions = (trace: LapTraceView | null | undefined) => !!trace?.channels.pos_x && !!trace?.channels.pos_z
-const mapRef = computed(() => hasPositions(props.reference) ? props.reference! : null)
+// 06/11: also a reference whose coordinates do not draw a track (all equal) gives way.
+const mapRef = computed(() => hasMapPositions(props.reference) ? props.reference! : null)
 const frame = computed(() => mapRef.value ?? props.lap)
 const base = computed(() => mapPoints(frame.value, at, W.value, H.value, 18))
 // Edges through the same transform as the laps: they line up with no adjustment of their own.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { analysisSessionToken, bodySlipDeg, channelAt, compareCorners, cornerAt, focusAdvice, focusInStretch, glideFrame, stepCorner, stretchDelta, finishLine, timeSyncedFraction, cornerAdvice, deltaTrend, detectCorners, formatDelta, fractions, lapDelta, mapPoints } from '~/services/telemetry/lapAnalysis'
+import { analysisSessionToken, bodySlipDeg, channelAt, compareCorners, cornerAt, focusAdvice, focusInStretch, glideFrame, stepCorner, stretchDelta, finishLine, timeSyncedFraction, cornerAdvice, deltaTrend, detectCorners, formatDelta, fractions, lapDelta, mapPoints, hasMapPositions, worldToMap } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
 const STEP = 2
@@ -144,6 +144,20 @@ describe('lap analysis (our Track Titan)', () => {
     expect(Math.max(...xs)).toBeCloseTo(290, 0)
     expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(140, 0) // 400 x 200 m track: half as tall
     expect(mapPoints(lap(() => 200, [], 60, 3000, false), fractions(11), 300, 300)).toBeNull()
+  })
+
+  it('a frame whose coordinates stay in one place draws nothing (06/11: map squeezed into its centre)', () => {
+    const flat = lap(() => 200)
+    flat.channels.pos_x = flat.channels.pos_x!.map(() => 0)
+    flat.channels.pos_z = flat.channels.pos_z!.map(() => 0)
+    expect(hasMapPositions(flat)).toBe(false)
+    expect(hasMapPositions(lap(() => 200))).toBe(true)
+    // Your lap framed by such a reference: null, so the map falls back to your lap alone.
+    expect(mapPoints(lap(() => 200), fractions(11), 300, 300, 10, flat)).toBeNull()
+    expect(worldToMap(flat, fractions(11), 300, 300)).toBeNull()
+    const empty = lap(() => 200)
+    empty.channels.pos_x = empty.channels.pos_x!.map(() => Number.NaN)
+    expect(hasMapPositions(empty)).toBe(false)
   })
 
   it('ACC orientation as the minimap: world Z down, then 270° clockwise (world +X up)', () => {
