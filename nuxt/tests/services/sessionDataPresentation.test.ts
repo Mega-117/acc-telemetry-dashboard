@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { lapStatus, recordedNumber, sessionDataCheck, sessionDataReferences, stintDataFacts, stintEndFacts } from '~/services/session-detail/sessionDataPresentation'
+import { lapStatus, recordedNumber, sessionDataCheck, sessionSettled, SETTLED_AFTER_MS, sessionDataReferences, stintDataFacts, stintEndFacts } from '~/services/session-detail/sessionDataPresentation'
 import type { FullSession, LapData, StintData } from '~/types/telemetry'
 
 const lap = (overrides = {}): LapData => ({ lap_number: 1, lap_time_ms: 90000, elapsed_time_ms: 90000, fuel_start: 50, fuel_remaining: 47,
@@ -59,5 +59,18 @@ describe('Dati page data check', () => {
     expect(sessionDataCheck(session([lap()]), { bestLap: 88000 })).toMatchObject({ lapsOff: 0, bestOff: 1 })
     expect(sessionDataCheck(session([lap()], { laps_total: undefined, laps_valid: null }), undefined)).toMatchObject({ lapsOff: 0, validOff: 0 })
     expect(sessionDataCheck(null, null)).toBeNull()
+  })
+})
+
+describe('Dati check only on a settled session (Codex 06/11)', () => {
+  const end = '2026-11-06T12:00:00.000Z', at = Date.parse(end)
+  it('same save, no save for 10 minutes: settled', () => {
+    expect(sessionSettled(end, end, at + SETTLED_AFTER_MS)).toBe(true)
+  })
+  it('a lap saved meanwhile, a recent save or no end: not settled', () => {
+    expect(sessionSettled(end, '2026-11-06T12:01:50.000Z', at + SETTLED_AFTER_MS * 2)).toBe(false)
+    expect(sessionSettled(end, end, at + 60_000)).toBe(false)
+    expect(sessionSettled(null, null, at)).toBe(false)
+    expect(sessionSettled('nonsense', 'nonsense', at)).toBe(false)
   })
 })

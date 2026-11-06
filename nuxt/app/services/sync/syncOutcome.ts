@@ -23,8 +23,10 @@ export function syncOutcomeCounts(results: SyncOutcomeResult[], streaks: Map<str
     if (result.status === 'error') {
       counts.errors++
       if (!name) continue
-      // Offline the failure is expected: it does not count towards stuck.
-      const streak = offline ? (streaks.get(name) || 0) : (streaks.get(name) || 0) + 1
+      // Offline the failure is expected: it is never stuck, and it breaks a run of online failures
+      // (Codex 06/11: online, online, offline used to say stuck while offline).
+      if (offline) { streaks.delete(name); continue }
+      const streak = (streaks.get(name) || 0) + 1
       streaks.set(name, streak)
       if (streak >= STUCK_AFTER_CYCLES) counts.stuck++
       continue

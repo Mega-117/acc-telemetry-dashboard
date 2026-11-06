@@ -31,7 +31,20 @@ export function pageCode(path: string): number | null {
   return 0
 }
 
-export type PageShown = { page: number, ms: number, slow: number }
+/** One start time per navigation (the router's own `to` object), so overlapping navigations never mix. */
+export function createNavigationClock(now: () => number) {
+  const started = new WeakMap<object, number>()
+  return {
+    start(navigation: object) { started.set(navigation, now()) },
+    take(navigation: object): number | null {
+      const at = started.get(navigation)
+      started.delete(navigation)
+      return at ?? null
+    },
+  }
+}
+
+export type PageShown ={ page: number, ms: number, slow: number }
 
 export function pageShown(path: string, startedAt: number, paintedAt: number): PageShown | null {
   const page = pageCode(path)

@@ -19,6 +19,17 @@ describe('sync outcome spy (PIP-740)', () => {
     expect(syncOutcomeCounts([{ status: 'error', fileName: 'e' }], streaks, false).stuck).toBe(0)
   })
 
+  it('Codex 06/11: an offline failure is never stuck and breaks a run of online failures', () => {
+    const streaks = new Map<string, number>()
+    syncOutcomeCounts([{ status: 'error', fileName: 'e' }], streaks, false)
+    syncOutcomeCounts([{ status: 'error', fileName: 'e' }], streaks, false)
+    expect(syncOutcomeCounts([{ status: 'error', fileName: 'e' }], streaks, true).stuck).toBe(0)
+    const other = new Map<string, number>()
+    syncOutcomeCounts([{ status: 'error', fileName: 'e' }], other, false)
+    syncOutcomeCounts([{ status: 'error', fileName: 'e' }], other, true)
+    expect(syncOutcomeCounts([{ status: 'error', fileName: 'e' }], other, false).stuck).toBe(0)
+  })
+
   it('failures with the PC offline never make a session stuck', () => {
     const streaks = new Map<string, number>()
     for (let i = 0; i < 3; i++) expect(syncOutcomeCounts([{ status: 'error', fileName: 'e' }], streaks, true)).toMatchObject({ stuck: 0, offline: 1, errors: 1 })

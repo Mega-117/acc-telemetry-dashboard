@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pageCode, pageShown, SLOW_PAGE_MS } from '~/services/monitoring/pageTiming'
+import { createNavigationClock, pageCode, pageShown, SLOW_PAGE_MS } from '~/services/monitoring/pageTiming'
 
 describe('page timing spy (PIP-742)', () => {
   it('main-window pages get their code, never the path; other windows are not pages', () => {
@@ -19,5 +19,18 @@ describe('page timing spy (PIP-742)', () => {
     expect(pageShown('/sessioni/x', 100, 100 + SLOW_PAGE_MS)).toEqual({ page: 3, ms: SLOW_PAGE_MS, slow: 1 })
     expect(pageShown('/standings-overlay', 0, 5000)).toBeNull()
     expect(pageShown('/dati', 200, 100)).toBeNull()
+  })
+})
+
+describe('navigation clock (Codex 06/11)', () => {
+  it('a cancelled navigation does not clear the next one', () => {
+    let t = 0
+    const clock = createNavigationClock(() => t)
+    const a = { path: '/sessioni' }, b = { path: '/dati' }
+    clock.start(a); t = 10
+    clock.start(b); t = 20
+    expect(clock.take(a)).toBe(0)       // A cancelled: only its own clock
+    expect(clock.take(b)).toBe(10)      // B still timed
+    expect(clock.take(b)).toBeNull()    // taken once
   })
 })

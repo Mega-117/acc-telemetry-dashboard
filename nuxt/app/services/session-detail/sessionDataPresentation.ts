@@ -38,6 +38,15 @@ export function sessionDataCheck(session: FullSession | null, listed: { laps?: n
   }
 }
 
+export const SETTLED_AFTER_MS = 10 * 60 * 1000
+
+/** PIP-743: the list and the detail come from the same save, and nothing was saved for 10 minutes. */
+export function sessionSettled(listedEnd: unknown, detailEnd: unknown, now: number): boolean {
+  if (typeof listedEnd !== 'string' || !listedEnd || listedEnd !== detailEnd) return false
+  const at = Date.parse(listedEnd)
+  return Number.isFinite(at) && now - at >= SETTLED_AFTER_MS
+}
+
 /** Present existing session facts; never promote live telemetry into a past lap. */
 export function sessionDataReferences(session: FullSession | null) {
   const laps = session?.stints.flatMap(stint => stint.laps) ?? []
