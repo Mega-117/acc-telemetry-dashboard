@@ -8,6 +8,36 @@ export function recordedNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
+/**
+ * PIP-743 (dev.14 plan, point 8): the laps the Dati page draws against two other counts of the same
+ * session: the logger's own counters (session_info) and the summary the Sessioni list shows. A lap
+ * lost on the way (upload chunks, merge, canonical rewrite) makes them differ: lapsOff/validOff is the
+ * KO. bestOff (the list's best against the best clean lap drawn) is information: the list keeps its
+ * own rules for which laps count.
+ */
+export function sessionDataCheck(session: FullSession | null, listed: { laps?: number, lapsValid?: number, bestLap?: number | null } | null | undefined) {
+  if (!session) return null
+  const laps = session.stints.flatMap(stint => stint.laps)
+  const valid = laps.filter(lap => lap.is_valid === true).length
+  const info = session.session_info
+  const counted = (value: unknown) => (typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null)
+  const loggerLaps = counted(info?.laps_total), loggerValid = counted(info?.laps_valid)
+  const listLaps = counted(listed?.laps), listValid = counted(listed?.lapsValid)
+  const off = (a: number, b: number | null) => (b === null ? 0 : Math.abs(a - b))
+  const best = sessionDataReferences(session).best
+  const listBest = typeof listed?.bestLap === 'number' && listed.bestLap > 0 ? listed.bestLap : null
+  const lapsOff = Math.max(off(laps.length, loggerLaps), off(laps.length, listLaps))
+  const validOff = Math.max(off(valid, loggerValid), off(valid, listValid))
+  return {
+    laps: laps.length,
+    lapsOff,
+    validOff,
+    // One number for the R2 rule: a session is one KO, however many counts differ.
+    off: lapsOff + validOff > 0 ? 1 : 0,
+    bestOff: best !== null && listBest !== null && Math.abs(best - listBest) > 1 ? 1 : 0,
+  }
+}
+
 /** Present existing session facts; never promote live telemetry into a past lap. */
 export function sessionDataReferences(session: FullSession | null) {
   const laps = session?.stints.flatMap(stint => stint.laps) ?? []

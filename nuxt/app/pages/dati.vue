@@ -6,7 +6,8 @@ import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { useSessionLoader } from '~/composables/useSessionLoader'
 import { mergeSessionsDeterministic } from '~/services/telemetry/telemetryMergeService'
 import { sessionGame } from '~/services/telemetry/gameIdentity'
-import { sessionDataReferences, stintDataFacts, stintEndFacts, lapStatus } from '~/services/session-detail/sessionDataPresentation'
+import { sessionDataCheck, sessionDataReferences, stintDataFacts, stintEndFacts, lapStatus } from '~/services/session-detail/sessionDataPresentation'
+import { noteFeatureUse } from '~/services/usage/featureUseNote'
 import { formatLapTime, formatTrackName, formatCarName, getSessionTypeLabel } from '~/utils/telemetryFormat'
 import { brakeColor, pressureColor, tyreColor, type BrakePad } from '~/utils/temperatureColor'
 import type { FullSession, SectorTelemetry, SessionDocument } from '~/types/telemetry'
@@ -169,6 +170,11 @@ async function selectSession(id: string, restore = false) {
     if (request !== revision || uid !== profileUser.value?.uid) return
     full.value = result
     if (!result) error.value = t('data.errors.detail')
+    // PIP-743: the laps drawn against the logger's counters and the list's summary; a session still
+    // being driven (no end yet) moves while it is read and is left out.
+    const listed = sessions.value.find(s => s.sessionId === id)
+    const check = listed?.meta?.date_end ? sessionDataCheck(result, listed.summary) : null
+    if (check) noteFeatureUse({ event: 'data.session_check', ...check })
     reconcileSelection(restore ? remembered() : undefined); saveSelection()
     updatedAt.value = new Date().toLocaleTimeString(intlLocale.value)
   } catch { if (request === revision) error.value = t('data.errors.session') }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { lapStatus, recordedNumber, sessionDataReferences, stintDataFacts, stintEndFacts } from '~/services/session-detail/sessionDataPresentation'
+import { lapStatus, recordedNumber, sessionDataCheck, sessionDataReferences, stintDataFacts, stintEndFacts } from '~/services/session-detail/sessionDataPresentation'
 import type { FullSession, LapData, StintData } from '~/types/telemetry'
 
 const lap = (overrides = {}): LapData => ({ lap_number: 1, lap_time_ms: 90000, elapsed_time_ms: 90000, fuel_start: 50, fuel_remaining: 47,
@@ -40,5 +40,24 @@ describe('DATI recorded session facts', () => {
     expect(lapStatus(lap({completeness:'missing'}))).toBe('Dati persi')
     expect(lapStatus(lap({validity:'unknown'}))).toBe('Validità non rilevata')
     expect(lapStatus(lap({is_valid:false,pit_out_lap:true,completeness:'partial'}))).toBe('Invalido · Uscita box · Parziale')
+  })
+})
+
+// PIP-743: the laps the Dati page draws against the logger's counters and the Sessioni list summary.
+describe('Dati page data check', () => {
+  const session = (laps: LapData[], info = {}) => ({ session_info: { laps_total: laps.length, laps_valid: laps.filter(l => l.is_valid).length, ...info }, stints: [{ laps }] }) as unknown as FullSession
+  it('the same laps everywhere: nothing off', () => {
+    const laps = [lap(), lap({ lap_number: 2, lap_time_ms: 89000 }), lap({ lap_number: 3, is_valid: false })]
+    expect(sessionDataCheck(session(laps), { laps: 3, lapsValid: 2, bestLap: 89000 })).toEqual({ laps: 3, lapsOff: 0, validOff: 0, off: 0, bestOff: 0 })
+  })
+  it('a lap lost on the way shows against the logger and the list', () => {
+    const laps = [lap(), lap({ lap_number: 2 })]
+    expect(sessionDataCheck(session(laps, { laps_total: 3, laps_valid: 3 }), null)).toMatchObject({ lapsOff: 1, validOff: 1, off: 1 })
+    expect(sessionDataCheck(session(laps), { laps: 4, lapsValid: 2 })).toMatchObject({ lapsOff: 2, validOff: 0 })
+  })
+  it('a best different from the list is information; missing counts are not compared', () => {
+    expect(sessionDataCheck(session([lap()]), { bestLap: 88000 })).toMatchObject({ lapsOff: 0, bestOff: 1 })
+    expect(sessionDataCheck(session([lap()], { laps_total: undefined, laps_valid: null }), undefined)).toMatchObject({ lapsOff: 0, validOff: 0 })
+    expect(sessionDataCheck(null, null)).toBeNull()
   })
 })
