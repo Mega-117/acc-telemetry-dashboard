@@ -10,10 +10,12 @@ import { setLocale } from '~/i18n'
 // Screen texts are asserted in Italian; jsdom starts in English.
 setLocale('it')
 
-const fake = vi.hoisted(() => ({ settings: {} as any, points: [] as any[] }))
+const fake = vi.hoisted(() => ({ settings: {} as any, points: [] as any[], coachOn: true }))
 vi.mock('~/composables/useFirebaseAuth', () => ({ useFirebaseAuth: () => ({ isAdmin: ref(false) }) }))
 vi.mock('~/composables/usePublicPath', () => ({ usePublicPath: () => ({ getPublicPath: (path: string) => path }) }))
 vi.mock('~/composables/useSpotterVoiceSettings', () => ({
+  // 06/11 switch: on here so the coach row keeps its tests; the last test turns it off.
+  get ADAPTIVE_COACH_AVAILABLE() { return fake.coachOn },
   useSpotterVoiceSettings: () => fake.settings,
   spotterVoiceOptions: [{ id: 'if_sara', label: 'Sara' }, { id: 'im_nicola', label: 'Nicola' }],
 }))
@@ -85,4 +87,14 @@ it('hides unsupported EVO advice without altering ACC preferences', async () => 
   expect(wrapper.text()).toContain('Avvisi pressioni')
   expect(fake.settings.toggleAdaptiveCoach).not.toHaveBeenCalled()
   expect(fake.settings.togglePressureWarnings).not.toHaveBeenCalled()
+})
+it('06/11: with the switch off (the shipped value) the Feedback coach row is not there at all', async () => {
+  const real = await vi.importActual<typeof import('~/composables/useSpotterVoiceSettings')>('~/composables/useSpotterVoiceSettings')
+  expect(real.ADAPTIVE_COACH_AVAILABLE).toBe(false)
+  fake.coachOn = false
+  wrapper = mount(Spotter, { global: { components: { UiRacingSwitch: RacingSwitch } } })
+  await flushPromises()
+  expect(wrapper.text()).not.toContain('Feedback coach')
+  expect(wrapper.find('select[aria-label="Modalità feedback coach"]').exists()).toBe(false)
+  fake.coachOn = true
 })

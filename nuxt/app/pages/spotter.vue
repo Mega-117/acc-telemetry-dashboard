@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useGameContext } from '~/composables/useGameContext'
 import { gameLabel, gameUiSupport } from '~/services/telemetry/gameCatalog'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { spotterVoiceOptions, useSpotterVoiceSettings, type SpotterVoiceId } from '~/composables/useSpotterVoiceSettings'
+import { ADAPTIVE_COACH_AVAILABLE, spotterVoiceOptions, useSpotterVoiceSettings, type SpotterVoiceId } from '~/composables/useSpotterVoiceSettings'
 import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'
 import { referenceMatchesContext, resolvePlayableReferenceAudioPath } from '~/services/spotter/trackVoiceReferences'
 import { presentVoiceRuntimeMessage } from '~/services/spotter/voiceRuntimePresentation'
@@ -185,7 +185,8 @@ onMounted(() => {
                 @update:model-value="setReferenceSessionModes"
               />
             </div>
-            <div v-if="support.adaptiveCoach" class="feature-row">
+            <!-- 06/11 (user): Feedback coach switched off and hidden (ADAPTIVE_COACH_AVAILABLE). -->
+            <div v-if="ADAPTIVE_COACH_AVAILABLE && support.adaptiveCoach" class="feature-row">
               <h3>{{ t('spotter.coachFeedback') }}</h3>
               <div class="feature-control">
                 <div class="select-shell"><select

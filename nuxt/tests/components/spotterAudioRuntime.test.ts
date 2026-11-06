@@ -9,7 +9,8 @@ vi.mock('~/composables/useFastStatePoller', () => ({ useFastStatePoller: () => (
 vi.mock('~/composables/useLiveStatePoller', () => ({ useLiveStatePoller: () => ({ liveLap: mocks.live, startLiveStatePolling() {}, stopLiveStatePolling() {} }) }))
 vi.mock('~/composables/useCoachStatePoller', () => ({ useCoachStatePoller: () => ({ coachState: { value: null }, startCoachStatePolling() {}, stopCoachStatePolling() {} }) }))
 vi.mock('~/composables/useFirebaseAuth', () => ({ useFirebaseAuth: () => ({ canEnterApp: { value: true }, isSecondaryLocalRuntime: { value: true }, isLocalRuntimeAttested: { value: true } }) }))
-vi.mock('~/composables/useSpotterVoiceSettings', () => ({ useSpotterVoiceSettings: () => mocks.settings }))
+// The coach logic keeps its tests: here the 06/11 switch is on.
+vi.mock('~/composables/useSpotterVoiceSettings', () => ({ ADAPTIVE_COACH_AVAILABLE: true, useSpotterVoiceSettings: () => mocks.settings }))
 vi.mock('~/composables/usePublicPath', () => ({ usePublicPath: () => ({ getPublicPath: (path: string) => path }) }))
 vi.mock('~/composables/useVoiceLabRuntime', () => ({ useVoiceLabRuntime: () => ({ readVoicePoints: async () => ({ points: [] }) }) }))
 vi.mock('~/services/spotter/trackVoiceReferenceChanges', () => ({ subscribeTrackVoiceReferencesChanged: () => () => {} }))

@@ -33,6 +33,12 @@ const STORAGE_KEYS = {
   adaptiveCoachMode: 'acc.adaptiveCoach.mode',
 }
 
+/**
+ * 06/11 (user): the adaptive "Feedback coach" is switched off for everyone: hidden on the Spotter page and never
+ * spoken, whatever was stored. Its logic, settings and tests stay; true brings it back.
+ */
+export const ADAPTIVE_COACH_AVAILABLE = false
+
 /** PIP-260: 'focus' = una curva alla volta (default), 'all' = ogni curva
  * con errore persistente parla sul proprio marker. */
 export type AdaptiveCoachMode = 'focus' | 'all'

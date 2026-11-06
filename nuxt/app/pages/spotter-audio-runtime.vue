@@ -8,7 +8,7 @@ import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useLiveStatePoller } from '~/composables/useLiveStatePoller'
 import { usePublicPath } from '~/composables/usePublicPath'
-import { useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
+import { ADAPTIVE_COACH_AVAILABLE, useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
 import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'
 import { resolveLocalRuntimeCapability } from '~/services/auth/localIdentityBridge'
 import { lapTimeAnnouncementPaths } from '~/services/overlay/lapTimeAnnouncer'
@@ -141,7 +141,7 @@ const matchingReferences = computed(() => trackVoiceReferences.value.filter(poin
 const { coachState, startCoachStatePolling, stopCoachStatePolling } = useCoachStatePoller(getRuntimeApi)
 let postCornerState = createPostCornerState()
 let preCornerState = createPreCornerState()
-const coachAllowedForSession = computed(() => audioFeatureAvailable(fastState.value, 'adaptiveCoach') && isSpotterFeatureAllowed(
+const coachAllowedForSession = computed(() => ADAPTIVE_COACH_AVAILABLE && audioFeatureAvailable(fastState.value, 'adaptiveCoach') && isSpotterFeatureAllowed(
   adaptiveCoachEnabled.value,
   adaptiveCoachSessionModes.value,
   audioSessionType.value,
