@@ -347,8 +347,7 @@ function measureTrace() {
     // pixels past the window: take them off, so the page itself never scrolls.
     // 06/11: the session page may hide its scrollbar in Telemetria: found by its class first, then by its overflow.
     let page: Element | null = el.closest('.session-detail-wrapper') ?? el.parentElement
-    while (page && page !== document.documentElement && !page.classList.contains('session-detail-wrapper')
-      && !/(auto|scroll)/.test(getComputedStyle(page).overflowY)) page = page.parentElement
+    while (page && page !== document.documentElement && !page.classList.contains('session-detail-wrapper') && !/(auto|scroll)/.test(getComputedStyle(page).overflowY)) page = page.parentElement
     page ??= document.scrollingElement
     const extra = page ? page.scrollHeight - page.clientHeight : 0
     if (extra > 0) traceHeight.value = Math.max(420, traceHeight.value - extra)
