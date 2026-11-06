@@ -12,7 +12,7 @@ export default {
     usage: {
       label: 'Share usage statistics',
       text: 'Share usage time, sessions and features used, with their outcomes. The choice applies to the desktop app and the Pitwall website. Summaries are kept for 90 days.',
-      notCollected: 'No screenshots, alert text or detailed telemetry are collected. Technical diagnostics stay separate.',
+      notCollected: 'No screenshots, alert text or detailed telemetry are collected. Technical diagnostics (errors, freezes, versions) are separate: always on because the program needs them, deleted after 30 days. Details in the Privacy notice.',
       stoppedOffline: 'Collection stopped on this device. The preference will sync as soon as you are back online.',
     },
     report: {

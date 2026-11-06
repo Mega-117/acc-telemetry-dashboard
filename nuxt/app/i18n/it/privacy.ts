@@ -11,7 +11,7 @@ export default {
     usage: {
       label: 'Condividi statistiche di utilizzo',
       text: 'Condividi tempi di utilizzo, sessioni e funzionalità usate, con i relativi esiti. La scelta vale per desktop e Pitwall web. I riepiloghi restano disponibili per 90 giorni.',
-      notCollected: 'Non vengono raccolti screenshot, testo degli avvisi o telemetria dettagliata. La diagnostica tecnica resta separata.',
+      notCollected: "Non vengono raccolti screenshot, testo degli avvisi o telemetria dettagliata. La diagnostica tecnica (errori, blocchi, versioni) è a parte: è sempre attiva perché serve al funzionamento e si cancella dopo 30 giorni. Dettagli nell'Informativa privacy.",
       stoppedOffline: 'Raccolta fermata su questo dispositivo. La preferenza sarà sincronizzata appena torna la connessione.',
     },
     report: {
