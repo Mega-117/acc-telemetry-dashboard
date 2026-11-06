@@ -13,10 +13,15 @@ import { useSessionZones } from '~/composables/useSessionZones'
 import { useSectorCompare } from '~/composables/useSectorCompare'
 import LapChoiceCard from './LapChoiceCard.vue'
 import LapChoiceDialog from './LapChoiceDialog.vue'
-import TraceStripHead, { type DeltaPlace } from './TraceStripHead.vue'
+import TraceStrip from './TraceStrip.vue'
+import TraceSkeleton from './TraceSkeleton.vue'
+import type { DeltaPlace } from './traceDeltaPlace'
 import StintBlock from './StintBlock.vue'
+import UnderMapSlides from './UnderMapSlides.vue'
 import { stintFacts, stintVerdict, type StintSummary } from '~/services/telemetry/stintBlock'
 import { noteFeatureUse } from '~/services/usage/featureUseNote'
+import { deltaHeat } from '~/utils/deltaHeat'
+import { deltaBars, deltaLevel } from '~/utils/deltaRead'
 import { useLapChoice } from '~/composables/useLapChoice'
 import { traceClass, type LapSide, type SessionKindBests } from '~/services/telemetry/lapChoice'
 import { electronLapSource, pilotLapSource, type LapSource, type LocalLapBridge } from '~/services/telemetry/lapSources'
@@ -25,9 +30,11 @@ import { LapsArchiveError } from '~/services/telemetry/lapsArchiveClient'
 import { lapShareErrorMessage } from '~/services/telemetry/lapShareLink'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { compareCorners, detectCorners, formatDelta, stretchDelta } from '~/services/telemetry/lapAnalysis'
+import { segmentsCheck, withApproach } from '~/services/telemetry/segmentApproach'
 import { useFocusZone } from '~/composables/useFocusZone'
 import { carMismatchNote } from '~/composables/useReferenceLibrary'
 import { useCornerStepper } from '~/composables/useCornerStepper'
+import { useWheelForward } from '~/composables/useWheelForward'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { readSessionLaps, withArchiveFallback } from '~/services/telemetry/sessionLapLoading'
 import { useTrackEdges } from '~/composables/useTrackEdges'
@@ -73,7 +80,7 @@ const layout = computed<Layout>(() => 'tracce')
 // 01/11 (a trial) -> dev.10 (user 05/11): the delta always first on the right, fixed while the charts scroll;
 // under the map goes the stint block. The switch is gone (a saved 'centre' is ignored).
 const deltaPlace = ref<DeltaPlace>('top')
-const allChannels = ref(false)
+
 
 // PIP-623: every lap carries its origin. Only laps of the shown session ("local" on the PC,
 // "pilot" from the archive in coach view) can be "Tu" and have sector times; "own" (the
@@ -82,10 +89,10 @@ const entries = ref<Entry[]>([])
 const traces = ref<Record<string, LapTraceView>>({})
 const lapId = ref(''), refId = ref('')
 const library = useReferenceLibrary({ entries, traces, refId, sessionToken: () => props.sessionToken, sectorTimesOf: e => sectorTimes(e) })
-const loading = ref(false), error = ref(''), fromArchive = ref(false), programArchive = ref(false)
+const loading = ref(false), error = ref(''), fromArchive = ref(false)
 // PIP-635: nessun giro da analizzare: la pagina torna su Sessione se l'aveva aperta da sola.
 const emit = defineEmits<{ unavailable: [], lapLinkHandled: [], removeCompare: [], referenceChosen: [] }>(); watch(error, message => { if (message) emit('unavailable') })
-const { t, locale } = useI18n()
+const { t } = useI18n()
 const cursor = ref<number | null>(null)
 const selectedCorner = ref<number | null>(null)
 const skipped = ref(0)
@@ -138,7 +145,6 @@ async function load() {
   // (valid and complete laps of the last 30 days); the program keeps reading them from the PC.
   const archiveUid = pilot ?? (desktop ? null : currentUser.value?.uid ?? null)
   fromArchive.value = !pilot && !!archiveUid
-  programArchive.value = false
   let source: LapSource
   if (archiveUid) source = pilotLapSource(archiveUid, archiveDeps, props.sharedSessionId ?? null)
   else if (desktop) source = electronLapSource(bridge!)
@@ -155,7 +161,8 @@ async function load() {
       const chosen = await withArchiveFallback(result, () => readSessionLaps(pilotLapSource(ownUid, archiveDeps, null), token, valid, isCurrent, true))
       if (!isCurrent() || !chosen) return
       result = chosen.result
-      if (chosen.fromArchive) { fromArchive.value = true; programArchive.value = true }
+      // 06/11 (user): laps from the online archive open as any other, with no note above the page.
+      if (chosen.fromArchive) fromArchive.value = true
     }
     const ok = result.ok
     skipped.value = result.total - ok.length
@@ -270,7 +277,11 @@ const refEntry = computed(() => refId.value ? entries.value.find(e => e.id === r
 // PIP-645: corners from the session's best valid lap (else the reference, else yours): the same numbers and
 // boundaries whatever reference is picked, so the session statistics of Semplice never move with it.
 const sessionBest = computed(() => entries.value.filter(e => (e.origin === 'local' || e.origin === 'pilot') && e.valid && e.complete).sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0] ?? null)
-const corners = computed(() => detectCorners((sessionBest.value && traces.value[sessionBest.value.id]) ?? reference.value ?? lap.value ?? emptyTrace()))
+// 06/11 (user): each segment starts before its braking (withApproach), on the same trace the corners come from.
+const cornerSource = computed(() => (sessionBest.value && traces.value[sessionBest.value.id]) ?? reference.value ?? lap.value ?? emptyTrace())
+const corners = computed(() => withApproach(detectCorners(cornerSource.value), cornerSource.value))
+// PIP-737 spy: the moved boundaries checked against the detected ones (KO: a gap, an overlap, a lost or moved segment).
+watch(corners, c => { if (c.length) noteFeatureUse({ event: 'laps.segments', ...segmentsCheck(detectCorners(cornerSource.value), c) }) })
 const comparison = computed(() => lap.value && reference.value ? compareCorners(lap.value, reference.value, corners.value) : [])
 const worst = computed(() => [...comparison.value].sort((a, b) => b.timeLostS - a.timeLostS).filter(c => c.timeLostS >= 0.03).slice(0, 3))
 const totalDelta = computed(() => lap.value && reference.value ? lap.value.lapTimeS - reference.value.lapTimeS : null)
@@ -281,10 +292,12 @@ const viewportHeight = ref(900); function measure() { viewportHeight.value = win
 onMounted(() => { measure(); window.addEventListener('resize', measure) })
 onBeforeUnmount(() => window.removeEventListener('resize', measure))
 // Tracce: under the sticky bar the charts fill one screen (about 150 px for bar and margins).
-// Heights from the five essential channels only: "Altri canali" adds rows below, never shrinks these.
+// Heights from the five essential channels only: the other channels add rows below, never shrink these.
 const ESSENTIAL_ROWS = 5
 // Tracce fills the window under the lap bar; the five essential charts fill the right column.
 const traceRoot = ref<HTMLElement | null>(null)
+// 06/11 (user): the wheel over the fixed top (strip, delta) scrolls the charts below it, with the same feel.
+const { box: chartScroll, onWheel: scrollCharts } = useWheelForward()
 const traceHeight = ref(600)
 // The delta under the map grows down to the same bottom as the corner list on the left
 // (or the bottom of Tracce when that column is closed), so the three columns end level.
@@ -322,7 +335,7 @@ onBeforeUnmount(() => resizeObserver?.disconnect())
 function measureTrace() {
   const el = traceRoot.value
   if (!el) return
-  traceHeight.value = Math.max(420, Math.floor(window.innerHeight - el.getBoundingClientRect().top - 12))
+  traceHeight.value = Math.max(420, Math.floor(window.innerHeight - el.getBoundingClientRect().top))
   nextTick(() => {
     // Padding and margins below the panel (page, layout) can still push the page a few
     // pixels past the window: take them off, so the page itself never scrolls.
@@ -345,7 +358,6 @@ watch([traceRoot, layout, reference, deltaPlace], () => nextTick(measureTrace))
 // Shown again after Sessione: measured while hidden (zero size), so measure now.
 watch(() => props.active, on => { if (on !== false) nextTick(() => { measureTrace(); measureDelta() }) })
 // What the charts show now, and the way back to the whole lap (Garage 61 reset, Esc, double click).
-const viewLabel = computed(() => zoomRange.value ? "Zoom" : selectedSector.value !== null ? t('telemetry.sector', { n: selectedSector.value + 1 }) : selectedCorner.value !== null ? t('telemetry.corner', { n: selectedCorner.value }) : t('telemetry.wholeLap'))
 const wholeView = computed(() => !zoomRange.value && selectedSector.value === null && selectedCorner.value === null)
 // PIP-635: quanto perdi nel tratto che guardi (curva, settore o zoom), fisso: senza cercarlo in fondo al delta.
 const stretchLoss = computed(() => wholeView.value || !lap.value || !reference.value ? null
@@ -384,7 +396,7 @@ const { sectorList, sectorGaps } = useSectorCompare({ lap, reference, lapTimes: 
 const selectedSector = ref<number | null>(null)
 // Tracce: a stretch zoomed with the mouse (drag, wheel) wins over the sector or the corner.
 const zoomRange = ref<[number, number] | null>(null)
-const { goCorner, cursorCorner } = useCornerStepper({ active: () => layout.value === 'tracce' && props.active !== false, corners, selectedCorner, selectedSector, zoomRange, cursor, wholeLap })
+const { goStep, canStep, cursorCorner } = useCornerStepper({ active: () => layout.value === 'tracce' && props.active !== false, corners, sectorCount: computed(() => sectorList.value.length), selectedCorner, selectedSector, zoomRange, cursor, wholeLap })
 const range = computed<[number, number]>(() => {
   // PIP-645: a dragged zoom applies in Semplice too.
   if (zoomRange.value) return zoomRange.value
@@ -393,7 +405,7 @@ const range = computed<[number, number]>(() => {
   const corner = selectedCorner.value !== null ? corners.value[selectedCorner.value - 1] : null
   return corner ? [corner.start, corner.end] : [0, 1]
 })
-const { focusCorner, focus, focusZone } = useFocusZone({ lap, reference, comparison, worst, range, wholeView, selectedSector, selectedCorner, zoomRange })
+const { focus, focusZone } = useFocusZone({ lap, reference, comparison, worst, range, wholeView, selectedSector, selectedCorner, zoomRange })
 function selectSector(index: number) {
   selectedCorner.value = null
   selectedSector.value = selectedSector.value === index ? null : index
@@ -423,17 +435,13 @@ const cornersByLoss = computed(() => [...comparison.value].sort((a, b) => b.time
 const cornerDeltas = computed(() => Object.fromEntries(comparison.value.map(c => [c.corner.number, c.timeLostS])))
 // Red where you lose, green where you gain (VRS). PIP-635: full colours, so a loss reads as a loss at a
 // glance; the seconds only shade it a little (full at 0.15 s). Under a hundredth it is even (grey).
-function heat(seconds: number) {
-  if (Math.abs(seconds) < 0.01) return 'rgba(255, 255, 255, 0.06)'
-  const strength = (0.72 + 0.28 * Math.min((Math.abs(seconds) - 0.01) / 0.14, 1)).toFixed(2)
-  return seconds > 0 ? `rgba(228, 0, 43, ${strength})` : `rgba(22, 163, 74, ${strength})`
-}
+const heat = deltaHeat
 
 function emptyTrace(): LapTraceView { return { gameId: 'acc', variant: null, sessionId: null, track: '', car: '', lapTimeS: 0, source: '', complete: false, valid: null, fuelL: null, conditions: null, gridStepM: 2, lengthM: 0, channels: {} } }
-const has = (name: string) => !!lap.value?.channels[name]
-// PIP-635: the time in the stretch you look at sits in the Delta header (Garage 61, Delta), fixed.
+// PIP-635: the time in the stretch you look at sits in the Delta header (Garage 61, Delta), fixed. 05/11 (user): the
+// number only - the strip above already names the stretch.
 const deltaRow = computed<ChartRow[]>(() => reference.value ? [{ key: 'delta', title: t('telemetry.rows.delta'), unit: 's', channels: [], delta: true, height: 70,
-  ...(stretchLoss.value !== null ? { note: `${viewLabel.value} · ${formatDelta(stretchLoss.value)}`, noteTone: stretchLoss.value >= 0.01 ? 'loss' as const : stretchLoss.value <= -0.01 ? 'gain' as const : null } : {}) }] : [])
+  ...(stretchLoss.value !== null ? { note: formatDelta(stretchLoss.value), noteTone: stretchLoss.value > 0 ? 'loss' as const : stretchLoss.value < 0 ? 'gain' as const : null } : {}) }] : [])
 const speedRow: ChartRow = { key: 'speed', title: t('telemetry.rows.speed'), unit: 'km/h', channels: [{ name: 'speed_kmh' }], height: 100 }
 // One channel per chart: every chart shows only your line and the reference's.
 const pedalRows: ChartRow[] = [
@@ -442,17 +450,11 @@ const pedalRows: ChartRow[] = [
 ]
 const steerRow: ChartRow = { key: 'steer', title: t('telemetry.rows.steer'), channels: [{ name: 'steer_deg' }], height: 60, digits: 2 }
 const gearRow: ChartRow = { key: 'gear', title: t('telemetry.rows.gear'), channels: [{ name: 'gear' }], height: 46 }
-const DEG = 57.2958
-const extraRows = computed<ChartRow[]>(() => [
-  ...(has('acc_lat_g') ? [{ key: 'latg', title: t('telemetry.rows.latG'), unit: 'G', channels: [{ name: 'acc_lat_g' }], digits: 2 }, { key: 'longg', title: t('telemetry.rows.longG'), unit: 'G', channels: [{ name: 'acc_long_g' }], digits: 2 }] : []),
-  ...(has('slip_angle_fl') ? (['fl', 'fr', 'rl', 'rr'] as const).map(w => ({ key: `slip-${w}`, title: t('telemetry.rows.slip', { wheel: t(WHEEL_NAME[w]) }), unit: '°', channels: [{ name: `slip_angle_${w}`, scale: DEG }], digits: 1 })) : []),
-  ...(has('susp_travel_mm_fl') ? (['fl', 'fr', 'rl', 'rr'] as const).map(w => ({ key: `susp-${w}`, title: t('telemetry.rows.susp', { wheel: t(WHEEL_NAME[w]) }), unit: 'mm', channels: [{ name: `susp_travel_mm_${w}` }] })) : []),
-  ...(has('rpm') ? [{ key: 'rpm', title: t('telemetry.rows.rpm'), channels: [{ name: 'rpm' }] }] : []),
-] as ChartRow[])
-const WHEEL_NAME = { fl: 'telemetry.wheels.fl', fr: 'telemetry.wheels.fr', rl: 'telemetry.wheels.rl', rr: 'telemetry.wheels.rr' } as const
 // Semplice: the four corner charts share the window under the three tips, never below 80 px.
 // Garage 61: the delta sits under the map; the channels on the right are speed, pedals, steering, gear.
-const traceRows = computed(() => [speedRow, ...pedalRows, steerRow, gearRow, ...(allChannels.value ? extraRows.value : [])])
+// 05/11 (user): no "Altri canali" button. PIP-736: no G, slip, suspension or rpm charts either (rpm stays in the
+// lap file: the Dashboard HUD's reference-rpm marker reads it).
+const traceRows = computed(() => [speedRow, ...pedalRows, steerRow, gearRow])
 
 // PIP-619: air/road and grip of each lap (from the lap, else this session's laps): like for like.
 const sessionEntries = computed(() => entries.value.filter(e => e.origin === 'local' || e.origin === 'pilot'))
@@ -470,8 +472,9 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
         <LapChoiceCard side="you" :choice="choice.youCard.value" :ideal-scope="idealScope" :disabled="!sessionEntries.length" @change="openChooser('you')" />
         <div class="compare-mid">
           <!-- 01/11: only the number (the colour says faster or slower; the words stay in the tooltip). -->
+          <!-- 05/11 (user): a small "Distacco" over the number, and the dot as every other time on the page. -->
           <p class="compare-gap" :class="{ gain: (totalDelta ?? 0) < 0, loss: (totalDelta ?? 0) > 0 }" :title="gapTitle">
-            <template v-if="totalDelta !== null"><strong>{{ formatDelta(totalDelta).replace('.', locale === 'it' ? ',' : '.') }}</strong><span class="sr-only"> s, {{ gapWord }}</span><em v-if="invalidPair">{{ t('telemetry.choice.invalidQualifier') }}</em></template>
+            <template v-if="totalDelta !== null"><span class="compare-gap__label" aria-hidden="true">{{ t('telemetry.gapLabel') }}</span><strong>{{ formatDelta(totalDelta) }}</strong><span class="sr-only"> s, {{ gapWord }}</span><em v-if="invalidPair">{{ t('telemetry.choice.invalidQualifier') }}</em></template>
           </p>
         </div>
         <LapChoiceCard side="ref" :choice="choice.refCard.value" :reason="choice.reason.value" :ideal-scope="idealScope" :pilot-name="pilotName" :disabled="!entries.length" @change="openChooser('ref')" />
@@ -491,8 +494,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
     <p v-if="refNote" class="analysis-note analysis-note--warn">{{ refNote }}</p>
 
     <p v-if="skipped" class="analysis-note">{{ t('telemetry.skipped', { count: skipped }) }}</p>
-    <p v-if="fromArchive && entries.length" class="analysis-note">{{ programArchive ? t('telemetry.programArchiveNote') : t('telemetry.browserNote') }}</p>
-    <p v-if="loading" class="analysis-empty" role="status">{{ t('telemetry.loading') }}</p>
+    <TraceSkeleton v-if="loading" :height="traceHeight" :label="t('telemetry.loading')" />
     <p v-else-if="error" class="analysis-empty">{{ error }}</p>
     <p v-else-if="lapId === refId && entries.length > 1" class="analysis-empty">{{ t('telemetry.sameLap') }}</p>
 
@@ -501,45 +503,66 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
     <div v-else-if="lap" ref="traceRoot" class="layout-tracce" :class="{ 'layout-tracce--wide': deltaPlace === 'top' }" :style="{ height: `${traceHeight}px` }">
       <aside class="tracce-left">
         <!-- Who is faster is already in the coloured pickers above: here only where. -->
-        <section class="side-box">
-          <h4>{{ t('telemetry.sectors') }}</h4>
+        <!-- 05/11 (user: "S1 S2 S3 from afar say nothing"): a clear title, "Settore 1" in full, the time and, below, the band
+             of the difference - the sector table of MoTeC and Track Titan, made easier to read. -->
+        <!-- 05/11 (user): no title ("Settore 1, 2, 3" already says it); each card stands out on its own ground. -->
+        <section class="side-box side-box--sectors" :aria-label="t('telemetry.sectorsTitle')">
           <div v-if="sectorGaps.length" class="sector-rows" :class="{ 'has-active': selectedSector !== null && !zoomRange }">
             <button v-for="(g, i) in sectorGaps" :key="i" type="button" class="sector-row" :class="{ active: selectedSector === i }" :title="t('telemetry.sectorTitle', { time: (g.ref / 1000).toFixed(3) })" @click="selectSector(i)">
-              <span class="sector-name">S{{ i + 1 }}</span>
+              <span class="sector-name">{{ t('telemetry.sectorN', { n: i + 1 }) }}</span>
               <span class="sector-time">{{ (g.ref / 1000).toFixed(3) }}</span>
-              <span class="sector-gap" :style="{ background: heat(g.gap / 1000) }">{{ formatDelta(g.gap / 1000) }}</span>
+              <span class="sector-gap corner-bar" :class="[`is-${deltaLevel(g.gap / 1000)}`, g.gap > 0 ? 'is-loss' : 'is-gain']">
+                <span class="corner-bar__fill" :style="{ width: `${deltaBars(sectorGaps.map(x => x.gap))[i]}%` }" />
+                <span class="corner-bar__value">{{ formatDelta(g.gap / 1000) }}</span>
+              </span>
             </button>
           </div>
           <p v-else class="analysis-note">{{ t('telemetry.noSectors') }}</p>
         </section>
         <!-- VRS: corners from the costliest; the first three carry their rank. -->
         <!-- PIP-635: only the list here (Delta, Garage 61): a row selects and zooms; the way back is in the charts' bar. -->
-        <!-- 01/11 (from Dove migliorare): this lap, or the whole session (where you are least consistent, the most
-             potential, the most mistakes) when the session has enough laps. -->
-        <div v-if="zones.active.value" class="rc-switch loss-scope" role="group" :aria-label="t('telemetry.lossScopeAria')">
-          <button type="button" :aria-pressed="lossScope === 'lap'" :class="{ active: lossScope === 'lap' }" @click="lossScope = 'lap'">{{ t('telemetry.lossScopeLap') }}</button>
-          <button type="button" :aria-pressed="lossScope === 'session'" :class="{ active: lossScope === 'session' }" @click="lossScope = 'session'">{{ t('telemetry.lossScopeSession') }}</button>
-        </div>
-        <SessionZonesCard v-if="zones.active.value && lossScope === 'session'" compact :insight="zones.insight.value" :selected="selectedCorner" :total-laps="zones.totalLaps.value" @select="selectCorner($event)" />
-        <section v-else-if="comparison.length" ref="cornersBox" class="side-box side-box--corners">
+        <!-- 05/11 (user): the session's advice moved under the map (dots); here only this lap's losses. -->
+        <section v-if="comparison.length" ref="cornersBox" class="side-box side-box--corners">
           <div class="side-head">
             <h4>{{ t('telemetry.lossTitle') }}</h4>
           </div>
           <!-- Column heads as in the Curve table: the rows are corners, the cell the time lost there. -->
           <div class="corner-row corner-row--head" aria-hidden="true"><span>{{ t('telemetry.cornerHead') }}</span><span>{{ t('telemetry.timeLost') }}</span></div>
           <div class="corner-list" :class="{ 'has-active': selectedCorner !== null && selectedSector === null && !zoomRange }">
-            <button v-for="c in cornersByLoss" :key="c.corner.number" type="button" class="corner-row" :class="{ active: selectedCorner === c.corner.number }" :title="t('telemetry.cornerTitle', { n: c.corner.number, lap: c.lapMinKmh?.toFixed(0) ?? '--', ref: c.refMinKmh?.toFixed(0) ?? '--' })" @click="selectCorner(c.corner.number)">
-              <span class="corner-num">{{ c.corner.number }}</span><span class="corner-cell" :style="{ background: heat(c.timeLostS) }">{{ formatDelta(c.timeLostS) }}</span>
+            <!-- 05/11 (user, as Trophi / Track Titan / Delta): a bar as long as the time lost against the worst corner,
+                 the first three losses stand out, the others step back; near zero a grey number, never a word. -->
+            <button v-for="(c, i) in cornersByLoss" :key="c.corner.number" type="button" class="corner-row" :class="{ active: selectedCorner === c.corner.number }" :title="t('telemetry.cornerTitle', { n: c.corner.number, lap: c.lapMinKmh?.toFixed(0) ?? '--', ref: c.refMinKmh?.toFixed(0) ?? '--' })" @click="selectCorner(c.corner.number)">
+              <span class="corner-num">{{ c.corner.number }}</span>
+              <span class="corner-cell corner-bar" :class="[`is-${deltaLevel(c.timeLostS)}`, c.timeLostS > 0 ? 'is-loss' : 'is-gain']">
+                <span class="corner-bar__fill" :style="{ width: `${deltaBars(cornersByLoss.map(x => x.timeLostS))[i]}%` }" />
+                <span class="corner-bar__value">{{ formatDelta(c.timeLostS) }}</span>
+              </span>
             </button>
           </div>
         </section>
       </aside>
       <div class="tracce-center">
-        <div class="panel">
+        <!-- 06/11 (user): the way back to the whole lap, in words for a beginner, over the map, aligned right. Its row is
+             always kept (the map never jumps), the button shows only while a sector, a corner or a dragged stretch is
+             open (also a click on the open box, Esc, double click). -->
+        <div class="whole-row">
+          <button v-if="!wholeView" type="button" class="rc-btn rc-btn--compact whole-lap" data-testid="whole-lap" :title="t('telemetry.backWholeTitle')" @click="wholeLap">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8a5 5 0 1 0 1.6-3.7M3 2.5v2.8h2.8" /></svg>{{ t('telemetry.backWhole') }}
+          </button>
+        </div>
+        <div class="panel panel--map">
           <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null && !sessionColours" :focus="selectedSector !== null ? range : null" :color-mode="sessionColours ? 'delta' : 'laps'" :zone-colors="sessionColours ? zones.colors.value : null" zoom-controls :size="deltaPlace === 'top' ? 420 : 320" :corner-deltas="cornerDeltas" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>
-        <!-- dev.10 (user 05/11): the stint of Tu under the map (pace, valid laps, best, theoretical, fuel). -->
-        <StintBlock v-if="stintBlock" :facts="stintBlock" :summary="stintSummary" />
+        <!-- 05/11 (user): under the map, pages with dots: the stint of Tu, then the session's advice (always there, with
+             few laps it says how many it needs). On the session page the map takes the session's colours, as the old
+             Giro/Sessione switch. -->
+        <UnderMapSlides v-if="stintBlock || zones.active.value" :labels="[stintBlock ? t('telemetry.underMap.stint') : '', t('telemetry.underMap.session')].filter(Boolean)"
+          :index="lossScope === 'session' && stintBlock ? 1 : 0" @update:index="lossScope = $event === 1 || !stintBlock ? 'session' : 'lap'">
+          <template #default="{ index }">
+            <StintBlock v-if="stintBlock && index === 0" :facts="stintBlock" :summary="stintSummary" />
+            <SessionZonesCard v-else :insight="zones.insight.value" :selected="selectedCorner" :total-laps="zones.totalLaps.value" @select="selectCorner($event)" />
+          </template>
+        </UnderMapSlides>
         <div v-if="reference && deltaPlace === 'centre'" ref="deltaWrap">
           <AnalysisCharts :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaHeight" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
         </div>
@@ -547,32 +570,28 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
       <div class="tracce-right">
         <!-- Sectors and corners on top of the charts, aligned to their distance axis and
              sticky under the lap bar (Track Titan's segment strip, MoTeC's section bar). -->
-        <div class="tracce-top">
-        <div class="tracce-strip">
-          <TraceStripHead v-model:delta-place="deltaPlace" v-model:all-channels="allChannels" :view-label="viewLabel" :whole-view="wholeView"
-            :stepping="selectedCorner !== null && !zoomRange" :focus="focusCorner ? { number: focusCorner.corner.number, lostS: focusCorner.timeLostS } : null"
-            :show-delta-switch="false" @step="goCorner" @whole="wholeLap" @open-focus="selectCorner" />
-          <div v-if="sectorList.length" class="strip-row strip-row--sectors">
-            <button v-for="s in visibleSectors" :key="s.index" type="button" :class="{ active: selectedSector === s.index }" :style="{ left: `${s.left}%`, width: `${s.width}%` }" :title="t('telemetry.sectorStripTitle', { n: s.index + 1 })" @click="selectSector(s.index)">S{{ s.index + 1 }}</button>
-          </div>
-          <div class="strip-row strip-row--corners">
-            <button v-for="c in visibleCorners" :key="c.number" type="button" :class="{ active: selectedCorner === c.number, gain: c.lost <= -0.01, loss: c.lost >= 0.01 }" :style="{ left: `${c.left}%`, width: `${c.width}%` }" :title="`${t('telemetry.corner', { n: c.number })}: ${formatDelta(c.lost)} s`" @click="selectCorner(c.number)">{{ c.number }}</button>
-          </div>
-        </div>
+        <div class="tracce-top" @wheel="scrollCharts">
+        <TraceStrip :sectors="visibleSectors" :corners="visibleCorners" :selected-sector="selectedSector" :selected-corner="selectedCorner" :can-step="canStep"
+          @sector="selectSector" @corner="selectCorner" @step="goStep" />
         <!-- 01/11: the delta first, fixed with the bar while the other charts scroll under it. -->
         <AnalysisCharts v-if="reference && deltaPlace === 'top'" class="tracce-delta" :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaTopHeight" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
         </div>
-        <AnalysisCharts :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="traceRowHeight" :cursor-tag="cursorCorner" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
+        <!-- 05/11 (user): the charts scroll in their own box under the strip and the delta, never behind them. -->
+        <div ref="chartScroll" class="tracce-scroll">
+          <AnalysisCharts :lap="lap" :reference="reference" :rows="traceRows" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="traceRowHeight" :cursor-tag="cursorCorner" :distances="!reference" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
+        </div>
       </div>
     </div>
   </section>
 </template>
 
 <style scoped lang="scss">
+// The left column's styles (Settori, Dove perdi di più), kept apart for max-lines; scoped with the rest.
+@use "./analysisSideBoxes";
 // Racer Core language: dark cells, thin borders, red accent, italic display titles.
 .analysis { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; animation: rc-panel-in 200ms ease-out; }
 // 02/11: shown again after Sessione (v-show) the view fades in, as the Sessione view does.
-@keyframes rc-panel-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes rc-panel-in { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .analysis { animation: none; } }
 // Sticky: lap pickers and layout stay in sight while the charts scroll under them.
 .analysis-bar { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 6px 0; background: #0b0b10f2; box-shadow: 0 8px 12px -10px #000;
@@ -583,15 +602,24 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 .analysis-bar--head { flex-wrap: wrap; > .compare { flex: 1 1 0; justify-content: flex-end; } > .bar-note { flex: 1 1 100%; text-align: right; } }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 // PIP-623: share and paste, square buttons as tall as the pickers.
-.loss-scope { display: flex; button { flex: 1; } }
 .bar-note { color: #3ddc5a; font-size: 12px; &.failed { color: #ff5a6e; } }
 .analysis-note--warn { color: #fbbf24; }
 // PIP-635: the comparison block: Tu, the gap between the two laps, Riferimento.
 .compare { display: flex; align-items: center; gap: 0; min-width: 0; flex: 1 1 auto; }
+// 06/11 (user): as tall as the sectors/segments strip beside it (58 px, TraceStrip) and its ◀ ▶ (50 px), so the map
+// starts level with the delta chart (strip + the right column's 4 px gap; the centre column's gap is 8 px, hence -4).
+// 06/11 (user): the same thin line as between the charts, between the delta and the charts below it.
+.tracce-delta { border-bottom: 1px solid #ffffff17; }
+.whole-row { flex: none; display: flex; align-items: center; justify-content: flex-end; height: 58px; margin-bottom: -4px; padding: 4px 0; }
+// 06/11 (user): the site's light button (.rc-btn, as Condividi: thin white edge, the cut corner, a fuller white on hover)
+// instead of a dark box going red; only its height follows the strip's ◀ ▶.
+.whole-lap { flex: none; height: 50px;
+  svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; } }
 .compare-gap { display: grid; justify-items: center; align-content: center; min-width: 104px; height: 38px; margin: 0; padding: 0 10px; line-height: 1.1; color: #b3b3b8;
   strong { font: 700 16px 'Inter', sans-serif; font-variant-numeric: tabular-nums; color: #e6e6ea; }
   em { font-style: normal; font-size: 11px; }
   &.gain strong { color: #3ddc5a; } &.loss strong { color: #ff5a6e; } }
+.compare-gap__label { color: #8a8a90; font: 700 9px 'Inter', sans-serif; letter-spacing: .08em; text-transform: uppercase; }
 // Narrow screens: the two laps one under the other, the gap between them (they need about 620 px side by side).
 .compare-mid { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .compare-swap { width: 34px; height: 26px; padding: 0; border: 1px solid #ffffff40; background: #ffffff0d; color: #fff; font: 700 15px/1 "Inter", sans-serif; cursor: pointer;
@@ -601,61 +629,42 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
 .analysis-note { margin: 4px 0 0; color: #77777d; font-size: 11px; }
 .gain { color: #3ddc5a; }
 .loss { color: #ff5a6e; }
-.panel { display: grid; gap: 8px; border: 1px solid #ffffff1f; background: #ffffff06; padding: 8px; align-content: start; }
+// 06/11 (user): no frame around the map either, as the charts: the thin line under it separates it from the pages below.
+.panel { display: grid; gap: 8px; padding: 0 0 22px; border-bottom: 1px solid #ffffff2b; align-content: start; }
 .map-legend { display: flex; gap: 5px; align-items: center; color: #8a8a90; font-size: 11px;
   i { width: 14px; height: 3px; margin-left: 6px; &.g { background: #3ddc5a; } &.r { background: #ff5a6e; } &.n { background: #8a8a90; } } }
 
 // Garage 61 analyzer: left bar, map + delta in the middle, channels on the right, sector strip on top of the charts.
-.layout-tracce { display: grid; grid-template-columns: 210px 320px minmax(0, 1fr); grid-template-areas: 'left center right'; gap: 10px; align-items: stretch; overflow: hidden;
+// 06/11 (user): a thin line between the columns, with air on both sides (24 px; each column 24 px wider, the content
+// keeps its width).
+.layout-tracce { display: grid; grid-template-columns: 234px 344px minmax(0, 1fr); grid-template-areas: 'left center right'; gap: 24px; align-items: stretch; overflow: hidden;
   // 01/11: with the delta on top the map has the middle column to itself: wider, numbers and times readable.
-  &--wide { grid-template-columns: 210px 420px minmax(0, 1fr); } }
+  &--wide { grid-template-columns: 234px 444px minmax(0, 1fr); }
+  > .tracce-left, > .tracce-center { padding-right: 24px; }
+  > .tracce-left { border-right: 1px solid #ffffff2b; }
+  // The line between the map and the charts starts under "Torna al giro intero" (its row: 58 px, button 4..54 px).
+  > .tracce-center { position: relative; &::after { content: ''; position: absolute; top: 54px; right: 0; bottom: 0; width: 1px; background: #ffffff17; pointer-events: none; } } }
 // Left column: three boxes with air between them (Garage 61 Laps/Gaps, VRS corners).
 // Tracce fills the window: the page does not scroll, each column scrolls on its own.
 .tracce-left { grid-area: left; display: flex; flex-direction: column; gap: 10px; height: 100%; overflow-y: auto; overflow-x: hidden; }
-.side-box { display: grid; gap: 8px; padding: 10px; border: 1px solid #ffffff1f; background: #ffffff06;
-  h4 { margin: 0 0 2px; color: #fff; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; letter-spacing: .02em;
-    small { color: #77777d; font: 500 10px 'Inter', sans-serif; text-transform: none; margin-left: 4px; } }
-  // The corner list reaches the bottom of the column, level with the delta; on a very tall
-  // window it stops at a maximum height and scrolls inside.
-  // A column: title, the opened corner's advice when there is one, the head, then the list that scrolls (01/11).
-  &--corners { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 160px; max-height: 760px; > .corner-list { flex: 1 1 auto; } } }
-.side-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; h4 { margin: 0; } }
-.sector-rows { display: grid; gap: 3px; }
-// PIP-635: the row you are looking at stands out as a whole (white frame, number on white), the others step back;
-// red and green stay only for losing and gaining.
-.sector-row, .corner-row { transition: opacity .15s ease; &.active { outline: 2px solid #fff; outline-offset: 1px; z-index: 1; } }
-.has-active > .sector-row:not(.active), .has-active > .corner-row:not(.active) { opacity: .5; &:hover { opacity: .85; } }
-.sector-row { display: grid; grid-template-columns: 30px 1fr 1fr; gap: 3px; padding: 0; border: 0; background: none; cursor: pointer; font-variant-numeric: tabular-nums;
-  &.active .sector-name { background: #fff; color: #0b0b10; } }
-.sector-name { display: grid; place-items: center; padding: 6px 0; background: #ffffff0d; color: #e6e6ea; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; }
-.sector-time { display: grid; place-items: center; background: #ffffff08; color: #c8c8cc; font: 600 13px 'Inter', sans-serif; }
-.sector-gap { display: grid; place-items: center; color: #fff; font: 700 13px 'Inter', sans-serif; }
-.corner-row--head { cursor: default; color: #a1a1a8; font: 700 11px 'Inter', sans-serif; text-transform: uppercase; letter-spacing: .04em; }
-// One corner per row, the section scrolls on its own when the list is longer than the column.
-.corner-list { display: grid; gap: 3px; align-content: start; min-height: 0; overflow-y: auto; padding-right: 2px; }
-.corner-row { display: grid; grid-template-columns: 52px 1fr; gap: 3px; padding: 0; border: 0; background: none; cursor: pointer; text-align: center;
-  &.active .corner-num { background: #fff; color: #0b0b10; }
-  &.active .corner-cell { box-shadow: none; } }
-.corner-num { position: relative; display: grid; place-items: center; padding: 4px 0; background: #ffffff0d; color: #e6e6ea; font: italic 700 15px 'Racer Display', 'Arial Narrow', sans-serif; }
-.corner-cell { display: grid; place-items: center; color: #fff; font: 700 13px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
-.tracce-center { grid-area: center; display: grid; gap: 8px; align-content: start; height: 100%; overflow-y: auto; overflow-x: hidden; }
+// 05/11 (user): the map on top, the pages under it fill the column down to the window's bottom, level with the other two.
+// 06/11 (user): the column itself never scrolls; only the pages under the map do, inside their frame, without a scrollbar.
+.tracce-center { grid-area: center; display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; overflow: hidden auto; scrollbar-width: none; &::-webkit-scrollbar { display: none; }
+  > * { flex: none; } > .under-map { flex: 1 1 auto; min-height: 200px; } }
+// (Codex 06/11) a wide but short window: the pages under the map keep 200 px, and only then the column scrolls (no bar).
 // 01/11: the charts reach the right edge: the column still scrolls (wheel, touch), without the 15 px scrollbar
 // that left a gap beside the pills.
-.tracce-right { grid-area: right; min-width: 0; height: 100%; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; &::-webkit-scrollbar { display: none; } }
+.tracce-right { grid-area: right; min-width: 0; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+.tracce-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; &::-webkit-scrollbar { display: none; } }
 // 01/11: the bar and (when on top) the delta stay fixed together while the charts scroll.
-.tracce-top { position: sticky; top: 0; z-index: 4; display: grid; gap: 4px; margin-bottom: 6px; padding-bottom: 2px; background: #0b0b10f2; box-shadow: 0 8px 10px -10px #000; }
-.tracce-strip { display: grid; gap: 1px; padding: 2px 9px 2px 43px; }
-.strip-row { position: relative; height: 24px;
-  button { position: absolute; top: 0; height: 100%; padding: 0; border: 1px solid #0b0b10; background: #ffffff14; color: #e6e6ea; font: 700 13px 'Inter', sans-serif; cursor: pointer; overflow: hidden;
-    &:hover { background: #ffffff26; }
-    &.active { background: #ffffff33; color: #fff; box-shadow: inset 0 -2px #ff0024; } }
-  &--sectors { height: 16px; button { font-size: 11px; } }
-  &--corners { height: 18px;
-    button { background: #ffffff0a; color: #b3b3b8; font-size: 10px; &.gain { color: #3ddc5a; } &.loss { color: #ff5a6e; } } } }
+.tracce-top { flex: none; display: grid; gap: 4px; margin-bottom: 6px; padding-bottom: 2px; }
 
 // PIP-639: stacked (phone) or lists beside the map (tablet): the page scrolls, not each column (nested scroll areas
 // trap the thumb on a phone), so the fitted window height (inline style) and the sticky bar are for desktop only.
 @media (max-width: 1100px) { .layout-tracce, .layout-pilota { grid-template-columns: minmax(0, 1fr); overflow: visible; height: auto !important; } .analysis-bar { position: static; }
-  .layout-tracce { grid-template-areas: "left" "center" "right"; } .tracce-left, .tracce-center, .tracce-right, .pilota-left, .pilota-right { position: static; height: auto; overflow: visible; } }
+  .layout-tracce { grid-template-areas: "left" "center" "right"; } .tracce-left, .tracce-center, .tracce-right, .tracce-scroll, .pilota-left, .pilota-right { position: static; height: auto; overflow: visible; } .tracce-right { display: block; }
+  .layout-tracce > .tracce-left, .layout-tracce > .tracce-center { padding-right: 0; border-right: 0; &::after { display: none; } }
+  // Stacked, the column has no height of its own: the pages under the map keep a frame to show in.
+  .tracce-center > .under-map { min-height: 260px; } }
 @media (min-width: 701px) and (max-width: 1100px) { .layout-tracce { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "left center" "right right"; } }
 </style>

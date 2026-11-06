@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useGameContext } from '~/composables/useGameContext'
-import { preparePage, preparePageFonts } from '~/services/ui/pagePreparation'
+import { preparePage, preparePageFonts, rememberPage, rememberedPage } from '~/services/ui/pagePreparation'
 import { overviewEntryKey, decodeOverviewImage } from '~/services/auth/overviewEntryPreparation'
 import { useTargetUserId } from '~/composables/usePilotContext'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
@@ -35,8 +35,14 @@ async function prepare() {
     return { uid, projection: ready, events, pending }
   })
 }
-const prepared = shallowRef(await prepare())
-async function retry() { prepared.value = await prepare() }
+// 06/11 (user: "I click and nothing happens for a moment"): the projection was rebuilt on every visit (0.5-0.65 s while
+// the old page waited). Seen before for this owner, the page enters at once with what it showed and refreshes behind.
+const rememberKey = `panoramica:${uid}`
+const remembered = useGameContext().consultedGame.value === 'acc' ? rememberedPage<NonNullable<Awaited<ReturnType<typeof prepare>> & { ok: true }>['value']>(rememberKey) : undefined
+const prepared = shallowRef(remembered ? { ok: true as const, value: { ...remembered, stale: true } } : await prepare())
+if (prepared.value.ok && prepared.value.value && !remembered) rememberPage(rememberKey, prepared.value.value)
+// The refresh behind is PanoramicaPage's own load (`stale`), which drops late answers and shows errors (Codex 06/11).
+async function retry() { prepared.value = await prepare(); if (prepared.value.ok && prepared.value.value) rememberPage(rememberKey, prepared.value.value) }
 watch(useGameContext().consultedGame, game => { if (game === 'acc') void retry() })
 </script>
 

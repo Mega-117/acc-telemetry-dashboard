@@ -14,6 +14,8 @@ export const MIN_ZONE_LAPS = 4
 /** A pass is spoiled when it is this far above the typical time (and well outside the usual swing). */
 const MISTAKE_MIN_S = 0.3
 const MISTAKE_SPREAD_FACTOR = 4
+/** Below this a swing or a potential is not worth a card (the card says there is nothing else). */
+export const ADVICE_MIN_S = 0.05
 
 export interface ZoneStat {
   corner: Corner
@@ -23,7 +25,7 @@ export interface ZoneStat {
   spreadS: number
   /** Typical minus best: what the usual lap leaves on the table here. */
   potentialS: number
-  /** Laps spoiled here (valid and invalid) and the time they lost on the typical pass. */
+  /** Laps spoiled here (valid and invalid: out of every complete lap) and the time they lost on the typical pass. */
   mistakes: number
   mistakeLossS: number
 }
@@ -61,12 +63,18 @@ export function sessionZones(validLaps: LapTraceView[], corners: Corner[], inval
     return [{ corner, bestS: Math.min(...times), typicalS, spreadS, potentialS: typicalS - Math.min(...times),
       mistakes: spoiled.length, mistakeLossS: spoiled.reduce((sum, t) => sum + t - typicalS, 0) }]
   })
-  // Each card names the corner that really ranks first for it, even when another card names it too.
-  const pick = (score: (z: ZoneStat) => number, keep: (z: ZoneStat) => boolean) =>
-    zones.filter(keep).sort((a, b) => score(b) - score(a))[0] ?? null
+  // 05/11 (user): one stretch per card, so each colour shows on the map and no card repeats another. In order of
+  // what costs most - mistakes, then potential, then swing - each card takes the worst stretch the cards before it
+  // left; a card says "nothing else" rather than name a stretch worth under ADVICE_MIN_S.
+  const used = new Set<number>()
+  const pick = (score: (z: ZoneStat) => number, keep: (z: ZoneStat) => boolean) => {
+    const zone = zones.filter(z => keep(z) && !used.has(z.corner.number)).sort((a, b) => score(b) - score(a))[0] ?? null
+    if (zone) used.add(zone.corner.number)
+    return zone
+  }
   const mostMistakes = pick(z => z.mistakes * 1000 + z.mistakeLossS, z => z.mistakes > 0)
-  const leastConsistent = pick(z => z.spreadS, z => z.spreadS >= 0.01)
-  const mostPotential = pick(z => z.potentialS, z => z.potentialS >= 0.01)
+  const mostPotential = pick(z => z.potentialS, z => z.potentialS >= ADVICE_MIN_S)
+  const leastConsistent = pick(z => z.spreadS, z => z.spreadS >= ADVICE_MIN_S)
   return { laps: validLaps.length, zones, leastConsistent, mostPotential, mostMistakes }
 }
 
@@ -79,7 +87,8 @@ export function zoneMapColors(insight: SessionZones): { start: number, end: numb
     .flatMap(([key, color]) => { const zone = insight[key]; return zone ? [{ start: zone.corner.start, end: zone.corner.end, color }] : [] })
 }
 
-/** Seconds with a comma, as the sentences read in Italian: 0.4 → "0,4", 0.06 → "0,06". */
+/** Seconds for the cards: 0.4 → "0.4", 0.06 → "0.06". */
 export function zoneSeconds(seconds: number): string {
-  return (seconds >= 0.1 ? seconds.toFixed(1) : seconds.toFixed(2)).replace('.', ',')
+  // 05/11 (user): a dot, as every other time on the Telemetria.
+  return seconds >= 0.1 ? seconds.toFixed(1) : seconds.toFixed(2)
 }

@@ -15,6 +15,15 @@ export async function preparePage<T>(work: () => Promise<T>, timeoutMs = 12000):
   }
 }
 
+/**
+ * 06/11 (user: a click, then nothing for half a second): what a page was last prepared with, per page and owner, in
+ * memory only. A page seen before enters at once with it (PIP-455: still a whole page, never an empty one) and
+ * refreshes behind; the next visit gets the newer one.
+ */
+const remembered = new Map<string, unknown>()
+export function rememberPage<T>(key: string, value: T): void { remembered.set(key, value) }
+export function rememberedPage<T>(key: string): T | undefined { return remembered.get(key) as T | undefined }
+
 /** Preserve the chosen fonts; wait for their actual metrics before entering. */
 export async function preparePageFonts(): Promise<void> {
   if (typeof document === 'undefined') return

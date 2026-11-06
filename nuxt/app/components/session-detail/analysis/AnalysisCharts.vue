@@ -38,13 +38,15 @@ const props = withDefaults(defineProps<{
   corners?: Corner[]
   /** PIP-635: what goes before the distance under the cursor (the corner, "C6"). */
   cursorTag?: string | null
+  /** The km labels under the last chart (false: the delta above shows the one scale). The cursor tag always shows. */
+  distances?: boolean
   /** Same height for every row (Tracce). */
   rowHeight?: number | null
   /** Garage 61 zoom: drag to zoom a stretch, wheel in and out, double click for the lap. */
   zoomable?: boolean
   /** 01/11 (the focus zone of Track Titan): the stretch to look at, highlighted at the same place on every chart. */
   focus?: [number, number] | null
-}>(), { range: () => [0, 1], refCursor: null, corners: () => [], cursorTag: null, rowHeight: null, zoomable: false, focus: null })
+}>(), { range: () => [0, 1], refCursor: null, corners: () => [], cursorTag: null, distances: true, rowHeight: null, zoomable: false, focus: null })
 const emit = defineEmits<{ hover: [fraction: number | null], select: [corner: number], zoom: [range: [number, number] | null] }>()
 
 const uid = useId()
@@ -148,24 +150,27 @@ const headerValues = computed(() => charts.value.map(chart => {
   const f = props.cursor
   if (!inRange(f)) return null
   // The delta box takes the line's colour: red when you lose, green when you gain.
-  if (chart.row.delta) { const d = deltaAt(f) - chart.origin; return props.reference ? { lap: `${formatDelta(d)} s`, ref: null, diff: null, tone: d > 0 ? 'loss' : d < 0 ? 'gain' : null } : null }
+  if (chart.row.delta) { const d = deltaAt(f) - chart.origin; return props.reference ? { lap: `${formatDelta(d)} s`, ref: null, tone: d > 0 ? 'loss' : d < 0 ? 'gain' : null, width: 8 } : null }
   const c = chart.row.channels[0]
   if (!c) return null
   const digits = chart.row.digits ?? 0
   const unit = chart.row.unit ? ` ${chart.row.unit}` : ''
   const lap = valueAt(props.lap, c, f)
   const ref = props.reference ? valueAt(props.reference, c, props.refCursor ?? f) : null
-  const diff = lap !== null && ref !== null ? lap - ref : null
+  // 06/11 (user): no Δ readout - Tu and Rif. side by side already show it, and the delta chart above.
   return {
     lap: `${lap === null ? '--' : lap.toFixed(digits)}${unit}`,
     ref: props.reference ? `${ref === null ? '--' : ref.toFixed(digits)}${unit}` : null,
-    diff: diff === null ? null : `${diff > 0 ? '+' : diff < 0 ? '−' : '±'}${Math.abs(diff).toFixed(digits)}`,
+    // 05/11 (user): room for three digits (plus decimals and unit) whatever the value, so the numbers never move.
+    width: 3 + (digits ? digits + 1 : 0) + unit.length,
   }
 }))
 const km = (fraction: number) => {
   const metres = fraction * props.lap.lengthM
   return metres >= 1000 ? `${(metres / 1000).toFixed(1)} km` : `${Math.round(metres)} m`
 }
+// 06/11 (user): the cursor tag always in metres ("1312 m", not "1.3 km"): the exact point on every chart.
+const metresAt = (fraction: number) => `${Math.round(fraction * props.lap.lengthM)} m`
 // Distance axis: round steps in metres along the shown range, with a faint vertical line each.
 const xTicks = computed(() => {
   const [r0, r1] = props.range
@@ -222,12 +227,14 @@ function onDouble() {
     <div v-for="(chart, index) in charts" :key="chart.row.key" class="chart">
       <!-- Track Titan header: the channel name, readable, and the values at the cursor. -->
       <div class="chart-head">
-        <span class="chart-title">{{ chart.row.title }}<em v-if="chart.row.note" class="chart-note" :class="chart.row.noteTone ? `chart-note--${chart.row.noteTone}` : null">{{ chart.row.note }}</em></span>
-        <span v-if="headerValues[index]" class="chart-values">
+        <span class="chart-title">{{ chart.row.title }}</span>
+        <span v-if="headerValues[index]" class="chart-values" :style="{ '--w': `${headerValues[index]!.width}ch` }">
           <span class="v" :class="'tone' in headerValues[index]! && headerValues[index]!.tone ? `v--${headerValues[index]!.tone}` : 'v--lap'">{{ tr('telemetry.you') }} <b>{{ headerValues[index]!.lap }}</b></span>
           <span v-if="headerValues[index]!.ref" class="v v--ref">{{ tr('telemetry.refShort') }} <b>{{ headerValues[index]!.ref }}</b></span>
-          <span v-if="headerValues[index]!.diff" class="v v--diff">Δ <b>{{ headerValues[index]!.diff }}</b></span>
         </span>
+        <!-- 06/11 (user): the gap of the open stretch at the right end of the header (as Track Titan's "Diff"), out of the
+             line name + values. -->
+        <em v-if="chart.row.note" class="chart-note" :class="chart.row.noteTone ? `chart-note--${chart.row.noteTone}` : null">{{ chart.row.note }}</em>
       </div>
       <div class="chart-yaxis" :style="{ height: `${chart.height}px` }">
         <span v-for="(t, i) in chart.ticks" :key="i" :style="{ top: `${t.y}px` }">{{ t.label }}</span>
@@ -257,8 +264,10 @@ function onDouble() {
         <i v-for="(d, i) in dots[index]" :key="i" class="chart-dot" :class="{ ref: d.ref }" :style="{ left: `${d.x / WIDTH * 100}%`, top: `${d.y}px`, '--c': d.color }" />
       </div>
       <div class="chart-xaxis">
-        <span v-for="(t, i) in xTicks" :key="i" class="chart-xtick" :style="{ left: `${t.x / WIDTH * 100}%`, '--p': `${t.x / WIDTH * 100}%` }">{{ t.label }}</span>
-        <span v-if="inRange(cursor)" class="chart-xcursor" :style="{ left: `${xOf(cursor!) / WIDTH * 100}%`, '--p': `${xOf(cursor!) / WIDTH * 100}%` }">{{ cursorTag ? `${cursorTag} · ` : '' }}{{ km(cursor!) }}</span>
+        <!-- 06/11 (user): the distances only once (under the last chart, or only on the delta above when it is there); the
+             others keep the row (same heights) for the cursor tag, our strong point. -->
+        <span v-for="(t, i) in distances && index === charts.length - 1 ? xTicks : []" :key="i" class="chart-xtick" :style="{ left: `${t.x / WIDTH * 100}%`, '--p': `${t.x / WIDTH * 100}%` }">{{ t.label }}</span>
+        <span v-if="inRange(cursor)" class="chart-xcursor" :style="{ left: `${xOf(cursor!) / WIDTH * 100}%`, '--p': `${xOf(cursor!) / WIDTH * 100}%` }">{{ cursorTag ? `${cursorTag} · ` : '' }}{{ metresAt(cursor!) }}</span>
       </div>
     </div>
   </div>
@@ -268,7 +277,9 @@ function onDouble() {
 .charts { display: grid; gap: 6px; min-width: 0; }
 .bands { display: block; width: calc(100% - 51px); margin-left: 43px; height: 18px;
   .band { cursor: pointer; rect { fill: #ffffff0d; stroke: #ffffff1f; stroke-width: 1; vector-effect: non-scaling-stroke; } text { fill: #b3b3b8; font: 700 11px 'Inter', sans-serif; text-anchor: middle; } &:hover rect { fill: #ff002426; } } }
-.chart { display: grid; grid-template-columns: 42px minmax(0, 1fr); grid-template-rows: auto auto 16px; border: 1px solid #ffffff1f; background: #ffffff06; padding: 6px 8px 2px 0; }
+.chart { display: grid; grid-template-columns: 42px minmax(0, 1fr); grid-template-rows: auto auto 16px; padding: 6px 8px 2px 0;
+  // 06/11 (user: "they look glued together", as Track Titan): no box per chart, only a thin line under each one.
+  border-bottom: 1px solid #ffffff17; &:last-child { border-bottom: 0; } }
 .chart-yaxis { position: relative;
   span { position: absolute; right: 6px; transform: translateY(-50%); color: #a1a1a8; font: 600 11px 'Inter', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; } }
 .chart-plot { position: relative; min-width: 0; }
@@ -279,27 +290,32 @@ svg { display: block; width: 100%; touch-action: none; cursor: crosshair; }
 .chart-line { fill: none; stroke-width: 1.8; vector-effect: non-scaling-stroke; stroke-linejoin: round; &--ref { stroke-width: 1.5; } }
 .chart-zero { stroke: #ffffff40; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .chart-cursor { stroke: #fff; stroke-width: 1; vector-effect: non-scaling-stroke; opacity: .55; }
-.chart-grid { stroke: #ffffff14; stroke-width: 1; stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
+// 06/11 (user): a fainter grid, so the lines breathe.
+.chart-grid { stroke: #ffffff0b; stroke-width: 1; stroke-dasharray: 3 4; vector-effect: non-scaling-stroke; }
 .chart-dot { position: absolute; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; background: var(--c); border: 1.5px solid #fff; pointer-events: none;
   &.ref { background: #0a0a0f; border: 2px solid var(--c); } }
 // Track Titan header: name on the left in white, live values on the right in the lap colours.
 // Altezza fissa: i riquadri dei valori compaiono e spariscono col cursore senza spostare nulla (niente
 // scrollbar che lampeggia nella colonna centrale).
 // 02/11 (user): the values at the cursor in the middle of the header, the channel name on the left.
-.chart-head { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 10px; min-height: 24px; padding: 0 0 4px 12px;
-  > .chart-values { grid-column: 2; } }
+// 06/11 (user: without boxes it was unclear whether the values belong to the chart above or below): the values follow
+// the chart's own name on the left, as one line - "VELOCITÀ  ● Tu 218 km/h  ● Rif. 218 km/h".
+.chart-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 22px; min-height: 24px; padding: 0 0 4px 12px;
+  // The same start on every chart, whatever the name's length.
+  > .chart-title { min-width: 110px; } }
 .chart-title { color: #fff; font: italic 700 15px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; letter-spacing: .03em;
   small { color: #8a8a90; font: 500 11px 'Inter', sans-serif; text-transform: none; } }
-.chart-note { margin-left: 8px; padding: 1px 6px; border: 1px solid #ffffff2e; color: #e6e6ea; font: normal 700 11px 'Inter', sans-serif; letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums;
-  &--loss { border-color: #ff5a6e80; background: #e4002b33; color: #ff8a98; } &--gain { border-color: #3ddc5a80; background: #16a34a33; color: #7ee79a; } }
-.chart-values { display: flex; gap: 6px; font: 600 12px 'Inter', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap;
-  // A small fixed width per number, right-aligned: changing digits barely move the boxes.
-  // Riquadri discreti: bordo e fondo appena accennati nel colore del giro, il numero e' quello che si nota.
-  .v { --vc: #e6e6ea; display: inline-flex; align-items: baseline; gap: 5px; height: 20px; box-sizing: border-box; padding: 2px 6px; border: 1px solid color-mix(in srgb, var(--vc) 22%, transparent); background: color-mix(in srgb, var(--vc) 7%, transparent); color: #8a8a90;
-    b { display: inline-block; min-width: 5ch; text-align: right; color: var(--vc); font-weight: 700; font-size: 13px; } }
-  .v--diff b { min-width: 3ch; }
+// 06/11 (user): the gap of the open stretch well visible - any gain green, any loss red, even -0.002.
+.chart-note { margin-left: auto; padding: 2px 8px; border: 1px solid #ffffff2e; color: #e6e6ea; font: normal 700 13px 'Inter', sans-serif; letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums;
+  &--loss { border-color: #ff0024; background: #e4002b; color: #fff; } &--gain { border-color: #16a34a; background: #16a34a; color: #fff; } }
+// 06/11 (user, as Track Titan): no boxes and no Δ - a dot in the lap's colour, the label, the value in that colour.
+// A fixed width per number, right-aligned: changing digits never move them.
+.chart-values { display: flex; gap: 16px; font: 600 12px 'Inter', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap;
+  .v { --vc: #e6e6ea; display: inline-flex; align-items: center; gap: 6px; height: 20px; color: #a1a1a8;
+    &::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--vc); }
+    b { display: inline-block; min-width: var(--w, 5ch); text-align: right; color: var(--vc); font-weight: 700; font-size: 13px; } }
   .v--lap { --vc: #38bdf8; } .v--ref { --vc: #fbbf24; } .v--loss { --vc: #ff5a6e; } .v--gain { --vc: #3ddc5a; } }
-.chart-grid--x { stroke-dasharray: none; stroke: #ffffff0d; }
+.chart-grid--x { stroke-dasharray: none; stroke: #ffffff08; }
 .chart-xaxis { grid-column: 2; position: relative; overflow: hidden; height: 16px; color: #a1a1a8; font: 600 11px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
 // Labels slide from left-aligned at the start to right-aligned at the end (--p), so the
 // one at the cursor never sticks out of the chart: no scrollbar flashing on the far right.

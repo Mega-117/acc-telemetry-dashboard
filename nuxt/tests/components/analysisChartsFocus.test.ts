@@ -39,4 +39,17 @@ describe('AnalysisCharts focus band', () => {
     expect(view.findAll('rect.chart-focus')[0]!.attributes('x')).toBe('0')
     view.unmount()
   })
+
+  it('06/11: the km labels once, under the last chart, or nowhere when the delta above shows them; the cursor tag on every chart', async () => {
+    const view = mount(AnalysisCharts, { props: { lap: trace(104), reference: trace(103), rows, cursor: 0.5 } })
+    const ticks = () => view.findAll('.chart').map(c => c.findAll('.chart-xtick').length)
+    expect(ticks()[0]).toBe(0)
+    expect(ticks()[1]).toBeGreaterThan(0)
+    await view.setProps({ distances: false })
+    expect(ticks()).toEqual([0, 0])
+    expect(view.findAll('.chart-xcursor')).toHaveLength(2)
+    // The cursor tag in whole metres, never rounded to "x.x km" (here the lap is 100 m long).
+    expect(view.get('.chart-xcursor').text()).toBe(`${Math.round(0.5 * view.props('lap').lengthM)} m`)
+    view.unmount()
+  })
 })

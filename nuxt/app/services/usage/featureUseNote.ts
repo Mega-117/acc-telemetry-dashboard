@@ -12,6 +12,9 @@ export type FeatureUseNote =
   | { event: 'laps.coach_loaded', laps: number, otherCar: number, failed: number }
   | { event: 'laps.ideal_built', segments: number, joinsSkipped: number, gainTenthsPct: number }
   | { event: 'laps.stint_card', kind: number, reference: number, bestMismatch: number }
+  /** PIP-737 (dev.12): segments moved before the braking, and the Panoramica entered with the last visit's data. */
+  | { event: 'laps.segments', segments: number, badBounds: number }
+  | { event: 'overview.remembered', changed: number, older: number }
 
 type Bridge = { noteFeatureUse?: (note: FeatureUseNote) => void }
 

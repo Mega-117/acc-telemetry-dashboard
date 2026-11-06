@@ -9,7 +9,7 @@ import { buildCommonOverviewProjection } from '~/services/projections/buildCommo
 const mocks = vi.hoisted(() => ({ acc: vi.fn(), evo: vi.fn(), push: vi.fn() }))
 const game = ref('acc'), owner = ref('qa'), cloudReady = ref(true)
 vi.mock('~/composables/useFirebaseAuth', () => ({ useFirebaseAuth: () => ({ cloudSessionReady: cloudReady }) }))
-vi.mock('~/services/ui/pagePreparation', () => ({ preparePage: async (work: () => Promise<unknown>) => ({ ok: true, value: await work() }), preparePageFonts: async () => {} }))
+vi.mock('~/services/ui/pagePreparation', () => ({ preparePage: async (work: () => Promise<unknown>) => ({ ok: true, value: await work() }), preparePageFonts: async () => {}, rememberPage: () => {}, rememberedPage: () => undefined }))
 vi.mock('~/repositories/raceCalendarRepository', () => ({ loadRaceCalendarEvents: async () => [] }))
 vi.mock('~/composables/useGameContext', () => ({ useGameContext: () => ({ consultedGame: game }) }))
 vi.mock('~/composables/usePilotContext', () => ({ usePilotContext: () => ref(null), useTargetUserId: () => owner }))
@@ -124,5 +124,46 @@ it('keeps exactly one overview mounted through route-level ACC/EVO switches', as
   await flushPromises()
   expect(wrapper.findAll('.overview-instance')).toHaveLength(1)
   wrapper.unmount()
+  vi.unstubAllGlobals()
+})
+it('06/11: entrata con i dati della visita prima (stale) mostra subito quelli e poi carica i nuovi; un nuovo non viene mai ricoperto dal vecchio', async () => {
+  cloudReady.value = true
+  let resolveFresh: (p: unknown) => void = () => {}
+  mocks.acc.mockImplementation(() => new Promise(r => { resolveFresh = r }))
+  const wrapper = mount(Page, { props: { prepared: { uid: 'qa', projection: projection('Visita prima') as never, events: [], stale: true } }, global: { stubs } })
+  await flushPromises()
+  expect(wrapper.text()).toContain('Visita prima')
+  expect(mocks.acc).toHaveBeenCalledTimes(1)
+  resolveFresh(projection('Sessione nuova'))
+  await flushPromises()
+  expect(wrapper.text()).toContain('Sessione nuova')
+  expect(wrapper.text()).not.toContain('Visita prima')
+  wrapper.unmount()
+})
+it('06/11: entrata preparata (non stale) non ricarica', async () => {
+  cloudReady.value = true
+  mocks.acc.mockResolvedValue(projection('Altro'))
+  const wrapper = mount(Page, { props: { prepared: { uid: 'qa', projection: projection('Preparata') as never, events: [] } }, global: { stubs } })
+  await flushPromises()
+  expect(mocks.acc).not.toHaveBeenCalled()
+  expect(wrapper.text()).toContain('Preparata')
+  wrapper.unmount()
+})
+it('PIP-737 spy: after the fast entry the reload notes changed and never older; an older session is the KO', async () => {
+  const notes: unknown[] = []
+  vi.stubGlobal('electronAPI', { noteFeatureUse: (n: unknown) => notes.push(n) })
+  ;(window as unknown as { electronAPI: unknown }).electronAPI = { noteFeatureUse: (n: unknown) => notes.push(n) }
+  cloudReady.value = true
+  mocks.acc.mockResolvedValue(projection('2026_11_04T10_00_00_Monza'))
+  const old = mount(Page, { props: { prepared: { uid: 'qa', projection: projection('2026_11_05T10_00_00_Monza') as never, events: [], stale: true } }, global: { stubs } })
+  await flushPromises()
+  expect(notes.at(-1)).toEqual({ event: 'overview.remembered', changed: 1, older: 1 })
+  old.unmount()
+  mocks.acc.mockResolvedValue(projection('2026_11_06T10_00_00_Monza'))
+  const fresh = mount(Page, { props: { prepared: { uid: 'qa', projection: projection('2026_11_05T10_00_00_Monza') as never, events: [], stale: true } }, global: { stubs } })
+  await flushPromises()
+  expect(notes.at(-1)).toEqual({ event: 'overview.remembered', changed: 1, older: 0 })
+  fresh.unmount()
+  delete (window as unknown as { electronAPI?: unknown }).electronAPI
   vi.unstubAllGlobals()
 })

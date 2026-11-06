@@ -58,3 +58,28 @@ describe('useCornerStepper', () => {
     wrapper.unmount()
   })
 })
+
+describe('useCornerStepper - 05/11 (user): the same arrows step the sectors', () => {
+  it('with a sector open ← → move to the sector before / after, round the lap; a dragged zoom is dropped; nothing to step on the whole lap', () => {
+    const state = { selectedCorner: ref<number | null>(null), selectedSector: ref<number | null>(2), zoomRange: ref<[number, number] | null>(null), cursor: ref<number | null>(null) }
+    let api!: ReturnType<typeof useCornerStepper>
+    const wrapper = mount(defineComponent({ setup() {
+      api = useCornerStepper({ active: () => true, corners, sectorCount: ref(3), ...state, wholeLap: () => {} })
+      return () => h('div')
+    } }), { attachTo: document.body })
+    expect(api.canStep.value).toBe(true)
+    press('ArrowRight')
+    expect(state.selectedSector.value).toBe(0)
+    api.goStep(-1)
+    expect(state.selectedSector.value).toBe(2)
+    expect(state.selectedCorner.value).toBeNull()
+    state.zoomRange.value = [0.1, 0.2]
+    expect(api.canStep.value).toBe(true)
+    api.goStep(1)
+    expect(state.selectedSector.value).toBe(0)
+    expect(state.zoomRange.value).toBeNull()
+    state.selectedSector.value = null
+    expect(api.canStep.value).toBe(false)
+    wrapper.unmount()
+  })
+})

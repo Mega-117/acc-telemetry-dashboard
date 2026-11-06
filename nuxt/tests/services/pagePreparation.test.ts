@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { preparePage, preparePageFonts } from '../../app/services/ui/pagePreparation'
+import { preparePage, preparePageFonts, rememberPage, rememberedPage } from '../../app/services/ui/pagePreparation'
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
 describe('complete page presentation', () => {
@@ -34,5 +34,14 @@ describe('complete page presentation', () => {
     expect(load.mock.calls).toEqual([['400 16px Inter'], ['italic 500 18px "Racer Display"'], ['italic 700 24px "Racer Display"']])
     vi.stubGlobal('document', undefined)
     await expect(preparePageFonts()).resolves.toBeUndefined()
+  })
+  it('06/11: remembers what a page was prepared with, per key, for an instant next visit', () => {
+    expect(rememberedPage('panoramica:u1')).toBeUndefined()
+    rememberPage('panoramica:u1', { n: 1 })
+    rememberPage('panoramica:u2', { n: 2 })
+    expect(rememberedPage('panoramica:u1')).toEqual({ n: 1 })
+    rememberPage('panoramica:u1', { n: 3 })
+    expect(rememberedPage('panoramica:u1')).toEqual({ n: 3 })
+    expect(rememberedPage('panoramica:u2')).toEqual({ n: 2 })
   })
 })

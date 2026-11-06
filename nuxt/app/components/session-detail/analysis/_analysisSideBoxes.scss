@@ -1,0 +1,48 @@
+// The Telemetria's left column (Settori, Dove perdi di più), moved out of SessionAnalysisPanel.vue (max-lines);
+// imported inside its scoped style, so the rules stay scoped to the panel.
+// 06/11 (user: "the charts' style is great without boxes"): no frame here either, only the thin line under each section.
+.side-box { display: grid; gap: 8px; padding: 0 0 24px; border-bottom: 1px solid #ffffff2b;
+  & + & { padding-top: 14px; }
+  &:last-child { border-bottom: 0; }
+  h4 { margin: 0 0 2px; color: #fff; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; letter-spacing: .02em;
+    small { color: #77777d; font: 500 10px 'Inter', sans-serif; text-transform: none; margin-left: 4px; } }
+  // The corner list reaches the bottom of the column, level with the delta; on a very tall
+  // window it stops at a maximum height and scrolls inside.
+  // A column: title, the opened corner's advice when there is one, the head, then the list that scrolls (01/11).
+  &--corners { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 160px; > .corner-list { flex: 1 1 auto; } } }
+.side-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; h4 { margin: 0; } }
+.sector-rows { display: grid; gap: 3px; }
+// PIP-635: the row you are looking at stands out as a whole (white frame, number on white), the others step back;
+// red and green stay only for losing and gaining.
+// 06/11 (user): a sector shows the white frame outside the row, as before, with 3 px of room in its list so the column
+// edge never cuts it. A corner has no frame: its number on white and the others dimmed say it (a frame left a black
+// gap between the white number and the bar).
+.sector-row, .corner-row { transition: opacity .15s ease; }
+.sector-row.active { outline: 2px solid #fff; outline-offset: 1px; z-index: 1; }
+.has-active > .sector-row:not(.active), .has-active > .corner-row:not(.active) { opacity: .5; &:hover { opacity: .85; } }
+// 05/11 (user): each sector a small card - "SETTORE 1" and its time on one line, the band of the difference below.
+// 05/11 (user): no title; the three cards inside one box (the .side-box frame), each with a lighter ground and a thin border.
+.sector-rows { gap: 6px; padding: 3px; }
+// 06/11 (user): no card frame - name, time and band on the page's ground, a light ground only on hover.
+.sector-row { display: grid; grid-template-columns: 1fr auto; grid-template-areas: 'name time' 'gap gap'; gap: 4px 6px; padding: 6px 0; cursor: pointer; font-variant-numeric: tabular-nums; text-align: left;
+  border: 0; background: none;
+  &:hover { background: #ffffff0a; }
+  &.active { background: #ffffff1a; } }
+.sector-name { grid-area: name; color: #fff; font: italic 700 15px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; }
+.sector-time { grid-area: time; align-self: center; color: #b3b3b8; font: 600 12px 'Inter', sans-serif; }
+.sector-gap { grid-area: gap; min-height: 28px; }
+// 05/11 (user): the sector delta is a band too (.corner-bar).
+.sector-gap { font: 700 14px 'Inter', sans-serif; }
+.corner-row--head { cursor: default; color: #a1a1a8; font: 700 11px 'Inter', sans-serif; text-transform: uppercase; letter-spacing: .04em; }
+// One corner per row, the section scrolls on its own when the list is longer than the column.
+.corner-list { display: grid; gap: 3px; align-content: start; min-height: 0; overflow-y: auto; padding-right: 2px; }
+.corner-row { display: grid; grid-template-columns: 52px 1fr; gap: 3px; padding: 0; border: 0; background: none; cursor: pointer; text-align: center;
+  &.active .corner-num { background: #fff; color: #0b0b10; }
+  &.active .corner-cell { box-shadow: none; } }
+.corner-num { position: relative; display: grid; place-items: center; padding: 4px 0; background: #ffffff0d; color: #e6e6ea; font: italic 700 15px 'Racer Display', 'Arial Narrow', sans-serif; }
+.corner-cell { display: grid; place-items: center; color: #fff; font: 700 13px 'Inter', sans-serif; font-variant-numeric: tabular-nums; }
+// 05/11 (user): a bar as long as the time lost against the worst corner, on a neutral track; the top three loud.
+.corner-bar { position: relative; display: flex; align-items: center; justify-content: flex-end; min-height: 26px; padding: 0 8px; background: #ffffff08; overflow: hidden; }
+// 05/11 (user: "colours too dull"): full Racer Core red and green, white numbers; the length says how much.
+.corner-bar__fill { position: absolute; left: 0; top: 0; bottom: 0; .is-loss > & { background: #e4002b; } .is-gain > & { background: #16a34a; } }
+.corner-bar__value { position: relative; color: #fff; text-shadow: 0 1px 2px #000000a0; }

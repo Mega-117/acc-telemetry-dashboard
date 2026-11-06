@@ -3374,7 +3374,7 @@ const gripZones = computed(() => {
 // (track, then date and car), actions and the switch on the right.
 // 02/11 (option A): the view switch is always first on the left, at the same place in Sessione and Telemetria;
 // the row keeps one height and one spacing in both views (nothing jumps), the rest of it fades in.
-.session-header--compact { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 10px 16px; min-height: 44px; margin: 4px 0 10px;
+.session-header--compact { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 10px 16px; min-height: 46px; margin: 4px 0 10px;
   .header-actions { order: -1; } .detail-tabs { order: -1; }
   .header-id, .header-laps { animation: rc-view-in 200ms ease-out; }
   .header-laps { display: flex; flex: 1 1 560px; min-width: 0; }
@@ -3450,9 +3450,10 @@ const gripZones = computed(() => {
 // played again).
 .session-detail-page.is-view-leaving {
   .master-detail, .session-header--compact .header-id, .session-header--compact .header-laps, :deep(.analysis) {
-    opacity: 0; transform: translateY(-4px); transition: opacity 150ms ease-in, transform 150ms ease-in; pointer-events: none; }
+    opacity: 0; transition: opacity 150ms ease-in; pointer-events: none; }
 }
-@keyframes rc-view-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+// 06/11 (user: the content moved a few pixels between Sessione and Telemetria): a fade only, no slide.
+@keyframes rc-view-in { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .master-detail, .session-header--compact .header-id, .session-header--compact .header-laps { animation: none; } }
 
 

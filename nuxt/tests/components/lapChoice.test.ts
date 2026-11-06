@@ -62,6 +62,9 @@ describe('LapChoiceCard', () => {
     expect(wrapper.classes()).toContain('is-ideal')
     expect(wrapper.get('.lap-pill__body').attributes('title')).toContain('Non è un giro vero — i tuoi settori migliori di questa sessione')
     expect(wrapper.get('.lap-pill__lap').text()).toBe('Ideale')
+    // 05/11 (user): the tags row is there even empty, so the pill keeps the size of a real lap's.
+    expect(wrapper.find('.lap-pill__tags').exists()).toBe(true)
+    expect(wrapper.findAll('.lap-pill__tags span')).toHaveLength(0)
     wrapper.unmount()
     wrapper = mount(LapChoiceCard, { props: { side: 'you', choice: { ...you, status: 'unknown', mine: false, driver: 'Mike' } } })
     expect(wrapper.get('.lap-pill__status').text()).toBe('?Validità non disponibile') // icon + screen-reader words
@@ -111,6 +114,19 @@ describe('LapChoiceCard', () => {
     wrapper = mount(LapChoiceCard, { props: { side: 'you', choice: you } })
     await wrapper.get('.lap-pill__change').trigger('click')
     expect(wrapper.emitted('change')).toHaveLength(1)
+  })
+  it('06/11: a click anywhere on the card opens the chooser once; ⓘ keeps its box; a disabled card does nothing', async () => {
+    wrapper = mount(LapChoiceCard, { props: { side: 'ref', choice: ref, reason: { kind: 'myBest' } } })
+    await wrapper.get('.lap-pill__time').trigger('click')
+    expect(wrapper.emitted('change')).toHaveLength(1)
+    await wrapper.get('.lap-pill__change').trigger('click')
+    expect(wrapper.emitted('change')).toHaveLength(2)
+    await wrapper.get('.lap-pill__why').trigger('click')
+    expect(wrapper.emitted('change')).toHaveLength(2)
+    expect(wrapper.find('.lap-pill__info').exists()).toBe(true)
+    await wrapper.setProps({ disabled: true })
+    await wrapper.get('.lap-pill__time').trigger('click')
+    expect(wrapper.emitted('change')).toHaveLength(2)
   })
 })
 

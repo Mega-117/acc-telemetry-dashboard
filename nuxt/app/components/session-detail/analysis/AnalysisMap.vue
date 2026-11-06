@@ -6,6 +6,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { deltaTrend, finishLine, glideFrame, fractions, lapDelta, mapPoints, worldToMap, type Corner, type MapPoint } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
+import { placeMapLabels } from '~/services/telemetry/mapLabelPlacement'
 import { useI18n } from '~/i18n'
 const { t } = useI18n()
 
@@ -129,7 +130,7 @@ const labels = computed(() => {
   const points = base.value
   if (!points) return []
   const n = points.length
-  return props.corners.map(c => {
+  const raw = props.corners.map(c => {
     const i = Math.round(c.apex * (POINTS - 1))
     const a = points[(i - 6 + n) % n]!, p = points[i]!, b = points[(i + 6) % n]!
     const tx = b.x - a.x, ty = b.y - a.y
@@ -149,11 +150,26 @@ const labels = computed(() => {
     const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), Math.max(lo, hi))
     // 01/11 (Codex): the bend out of the visible frame: no time pushed onto the edge, far from its corner.
     const inView = p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h
-    const gx = clamp(p.x + nx * far, box.x + margin * 1.6, box.x + box.w - margin * 1.6)
-    const gy = clamp(p.y + ny * far, box.y + margin, box.y + box.h - margin * 0.6)
-    return { number: c.number, point: { x: p.x + nx * offset, y: p.y + ny * offset },
-      gap: gap === null || !inView ? null : { text: `${gap > 0 ? '+' : gap < 0 ? '−' : '±'}${Math.abs(gap).toFixed(3)}`, loss: gap > 0, x: gx, y: gy } }
+    const keepInside = (q: { x: number, y: number }) => ({ x: clamp(q.x, box.x + margin * 1.6, box.x + box.w - margin * 1.6), y: clamp(q.y, box.y + margin, box.y + box.h - margin * 0.6) })
+    return { number: c.number, apex: p, point: { x: p.x + nx * offset, y: p.y + ny * offset }, keepInside,
+      preferred: { x: p.x + nx * far, y: p.y + ny * far },
+      gap: gap === null || !inView ? null : { text: `${gap > 0 ? '+' : gap < 0 ? '−' : '±'}${Math.abs(gap).toFixed(3)}`, loss: gap > 0 } }
   })
+  // 05/11 (user): close bends (Monza 3-4) wrote their times on top of each other: each time takes the first free
+  // spot around its own corner, never over another time or a corner number.
+  const withGap = raw.filter(r => r.gap)
+  const z = zoomScale.value
+  const spots = placeMapLabels(withGap.map(r => ({ anchor: r.apex, preferred: r.preferred, width: 44 * z, height: 13 * z })),
+    raw.map(r => r.point), 11 * z, raw[0]?.keepInside)
+  const at = new Map(withGap.map((r, i) => [r.number, spots[i]!]))
+  return raw.map(r => ({ number: r.number, point: r.point, apex: r.apex, gap: r.gap ? { ...r.gap, ...at.get(r.number)! } : null }))
+})
+// 05/11 (user): the bend where you lose the most (the "Da guardare" one) pulses on its number: the problem at a glance.
+const worstNumber = computed(() => {
+  const deltas = props.cornerDeltas
+  if (!deltas) return null
+  const worst = Object.entries(deltas).filter(([, d]) => typeof d === 'number' && d >= 0.01).sort((a, b) => b[1] - a[1])[0]
+  return worst ? Number(worst[0]) : null
 })
 const finish = computed(() => base.value ? finishLine(base.value, 10) : null)
 // Selected sector on the track: a coloured band under the lines, a mark where it starts and ends.
@@ -289,7 +305,8 @@ function onMove(event: PointerEvent) {
   <div v-if="zoomControls" class="map-zoom">
     <button type="button" :aria-label="t('telemetry.map.zoomInAria')" :title="t('telemetry.map.zoomInTitle')" :disabled="frameNow.span <= minSpan" @click="zoomStep(1 / 1.6)">+</button>
     <button type="button" :aria-label="t('telemetry.map.zoomOutAria')" :title="t('telemetry.map.zoomOutTitle')" :disabled="frameNow.span >= maxSpan" @click="zoomStep(1.6)">−</button>
-    <button v-if="view" type="button" :aria-label="t('telemetry.map.resetAria')" :title="t('telemetry.map.resetTitle')" @click="view = null">⟲</button>
+    <!-- 06/11 (user): always in its place, off while there is nothing to reset: + and − never move. -->
+    <button type="button" :aria-label="t('telemetry.map.resetAria')" :title="t('telemetry.map.resetTitle')" :disabled="!view" @click="view = null">⟲</button>
   </div>
   <svg class="map" :class="{ 'map--pan': zoomControls, 'map--dragging': dragging }" :viewBox="viewBox" :style="{ '--z': zoomScale }" role="img" :aria-label="t('telemetry.map.aria')" @pointermove="onMove" @pointerleave="onLeave" @pointerdown="onDown" @mousedown.prevent @dragstart.prevent @pointerup="onUp" @pointercancel="onUp" @wheel="onWheel" @dblclick="zoomControls && resetView()">
     <template v-if="edgePaths">
@@ -314,10 +331,12 @@ function onMove(event: PointerEvent) {
       <line v-bind="sector.end" class="map-sector-mark" />
     </template>
     <!-- 01/11: on a zoomed corner no numbers and no times: those around the edge belonged to corners out of sight. -->
-    <g v-for="l in zoomed ? [] : labels" :key="l.number" class="map-corner" :class="{ active: selected === l.number }" @click="!dragged && emit('select', l.number)">
+    <g v-for="l in zoomed ? [] : labels" :key="l.number" class="map-corner" :class="{ active: selected === l.number, 'is-worst': l.number === worstNumber }" @click="!dragged && emit('select', l.number)">
       <!-- 01/11: a click area twice the drawn circle (the numbers were hard to hit), invisible. -->
       <!-- 02/11: three times the drawn circle, invisible: the numbers are easy to hit. -->
       <circle :cx="l.point.x" :cy="l.point.y" :r="27 * zoomScale" class="map-corner__hit" />
+      <!-- 05/11 (user): the number of the bend where you lose the most has a red edge and a red ring pulsing around it. -->
+      <circle v-if="l.number === worstNumber" :cx="l.point.x" :cy="l.point.y" :r="16 * zoomScale" class="map-worst__pulse" data-testid="map-worst" aria-hidden="true" />
       <circle :cx="l.point.x" :cy="l.point.y" :r="9 * zoomScale" />
       <text :x="l.point.x" :y="l.point.y + 4 * zoomScale" :font-size="11 * zoomScale">{{ l.number }}</text>
       <text v-if="l.gap" :x="l.gap.x" :y="l.gap.y + 4 * zoomScale" :font-size="11 * zoomScale" class="map-corner__gap" :class="l.gap.loss ? 'loss' : 'gain'">{{ l.gap.text }}</text>
@@ -336,8 +355,13 @@ html.map-grabbing, html.map-grabbing * { user-select: none !important; }
 
 <style scoped lang="scss">
 .map-wrap { position: relative; }
-.map-zoom { position: absolute; top: 4px; left: 4px; display: grid; gap: 3px; z-index: 1;
+// 06/11 (user): bottom left of the map.
+.map-zoom { position: absolute; bottom: 4px; left: 4px; display: grid; gap: 3px; z-index: 1;
   button { width: 24px; height: 24px; border: 1px solid #ffffff2e; background: #0d0d12e6; color: #e6e6ea; font: 700 14px/1 "Inter", sans-serif; cursor: pointer; &:disabled { opacity: .35; cursor: default; } } }
+// 06/11 (user): + − ⟲ only while the mouse is over the map (or a button has the keyboard focus); always on touch screens.
+@media (hover: hover) {
+  .map-zoom { opacity: 0; pointer-events: none; transition: opacity .15s ease; }
+  .map-wrap:hover .map-zoom, .map-zoom:focus-within { opacity: 1; pointer-events: auto; } }
 .map { display: block; width: 100%; height: auto; touch-action: none; user-select: none;
   &--pan, &--dragging { cursor: default; } }
 // Strokes scale with the zoom (--z), so a zoomed corner keeps thin lines.
@@ -351,7 +375,15 @@ html.map-grabbing, html.map-grabbing * { user-select: none !important; }
 .map-lap { stroke-width: calc(3px * var(--z, 1)); stroke-linecap: round; }
 .map-finish-white { stroke: #fff; stroke-width: calc(4px * var(--z, 1)); }
 .map-finish-black { stroke: #000; stroke-width: calc(4px * var(--z, 1)); stroke-dasharray: calc(2px * var(--z, 1)) calc(2px * var(--z, 1)); }
-.map-corner { cursor: default;
+/* 05/11 (user): the bend where you lose the most pulses; still for those who asked for less motion. */
+/* 05/11 (user: "it must be seen"): a strong red ring and a red glow that grows well beyond the number. */
+.map-corner.is-worst circle:not(.map-corner__hit):not(.map-worst__pulse) { stroke: #ff0024; stroke-width: calc(2.5px * var(--z, 1)); fill: #3a0009; }
+.map-worst__pulse { pointer-events: none; fill: rgba(255, 0, 36, 0.35); stroke: #ff0024; stroke-width: calc(3.5px * var(--z, 1)); transform-box: fill-box; transform-origin: center;
+  animation: map-worst-pulse 1.3s ease-out infinite; }
+@keyframes map-worst-pulse { 0% { transform: scale(.55); opacity: 1; } 60% { opacity: .85; } 100% { transform: scale(1.9); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .map-worst__pulse { animation: none; opacity: .8; } }
+// 06/11 (user): the hand over a corner's click area (the map itself keeps the normal arrow, 02/11).
+.map-corner { cursor: pointer;
   circle { fill: #0a0a0f; stroke: #ffffff59; stroke-width: calc(1px * var(--z, 1)); }
   .map-corner__hit { fill: transparent; stroke: none; }
   // Readable on the track and the dark background: a dark outline around the digits.

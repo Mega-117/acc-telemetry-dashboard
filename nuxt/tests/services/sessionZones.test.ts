@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ref } from 'vue'
 import { useSessionZones } from '~/composables/useSessionZones'
-import { MIN_ZONE_LAPS, sessionZones, zoneMapColors, zoneSeconds, ZONE_COLORS } from '~/services/telemetry/sessionZones'
+import { ADVICE_MIN_S, MIN_ZONE_LAPS, sessionZones, zoneMapColors, zoneSeconds, ZONE_COLORS } from '~/services/telemetry/sessionZones'
 import type { Corner } from '~/services/telemetry/lapAnalysis'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 
@@ -32,18 +32,24 @@ describe('sessionZones (PIP-645, Semplice on the whole session)', () => {
     expect(c2.potentialS).toBeCloseTo(0.2, 3)
     expect(c2.spreadS).toBeCloseTo(0.4, 3)
   })
-  it('each card names the corner that ranks first for it: mistakes, least consistent, potential', () => {
+  it('05/11 (user): one stretch per card - mistakes first, then potential, then swing; never the same stretch twice', () => {
     expect(insight.mostMistakes?.corner.number).toBe(3)
     expect(insight.mostMistakes?.mistakes).toBe(2)
     expect(insight.mostMistakes?.mistakeLossS).toBeCloseTo(3.5, 2)
-    expect(insight.leastConsistent?.corner.number).toBe(2)
+    // Corner 2 is both the most potential and the least consistent: potential takes it, swing has nothing else worth it.
     expect(insight.mostPotential?.corner.number).toBe(2)
+    expect(insight.leastConsistent).toBeNull()
   })
-  it('review: never names a smaller potential just because the top corner is on another card', () => {
-    // Corner 1 gets 0.015 s of potential, corner 2 keeps 0.3 s: the card stays on corner 2.
-    const more = sessionZones([...laps, ...[1, 2, 3, 4].map(() => lap([30.25, 20.3, 25]))], corners, invalid)
-    expect(more.leastConsistent?.corner.number).toBe(2)
-    expect(more.mostPotential?.corner.number).toBe(2)
+  it('the next card takes the worst stretch left, when it is worth at least ADVICE_MIN_S', () => {
+    // Corner 1 now swings by 0.2 s: the swing card goes there instead of repeating corner 2.
+    const withCorner1 = (a: number) => [20.0, 20.6, 20.1, 20.5, 20.3, 20.0].map((b, i) => lap([i % 2 ? 30 + a : 30, b, i === 4 ? 26.5 : 25]))
+    const swing = sessionZones(withCorner1(0.2), corners, invalid)
+    expect(swing.mostPotential?.corner.number).toBe(2)
+    expect(swing.leastConsistent?.corner.number).toBe(1)
+    expect(ADVICE_MIN_S).toBe(0.05)
+    // Under ADVICE_MIN_S it is not worth a card.
+    const tiny = sessionZones(withCorner1(0.04), corners, invalid)
+    expect(tiny.leastConsistent).toBeNull()
   })
   it('does not count a usual swing as a mistake', () => {
     expect(insight.zones[1]!.mistakes).toBe(0)
@@ -66,14 +72,14 @@ describe('sessionZones (PIP-645, Semplice on the whole session)', () => {
     expect(zones.active.value).toBe(true)
     expect(zones.totalLaps.value).toBe(7)
     expect(zones.insight.value.mostMistakes?.corner.number).toBe(3)
-    expect(zones.colors.value).toHaveLength(3)
+    expect(zones.colors.value).toHaveLength(2)
     entries.value = entries.value.slice(0, 3)
     expect(zones.active.value).toBe(false)
     expect(zones.colors.value).toBeNull()
   })
-  it('colours the chosen stretches on the map and writes seconds with a comma', () => {
-    expect(zoneMapColors(insight)).toEqual(expect.arrayContaining([{ start: 2 / 3, end: 1, color: ZONE_COLORS.mistakes }, { start: 1 / 3, end: 2 / 3, color: ZONE_COLORS.consistency }]))
-    expect(zoneSeconds(0.4)).toBe('0,4')
-    expect(zoneSeconds(0.06)).toBe('0,06')
+  it('colours the chosen stretches on the map and writes seconds with a dot', () => {
+    expect(zoneMapColors(insight)).toEqual(expect.arrayContaining([{ start: 2 / 3, end: 1, color: ZONE_COLORS.mistakes }, { start: 1 / 3, end: 2 / 3, color: ZONE_COLORS.potential }]))
+    expect(zoneSeconds(0.4)).toBe('0.4')
+    expect(zoneSeconds(0.06)).toBe('0.06')
   })
 })

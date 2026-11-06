@@ -78,6 +78,7 @@ export default defineConfig({
         'app/utils/raceCalendarForm.ts',
         'app/utils/floatingPlacement.ts',
         'app/composables/useCornerStepper.ts',
+        'app/composables/useWheelForward.ts',
         'app/composables/useFocusZone.ts',
         'app/composables/useSessionZones.ts',
         'app/composables/useSectorCompare.ts',
@@ -121,6 +122,7 @@ export default defineConfig({
         'app/utils/boxEngineer.ts',
         'app/i18n/index.ts',
         'app/services/telemetry/lapAnalysis.ts',
+        'app/services/telemetry/segmentApproach.ts',
         'app/components/overlay/ControlKNumberField.vue',
         'app/services/auth/dashboardEntryRecovery.ts',
         'app/components/overlay/PressureTestPanel.vue',
@@ -364,6 +366,9 @@ export default defineConfig({
         // dev.10: coach laps shipped with the program (index, choice).
         'app/services/telemetry/coachLaps.ts',
         'app/services/telemetry/stintBlock.ts',
+        'app/services/telemetry/mapLabelPlacement.ts',
+        'app/utils/deltaHeat.ts',
+        'app/utils/deltaRead.ts',
         // PIP-695: scelta di "Tu" e "Riferimento" (schede e finestra "Cambia").
         'app/services/telemetry/lapChoice.ts',
         'app/composables/useLapChoice.ts',

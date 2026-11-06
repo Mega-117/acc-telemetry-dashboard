@@ -50,11 +50,17 @@ function listen(on: boolean) {
   }
 }
 watch(infoOpen, open => listen(open))
+// 06/11 (user): the whole card opens the chooser, as the ▾ (which keeps the keyboard). Its own buttons (ⓘ, ▾, the
+// slot's) and the ⓘ box keep their click.
+function onPillClick(event: MouseEvent) {
+  if (props.disabled || (event.target as HTMLElement).closest('button, .lap-pill__info')) return
+  emit('change')
+}
 onBeforeUnmount(() => listen(false))
 </script>
 
 <template>
-  <div ref="root" class="lap-pill" :class="[`lap-pill--${side}`, { 'is-ideal': choice?.ideal }]" :style="{ '--c': color }">
+  <div ref="root" class="lap-pill" :class="[`lap-pill--${side}`, { 'is-ideal': choice?.ideal, 'is-clickable': !disabled }]" :style="{ '--c': color }" data-testid="lap-pill" @click="onPillClick">
     <span class="lap-pill__side" :title="t(side === 'you' ? 'telemetry.youHint' : 'telemetry.referenceHint')">{{ text.side(side) }}</span>
     <div class="lap-pill__body" :title="tooltip">
       <template v-if="choice">
@@ -66,11 +72,16 @@ onBeforeUnmount(() => listen(false))
           <span v-else-if="!choice.ideal" class="lap-pill__status" :class="`is-${choice.status}`" :title="status!.text"><span v-if="choice.status !== 'invalid'" aria-hidden="true">{{ status!.icon }}</span><span class="sr-only">{{ status!.text }}</span></span>
           <button v-if="infoLines.length" type="button" class="lap-pill__why" :aria-expanded="infoOpen" :aria-label="infoLines.join('. ')" :title="tooltip" @click="infoOpen = !infoOpen">ⓘ</button>
         </p>
-        <p v-if="tags.length" class="lap-pill__tags">
+        <!-- 05/11 (user): the row is always there (empty for the ideal lap, which has no single fuel or grip):
+             the two pills never change size. -->
+        <p class="lap-pill__tags">
           <span v-for="tag in tags" :key="tag">{{ tag }}</span>
         </p>
       </template>
-      <p v-else class="lap-pill__main">{{ t('telemetry.choice.noLap') }}</p>
+      <template v-else>
+        <p class="lap-pill__main">{{ t('telemetry.choice.noLap') }}</p>
+        <p class="lap-pill__tags" />
+      </template>
     </div>
     <strong v-if="choice" class="lap-pill__time" :class="{ 'is-best': choice.best, 'is-invalid': choice.status === 'invalid' }">{{ formatLapTime(choice.lapTimeMs) }}</strong>
     <div class="lap-pill__actions">
@@ -84,14 +95,17 @@ onBeforeUnmount(() => listen(false))
 </template>
 
 <style scoped lang="scss">
-.lap-pill { --c: #38bdf8; position: relative; display: flex; align-items: center; gap: 8px; flex: none; padding-right: 3px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 12%, #0a0a0f);
+// 06/11 (user): as much room right of the ▾ as between the TU tag and the name (8 px).
+.lap-pill { --c: #38bdf8; position: relative; display: flex; align-items: center; gap: 8px; flex: none; padding-right: 8px; border: 1px solid var(--c); background: color-mix(in srgb, var(--c) 12%, #0a0a0f);
   &.is-ideal { border-style: dashed; } }
 // The side label keeps its own width (TU stays square); 01/11: what follows it has the same width on both pills
 // (body and time fixed), so the two laps line up.
 .lap-pill__side { align-self: stretch; display: grid; place-items: center; flex: none; padding: 0 7px; background: var(--c); color: #0a0a0f; font: italic 700 12px 'Racer Display', sans-serif; text-transform: uppercase; }
-.lap-pill__body { display: grid; gap: 1px; flex: none; width: clamp(170px, 15vw, 240px); min-width: 0; padding: 3px 0; p { margin: 0; } }
-.lap-pill__main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 7px; color: #fff; font: 700 13px 'Inter', sans-serif; }
-.lap-pill__driver { min-width: 0; overflow-wrap: anywhere; }
+// 05/11 (user): fixed size whatever the lap - one line for the name (cut with …), one for the tags (empty or not).
+.lap-pill { height: 46px; box-sizing: border-box; }
+.lap-pill__body { display: grid; grid-template-rows: 18px 17px; gap: 1px; flex: none; width: clamp(170px, 15vw, 240px); min-width: 0; padding: 3px 0; p { margin: 0; } }
+.lap-pill__main { display: flex; flex-wrap: nowrap; align-items: baseline; gap: 7px; min-width: 0; overflow: hidden; white-space: nowrap; color: #fff; font: 700 13px 'Inter', sans-serif; }
+.lap-pill__driver { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .lap-pill__lap { color: #d4d4da; font: 600 12px 'Inter', sans-serif; }
 .lap-pill__status { font: 700 13px 'Inter', sans-serif; &.is-valid { color: #3ddc5a; } &.is-invalid { color: #ff8a98; } &.is-incomplete, &.is-unknown { color: #b3b3b8; } }
 .lap-pill__why { padding: 0 2px; border: 0; background: none; color: #fde68a; font: 700 13px 'Inter', sans-serif; cursor: help; &:focus-visible { outline: 2px solid #fff; } }
@@ -102,6 +116,9 @@ onBeforeUnmount(() => listen(false))
   &:hover:not(:disabled) { border-color: var(--c); background: color-mix(in srgb, var(--c) 18%, transparent); }
   &:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
   &:disabled { opacity: .5; cursor: default; } }
+// The card as one button: pointer, and the ▾ lights up wherever the mouse is on it.
+.lap-pill.is-clickable { cursor: pointer;
+  &:hover .lap-pill__change:not(:disabled) { border-color: var(--c); background: color-mix(in srgb, var(--c) 18%, transparent); } }
 // Over the page, under the pill: opening it never moves the charts.
 .lap-pill__info { position: absolute; top: calc(100% + 4px); left: -1px; right: -1px; z-index: 30; display: grid; gap: 4px; padding: 8px 10px; border: 1px solid var(--c); background: #121218; box-shadow: 0 10px 24px #000a; }
 .lap-pill__reason { margin: 0; color: #e6e6ea; font: 500 12px/1.4 'Inter', sans-serif; &:first-child { color: #fde68a; } }

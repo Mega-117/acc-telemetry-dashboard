@@ -93,3 +93,17 @@ describe('AnalysisMap reference line (Codex 05/11)', () => {
     both.unmount()
   })
 })
+
+describe('AnalysisMap worst bend (05/11)', () => {
+  it('pulses on the bend that loses the most, none when nothing is lost or when zoomed', () => {
+    const view = mount(AnalysisMap, { props: { lap: trace(), reference: trace(), corners, cursor: null, cornerDeltas: { 1: 0.069, 2: -0.031, 3: 0.004 } } })
+    expect(view.findAll('[data-testid="map-worst"]')).toHaveLength(1)
+    view.unmount()
+    const gains = mount(AnalysisMap, { props: { lap: trace(), reference: trace(), corners, cursor: null, cornerDeltas: { 1: -0.05, 2: 0.004 } } })
+    expect(gains.find('[data-testid="map-worst"]').exists()).toBe(false)
+    gains.unmount()
+    const zoomed = mount(AnalysisMap, { props: { lap: trace(), reference: trace(), corners, cursor: null, selected: 1, zoom: true, cornerDeltas: { 1: 0.069 } } })
+    expect(zoomed.find('[data-testid="map-worst"]').exists()).toBe(false)
+    zoomed.unmount()
+  })
+})

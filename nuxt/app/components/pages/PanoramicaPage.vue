@@ -16,6 +16,8 @@ import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { OVERVIEW_CAR_SIZES } from '~/utils/responsiveImage'
 import { getOverviewCarImage } from '~/utils/overviewCarImage'
 import { overviewEntryKey } from '~/services/auth/overviewEntryPreparation'
+import { rememberPage } from '~/services/ui/pagePreparation'
+import { noteFeatureUse } from '~/services/usage/featureUseNote'
 import type { OverviewProjection } from '~/types/overviewProjections'
 import type { RaceCalendarEvent } from '~/repositories/raceCalendarRepository'
 import { useI18n, type TranslationKey } from '~/i18n'
@@ -23,7 +25,7 @@ import { parseTelemetryDate } from '~/utils/telemetryFormat'
 
 // PIP-555: `pending` = prepared before the cloud with nothing to show; the page stays
 // "in caricamento" and loads at the cloud-ready event.
-const props = defineProps<{ prepared?: { uid: string; projection: OverviewProjection | null; events: RaceCalendarEvent[]; pending?: boolean } }>()
+const props = defineProps<{ prepared?: { uid: string; projection: OverviewProjection | null; events: RaceCalendarEvent[]; pending?: boolean; stale?: boolean } }>()
 
 const { t, locale, intlLocale } = useI18n()
 const pilotContext = usePilotContext()
@@ -41,6 +43,20 @@ const overview = useOverviewProjection(uid => {
 // Whether what is on screen was computed with the cloud: a cloud-ready event then changes nothing.
 let loadedWithCloud = preparedForThisOwner && !props.prepared?.pending && cloudSessionReady.value
 const { projection: overviewProjection, status: overviewStatus } = overview
+// 06/11: what is on screen is remembered for an instant next visit (pages/panoramica.vue); entered with the last visit's
+// projection (`stale`), the page reloads it through its own load, which keeps the content and drops late answers.
+watch(overviewProjection, (projection) => {
+  if (projection && consultedGame.value === 'acc' && targetUserId.value)
+    rememberPage(`panoramica:${targetUserId.value}`, { uid: targetUserId.value, projection, events: props.prepared?.events ?? [], pending: false })
+})
+onMounted(async () => {
+  if (!props.prepared?.stale || !preparedForThisOwner) return
+  const before = props.prepared.projection?.lastSession?.id ?? ''
+  await loadOverview()
+  const after = overviewProjection.value?.lastSession?.id ?? ''
+  // PIP-737 spy: the reload behind replaced the remembered page (changed) and never with an older session (KO).
+  noteFeatureUse({ event: 'overview.remembered', changed: after !== before ? 1 : 0, older: before && after && after.slice(0, 19) < before.slice(0, 19) ? 1 : 0 })
+})
 const calendarBusy = ref(false)
 const isOverviewPlaceholder = computed(() => !overviewProjection.value && overviewStatus.value !== 'empty')
 const emptyActivityTotals = {
@@ -229,8 +245,10 @@ function goToStats() {
 .grip-badge { display: inline-block; font-size: 9px; color: #c7c7c7; margin-left: 6px; text-decoration: none; }
 .last-drive__actions { display: flex; justify-content: center; gap: 24px; padding-top: 18px; }
 .last-drive__actions button { flex: 0 1 auto; min-width: 150px; }
-.racing-overview__side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.overview-activity { flex: 1; }
+// 06/11 (user, large screens): Prossima gara a third of the column, Attività two thirds (each never under its content);
+// the bars stop at 320 px and sit in the middle of their card, so a tall window does not turn them into towers.
+.racing-overview__side { display: grid; grid-template-rows: 1fr 2fr; gap: 12px; min-width: 0; }
+.racing-overview__side :deep(.activity-card--racing .chart-area) { max-height: 320px; align-self: center; width: 100%; }
 .overview-error { color: #ffafba; padding: 12px; }
 .overview-error button { color: #fff; background: transparent; border: 1px solid #aaa; padding: 6px 12px; }
 .overview-placeholder > :not(.overview-loading-label) { visibility: hidden; }
@@ -246,7 +264,7 @@ function goToStats() {
 }
 @media (max-width: 1050px) { .racing-overview { grid-template-columns: 1.2fr 1fr; gap: 12px; } .last-drive__results { padding-inline: 12px; } .performance-table td { padding-inline: 10px; } .last-drive__actions { gap: 12px; } }
 // PIP-639: tablet in verticale e telefono: una colonna (due colonne strette tagliavano testi e bottoni).
-@media (max-width: 900px) { .racing-overview { grid-template-columns: 1fr; } .last-drive__hero { min-height: 340px; } }
+@media (max-width: 900px) { .racing-overview { grid-template-columns: 1fr; } .racing-overview__side { grid-template-rows: auto auto; } .last-drive__hero { min-height: 340px; } }
 // Le etichette dei tempi vanno a capo invece di finire con i puntini quando la colonna e' stretta.
 @media (max-width: 1300px) { .time-label { white-space: normal; } }
 // Tablet in orizzontale, schermo basso (barre del browser comprese): tutto in una schermata, foto piu' bassa.
