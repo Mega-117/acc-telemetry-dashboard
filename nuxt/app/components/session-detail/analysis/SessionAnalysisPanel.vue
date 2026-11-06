@@ -126,6 +126,7 @@ const invalidPair = computed(() => [lapEntry.value, refEntry.value].some(e => e 
 function openChooser(side: LapSide) { chooser.value = side }
 // Each load gets a generation: a late answer for another session or pilot never replaces the current one.
 let loadGeneration = 0
+const SUGGESTIONS_WAIT_MS = 2500 // the skeleton waits this long at most for the reference suggestions
 async function load() {
   const generation = ++loadGeneration
   const isCurrent = () => generation === loadGeneration
@@ -191,8 +192,11 @@ async function load() {
     // Coach view: the coach's own laps here as references; your own view: your best laps here from every session (PIP-646).
     const first = traces.value[usable[0]!.id]
     library.refreshIdeal()
-    if (bridge && first) void (pilot ? library.loadOwnLaps(isCurrent, bridge, first.track, first.car) : library.loadBestLaps(isCurrent, bridge, first.track, first.car))
-    else if (!pilot && first) void choice.loadArchiveBest(isCurrent)
+    // 06/11 (user: the page jumped ~0.7 s after opening): the suggestions below can change the reference, so the
+    // skeleton stays until they answer (at most SUGGESTIONS_WAIT_MS); a slow one still moves it later, as before.
+    const suggestions: Promise<unknown>[] = []
+    if (bridge && first) suggestions.push(pilot ? library.loadOwnLaps(isCurrent, bridge, first.track, first.car) : library.loadBestLaps(isCurrent, bridge, first.track, first.car))
+    else if (!pilot && first) suggestions.push(choice.loadArchiveBest(isCurrent))
     // PIP-650: other drivers' laps here, a step above this session's best in the closest conditions.
     const bestTrace = traces.value[(best ?? last).id]
     const youEntry = entries.value.find(e => e.id === lapId.value) ?? best ?? last
@@ -204,12 +208,13 @@ async function load() {
       const same = usable.filter(e => e.valid && (!kind || traceClass(traces.value[e.id], sessionRow(e)).kind === kind))
       return same.length ? Math.min(...same.map(e => e.lapTimeMs)) : youEntry.lapTimeMs
     }
-    if (first) void library.loadOtherDrivers(isCurrent, archiveDeps, { game: first.gameId, track: first.track, car: first.car, variant: first.variant },
+    if (first) suggestions.push(library.loadOtherDrivers(isCurrent, archiveDeps, { game: first.gameId, track: first.track, car: first.car, variant: first.variant },
       { myUid: pilot ?? currentUser.value?.uid ?? null, myBestMs: myClassBestMs(),
         mine: { grip: bestTrace?.conditions?.grip ?? null, airC: bestTrace?.conditions?.airC ?? null, roadC: bestTrace?.conditions?.roadC ?? null, fuelL: bestTrace?.fuelL ?? null },
         // dev.10: the class of Tu (kind, fuel band, dry/wet) picks the same class first (Codex 05/11: Tu, not the session's best).
-        cls: youClass() })
-    if (first) void library.loadCoachLaps(isCurrent, { track: first.track, car: first.car }, youClass())
+        cls: youClass() }))
+    if (first) suggestions.push(library.loadCoachLaps(isCurrent, { track: first.track, car: first.car }, youClass()))
+    await Promise.race([Promise.allSettled(suggestions), new Promise(resolve => setTimeout(resolve, SUGGESTIONS_WAIT_MS))])
   } catch (e) {
     if (isCurrent()) error.value = e instanceof LapsArchiveError ? e.message : t('telemetry.errors.read')
   } finally {
@@ -469,15 +474,15 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
       <!-- PIP-695: two cards always in sight, "Tu  +1.733 s  Riferimento" (Track Titan colours): whose lap, which one,
            when, its status and why the reference; "Cambia" opens the chooser. The view sits apart, on the right. -->
       <div class="compare" role="group" :aria-label="t('telemetry.compareAria')">
-        <LapChoiceCard side="you" :choice="choice.youCard.value" :ideal-scope="idealScope" :disabled="!sessionEntries.length" @change="openChooser('you')" />
+        <LapChoiceCard side="you" :pending="loading" :choice="choice.youCard.value" :ideal-scope="idealScope" :disabled="!sessionEntries.length" @change="openChooser('you')" />
         <div class="compare-mid">
           <!-- 01/11: only the number (the colour says faster or slower; the words stay in the tooltip). -->
           <!-- 05/11 (user): a small "Distacco" over the number, and the dot as every other time on the page. -->
           <p class="compare-gap" :class="{ gain: (totalDelta ?? 0) < 0, loss: (totalDelta ?? 0) > 0 }" :title="gapTitle">
-            <template v-if="totalDelta !== null"><span class="compare-gap__label" aria-hidden="true">{{ t('telemetry.gapLabel') }}</span><strong>{{ formatDelta(totalDelta) }}</strong><span class="sr-only"> s, {{ gapWord }}</span><em v-if="invalidPair">{{ t('telemetry.choice.invalidQualifier') }}</em></template>
+            <template v-if="totalDelta !== null && !loading"><span class="compare-gap__label" aria-hidden="true">{{ t('telemetry.gapLabel') }}</span><strong>{{ formatDelta(totalDelta) }}</strong><span class="sr-only"> s, {{ gapWord }}</span><em v-if="invalidPair">{{ t('telemetry.choice.invalidQualifier') }}</em></template>
           </p>
         </div>
-        <LapChoiceCard side="ref" :choice="choice.refCard.value" :reason="choice.reason.value" :ideal-scope="idealScope" :pilot-name="pilotName" :disabled="!entries.length" @change="openChooser('ref')" />
+        <LapChoiceCard side="ref" :pending="loading" :choice="choice.refCard.value" :reason="choice.reason.value" :ideal-scope="idealScope" :pilot-name="pilotName" :disabled="!entries.length" @change="openChooser('ref')" />
       </div>
       <LapChoiceDialog :open="chooser !== null" :side="chooser ?? 'ref'" :source="choice.source" :apply="applyChoice" :variant="chooserVariant" :ideal-scope="idealScope"
         @close="chooser = null; choice.cancelPending()" />
@@ -545,11 +550,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
         <!-- 06/11 (user): the way back to the whole lap, in words for a beginner, over the map, aligned right. Its row is
              always kept (the map never jumps), the button shows only while a sector, a corner or a dragged stretch is
              open (also a click on the open box, Esc, double click). -->
-        <div class="whole-row">
-          <button v-if="!wholeView" type="button" class="rc-btn rc-btn--compact whole-lap" data-testid="whole-lap" :title="t('telemetry.backWholeTitle')" @click="wholeLap">
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8a5 5 0 1 0 1.6-3.7M3 2.5v2.8h2.8" /></svg>{{ t('telemetry.backWhole') }}
-          </button>
-        </div>
+        <div class="whole-row"><button v-if="!wholeView" type="button" class="rc-btn rc-btn--compact whole-lap" data-testid="whole-lap" :title="t('telemetry.backWholeTitle')" @click="wholeLap"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8a5 5 0 1 0 1.6-3.7M3 2.5v2.8h2.8" /></svg>{{ t('telemetry.backWhole') }}</button></div>
         <div class="panel panel--map">
           <AnalysisMap :lap="lap" :reference="reference" :edges="edges" :corners="corners" :cursor="cursor" :ref-cursor="refCursor" :selected="selectedCorner" :zoom="selectedCorner !== null && !sessionColours" :focus="selectedSector !== null ? range : null" :color-mode="sessionColours ? 'delta' : 'laps'" :zone-colors="sessionColours ? zones.colors.value : null" zoom-controls :size="deltaPlace === 'top' ? 420 : 320" :corner-deltas="cornerDeltas" @hover="cursor = $event" @select="selectCorner($event)" />
         </div>

@@ -1,8 +1,20 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 
 const { localProfile, cloudSessionReady, authSessionStatus, betaSeat, login, resetPassword } = useFirebaseAuth()
+// 06/11 (user: "a yellow bar flashes under the menu"): at every start the cloud is ready a fraction of a second after
+// the dashboard, and this bar showed for ~0.2 s pushing the page down. It now waits: shown only when the cloud is
+// still missing after CLOUD_GRACE_MS (a real offline start), never for the normal start.
+const CLOUD_GRACE_MS = 5000
+const cloudLate = ref(false)
+let graceTimer: ReturnType<typeof setTimeout> | undefined
+watch(cloudSessionReady, (ready) => {
+  clearTimeout(graceTimer)
+  cloudLate.value = false
+  if (!ready) graceTimer = setTimeout(() => { cloudLate.value = true }, CLOUD_GRACE_MS)
+}, { immediate: true })
+onBeforeUnmount(() => clearTimeout(graceTimer))
 // The development server (Nuxt dev) is never prepared for an offline restart: the notice
 // would always show there and say nothing new. Installed builds keep it, where it is a real warning.
 const offlineWarning = computed(() => !import.meta.dev && localProfile.value?.offlineReady === false)
@@ -24,15 +36,15 @@ async function reset() {
 </script>
 
 <template>
-  <aside v-if="localProfile && betaSeat !== 'full' && (!cloudSessionReady || offlineWarning)" class="local-profile-status" aria-label="Stato locale e cloud">
-    <p v-if="!cloudSessionReady" role="status">
+  <aside v-if="localProfile && betaSeat !== 'full' && ((!cloudSessionReady && cloudLate) || offlineWarning)" class="local-profile-status" aria-label="Stato locale e cloud">
+    <p v-if="!cloudSessionReady && cloudLate" role="status">
       <strong>Funzioni locali disponibili.</strong> Sincronizzazione in attesa.
       Lo storico mostra le sessioni disponibili su questo computer; le funzioni condivise richiedono il cloud.
     </p>
     <p v-if="offlineWarning">
       Questa versione di sviluppo non è preparata per il riavvio offline.
     </p>
-    <details v-if="!cloudSessionReady && authSessionStatus !== 'initializing'">
+    <details v-if="!cloudSessionReady && cloudLate && authSessionStatus !== 'initializing'">
       <summary>Ricollega il cloud</summary>
       <p>Accedi con {{ localProfile.email }}. Puoi continuare a usare il programma senza ricollegarti.</p>
       <AuthLoginForm :loading="busy" @submit="reconnect" @forgot-password="reset" />

@@ -11,8 +11,22 @@ beforeEach(() => {
     login: vi.fn(async () => ({ success: false, error: 'Connessione assente' })),
     resetPassword: vi.fn(async () => ({ success: true })) }
 })
-it('explains local availability and provides optional reconnection without blocking the page', async () => {
+it('06/11: at a normal start the cloud arrives within the grace time and the bar never shows', async () => {
+  vi.useFakeTimers()
   const wrapper = mount(LocalProfileStatus, { global: { stubs: { AuthLoginForm: true } } })
+  expect(wrapper.find('aside').exists()).toBe(false)
+  await vi.advanceTimersByTimeAsync(1000)
+  mock.auth.cloudSessionReady.value = true
+  await vi.advanceTimersByTimeAsync(10000)
+  expect(wrapper.find('aside').exists()).toBe(false)
+  vi.useRealTimers()
+})
+it('explains local availability and provides optional reconnection without blocking the page', async () => {
+  vi.useFakeTimers()
+  const wrapper = mount(LocalProfileStatus, { global: { stubs: { AuthLoginForm: true } } })
+  expect(wrapper.find('aside').exists()).toBe(false)
+  await vi.advanceTimersByTimeAsync(5000)
+  vi.useRealTimers()
   expect(wrapper.text()).toContain('Funzioni locali disponibili')
   expect(wrapper.text()).toContain('su questo computer')
   expect(wrapper.find('details').exists()).toBe(true)

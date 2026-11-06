@@ -121,7 +121,10 @@ const handleGoToSettings = () => {
   display: flex;
   flex-direction: column;
 }
+// 06/11: the page fade, our own (Nuxt's page transition kept every page left in memory, nuxt.config.ts). Each new
+// page's root fades in once it is ready; the old one goes at once (it stayed on screen while the new one prepared).
 .dashboard-viewport > :deep(*) {
+  animation: rc-page-in 200ms ease-out both;
   flex: 1 1 0%;
   height: 100%;
   min-height: 0;
@@ -175,4 +178,6 @@ const handleGoToSettings = () => {
   .dashboard-viewport > :deep(.page-container) { padding-left: 16px; padding-right: 16px; }
   .dashboard-viewport > :deep(.page-container:has(.racing-overview)) { padding: var(--app-content-top-space) 16px 14px; }
 }
+@keyframes rc-page-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .dashboard-viewport > :deep(*) { animation: none; } }
 </style>

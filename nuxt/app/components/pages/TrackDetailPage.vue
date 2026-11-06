@@ -411,7 +411,7 @@ function goToSession(id: string) {
       </aside>
     <section ref="sessionsRef" class="track-sessions" :aria-label="t('tracks.recent')">
       <h2 class="section-title">{{ t('tracks.recent') }}</h2>
-      <p v-if="isProjectionLoading" class="sessions-status" role="status">{{ t('sessions.loading') }}</p>
+      <p v-if="isProjectionLoading" class="sessions-status sessions-status--late" role="status">{{ t('sessions.loading') }}</p>
       <p v-else-if="!recentSessions.length" class="sessions-status" role="status">{{ t('tracks.noSessions') }}</p>
       <RacingSessionList v-else class="sessions-list" hide-track :groups="sessionGroups" :session-href="sessionRoute" @go-to-session="goToSession" />
       <PaginationControls
@@ -487,6 +487,8 @@ function goToSession(id: string) {
 .race-reference-card__metrics { display: grid; gap: 12px; }
 .fuel-cell-action { position: absolute; right: 12px; top: 12px; color: var(--rc-muted); font-size: 13px; }
 .no-data-hint, .sessions-status { color: var(--rc-muted); font-size: 12px; line-height: 1.6; }
+.sessions-status--late { animation: rc-status-late 200ms 400ms both; }
+@keyframes rc-status-late { from { opacity: 0; } }
 .track-sessions { grid-area: sessions; min-width: 0; margin-top: 12px; scroll-margin-top: 24px; }
 .track-sessions > .section-title { margin-bottom: 28px; }
 .track-sessions :deep(.pagination) { margin-top: 28px; }

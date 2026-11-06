@@ -17,6 +17,8 @@ const props = defineProps<{
   /** Coach view: the reasons speak of this driver, not of "you". */
   pilotName?: string | null
   disabled?: boolean
+  /** 06/11: the page is still loading: the card keeps its size, empty (no "Nessun giro scelto", no provisional lap). */
+  pending?: boolean
 }>()
 const emit = defineEmits<{ change: [] }>()
 const { t } = useI18n()
@@ -63,7 +65,11 @@ onBeforeUnmount(() => listen(false))
   <div ref="root" class="lap-pill" :class="[`lap-pill--${side}`, { 'is-ideal': choice?.ideal, 'is-clickable': !disabled }]" :style="{ '--c': color }" data-testid="lap-pill" @click="onPillClick">
     <span class="lap-pill__side" :title="t(side === 'you' ? 'telemetry.youHint' : 'telemetry.referenceHint')">{{ text.side(side) }}</span>
     <div class="lap-pill__body" :title="tooltip">
-      <template v-if="choice">
+      <template v-if="pending">
+        <p class="lap-pill__main" />
+        <p class="lap-pill__tags" />
+      </template>
+      <template v-else-if="choice">
         <p class="lap-pill__main">
           <span class="lap-pill__driver">{{ text.driver(choice) }}</span>
           <span v-if="lapLabel" class="lap-pill__lap">{{ lapLabel }}</span>
@@ -83,7 +89,8 @@ onBeforeUnmount(() => listen(false))
         <p class="lap-pill__tags" />
       </template>
     </div>
-    <strong v-if="choice" class="lap-pill__time" :class="{ 'is-best': choice.best, 'is-invalid': choice.status === 'invalid' }">{{ formatLapTime(choice.lapTimeMs) }}</strong>
+    <!-- 06/11 (user: the cards widened when the laps arrived): the time's place is always kept. -->
+    <strong class="lap-pill__time" :class="{ 'is-best': choice?.best, 'is-invalid': choice?.status === 'invalid' }">{{ choice && !pending ? formatLapTime(choice.lapTimeMs) : '' }}</strong>
     <div class="lap-pill__actions">
       <slot />
       <button type="button" class="lap-pill__change" :disabled="disabled" :aria-label="t(side === 'you' ? 'telemetry.choice.changeYouAria' : 'telemetry.choice.changeRefAria')" :title="t('telemetry.choice.change')" aria-haspopup="dialog" @click="emit('change')"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></button>

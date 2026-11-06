@@ -117,7 +117,7 @@ describe('SessionAnalysisPanel sharing and coach view', () => {
       readLapTrace: vi.fn(async (id: string) => rawLap({ lapNumber: id.includes('L005') ? 5 : 6, lapTime: id.includes('L005') ? 104.31 : 104.9 })),
     }
     const view = mount(SessionAnalysisPanel, { props: { sessionToken: '20261025_175240', laps, referenceRemoved: true }, global: { stubs: { AnalysisMap: true, AnalysisCharts: true, AnalysisCar: true } } })
-    await flushPromises()
+    await vi.waitFor(() => expect(view.get('.lap-pill--you').text()).toContain('G5'), { timeout: 4000 })
     expect(view.get('.lap-pill--you').text()).toContain('G5')
     expect(view.get('.lap-pill--ref').text()).not.toContain('G6')
     expect(view.find('.lap-pill--ref .lap-pill__remove').exists()).toBe(false)
@@ -145,7 +145,7 @@ describe('SessionAnalysisPanel sharing and coach view', () => {
       readLapTrace: vi.fn(async (id: string) => rawLap({ lapNumber: id.includes('L005') ? 5 : 6, lapTime: id.includes('L005') ? 104.31 : 104.9 })),
     }
     const view = mount(SessionAnalysisPanel, { props: { sessionToken: '20261025_175240', laps, sessionType: 'race' }, attachTo: document.body, global: { stubs: { AnalysisMap: true, AnalysisCharts: true, AnalysisCar: true } } })
-    await flushPromises()
+    await vi.waitFor(() => expect(view.get('.lap-pill--you .lap-pill__lap').text()).toBe('G5'), { timeout: 4000 })
     expect(view.get('.lap-pill--you .lap-pill__lap').text()).toBe('G5')
     expect(view.get('.lap-pill--you .lap-pill__time').text()).toBe('1:44.310')
     expect(view.get('.lap-pill--ref .lap-pill__lap').text()).toBe('G6')

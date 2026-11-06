@@ -1032,7 +1032,8 @@ body:has(.sessions-page),
 // on the whole window, their leave transition (the rule above) moved them down 36 px at once: the logo jumped.
 #app:has(.electron-titlebar) > :is(.loading-screen, .initializing-screen) { top: 36px; height: calc(var(--rc-shell-h, 100vh) - 36px); }
 .shell-motion-enter-from, .shell-motion-leave-to { opacity: 0; }
-.dashboard-wrapper.shell-motion-enter-from,
+// 06/11: the dashboard fades without growing: its entry runs while the main thread is busy building it, and a
+// scale then showed as a jump (frame by frame recording).
 .dashboard-wrapper.shell-motion-leave-to { transform: scale(.97); }
 .racer-auth.shell-motion-enter-from { transform: scale(.98); }
 @media (prefers-reduced-motion: reduce) {
@@ -1051,8 +1052,7 @@ body:has(.sessions-page),
 
 <style lang="scss">
 // PIP-640: login -> loader. The loader does not fade in: its logo is the login logo carried over (onShellEnter);
-// the laser lights up once the logo is home. Loader -> dashboard: as at the start, the logo fades, grows and
-// blurs out, then the dashboard fades in.
+// the laser lights up once the logo is home. Loader -> dashboard: the logo fades out while the dashboard fades in.
 .loading-screen.is-carried.shell-motion-enter-from { opacity: 1; }
 .loading-screen.is-carried .rc-boot__inner { animation: none; }
 .loading-screen.is-carried .rc-boot__laser { animation: rc-laser-in 500ms 550ms cubic-bezier(.4, 0, .2, 1) both; }
@@ -1061,8 +1061,11 @@ body:has(.sessions-page),
 @keyframes rc-text-in { from { opacity: 0; } }
 .loading-screen.shell-motion-leave-active { transition-duration: 700ms; }
 .loading-screen.shell-motion-leave-to { opacity: 1; }
-.loading-screen.shell-motion-leave-active .rc-boot__inner { opacity: 0; transform: scale(1.05); filter: blur(4px); }
-#app:has(> .loading-screen.shell-motion-leave-active) .dashboard-wrapper.shell-motion-enter-active { transition-duration: 700ms; transition-delay: 450ms; }
+// 06/11 (user: "the logo jumps bigger, then disappears"): the dashboard is built in the same moment (~0.23 s of busy
+// main thread, frame by frame recording), so the first frame after it already showed the logo grown: a jump. A fade
+// alone has nothing to jump; and the dashboard starts fading in sooner, so there is no black gap between the two.
+.loading-screen.shell-motion-leave-active .rc-boot__inner { opacity: 0; }
+#app:has(> .loading-screen.shell-motion-leave-active) .dashboard-wrapper.shell-motion-enter-active { transition-duration: 700ms; transition-delay: 200ms; }
 @media (prefers-reduced-motion: reduce) { .loading-screen.is-carried .rc-boot__laser { animation: none; } }
 // PIP-640: while the browser loading screen is up it is the only logo on screen (no double logo under it), and
 // the first interface waits for its logo to fade before fading in, slowly: logo out, then the content.

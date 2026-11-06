@@ -86,7 +86,10 @@ export default defineNuxtConfig({
     buildAssetsDir,
 
     // Page transitions
-    pageTransition: { name: 'page-fade', mode: 'out-in' }, // Finish leaving before revealing the next view.
+    // 06/11: no Nuxt page transition. With it every page left stayed in memory (Vue's Suspense keeps its afterLeave
+    // callback with the old page: +11 MB per Telemetria opened, measured; Codex). The new page fades in with our own
+    // CSS (layouts/dashboard.vue); the old page still stays until the new one is ready (Suspense, PIP-455).
+    pageTransition: false,
 
     // Meta tags e font
     head: {

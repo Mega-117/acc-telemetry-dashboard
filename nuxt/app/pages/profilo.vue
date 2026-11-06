@@ -6,10 +6,9 @@ import { useHeaderBack } from '~/composables/useHeaderBack'
 
 definePageMeta({
   layout: 'dashboard',
-  pageTransition: {
-    name: 'profile-zoom',
-    mode: 'out-in'
-  }
+  // 06/11: no Nuxt page transition here either (it kept the pages in memory, see nuxt.config.ts); the page fades in
+  // with the layout's CSS and keeps its own leaving animation (transitionState).
+  pageTransition: false
 })
 
 const { userDisplayName, logout: firebaseLogout, userRole } = useFirebaseAuth()

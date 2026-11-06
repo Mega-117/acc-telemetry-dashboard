@@ -335,3 +335,12 @@ describe('LapChoiceDialog: session link and keyboard', () => {
     expect(document.body.querySelector('[role="tab"][aria-selected="true"]')?.textContent).toBe('I miei giri')
   })
 })
+describe('LapChoiceCard while the page loads', () => {
+  it('06/11: pending keeps the card empty (no "Nessun giro scelto", no provisional time) with its time place kept', () => {
+    const w = mount(LapChoiceCard, { props: { side: 'ref', choice: null, pending: true } })
+    expect(w.text()).not.toContain('Nessun giro')
+    expect(w.find('.lap-pill__time').exists()).toBe(true)
+    expect(w.get('.lap-pill__time').text()).toBe('')
+    w.unmount()
+  })
+})

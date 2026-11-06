@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRuntimeCapabilityGate } from '~/composables/useRuntimeCapabilityGate'
 import type { RuntimeUiModel } from '~/services/runtime/rendererRuntimeBootstrapAdapter'
 
@@ -13,12 +13,24 @@ const props = defineProps<{
 const runtime = useRuntimeCapabilityGate()
 const view = computed(() => props.model || runtime.model.value)
 let release: (() => void) | null = null
+// 06/11 (user: "two update messages pop up and vanish in less than a second"): an information card (data update)
+// shows only when it lasts longer than INFO_DELAY_MS; warnings and errors show at once.
+const INFO_DELAY_MS = 800
+const infoDue = ref(false)
+let infoTimer: ReturnType<typeof setTimeout> | undefined
+watch(() => view.value.visible && view.value.tone === 'info', (info) => {
+  clearTimeout(infoTimer)
+  infoDue.value = false
+  if (info) infoTimer = setTimeout(() => { infoDue.value = true }, INFO_DELAY_MS)
+}, { immediate: true })
+const shown = computed(() => view.value.visible && (view.value.tone !== 'info' || infoDue.value))
 
 onMounted(() => {
   release = runtime.connect()
 })
 
 onBeforeUnmount(() => {
+  clearTimeout(infoTimer)
   release?.()
   release = null
 })
@@ -28,7 +40,7 @@ onBeforeUnmount(() => {
   <Teleport defer to="#app-toast-slot">
     <Transition name="runtime-status">
       <section
-        v-if="view.visible"
+        v-if="shown"
         class="runtime-capability-banner"
         :class="`runtime-capability-banner--${view.tone}`"
         :role="view.tone === 'danger' ? 'alert' : 'status'"

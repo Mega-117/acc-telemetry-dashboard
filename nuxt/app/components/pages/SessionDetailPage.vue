@@ -3344,6 +3344,10 @@ const gripZones = computed(() => {
 }
 
 // LOADING & ERROR STATES
+// 06/11 (user: things that flash for a moment): the spinner and "Caricamento sessione..." show only when the session
+// takes longer than 0.4 s; a quick load goes straight to the page.
+.loading-state { animation: rc-loading-late 200ms 400ms both; }
+@keyframes rc-loading-late { from { opacity: 0; } }
 .loading-state, .error-state {
   display: flex;
   flex-direction: column;
