@@ -15,7 +15,8 @@
    "steer": true,
    "fuelL": 114.8,
    "stintFuelL": 114.8,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "ed55735d70a56b71",
@@ -27,7 +28,8 @@
    "airC": 24.15,
    "roadC": 27.06,
    "rain": 0.3,
-   "steer": true
+   "steer": true,
+   "grip": "Wet"
   },
   {
    "id": "03072a2b46b2c59c",
@@ -42,7 +44,8 @@
    "steer": false,
    "fuelL": 24.0,
    "stintFuelL": 26.4,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "c79d1dcc73dc6282",
@@ -57,7 +60,8 @@
    "steer": false,
    "fuelL": 4.1,
    "stintFuelL": 6.0,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "9602a7b796db9d40",
@@ -72,7 +76,8 @@
    "steer": false,
    "fuelL": 65.0,
    "stintFuelL": 68.9,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "b30e20c0822d1625",
@@ -87,7 +92,8 @@
    "steer": false,
    "fuelL": 24.1,
    "stintFuelL": 29.9,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "97590f58721e55c3",
@@ -102,7 +108,8 @@
    "steer": true,
    "fuelL": 114.0,
    "stintFuelL": 114.0,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "179d161451f9818e",
@@ -117,7 +124,8 @@
    "steer": true,
    "fuelL": 42.2,
    "stintFuelL": 48.6,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "d9367380e287d4e8",
@@ -132,7 +140,8 @@
    "steer": true,
    "fuelL": 35.8,
    "stintFuelL": 35.8,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "3baa1d040f276c7a",
@@ -147,7 +156,8 @@
    "steer": true,
    "fuelL": 2.9,
    "stintFuelL": 5.3,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "8852b7100a72d1fc",
@@ -162,7 +172,8 @@
    "steer": true,
    "fuelL": 96.4,
    "stintFuelL": 101.3,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "99c140244a4c3dac",
@@ -177,7 +188,8 @@
    "steer": true,
    "fuelL": 86.0,
    "stintFuelL": 86.0,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "74295b9e3c3aa82a",
@@ -192,7 +204,8 @@
    "steer": true,
    "fuelL": 0.1,
    "stintFuelL": 5.1,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "40a3cee5e5184014",
@@ -207,7 +220,8 @@
    "steer": true,
    "fuelL": 76.2,
    "stintFuelL": 76.2,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "339c3c9344b00c63",
@@ -222,7 +236,8 @@
    "steer": true,
    "fuelL": 71.6,
    "stintFuelL": 81.0,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "6aa4e26172e3f426",
@@ -237,7 +252,8 @@
    "steer": true,
    "fuelL": 86.2,
    "stintFuelL": 105.0,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "9b06a74afba2fece",
@@ -252,7 +268,8 @@
    "steer": true,
    "fuelL": 88.8,
    "stintFuelL": 88.8,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "ba7ac863dcaba4dc",
@@ -267,7 +284,8 @@
    "steer": true,
    "fuelL": 115.2,
    "stintFuelL": 117.6,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "069eb7afdd57a935",
@@ -282,7 +300,8 @@
    "steer": true,
    "fuelL": 86.3,
    "stintFuelL": 91.7,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "6ee7c67f4db62d1d",
@@ -297,7 +316,8 @@
    "steer": true,
    "fuelL": 94.3,
    "stintFuelL": 105.0,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "d1a6d474a480dc16",
@@ -309,7 +329,8 @@
    "airC": 25.0,
    "roadC": 32.0,
    "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "grip": "Optimum"
   },
   {
    "id": "cd056ece5b624d4c",
@@ -321,7 +342,8 @@
    "airC": 25.0,
    "roadC": 32.0,
    "rain": 0.0,
-   "steer": false
+   "steer": false,
+   "grip": "Optimum"
   },
   {
    "id": "a2b78cf9d1d4c290",
@@ -336,7 +358,8 @@
    "steer": false,
    "fuelL": 13.8,
    "stintFuelL": 13.8,
-   "wet": true
+   "wet": true,
+   "grip": "Wet"
   },
   {
    "id": "f86ff0c2df0433ab",
@@ -351,7 +374,8 @@
    "steer": false,
    "fuelL": 62.8,
    "stintFuelL": 62.8,
-   "wet": true
+   "wet": true,
+   "grip": "Wet"
   },
   {
    "id": "a9baf0e75fa06714",
@@ -366,7 +390,8 @@
    "steer": false,
    "fuelL": 60.5,
    "stintFuelL": 60.5,
-   "wet": true
+   "wet": true,
+   "grip": "Wet"
   },
   {
    "id": "e48f0feaa95eb70a",
@@ -378,7 +403,8 @@
    "airC": 23.0,
    "roadC": 27.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "grip": "Optimum"
   },
   {
    "id": "ab5d29114b5c416f",
@@ -393,7 +419,8 @@
    "steer": true,
    "fuelL": 99.4,
    "stintFuelL": 102.3,
-   "wet": true
+   "wet": true,
+   "grip": "Wet"
   },
   {
    "id": "ee43ef591f547b9e",
@@ -408,7 +435,8 @@
    "steer": true,
    "fuelL": 116.0,
    "stintFuelL": 116.0,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "1de9f64ff16c9e22",
@@ -420,7 +448,8 @@
    "airC": 22.0,
    "roadC": 26.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "grip": "Optimum"
   },
   {
    "id": "6963504edda5a0d0",
@@ -435,7 +464,8 @@
    "steer": true,
    "fuelL": 67.4,
    "stintFuelL": 76.1,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "1f873b1a18750e19",
@@ -450,7 +480,8 @@
    "steer": true,
    "fuelL": 84.5,
    "stintFuelL": 105.0,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "9ec4281d9dc817f1",
@@ -465,7 +496,8 @@
    "steer": false,
    "fuelL": 54.9,
    "stintFuelL": 58.9,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "bdfcae7bb4b7f125",
@@ -480,7 +512,8 @@
    "steer": true,
    "fuelL": 67.8,
    "stintFuelL": 72.7,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "6427d538c37ec114",
@@ -495,7 +528,8 @@
    "steer": false,
    "fuelL": 2.6,
    "stintFuelL": 6.8,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "6fa985efd79e95da",
@@ -510,7 +544,8 @@
    "steer": false,
    "fuelL": 62.6,
    "stintFuelL": 64.9,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "0b91928be95b2b56",
@@ -525,7 +560,8 @@
    "steer": false,
    "fuelL": 56.7,
    "stintFuelL": 69.8,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "b9ba4a88d57d1170",
@@ -540,7 +576,8 @@
    "steer": false,
    "fuelL": 39.3,
    "stintFuelL": 41.6,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "b8282b1a4125ffdc",
@@ -555,7 +592,8 @@
    "steer": false,
    "fuelL": 33.1,
    "stintFuelL": 39.9,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "dfa000ed14e7cdc6",
@@ -567,7 +605,8 @@
    "airC": 27.0,
    "roadC": 33.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "grip": "Optimum"
   },
   {
    "id": "8a6ad570fa2f4622",
@@ -579,7 +618,8 @@
    "airC": 27.0,
    "roadC": 32.0,
    "rain": 0.0,
-   "steer": true
+   "steer": true,
+   "grip": "Optimum"
   },
   {
    "id": "8895295fe9c59a28",
@@ -594,7 +634,8 @@
    "steer": true,
    "fuelL": 58.0,
    "stintFuelL": 63.2,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "a1ef1822d93ef8ba",
@@ -609,7 +650,8 @@
    "steer": true,
    "fuelL": 109.3,
    "stintFuelL": 117.3,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "8bf4b38a4fe78c64",
@@ -624,7 +666,8 @@
    "steer": false,
    "fuelL": 37.9,
    "stintFuelL": 44.9,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "86d99c681bbd1853",
@@ -639,7 +682,8 @@
    "steer": true,
    "fuelL": 88.6,
    "stintFuelL": 96.1,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "ffe7dc2b377ae9db",
@@ -654,7 +698,8 @@
    "steer": true,
    "fuelL": 5.9,
    "stintFuelL": 5.9,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "3568093a589759e8",
@@ -669,7 +714,8 @@
    "steer": false,
    "fuelL": 24.7,
    "stintFuelL": 26.8,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "b9ea6e79f1b98b94",
@@ -684,7 +730,8 @@
    "steer": true,
    "fuelL": 6.7,
    "stintFuelL": 9.8,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "9e4e451855f7b8dd",
@@ -699,7 +746,8 @@
    "steer": true,
    "fuelL": 36.1,
    "stintFuelL": 42.8,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "3035a94f6a3e080e",
@@ -714,7 +762,8 @@
    "steer": true,
    "fuelL": 83.3,
    "stintFuelL": 86.6,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "d91e7c9ce8612574",
@@ -729,7 +778,8 @@
    "steer": false,
    "fuelL": 26.8,
    "stintFuelL": 29.6,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "14ef2c83b1bf9d8f",
@@ -744,7 +794,8 @@
    "steer": true,
    "fuelL": 45.3,
    "stintFuelL": 52.7,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "900c3a69dde1c0d1",
@@ -759,7 +810,8 @@
    "steer": true,
    "fuelL": 4.5,
    "stintFuelL": 7.4,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "f5a5096e5c3fa379",
@@ -774,7 +826,8 @@
    "steer": true,
    "fuelL": 103.0,
    "stintFuelL": 114.5,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "fa9ab3e324dc6123",
@@ -789,7 +842,8 @@
    "steer": true,
    "fuelL": 105.9,
    "stintFuelL": 114.5,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "44d141034e9bcc7d",
@@ -804,7 +858,8 @@
    "steer": true,
    "fuelL": 42.8,
    "stintFuelL": 45.9,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "12418702099b9a04",
@@ -819,7 +874,8 @@
    "steer": true,
    "fuelL": 33.6,
    "stintFuelL": 33.6,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "a95535d93bc202b2",
@@ -834,7 +890,8 @@
    "steer": false,
    "fuelL": 97.9,
    "stintFuelL": 104.0,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "0ba2b03778de787c",
@@ -849,7 +906,8 @@
    "steer": false,
    "fuelL": 91.9,
    "stintFuelL": 91.9,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "ad1e7c44caa96136",
@@ -864,7 +922,8 @@
    "steer": true,
    "fuelL": 115.0,
    "stintFuelL": 117.5,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "2c9105f0c99ea995",
@@ -879,7 +938,8 @@
    "steer": true,
    "fuelL": 115.4,
    "stintFuelL": 117.7,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "58f032c0ce68b567",
@@ -894,7 +954,8 @@
    "steer": false,
    "fuelL": 51.8,
    "stintFuelL": 56.9,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "35300e0e1b8c3e36",
@@ -909,7 +970,8 @@
    "steer": false,
    "fuelL": 52.0,
    "stintFuelL": 62.0,
-   "wet": true
+   "wet": true,
+   "grip": "Wet"
   },
   {
    "id": "196c8bc2f9e77136",
@@ -924,7 +986,8 @@
    "steer": true,
    "fuelL": 6.9,
    "stintFuelL": 6.9,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "3fe991c163d85998",
@@ -939,7 +1002,8 @@
    "steer": true,
    "fuelL": 7.6,
    "stintFuelL": 7.6,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "b6758686bb9f4d5e",
@@ -954,7 +1018,8 @@
    "steer": false,
    "fuelL": 59.7,
    "stintFuelL": 59.7,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "d599e4f36a751ca6",
@@ -969,7 +1034,8 @@
    "steer": false,
    "fuelL": 57.2,
    "stintFuelL": 65.0,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "7eac31b895df1535",
@@ -984,7 +1050,8 @@
    "steer": false,
    "fuelL": 57.0,
    "stintFuelL": 65.0,
-   "wet": true
+   "wet": true,
+   "grip": "Wet"
   },
   {
    "id": "59906818a5a7bc95",
@@ -999,7 +1066,8 @@
    "steer": true,
    "fuelL": 10.3,
    "stintFuelL": 10.3,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "31ec8e5801b52fe4",
@@ -1014,7 +1082,8 @@
    "steer": true,
    "fuelL": 41.2,
    "stintFuelL": 43.8,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "c94d25f22551e9ea",
@@ -1029,7 +1098,8 @@
    "steer": true,
    "fuelL": 113.6,
    "stintFuelL": 116.8,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "81ad4b65be9fc70d",
@@ -1044,7 +1114,8 @@
    "steer": true,
    "fuelL": 86.1,
    "stintFuelL": 105.5,
-   "wet": true
+   "wet": true,
+   "grip": "Wet"
   },
   {
    "id": "78758aac4c7a7c16",
@@ -1059,7 +1130,8 @@
    "steer": true,
    "fuelL": 89.1,
    "stintFuelL": 95.5,
-   "wet": true
+   "wet": true,
+   "grip": "Wet"
   },
   {
    "id": "5a078bfdfaacc41b",
@@ -1074,7 +1146,8 @@
    "steer": true,
    "fuelL": 105.0,
    "stintFuelL": 105.0,
-   "wet": true
+   "wet": true,
+   "grip": "Wet"
   },
   {
    "id": "86411f9932817d75",
@@ -1089,7 +1162,8 @@
    "steer": true,
    "fuelL": 113.8,
    "stintFuelL": 116.9,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "d9df09434dd2a5b2",
@@ -1104,7 +1178,8 @@
    "steer": true,
    "fuelL": 44.9,
    "stintFuelL": 48.2,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "60f7693dc8a2c858",
@@ -1119,7 +1194,8 @@
    "steer": true,
    "fuelL": 84.9,
    "stintFuelL": 95.0,
-   "wet": true
+   "wet": true,
+   "grip": "Wet"
   },
   {
    "id": "6b424fcb94f7a91e",
@@ -1134,7 +1210,8 @@
    "steer": true,
    "fuelL": 105.0,
    "stintFuelL": 105.0,
-   "wet": true
+   "wet": true,
+   "grip": "Wet"
   },
   {
    "id": "5bda55924dec9266",
@@ -1149,7 +1226,8 @@
    "steer": true,
    "fuelL": 5.9,
    "stintFuelL": 9.8,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "7fda8db81b16f616",
@@ -1164,7 +1242,8 @@
    "steer": true,
    "fuelL": 62.0,
    "stintFuelL": 62.0,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "6d0267c02bc5615c",
@@ -1179,7 +1258,8 @@
    "steer": true,
    "fuelL": 101.0,
    "stintFuelL": 104.8,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "3adc874c11c2475d",
@@ -1194,7 +1274,8 @@
    "steer": true,
    "fuelL": 97.2,
    "stintFuelL": 104.8,
-   "wet": true
+   "wet": true,
+   "grip": "Wet"
   },
   {
    "id": "81bc362e5db67532",
@@ -1209,7 +1290,8 @@
    "steer": true,
    "fuelL": 74.4,
    "stintFuelL": 78.4,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "49636577104abd0a",
@@ -1224,7 +1306,8 @@
    "steer": true,
    "fuelL": 84.0,
    "stintFuelL": 84.0,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "445f33c937f6b455",
@@ -1239,7 +1322,8 @@
    "steer": true,
    "fuelL": 9.1,
    "stintFuelL": 9.1,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "5fd8f59f27d5e655",
@@ -1254,7 +1338,8 @@
    "steer": true,
    "fuelL": 110.5,
    "stintFuelL": 116.8,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "89aaffacb29da77b",
@@ -1269,7 +1354,8 @@
    "steer": true,
    "fuelL": 113.8,
    "stintFuelL": 116.9,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "05f001ebee72618d",
@@ -1284,7 +1370,8 @@
    "steer": false,
    "fuelL": 36.2,
    "stintFuelL": 44.0,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "0505f226a560953d",
@@ -1299,7 +1386,8 @@
    "steer": false,
    "fuelL": 37.1,
    "stintFuelL": 37.1,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "0fc36f5ad6b88e5f",
@@ -1314,7 +1402,8 @@
    "steer": true,
    "fuelL": 102.1,
    "stintFuelL": 102.1,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "e1150dcb7f112bb8",
@@ -1329,7 +1418,8 @@
    "steer": true,
    "fuelL": 97.6,
    "stintFuelL": 100.1,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "5a48d21d1ef7a8ab",
@@ -1344,7 +1434,8 @@
    "steer": false,
    "fuelL": 35.0,
    "stintFuelL": 45.0,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "ee3d607c48c684d0",
@@ -1359,7 +1450,8 @@
    "steer": false,
    "fuelL": 38.0,
    "stintFuelL": 38.0,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "a9b28124c7d09f9e",
@@ -1374,7 +1466,8 @@
    "steer": true,
    "fuelL": 54.4,
    "stintFuelL": 60.0,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "c10d1ce239f7176c",
@@ -1389,7 +1482,8 @@
    "steer": true,
    "fuelL": 62.3,
    "stintFuelL": 65.2,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "43209b9908430bb2",
@@ -1404,7 +1498,8 @@
    "steer": true,
    "fuelL": 38.4,
    "stintFuelL": 50.8,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "ad5b9fd9a863b61d",
@@ -1419,7 +1514,8 @@
    "steer": true,
    "fuelL": 3.0,
    "stintFuelL": 5.3,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "6b30f1b8b67cb066",
@@ -1434,7 +1530,8 @@
    "steer": true,
    "fuelL": 113.0,
    "stintFuelL": 115.3,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "832913c8a23a9555",
@@ -1449,7 +1546,8 @@
    "steer": true,
    "fuelL": 108.0,
    "stintFuelL": 115.2,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "0221f56d98391045",
@@ -1464,7 +1562,8 @@
    "steer": false,
    "fuelL": 25.7,
    "stintFuelL": 25.7,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "86e5a0d39895dabc",
@@ -1479,7 +1578,8 @@
    "steer": false,
    "fuelL": 4.8,
    "stintFuelL": 6.9,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   },
   {
    "id": "7223773a5a227150",
@@ -1494,7 +1594,8 @@
    "steer": false,
    "fuelL": 69.9,
    "stintFuelL": 69.9,
-   "wet": false
+   "wet": false,
+   "grip": "Optimum"
   }
  ]
 }
