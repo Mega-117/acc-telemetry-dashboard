@@ -214,7 +214,8 @@ async function load() {
         // dev.10: the class of Tu (kind, fuel band, dry/wet) picks the same class first (Codex 05/11: Tu, not the session's best).
         cls: youClass() }))
     if (first) suggestions.push(library.loadCoachLaps(isCurrent, { track: first.track, car: first.car }, youClass()))
-    await Promise.race([Promise.allSettled(suggestions), new Promise(resolve => setTimeout(resolve, SUGGESTIONS_WAIT_MS))])
+    let waitTimer: ReturnType<typeof setTimeout> | undefined // cleared when the suggestions win (Codex 06/11)
+    await Promise.race([Promise.allSettled(suggestions), new Promise(resolve => { waitTimer = setTimeout(resolve, SUGGESTIONS_WAIT_MS) })]).finally(() => clearTimeout(waitTimer))
   } catch (e) {
     if (isCurrent()) error.value = e instanceof LapsArchiveError ? e.message : t('telemetry.errors.read')
   } finally {
