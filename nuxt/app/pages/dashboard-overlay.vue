@@ -66,10 +66,13 @@ useHudValuesReport('dashboard', telemetry.fastState, () => {
     inputs: { gear: state.gear, speedKmh: state.speedKmh, fuelL: state.fuelL, brakeBiasPct: state.brakeBiasPct,
       engineMap: state.engineMap, tractionControl: state.tractionControl, abs: state.abs,
       fuelPerLapL: state.fuelPerLapL, fuelLapsRemaining: state.fuelLapsRemaining, fuelLeftMs: state.fuelLeftTimeMs,
+      // 06/11: the rpm bar too (it was covered only by the shift trace): how full it is drawn, in %.
+      rpm: state.rpm, maxRpm: state.maxRpm,
       ...own?.inputs },
     shown: { gear: shown.gear, speed: shown.speed, fuel: shown.fuel, brakeBias: shown.brakeBias,
       engineMap: shown.engineMap, tc: shown.tractionControl, abs: shown.abs,
-      fuelPerLap: shown.fuelPerLap, lapsLeft: shown.lapsLeft, fuelLeft: shown.fuelLeft, ...own?.shown },
+      fuelPerLap: shown.fuelPerLap, lapsLeft: shown.lapsLeft, fuelLeft: shown.fuelLeft,
+      rpmBar: (shown.rpmRatio * 100).toFixed(1), ...own?.shown },
   }
 }, () => {
   // PIP-713: the view on the car ACC's camera is on, against the standings roster - a feed apart
