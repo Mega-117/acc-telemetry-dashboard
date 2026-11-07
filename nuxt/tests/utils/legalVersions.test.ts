@@ -12,6 +12,13 @@ describe('legal versions (PIP-658)', () => {
     expect(legalPageUrl('privacy', '/', 'en')).toBe('/legal/privacy-en.html')
     expect(legalPageUrl('termini', '/x/', 'en')).toBe('/x/legal/terms.html')
   })
+  it('points the installed app (racercore: protocol) to the public site, which the system browser can open', () => {
+    expect(legalPageUrl('termini', '/', 'it', 'racercore:')).toBe('https://app.racercore.app/legal/termini.html')
+    expect(legalPageUrl('privacy', '/', 'en', 'file:')).toBe('https://app.racercore.app/legal/privacy-en.html')
+    // A web page (site, Nuxt dev) keeps its own address.
+    expect(legalPageUrl('privacy', '/', 'it', 'https:')).toBe('/legal/privacy.html')
+    expect(legalPageUrl('privacy', '/', 'it', 'http:')).toBe('/legal/privacy.html')
+  })
   it('asks again when either text has a newer version', () => {
     expect(hasCurrentConsent({ termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION })).toBe(true)
     expect(hasCurrentConsent({ termsVersion: '2026-01-01', privacyVersion: PRIVACY_VERSION })).toBe(false)

@@ -30,8 +30,10 @@ const acceptPrivacy = ref(false)
 // PIP-698: usage statistics need a consent, so the box is optional and starts unticked.
 const acceptUsage = ref(false)
 const baseURL = useRuntimeConfig().app.baseURL
-const termsUrl = computed(() => legalPageUrl('termini', baseURL, locale.value))
-const privacyUrl = computed(() => legalPageUrl('privacy', baseURL, locale.value))
+// The installed app has its own protocol: there the links open the public site (legalPageUrl).
+const pageProtocol = typeof window === 'undefined' ? undefined : window.location.protocol
+const termsUrl = computed(() => legalPageUrl('termini', baseURL, locale.value, pageProtocol))
+const privacyUrl = computed(() => legalPageUrl('privacy', baseURL, locale.value, pageProtocol))
 
 const emit = defineEmits<{
   submit: [data: { firstName: string; lastName: string; nickname: string; email: string; password: string; consent: RegisterConsent }]
