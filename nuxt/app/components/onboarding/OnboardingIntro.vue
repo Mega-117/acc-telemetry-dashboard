@@ -1,20 +1,22 @@
 <script setup lang="ts">
-// PIP-571 / PIP-612: the introduction window. A step rail always on top (Racer Core,
-// Automazioni, Comandi), two short cards, then the command setup, which is the only way
-// out: "done" when the pilot finishes it, "later" when they postpone. Either way a last
-// screen confirms the end before the window closes. Each step slides in.
-import { computed, onMounted, ref, watch } from 'vue'
-import OnboardingPanelShowcase from '~/components/onboarding/OnboardingPanelShowcase.vue'
+// PIP-571 / PIP-612 / PIP-749: the introduction window. A step rail always on top (Benvenuto,
+// Live, Pannello rapido, In guida, Dati, Comandi): the four-pillar card drawn live, four clips
+// in the interface language, then the command setup, which is the only way out: "done" when
+// the pilot finishes it, "later" when they postpone. Either way a last screen confirms the
+// end; its Inizia closes the window onto the Panoramica. Each step slides in.
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import OnboardingWelcome from '~/components/onboarding/OnboardingWelcome.vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useOnboardingIntro, type OnboardingPhase, type OnboardingResult } from '~/composables/useOnboardingIntro'
 import { usePublicPath } from '~/composables/usePublicPath'
-import { ONBOARDING_STEPS } from '~/services/onboarding/onboardingSteps'
+import { ONBOARDING_STEPS, stepMedia } from '~/services/onboarding/onboardingSteps'
 import { useI18n } from '~/i18n'
 
 const intro = useOnboardingIntro()
 const { currentUser } = useFirebaseAuth()
 const { getPublicPath } = usePublicPath()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 // PIP-612: a short racing title and, instead of a sentence, the one thing to remember:
 // the key that opens the menu (the one just chosen, and Ctrl+K). Any simulator.
@@ -34,15 +36,29 @@ const root = ref<HTMLElement | null>(null)
 const step = computed(() => steps[index.value]!)
 const finish = computed(() => FINISH.value[result.value])
 const current = computed(() => ({ tour: index.value, commands: steps.length, finish: railLabels.value.length })[phase.value])
-// The fill reaches the end of the current step (equal columns), full on the last screen.
-const progress = computed(() => `${Math.min(1, (current.value + 1) / railLabels.value.length) * 100}%`)
-const commands = ref<{ postpone: () => void; pause: () => void; resume: () => void } | null>(null)
+// PIP-749: six steps no longer fit six full names. The current step gets a wider column with
+// its whole name; the others share the rest (narrow windows show only their tick or number).
+// The fill reaches the end of the current step, full on the last screen.
+const NOW_SHARE = 2.4
+const railColumns = computed(() => railLabels.value.map((_, i) => `minmax(0, ${i === current.value ? NOW_SHARE : 1}fr)`).join(' '))
+const progress = computed(() => {
+  const n = railLabels.value.length
+  if (current.value >= n) return '100%'
+  return `${((current.value + NOW_SHARE) / (n - 1 + NOW_SHARE)) * 100}%`
+})
+const commands = ref<{ postpone: () => void; pause: () => void; resume: () => void; busy: boolean } | null>(null)
 const confirmLater = ref(false)
 // The confirmation owns the keyboard while it is open: the key list stops listening.
-watch(confirmLater, (open) => {
-  if (open) commands.value?.pause()
-  else if (phase.value === 'commands') commands.value?.resume()
+// PIP-749: also when the key list mounts after the confirmation opened (step transition).
+watch([confirmLater, commands], ([open, list]) => {
+  if (!list) return
+  if (open) list.pause()
+  // Not while the step is being left (Sì, dopo): the departing list must not listen again.
+  else if (phase.value === 'commands') list.resume()
 })
+// PIP-749: the rail jumps between the cards; it stays still on the last screen and while the
+// command step is in progress (keys being set or tried), which has its own Indietro.
+const railLocked = computed(() => phase.value === 'finish' || (phase.value === 'commands' && !!commands.value?.busy))
 
 const wheelAvailable = computed(() => {
   if (typeof window === 'undefined') return false
@@ -50,17 +66,23 @@ const wheelAvailable = computed(() => {
   return !!api?.controlsGetState && api.localIdentityRole === 'primary'
 })
 
+// PIP-749: the step change destroys the button just pressed; focus goes back to the window,
+// so Tab starts inside it again and Esc keeps working.
+const refocus = () => { void nextTick(() => root.value?.focus()) }
 const goTo = (target: number) => {
   const clamped = Math.max(0, Math.min(steps.length, target))
   if (clamped === current.value) return
+  refocus()
   direction.value = clamped > current.value ? 'next' : 'prev'
   confirmLater.value = false
   if (clamped >= steps.length) { phase.value = 'commands'; return }
   phase.value = 'tour'
   index.value = clamped
 }
-const next = () => goTo(current.value + 1)
-const previous = () => goTo(current.value - 1)
+// PIP-749: the second click of a double click (detail 2) must not skip a card.
+const single = (event?: MouseEvent) => !event || event.detail < 2
+const next = (event?: MouseEvent) => { if (single(event)) goTo(current.value + 1) }
+const previous = (event?: MouseEvent) => { if (single(event)) goTo(current.value - 1) }
 const toCommands = () => goTo(steps.length)
 // The status is saved as soon as the setup ends, so closing the app on the last screen keeps it.
 const toFinish = (how: OnboardingResult, key: string | null = null) => {
@@ -70,27 +92,74 @@ const toFinish = (how: OnboardingResult, key: string | null = null) => {
   confirmLater.value = false
   direction.value = 'next'
   phase.value = 'finish'
+  refocus()
+}
+// PIP-749: the last screen always lands on the Panoramica, whatever page was under the window.
+const router = useRouter()
+const PANORAMICA = '/panoramica'
+const start = () => {
+  // Once only: a double click or Esc during the closing fade must not navigate twice.
+  if (!intro.visible.value) return
+  intro.close(result.value)
+  if (router && router.currentRoute.value.path !== PANORAMICA) void router.push(PANORAMICA)
 }
 const onEscape = () => {
   if (confirmLater.value) confirmLater.value = false
   else if (phase.value === 'tour') toCommands()
-  else if (phase.value === 'finish') intro.close(result.value)
+  else if (phase.value === 'finish') start()
 }
 
-watch(intro.visible, (open) => {
-  if (!open) return
+// PIP-749: Esc is heard by the whole page while the window is open, not only when the focus
+// is inside it (a language change or a step change can drop the focus on the page behind).
+// The window is modal: Tab and Shift+Tab cycle inside it, never on the page behind.
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+const trapTab = (event: KeyboardEvent) => {
+  const box = root.value
+  if (!box) return
+  const items = [...box.querySelectorAll<HTMLElement>(FOCUSABLE)]
+  if (!items.length) return
+  const first = items[0]!, last = items[items.length - 1]!
+  const active = document.activeElement as HTMLElement | null
+  const inside = !!active && box.contains(active)
+  if (event.shiftKey && (!inside || active === first || active === box)) { event.preventDefault(); last.focus() }
+  else if (!event.shiftKey && (!inside || active === last)) { event.preventDefault(); first.focus() }
+}
+const onKeydown = (event: KeyboardEvent) => {
+  if (event.defaultPrevented || !intro.visible.value) return
+  if (event.key === 'Tab') { trapTab(event); return }
+  if (event.key !== 'Escape') return
+  event.preventDefault()
+  onEscape()
+}
+const listenEscape = (on: boolean) => {
+  if (typeof document === 'undefined') return
+  document.removeEventListener('keydown', onKeydown)
+  if (on) document.addEventListener('keydown', onKeydown)
+}
+onBeforeUnmount(() => listenEscape(false))
+const restart = () => {
   phase.value = intro.startPhase.value
   index.value = 0
   direction.value = 'next'
   confirmLater.value = false
   requestAnimationFrame(() => root.value?.focus())
+}
+watch(intro.visible, (open) => {
+  listenEscape(open)
+  if (open) restart()
 }, { immediate: true })
+// PIP-749: Impostazioni -> Introduzione while it is already open starts it again from the first card.
+watch(intro.openings, () => { if (intro.visible.value) restart() })
 // PIP-657 (user decision 27/10): it opens by itself only in the desktop program, where Ctrl+K and the
 // automations live; in a browser it stays available from Impostazioni → Introduzione.
 const inDesktopApp = typeof window !== 'undefined' && !!(window as Window & { electronAPI?: unknown }).electronAPI
 const showFirstTime = () => { if (inDesktopApp) void intro.showIfFirstTime() }
 // The owner can still be loading when the layout mounts: retry once the uid arrives.
-watch(() => currentUser.value?.uid, (uid) => { if (uid) showFirstTime() })
+watch(() => currentUser.value?.uid, (uid, before) => {
+  // PIP-749: another account (logout, login) while the window is open: it was not theirs.
+  if (before && uid !== before && intro.visible.value) intro.abandon()
+  if (uid) showFirstTime()
+})
 onMounted(showFirstTime)
 </script>
 
@@ -106,19 +175,18 @@ onMounted(showFirstTime)
       :aria-label="t('onboarding.dialog')"
       tabindex="-1"
       data-onboarding-intro
-      @keydown.esc.prevent="onEscape"
     >
       <div class="onboarding__modal">
         <header class="onboarding__rail-wrap">
           <div class="onboarding__rail-track">
-            <ol class="onboarding__rail" :style="{ '--rail-n': railLabels.length }" :aria-label="t('onboarding.rail')">
+            <ol class="onboarding__rail" :style="{ gridTemplateColumns: railColumns }" :aria-label="t('onboarding.rail')">
               <li
                 v-for="(label, i) in railLabels"
-                :key="label"
+                :key="i"
                 class="onboarding__rail-item"
                 :class="{ 'is-done': i < current, 'is-now': i === current }"
               >
-                <button type="button" data-rail-step :disabled="phase === 'finish'" :aria-current="i === current ? 'step' : undefined" @click="goTo(i)">
+                <button type="button" data-rail-step :title="label" :disabled="railLocked" :aria-current="i === current ? 'step' : undefined" @click="goTo(i)">
                   <span class="onboarding__rail-n">{{ i < current ? '✓' : i + 1 }}</span>
                   <span class="onboarding__rail-label">{{ label }}</span>
                 </button>
@@ -150,12 +218,12 @@ onMounted(showFirstTime)
         <Transition :name="`onb-${direction}`" mode="out-in">
           <div v-if="phase === 'tour'" :key="step.id" class="onboarding__stage" data-onboarding-stage>
             <div class="onboarding__media">
-              <OnboardingPanelShowcase v-if="step.scene === 'panel'" />
+              <OnboardingWelcome v-if="step.scene === 'welcome'" />
               <video
                 v-else
                 class="onboarding__video"
-                :src="getPublicPath(step.video ?? '')"
-                :poster="step.poster ? getPublicPath(step.poster) : undefined"
+                :src="getPublicPath(stepMedia(step.video, locale))"
+                :poster="step.poster ? getPublicPath(stepMedia(step.poster, locale)) : undefined"
                 autoplay
                 muted
                 loop
@@ -188,7 +256,7 @@ onMounted(showFirstTime)
               <span>{{ t('onboarding.menu') }}</span><kbd v-if="menuKey">{{ menuKey }}</kbd><span v-if="menuKey" aria-hidden="true">·</span><kbd>Ctrl+K</kbd>
             </p>
             <p v-if="finish.text" class="onboarding__copy onboarding__finish-copy onboarding__finish-note">{{ finish.text }}</p>
-            <button type="button" class="onboarding__next onboarding__finish-go" data-onboarding-start @click="intro.close(result)">{{ t('onboarding.start') }}</button>
+            <button type="button" class="onboarding__next onboarding__finish-go" data-onboarding-start @click="start">{{ t('onboarding.start') }}</button>
           </div>
 
           <OnboardingCommands
@@ -252,7 +320,7 @@ $ease: cubic-bezier(.22, .61, .36, 1);
 .onboarding__rail-wrap { position: relative; z-index: 3; flex: 0 0 $rail-h; display: flex; align-items: center; padding: 0 32px; border-bottom: 1px solid $line; }
 .onboarding__rail-track { position: relative; flex: 1; align-self: stretch; display: flex; align-items: center; min-width: 0; }
 // Equal columns, no gaps: each step owns exactly one share of the progress line below.
-.onboarding__rail { display: grid; grid-template-columns: repeat(var(--rail-n, 3), minmax(0, 1fr)); width: 100%; margin: 0; padding: 0; list-style: none; }
+.onboarding__rail { display: grid; width: 100%; margin: 0; padding: 0; list-style: none; transition: grid-template-columns .6s $ease; }
 .onboarding__rail-item { min-width: 0;
   button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 4px; transition: color .4s ease; border: 0; background: none; color: #77777d; font: 600 12px/1 'Inter', 'Segoe UI', sans-serif; text-transform: uppercase; letter-spacing: .02em; cursor: pointer; text-align: left;
     &:hover { color: #fff; }
@@ -264,10 +332,13 @@ $ease: cubic-bezier(.22, .61, .36, 1);
   .is-now & { background: $red; color: #fff; animation: onb-pop .7s $ease; } }
 @keyframes onb-pop { 0% { transform: skewX(-12deg) scale(.85) } 60% { transform: skewX(-12deg) scale(1.06) } 100% { transform: skewX(-12deg) scale(1) } }
 .onboarding__rail-label { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+// Six names never fit: only the current step shows its name (the others on hover, via title).
+.onboarding__rail-item:not(.is-now) .onboarding__rail-label { display: none; }
 .onboarding__progress { position: absolute; left: 0; right: 0; bottom: -1px; height: 3px; background: transparent;
   span { display: block; height: 100%; background: $red; transition: width .9s $ease; } }
-// Floats over the end of the last column: it takes no room, the steps keep equal widths.
-.onboarding__skip-slot { position: absolute; top: 0; right: 32px; bottom: 0; display: flex; align-items: center; justify-content: flex-end; }
+// PIP-749: its own fixed column after the rail (six steps no longer leave room to float over
+// the last one): the steps keep equal widths and the same size on every screen.
+.onboarding__skip-slot { position: relative; flex: 0 0 132px; align-self: stretch; margin-left: 20px; display: flex; align-items: center; justify-content: flex-end; }
 .onboarding__skip { padding: 8px 0; border: 0; background: none; white-space: nowrap; color: #8a8a90; font: 500 13px/1 'Inter', 'Segoe UI', sans-serif; cursor: pointer; transition: color .3s ease;
   &:hover { color: #fff; text-decoration: underline; }
   &:focus-visible { outline: 2px solid #fff; outline-offset: 2px; } }
@@ -343,7 +414,6 @@ $ease: cubic-bezier(.22, .61, .36, 1);
 @media (max-width: 760px) {
   .onboarding { padding: 12px; }
   .onboarding__modal { width: calc(100vw - 24px); height: auto; max-height: calc(100vh - 24px); overflow: auto; }
-  .onboarding__rail-label { display: none; }
   .onboarding__body { grid-template-columns: 1fr; padding: 18px; }
   .onboarding__nav { justify-content: space-between; }
   .onboarding__title { font-size: 26px; }

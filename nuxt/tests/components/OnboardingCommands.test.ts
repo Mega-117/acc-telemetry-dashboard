@@ -7,9 +7,11 @@ import { EMPTY_WHEEL_BINDINGS, type WheelControlAction } from '~/services/contro
 
 const mock = await vi.hoisted(async () => {
   const { ref } = await import('vue')
-  return { bridge: null as any, ref }
+  return { bridge: null as any, ref, windowVisible: ref(true) }
 })
 vi.mock('~/composables/useWheelInputBridge', () => ({ useWheelInputBridge: () => mock.bridge }))
+// PIP-749: the native window state (X to tray), fed by the desktop program.
+vi.mock('~/composables/usePresentationVisibility', () => ({ usePresentationVisibility: () => mock.windowVisible }))
 vi.mock('~/composables/usePublicPath', () => ({ usePublicPath: () => ({ getPublicPath: (p: string) => p }) }))
 
 const ORDER: WheelControlAction[] = ['togglePalette', 'nextAction', 'previousAction', 'activateAction', 'mainMenu']
@@ -17,6 +19,7 @@ const binding = (button: number) => ({ deviceId: 'Wheel', deviceLabel: 'Wheel', 
 
 beforeEach(() => {
   vi.useFakeTimers()
+  mock.windowVisible.value = true
   const { ref } = mock
   const state = ref({ available: true, inputStatus: 'ready', inputBackend: 'native', devices: [{ deviceId: 'Wheel', deviceLabel: 'Wheel', buttons: [] }],
     bindings: { ...EMPTY_WHEEL_BINDINGS } as Record<WheelControlAction, any>, capture: null as any, lastError: null, ambiguousDeviceIds: [], operation: undefined as any })
@@ -47,12 +50,37 @@ async function tap(action: WheelControlAction) {
   mock.bridge.testedActions.value = []; await flushPromises()
 }
 
+/** PIP-749: with a wheel reader the step opens on the question; "yes" leads to the key list. */
+async function answerYes(wrapper: { get: (s: string) => { trigger: (e: string) => Promise<void> } }) {
+  await wrapper.get('[data-cmd-choose-wheel]').trigger('click'); await flushPromises()
+}
+
 // PIP-665: these checks read the Italian texts; the default would follow the system language.
 setLocale('it')
 
 describe('OnboardingCommands (PIP-571)', () => {
-  it('wheel path: assigns the five commands one at a time, practises the panel and finishes', async () => {
+  it('PIP-749: asks first; nothing listens until "yes", "no" goes to the Ctrl+K trial, Indietro asks again', async () => {
     const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises()
+    expect(wrapper.find('[data-cmd-screen="choose"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('i tasti del volante?')
+    expect(mock.bridge.start).toHaveBeenCalledTimes(1)
+    expect(mock.bridge.beginCapture).not.toHaveBeenCalled()
+    await wrapper.get('[data-cmd-choose-keyboard]').trigger('click'); await flushPromises()
+    expect(wrapper.find('[data-cmd-screen="keyboard"]').exists()).toBe(true)
+    await wrapper.get('[data-cmd-back]').trigger('click'); await flushPromises()
+    expect(wrapper.find('[data-cmd-screen="choose"]').exists()).toBe(true)
+    await answerYes(wrapper)
+    expect(wrapper.find('[data-cmd-screen="assign"]').exists()).toBe(true)
+    expect(mock.bridge.beginCapture).toHaveBeenLastCalledWith('togglePalette')
+    // From the key list, Indietro also returns to the question and stops listening.
+    await wrapper.get('[data-cmd-back]').trigger('click'); await flushPromises()
+    expect(wrapper.find('[data-cmd-screen="choose"]').exists()).toBe(true)
+    expect(mock.bridge.cancelCapture).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('wheel path: assigns the five commands one at a time, practises the panel and finishes', async () => {
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises(); await answerYes(wrapper)
     await flushPromises()
     expect(mock.bridge.start).toHaveBeenCalledTimes(1)
     // PIP-612: no choice first: the key list opens with its first row already waiting.
@@ -102,7 +130,7 @@ describe('OnboardingCommands (PIP-571)', () => {
   })
 
   it('Indietro is optional: skipping it leaves it unassigned and drops its exercise', async () => {
-    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises()
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises(); await answerYes(wrapper)
     for (const [i, action] of ORDER.slice(0, 4).entries()) await pressAndSave(action, i + 1)
     expect(wrapper.find('[data-slot="mainMenu"]').classes()).toContain('now'); expect(wrapper.get('[data-slot="mainMenu"]').text()).toContain('facoltativo')
     await wrapper.get('[data-cmd-skip]').trigger('click'); await flushPromises()
@@ -119,7 +147,7 @@ describe('OnboardingCommands (PIP-571)', () => {
   })
 
   it('after a while without any button it says what to check', async () => {
-    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises()
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises(); await answerYes(wrapper)
     expect(wrapper.get('[data-cmd-ask]').text()).not.toContain('collegato')
     vi.advanceTimersByTime(8100); await flushPromises()
     expect(wrapper.get('[data-cmd-ask]').text()).toContain('Il volante è collegato?')
@@ -129,7 +157,7 @@ describe('OnboardingCommands (PIP-571)', () => {
   })
 
   it('a failed or cancelled capture explains and Riprova arms it again', async () => {
-    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises()
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises(); await answerYes(wrapper)
     const s = mock.bridge.state
     s.value = { ...s.value, capture: null, operation: { ok: false, reason: 'binding_conflict' } }
     await flushPromises()
@@ -142,7 +170,7 @@ describe('OnboardingCommands (PIP-571)', () => {
   // PIP-612: the classic key list. Empty rows are filled in order; a row with a key
   // changes when clicked; with every row set there is one action, Continua.
   it('a click on a row right after a save cancels the pending move to the next command', async () => {
-    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises()
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises(); await answerYes(wrapper)
     await pressAndSave('togglePalette', 1)
     expect(wrapper.find('[data-slot="nextAction"]').classes()).toContain('now')
     const s = mock.bridge.state
@@ -159,7 +187,7 @@ describe('OnboardingCommands (PIP-571)', () => {
 
   it('rows already set are skipped; a changed key stays on its row; Esc keeps the old key', async () => {
     mock.bridge.state.value.bindings.togglePalette = binding(7)
-    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises()
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises(); await answerYes(wrapper)
     expect(wrapper.get('[data-slot="togglePalette"] .cmd__bind-key b').text()).toBe('✓ Pulsante 8')
     // The cursor starts on the first empty row.
     expect(mock.bridge.beginCapture).toHaveBeenLastCalledWith('nextAction')
@@ -180,7 +208,7 @@ describe('OnboardingCommands (PIP-571)', () => {
   it('Esc goes back to the FIRST empty row, not the next one after the changed key', async () => {
     const s = mock.bridge.state
     s.value.bindings = { ...s.value.bindings, togglePalette: binding(0), previousAction: binding(2), activateAction: binding(3) }
-    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises()
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises(); await answerYes(wrapper)
     await wrapper.get('[data-slot="activateAction"] .cmd__bind').trigger('click'); await flushPromises()
     s.value = { ...s.value, capture: null, operation: undefined }; await flushPromises()
     expect(wrapper.find('[data-slot="nextAction"]').classes()).toContain('now')
@@ -188,7 +216,7 @@ describe('OnboardingCommands (PIP-571)', () => {
   })
 
   it('clicking the row that is already listening does not arm it again after Esc', async () => {
-    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises()
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises(); await answerYes(wrapper)
     expect(mock.bridge.beginCapture).toHaveBeenCalledTimes(1)
     await wrapper.get('[data-slot="togglePalette"] .cmd__bind').trigger('click'); await flushPromises()
     expect(mock.bridge.beginCapture).toHaveBeenCalledTimes(1)
@@ -201,8 +229,10 @@ describe('OnboardingCommands (PIP-571)', () => {
     mock.bridge.beginCapture = vi.fn((action: WheelControlAction) => new Promise<void>((resolve) => {
       finishBegin = () => { s.value = { ...s.value, capture: { action }, operation: undefined }; resolve() }
     }))
-    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises()
-    await wrapper.get('button[data-cmd-keyboard]').trigger('click'); await flushPromises()
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises(); await answerYes(wrapper)
+    // PIP-749: from the key list, Indietro and then "No, tastiera e mouse".
+    await wrapper.get('[data-cmd-back]').trigger('click'); await flushPromises()
+    await wrapper.get('[data-cmd-choose-keyboard]').trigger('click'); await flushPromises()
     finishBegin(); await flushPromises()
     expect(wrapper.find('[data-cmd-screen="keyboard"]').exists()).toBe(true)
     expect(mock.bridge.cancelCapture).toHaveBeenCalled()
@@ -211,7 +241,7 @@ describe('OnboardingCommands (PIP-571)', () => {
   })
 
   it('pause stops listening without an error; resume listens again on the same row', async () => {
-    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises()
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises(); await answerYes(wrapper)
     const api = wrapper.vm as unknown as { pause(): void; resume(): void }
     api.pause(); await flushPromises()
     expect(mock.bridge.state.value.capture).toBeNull()
@@ -225,7 +255,7 @@ describe('OnboardingCommands (PIP-571)', () => {
   it('with every key already set: no capture, one Continua, and a changed key does not jump ahead', async () => {
     const s = mock.bridge.state
     s.value.bindings = Object.fromEntries(ORDER.map((action, i) => [action, binding(i)])) as any
-    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises()
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises(); await answerYes(wrapper)
     expect(mock.bridge.beginCapture).not.toHaveBeenCalled()
     expect(wrapper.find('[data-cmd-keep]').exists()).toBe(false)
     await wrapper.get('[data-slot="activateAction"] .cmd__bind').trigger('click'); await flushPromises()
@@ -240,7 +270,7 @@ describe('OnboardingCommands (PIP-571)', () => {
 
   it('waits for the readers before arming the first capture', async () => {
     mock.bridge.state.value = { ...mock.bridge.state.value, inputStatus: 'starting' }
-    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises()
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises(); await answerYes(wrapper)
     expect(mock.bridge.beginCapture).not.toHaveBeenCalled()
     mock.bridge.state.value = { ...mock.bridge.state.value, inputStatus: 'ready' }; await flushPromises()
     expect(mock.bridge.beginCapture).toHaveBeenCalledWith('togglePalette')
@@ -250,7 +280,7 @@ describe('OnboardingCommands (PIP-571)', () => {
   // PIP-612: "Lo faccio dopo" and its confirmation are in the corner of the introduction,
   // which calls postpone: the commands release the readers and emit later.
   it('postpone releases the readers and emits later', async () => {
-    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises()
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises(); await answerYes(wrapper)
     expect(wrapper.find('[data-cmd-later]').exists()).toBe(false)
     ;(wrapper.vm as unknown as { postpone(): void }).postpone(); await flushPromises()
     expect(mock.bridge.finishConfiguration).toHaveBeenCalled()
@@ -263,7 +293,7 @@ describe('OnboardingCommands (PIP-571)', () => {
     const off = vi.fn()
     Object.assign(window, { electronAPI: { onTrainingOverlayVisibility: (cb: typeof push) => { push = cb; return off } } })
     const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises()
-    await wrapper.get('button[data-cmd-keyboard]').trigger('click'); await flushPromises()
+    await wrapper.get('[data-cmd-choose-keyboard]').trigger('click'); await flushPromises()
     expect(wrapper.find('[data-cmd-screen="keyboard"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Premi Ctrl+K adesso.')
     expect(wrapper.get('[data-cmd-finish]').attributes('disabled')).toBeDefined()
@@ -295,14 +325,15 @@ describe('OnboardingCommands (PIP-571)', () => {
     delete (window as any).electronAPI
   })
 
-  it('keyboard path without the desktop signal does not block; Indietro returns to the key list', async () => {
+  it('keyboard path without the desktop signal does not block; Indietro returns to the question (PIP-749)', async () => {
     const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises()
-    await wrapper.get('button[data-cmd-keyboard]').trigger('click')
+    await wrapper.get('[data-cmd-choose-keyboard]').trigger('click'); await flushPromises()
     expect(wrapper.find('[data-task="kb-open"]').exists()).toBe(false)
-    expect(wrapper.find('button[data-cmd-wheel]').exists()).toBe(true)
-    await wrapper.get('[data-cmd-back]').trigger('click')
-    expect(wrapper.find('[data-cmd-screen="assign"]').exists()).toBe(true)
-    await wrapper.get('button[data-cmd-keyboard]').trigger('click')
+    // PIP-749: one way back only, to the question (no second "Ho un volante" button).
+    expect(wrapper.find('button[data-cmd-wheel]').exists()).toBe(false)
+    await wrapper.get('[data-cmd-back]').trigger('click'); await flushPromises()
+    expect(wrapper.find('[data-cmd-screen="choose"]').exists()).toBe(true)
+    await wrapper.get('[data-cmd-choose-keyboard]').trigger('click'); await flushPromises()
     await wrapper.get('[data-cmd-finish]').trigger('click')
     expect(wrapper.emitted('done')).toHaveLength(1)
     wrapper.unmount()
@@ -313,5 +344,78 @@ describe('OnboardingCommands (PIP-571)', () => {
     expect(browser.find('[data-cmd-later]').exists()).toBe(false)
     expect(mock.bridge.start).not.toHaveBeenCalled()
     browser.unmount()
+  })
+
+  it('PIP-749: the key list offers no second way to the keyboard path (the question has it)', async () => {
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises(); await answerYes(wrapper)
+    expect(wrapper.find('button[data-cmd-keyboard]').exists()).toBe(false)
+    expect((wrapper.vm as unknown as { busy: boolean }).busy).toBe(true)
+    await wrapper.get('[data-cmd-back]').trigger('click'); await flushPromises()
+    expect((wrapper.vm as unknown as { busy: boolean }).busy).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('PIP-749: a hidden window (tray) stops the capture and the test mode, and both come back when shown', async () => {
+    const toggle = async (visible: boolean) => { mock.windowVisible.value = visible; await flushPromises() }
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises(); await answerYes(wrapper)
+    expect(mock.bridge.state.value.capture).toEqual({ action: 'togglePalette' })
+    await toggle(false)
+    expect(mock.bridge.state.value.capture).toBeNull()
+    mock.bridge.beginCapture.mockClear()
+    // While hidden nothing arms again, even when the readers report changes.
+    mock.bridge.state.value = { ...mock.bridge.state.value, devices: [...mock.bridge.state.value.devices] }; await flushPromises()
+    expect(mock.bridge.beginCapture).not.toHaveBeenCalled()
+    await toggle(true)
+    expect(mock.bridge.beginCapture).toHaveBeenLastCalledWith('togglePalette')
+    // Practice: test mode off while hidden (the wheel drives the real panel again), on when back.
+    for (const [a, b] of [['togglePalette', 26], ['nextAction', 24], ['previousAction', 23], ['activateAction', 32], ['mainMenu', 34]] as const) await pressAndSave(a, b)
+    expect(wrapper.find('[data-cmd-screen="practice"]').exists()).toBe(true)
+    expect(mock.bridge.testMode.value).toBe(true)
+    await toggle(false)
+    expect(mock.bridge.testMode.value).toBe(false)
+    await toggle(true)
+    expect(mock.bridge.testMode.value).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('PIP-749: readers that fail to start say so, and "Sì" tries again', async () => {
+    mock.bridge.state.value = { ...mock.bridge.state.value, available: false }
+    mock.bridge.start = vi.fn(async () => { throw new Error('bridge down') })
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises()
+    await answerYes(wrapper)
+    // The failed start is retried by "Sì", and the failure is said instead of an endless wait.
+    expect(mock.bridge.start).toHaveBeenCalledTimes(2)
+    expect(mock.bridge.beginCapture).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Lettura dei comandi non disponibile')
+    wrapper.unmount()
+  })
+
+  it('PIP-749: a pause right after a saved key still moves on to the next empty row', async () => {
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises(); await answerYes(wrapper)
+    const s = mock.bridge.state
+    // The key is saved; the move to the next row is still pending (900 ms) when the pause comes.
+    s.value = { ...s.value, capture: null, bindings: { ...s.value.bindings, togglePalette: binding(26) }, operation: { ok: true, saved: true } }
+    await flushPromises()
+    const exposed = wrapper.vm as unknown as { pause: () => void; resume: () => void }
+    exposed.pause(); await flushPromises()
+    vi.advanceTimersByTime(2000); await flushPromises()
+    exposed.resume(); await flushPromises()
+    expect(mock.bridge.beginCapture).toHaveBeenLastCalledWith('nextAction')
+    expect(wrapper.find('[data-slot="nextAction"]').classes()).toContain('now')
+    wrapper.unmount()
+  })
+
+  it('PIP-749: "Lo faccio dopo" opened right after the last exercise does not strand the practice', async () => {
+    const wrapper = mount(OnboardingCommands, { props: { wheelAvailable: true } }); await flushPromises(); await answerYes(wrapper)
+    for (const [a, b] of [['togglePalette', 26], ['nextAction', 24], ['previousAction', 23], ['activateAction', 32], ['mainMenu', 34]] as const) await pressAndSave(a, b)
+    expect(wrapper.find('[data-cmd-screen="practice"]').exists()).toBe(true)
+    for (const action of ['togglePalette', 'nextAction', 'nextAction', 'previousAction', 'activateAction', 'mainMenu', 'togglePalette'] as const) await tap(action)
+    // The confirmation opens inside the 900 ms before "ready", then the pilot cancels it.
+    const exposed = wrapper.vm as unknown as { pause: () => void; resume: () => void }
+    exposed.pause(); await flushPromises()
+    vi.advanceTimersByTime(2000); await flushPromises()
+    exposed.resume(); await flushPromises()
+    expect(wrapper.find('[data-cmd-finish]').exists()).toBe(true)
+    wrapper.unmount()
   })
 })

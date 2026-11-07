@@ -5,8 +5,10 @@
 // (test mode: the game receives nothing). Keyboard: press the real Ctrl+K twice; the copy
 // mirrors the real panel opening. "Lo faccio dopo" postpones and the next launch asks again.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import OnboardingDeviceIcon from '~/components/onboarding/OnboardingDeviceIcon.vue'
 import OnboardingPanelReplica from '~/components/onboarding/OnboardingPanelReplica.vue'
 import { useKeyboardCapture } from '~/composables/useKeyboardCapture'
+import { usePresentationVisibility } from '~/composables/usePresentationVisibility'
 import { useWheelInputBridge } from '~/composables/useWheelInputBridge'
 import { canBeginAutoCapture, commandErrorText } from '~/services/controls/commandCapture'
 import { formatWheelBinding, type WheelBinding, type WheelControlAction } from '~/services/controls/wheelBindingModel'
@@ -29,8 +31,10 @@ const props = defineProps<{ wheelAvailable: boolean }>()
 const emit = defineEmits<{ done: [menuKey?: string]; later: [] }>()
 const { t } = useI18n()
 
-type Screen = 'assign' | 'practice' | 'ready' | 'keyboard'
-// PIP-612: no question and no device choice first. The screen is the list "command -> key"
+type Screen = 'choose' | 'assign' | 'practice' | 'ready' | 'keyboard'
+// PIP-749 (user decision 07/11): with a wheel reader the step opens on one question, "Vuoi
+// impostare i tasti del volante?": yes -> the key list below, no -> the Ctrl+K trial.
+// PIP-612: the key list "command -> key"
 // and its first row is already waiting: any button of any device (wheel, button box,
 // keyboard) fills it. Next to it the menu copy shows what the command does.
 // Indietro is optional: without it the first button still closes the menu.
@@ -51,7 +55,7 @@ const bridge = useWheelInputBridge()
 const { state, testedActions } = bridge
 const { keyHint, reset: resetKeyCapture } = useKeyboardCapture(bridge)
 
-const screen = ref<Screen>(props.wheelAvailable ? 'assign' : 'keyboard')
+const screen = ref<Screen>(props.wheelAvailable ? 'choose' : 'keyboard')
 const assignIndex = ref(0)
 const autoArmed = ref(false)
 const saved = ref(false)
@@ -68,14 +72,23 @@ const currentBinding = computed(() => state.value.bindings[current.value.id])
 const waiting = computed(() => state.value.capture?.action === current.value.id)
 // One name per device model: two readers of the same wheel are one wheel for the pilot.
 const controllers = computed(() => [...new Set(state.value.devices.filter(d => d.kind !== 'keyboard').map(d => d.deviceLabel))])
+// PIP-749: the readers could not start (bridge error): say so, and "Sì" tries again.
+const startFailed = ref(false)
+function startReaders() {
+  startFailed.value = false
+  Promise.resolve(bridge.start()).then((ok) => { if (ok === false && !state.value.available) startFailed.value = true })
+    .catch(() => { startFailed.value = true })
+}
 const readerStatus = computed(() => {
+  if (startFailed.value) return t('onboarding.commands.reader.unavailable')
   if (!state.value.available) return t('onboarding.commands.reader.starting')
   if (state.value.inputStatus === 'starting') return t('onboarding.commands.reader.searching')
   if (state.value.inputStatus === 'unavailable') return t('onboarding.commands.reader.unavailable')
   return ''
 })
-const stepNumber = computed(() => ({ keyboard: 1, assign: 1, practice: 2, ready: 2 } as const)[screen.value])
-const steps = computed(() => screen.value === 'keyboard' ? [t('onboarding.commands.stepTry')] : [t('onboarding.commands.stepAssign'), t('onboarding.commands.stepTry')])
+const stepNumber = computed(() => ({ choose: 0, keyboard: 1, assign: 1, practice: 2, ready: 2 } as const)[screen.value])
+// The question has no sub-steps; the keyboard path has just the trial.
+const steps = computed(() => screen.value === 'choose' ? [] : screen.value === 'keyboard' ? [t('onboarding.commands.stepTry')] : [t('onboarding.commands.stepAssign'), t('onboarding.commands.stepTry')])
 
 // What the menu copy next to the list shows for the command being assigned.
 const demo = ref<{ open: boolean, selected: number | null, confirmed: number | null }>({ open: true, selected: 0, confirmed: null })
@@ -141,7 +154,7 @@ function startAssign() {
   const first = nextOpen(-1)
   enterAction(first >= 0 ? first : 0, false)
 }
-function chooseWheel() { screen.value = 'assign'; startAssign() }
+function chooseWheel() { if (startFailed.value) startReaders(); screen.value = 'assign'; startAssign() }
 function enterAction(index: number, force = false) {
   cancelPending()
   if (state.value.capture && state.value.capture.action !== REQUIRED[index]!.id) void bridge.cancelCapture()
@@ -161,9 +174,38 @@ function pickRow(index: number) {
 let bindingBefore = ''
 const bindingKey = (action: WheelControlAction) => JSON.stringify(state.value.bindings[action] ?? null)
 // While the "Lo faccio dopo" confirmation is open nothing listens: its keys are its own.
-const paused = ref(false)
-function pause() { paused.value = true; cancelPending(); if (state.value.capture) void bridge.cancelCapture() }
-function resume() { paused.value = false; if (screen.value === 'assign') enterAction(assignIndex.value, rebinding.value) }
+// PIP-749: the same when the window is hidden (X sends the program to the tray): no key may
+// be captured, and the wheel works the real panel again (test mode off). Each reason holds
+// the list on its own; it resumes when none is left.
+type Hold = 'confirm' | 'hidden'
+const holds = ref<Hold[]>([])
+const paused = computed(() => holds.value.length > 0)
+function hold(reason: Hold) {
+  if (holds.value.includes(reason)) return
+  holds.value = [...holds.value, reason]
+  cancelPending()
+  if (state.value.capture) void bridge.cancelCapture()
+  if (screen.value === 'practice') bridge.setTestMode(false)
+}
+function release(reason: Hold) {
+  if (!holds.value.includes(reason)) return
+  holds.value = holds.value.filter(r => r !== reason)
+  if (paused.value) return
+  // A key saved just before the pause lost its pending move to the next row: make it now.
+  if (screen.value === 'assign' && saved.value) { saved.value = false; goNextAction() }
+  else if (screen.value === 'assign') enterAction(assignIndex.value, rebinding.value)
+  // A practice completed just before the pause lost its pending move to "ready": go there now.
+  else if (screen.value === 'practice') {
+    if (practiceDone(practice.value, tasks.value)) screen.value = 'ready'
+    else bridge.setTestMode(true)
+  }
+}
+const pause = () => hold('confirm')
+const resume = () => release('confirm')
+// The native window state (X to tray, minimised), not document.visibilityState: the dashboard
+// window keeps rendering in the background (backgroundThrottling off), so the page stays "visible".
+const windowVisible = usePresentationVisibility()
+watch(windowVisible, (visible) => { if (!props.wheelAvailable) return; if (visible) release('hidden'); else hold('hidden') })
 function armCapture() {
   if (screen.value !== 'assign' || paused.value || !autoArmed.value || saved.value || waiting.value) return
   if (!canBeginAutoCapture(state.value, bridge.testMode.value)) return
@@ -230,7 +272,7 @@ function startPractice() {
 }
 function restartAssign() { bridge.setTestMode(false); screen.value = 'assign'; startAssign() }
 watch(() => [...testedActions.value], (now, before) => {
-  if (screen.value !== 'practice') return
+  if (screen.value !== 'practice' || paused.value) return
   for (const action of now) {
     if (before?.includes(action)) continue
     practice.value = applyPracticePress(practice.value, action, tasks.value)
@@ -244,13 +286,19 @@ const hint = computed(() => practiceHint(practice.value, tasks.value))
 
 // PIP-612: "Lo faccio dopo" and its confirmation live in the corner of the introduction,
 // where "Salta" is; the introduction calls postpone once the pilot confirms.
-function postpone() { void release(); emit('later') }
-defineExpose({ postpone, pause, resume })
+function postpone() { void releaseAll(); emit('later') }
+// busy: keys being set or tried; the introduction keeps its step rail still meanwhile.
+const busy = computed(() => screen.value !== 'choose')
+// PIP-749: the screen just left took the focused button with it; keep the focus in the step.
+const section = ref<HTMLElement | null>(null)
+// At once, before the leaving screen (and its button) is removed by the transition.
+watch(screen, () => { section.value?.focus() }, { flush: 'sync' })
+defineExpose({ postpone, pause, resume, busy })
 function finish() {
   const key = screen.value !== 'keyboard' && state.value.bindings.togglePalette ? formatWheelBinding(state.value.bindings.togglePalette) : undefined
-  void release(); emit('done', key)
+  void releaseAll(); emit('done', key)
 }
-async function release() {
+async function releaseAll() {
   cancelPending()
   stopDemo()
   if (quietTimer) clearTimeout(quietTimer)
@@ -258,13 +306,18 @@ async function release() {
   await bridge.finishConfiguration()
 }
 
-// The first row waits for a key as soon as the readers are up (armCapture follows them).
-onMounted(() => { if (props.wheelAvailable) { void bridge.start(); startAssign() } })
-onBeforeUnmount(() => { void release() })
+// The readers start with the step, so the first row can wait for a key as soon as the pilot
+// answers yes (armCapture follows them); nothing listens while the question is shown.
+onMounted(() => {
+  if (!props.wheelAvailable) return
+  startReaders()
+})
+function toQuestion() { cancelPending(); if (state.value.capture) void bridge.cancelCapture(); screen.value = 'choose' }
+onBeforeUnmount(() => { void releaseAll() })
 </script>
 
 <template>
-  <section class="cmd" :aria-label="t('onboarding.commands.aria')">
+  <section ref="section" class="cmd" tabindex="-1" :aria-label="t('onboarding.commands.aria')">
     <!-- Sub-steps only when there is more than one (the keyboard path has just the trial). -->
     <header v-if="steps.length > 1" class="cmd__head">
       <ol class="cmd__steps" :aria-label="t('onboarding.commands.stepsAria')">
@@ -273,8 +326,26 @@ onBeforeUnmount(() => { void release() })
     </header>
 
     <Transition name="cmd-swap" mode="out-in">
+    <!-- 0. The question: set the wheel keys now, or use keyboard and mouse -->
+    <div v-if="screen === 'choose'" class="cmd__screen" data-cmd-screen="choose">
+      <h2 class="cmd__title">{{ t('onboarding.commands.chooseTitle') }} <em>{{ t('onboarding.commands.chooseAccent') }}</em></h2>
+      <p class="cmd__lead">{{ t('onboarding.commands.chooseLead') }}</p>
+      <div class="cmd__choices" role="group" :aria-label="t('onboarding.commands.chooseAria')">
+        <button type="button" class="cmd__choice cmd__choice--main" data-cmd-choose-wheel @click="chooseWheel">
+          <OnboardingDeviceIcon kind="wheel" />
+          <strong>{{ t('onboarding.commands.chooseWheel') }}</strong>
+          <span>{{ t('onboarding.commands.chooseWheelNote') }}</span>
+        </button>
+        <button type="button" class="cmd__choice" data-cmd-choose-keyboard @click="chooseKeyboard">
+          <OnboardingDeviceIcon kind="keyboard" />
+          <strong>{{ t('onboarding.commands.chooseKeyboard') }}</strong>
+          <span>{{ t('onboarding.commands.chooseKeyboardNote') }}</span>
+        </button>
+      </div>
+    </div>
+
     <!-- 1. Assegna: the list "command -> key", the first row already waits; the menu copy shows what it does -->
-    <div v-if="screen === 'assign'" class="cmd__screen cmd__screen--assign" data-cmd-screen="assign">
+    <div v-else-if="screen === 'assign'" class="cmd__screen cmd__screen--assign" data-cmd-screen="assign">
       <div class="cmd__assign">
         <h2 class="cmd__title">{{ t('onboarding.commands.assignTitle') }} <em>{{ t('onboarding.commands.assignAccent') }}</em></h2>
         <p class="cmd__lead">{{ t('onboarding.commands.assignLead') }}</p>
@@ -310,11 +381,6 @@ onBeforeUnmount(() => { void release() })
           </div>
           <p v-else-if="!saved" class="cmd__wizard-hint cmd__wizard-hint--soft">{{ readerStatus || t('onboarding.commands.moment') }}</p>
           <button v-if="current.optional && !currentBinding && !saved && !skipped.includes(current.id)" type="button" class="cmd__link" data-cmd-skip @click="skip">{{ t('onboarding.commands.skip') }}</button>
-        </div>
-        <!-- A real way out for who drives without wheel or button box: the menu works with Ctrl+K. -->
-        <div class="cmd__alt">
-          <span>{{ t('onboarding.commands.noWheel') }}</span>
-          <button type="button" class="cmd__ghost" data-cmd-keyboard @click="chooseKeyboard">{{ t('onboarding.commands.useKeyboard') }}</button>
         </div>
       </div>
       <div class="cmd__mock" data-cmd-demo>
@@ -381,7 +447,6 @@ onBeforeUnmount(() => { void release() })
         <p class="cmd__note">{{ t('onboarding.commands.kbNote') }}</p>
         <div class="cmd__row cmd__row--start">
           <button type="button" class="cmd__primary cmd__primary--big" :disabled="!keyboardDone" data-cmd-finish @click="finish">{{ t('onboarding.commands.gotIt') }}</button>
-          <button v-if="wheelAvailable" type="button" class="cmd__ghost" data-cmd-wheel @click="chooseWheel">{{ t('onboarding.commands.haveWheel') }}</button>
         </div>
       </div>
       <div class="cmd__mock cmd__mock--screen" :class="{ 'is-open': keyboardPractice.open }" data-cmd-kb-mock>
@@ -406,8 +471,8 @@ onBeforeUnmount(() => { void release() })
     </div>
     </Transition>
 
-    <footer v-if="wheelAvailable && (screen === 'keyboard' || screen === 'practice')" class="cmd__foot">
-      <button v-if="screen === 'keyboard'" type="button" class="cmd__back" data-cmd-back @click="chooseWheel">{{ t('onboarding.previous') }}</button>
+    <footer v-if="wheelAvailable && (screen === 'keyboard' || screen === 'assign' || screen === 'practice')" class="cmd__foot">
+      <button v-if="screen === 'keyboard' || screen === 'assign'" type="button" class="cmd__back" data-cmd-back @click="toQuestion">{{ t('onboarding.previous') }}</button>
       <button v-else type="button" class="cmd__back" data-cmd-reassign @click="restartAssign">{{ t('onboarding.commands.reassign') }}</button>
     </footer>
   </section>

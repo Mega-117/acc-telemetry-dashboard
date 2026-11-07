@@ -1,7 +1,8 @@
-// PIP-571: the four cards of the introduction (the fifth step is the command setup).
-// One place to change cards and clips. Clips live in `public/onboarding/` (looping, muted
-// WebM) with a JPG poster as fallback. Each sentence stays short: the clip does the explaining.
-// PIP-665: the texts are dictionary keys (onboarding.steps.<id>), translated where shown.
+// PIP-749: the cards of the introduction (the step after them is the command setup).
+// One place to change cards and clips. The first card is drawn live (the four pillars);
+// the others are looping, muted WebM clips recorded in the game on 07/11, one set per
+// language because the labels are burned into the video: `{lang}` becomes 'it' or 'en'.
+// The texts are dictionary keys (onboarding.steps.<id>), translated where shown.
 import type { TranslationKey } from '~/i18n'
 
 export interface OnboardingStep {
@@ -13,18 +14,19 @@ export interface OnboardingStep {
   /** Second part of the title, in red. */
   accent: TranslationKey
   text: TranslationKey
-  /** PIP-612: what else is there, named in a few tags instead of one card each. */
+  /** What else is there, named in a few tags. */
   chips?: readonly TranslationKey[]
-  /** Clip of the card; absent when the card shows the live panel copy instead (`scene`). */
+  /** Clip of the card, with `{lang}` for the language set; absent when `scene` draws it live. */
   video?: string
   poster?: string
-  /** 'panel': the large interactive copy of the pannello rapido (OnboardingPanelShowcase). */
-  scene?: 'panel'
+  /** 'welcome': the four pillars drawn in HTML (OnboardingWelcome), sharp at any size. */
+  scene?: 'welcome'
 }
 
-// PIP-612: two cards only, the promise and the one thing it does for you; then the
-// keys (the only task) and "Avvia ACC". The Ctrl+K card is gone: the menu is
-// discovered in the key setup, next to the buttons being assigned.
+const clip = (name: string) => ({ video: `/onboarding/v3/{lang}/${name}.webm`, poster: `/onboarding/v3/{lang}/${name}.jpg` })
+
+// PIP-749 (user decision 07/11): the four pillars Live, Automation, Performance, Memory;
+// the wheel keys come after, as a question, never as a required step.
 export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
   {
     id: 'benvenuto',
@@ -32,18 +34,43 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
     title: 'onboarding.steps.benvenuto.title',
     accent: 'onboarding.steps.benvenuto.accent',
     text: 'onboarding.steps.benvenuto.text',
-    chips: ['onboarding.steps.benvenuto.chipHud', 'onboarding.steps.benvenuto.chipVoice', 'onboarding.steps.benvenuto.chipPitwall'],
-    video: '/onboarding/01-benvenuto.webm',
-    poster: '/onboarding/01-benvenuto.jpg',
+    scene: 'welcome',
   },
   {
-    id: 'automazioni',
-    label: 'onboarding.steps.automazioni.label',
-    title: 'onboarding.steps.automazioni.title',
-    accent: 'onboarding.steps.automazioni.accent',
-    text: 'onboarding.steps.automazioni.text',
-    chips: ['onboarding.steps.automazioni.chipPressures', 'onboarding.steps.automazioni.chipFuelMinutes', 'onboarding.steps.automazioni.chipFuelSession'],
-    video: '/onboarding/03-automazioni.webm',
-    poster: '/onboarding/03-automazioni.jpg',
+    id: 'live',
+    label: 'onboarding.steps.live.label',
+    title: 'onboarding.steps.live.title',
+    accent: 'onboarding.steps.live.accent',
+    text: 'onboarding.steps.live.text',
+    ...clip('02-live'),
+  },
+  {
+    id: 'pannello',
+    label: 'onboarding.steps.pannello.label',
+    title: 'onboarding.steps.pannello.title',
+    accent: 'onboarding.steps.pannello.accent',
+    text: 'onboarding.steps.pannello.text',
+    ...clip('03-pannello'),
+  },
+  {
+    id: 'guida',
+    label: 'onboarding.steps.guida.label',
+    title: 'onboarding.steps.guida.title',
+    accent: 'onboarding.steps.guida.accent',
+    text: 'onboarding.steps.guida.text',
+    ...clip('04-guida'),
+  },
+  {
+    id: 'dati',
+    label: 'onboarding.steps.dati.label',
+    title: 'onboarding.steps.dati.title',
+    accent: 'onboarding.steps.dati.accent',
+    text: 'onboarding.steps.dati.text',
+    ...clip('05-dati'),
   },
 ]
+
+/** The clip or poster path of a card for the interface language (the labels in the video follow it). */
+export function stepMedia(path: string | undefined, locale: 'it' | 'en'): string {
+  return (path ?? '').replace('{lang}', locale)
+}

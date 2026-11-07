@@ -44,6 +44,8 @@ export function useOnboardingIntro() {
   // even when the status could not be written.
   const evaluatedOwner = useState<string>('onboarding-intro-evaluated', () => '')
   const owner = useState<{ uid: string; installationId: string } | null>('onboarding-intro-owner', () => null)
+  // PIP-749: bumped by every open, so a reopen while the window is already up restarts it.
+  const openings = useState<number>('onboarding-intro-openings', () => 0)
   const { currentUser } = useFirebaseAuth()
 
   /** Opens the intro by itself only when this user on this installation has never seen it. */
@@ -69,11 +71,13 @@ export function useOnboardingIntro() {
     if (uid) owner.value = { uid, installationId: await resolveInstallationId() }
     startPhase.value = 'tour'
     visible.value = true
+    openings.value++
   }
 
   /** Remembers how it ended for this user on this installation (the window may stay open). */
   const save = (result: OnboardingResult) => {
-    if (owner.value) {
+    // PIP-749: never under another account (logout and login while the window was open).
+    if (owner.value && owner.value.uid === currentUser.value?.uid) {
       writeOnboardingStatus(storage(), owner.value.uid, owner.value.installationId, result === 'done' ? 'done' : 'commands-pending')
     }
   }
@@ -84,5 +88,8 @@ export function useOnboardingIntro() {
     save(result)
   }
 
-  return { visible, startPhase, showIfFirstTime, open, save, close }
+  /** PIP-749: the account changed while the window was open: drop it without saving anything. */
+  const abandon = () => { visible.value = false; owner.value = null }
+
+  return { visible, startPhase, openings, showIfFirstTime, open, save, close, abandon }
 }

@@ -7,6 +7,7 @@ $sel: #ffd400;
 $line: #ffffff40;
 $chamfer: polygon(0 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%);
 $ease: cubic-bezier(.22, .61, .36, 1);
+.cmd:focus { outline: none; }
 .cmd { @include controls.tokens; display: flex; flex-direction: column; gap: 24px; height: 100%; box-sizing: border-box; padding: 24px 40px 18px; color: #fff; overflow: hidden; }
 .cmd__head { display: flex; align-items: center; gap: 20px; }
 .cmd__eyebrow { font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: #8a8a90; }

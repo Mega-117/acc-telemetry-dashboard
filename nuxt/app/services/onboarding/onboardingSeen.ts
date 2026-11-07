@@ -4,9 +4,10 @@
 // chose "Lo faccio dopo" on the command setup, for information only.
 // Pure logic: the storage is injected and every access is guarded.
 
-// The version is the introduction's: raising it (PIP-612: v2, the 4-screen introduction)
+// The version is the introduction's: raising it (PIP-612: v2, the 4-screen introduction;
+// PIP-749: v3, the four pillars with the 07/11 clips)
 // shows it once more to everyone, existing users included, then never again by itself.
-export const ONBOARDING_SEEN_PREFIX = 'racercore.onboarding.seen.v2'
+export const ONBOARDING_SEEN_PREFIX = 'racercore.onboarding.seen.v3'
 export const BROWSER_INSTALLATION_ID = 'browser'
 
 export type OnboardingStatus = 'unseen' | 'done' | 'commands-pending'

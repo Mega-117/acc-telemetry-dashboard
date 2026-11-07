@@ -100,4 +100,19 @@ describe('useOnboardingIntro (PIP-571)', () => {
     mock.currentUser.value = { uid: 'u9' }
     expect(await useOnboardingIntro().showIfFirstTime()).toBe(true)
   })
+
+  it('PIP-749: another account while open never saves under the first one; reopening bumps the restart signal', async () => {
+    electron(); mock.currentUser.value = { uid: 'u1' }
+    const intro = useOnboardingIntro()
+    await intro.showIfFirstTime()
+    window.localStorage.removeItem(onboardingSeenKey('u1', 'inst-a'))
+    mock.currentUser.value = { uid: 'u2' }
+    intro.save('later')
+    expect(window.localStorage.getItem(onboardingSeenKey('u1', 'inst-a'))).toBeNull()
+    intro.abandon()
+    expect(intro.visible.value).toBe(false)
+    const before = intro.openings.value
+    await intro.open(); await intro.open()
+    expect(intro.openings.value).toBe(before + 2)
+  })
 })

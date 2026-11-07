@@ -139,5 +139,9 @@ $ease: cubic-bezier(.45, 0, .55, 1);
   :global(.cmd__choice:hover) .dev__wheel, :global(.cmd__choice:hover) .dev__led, :global(.cmd__choice:hover) .dev__key--ctrl,
   :global(.cmd__choice:hover) .dev__key--k, :global(.cmd__choice:hover) .dev__click, :global(.cmd__choice:hover) .dev__rev,
   :global(.cmd__choice:hover) .dev__knob, :global(.cmd__choice:hover) .dev__lever, :global(.cmd__choice:hover) .dev__screen-bar { animation: none; }
+  // PIP-749: the same when the choice is reached with the keyboard.
+  :global(.cmd__choice:focus-visible) .dev__wheel, :global(.cmd__choice:focus-visible) .dev__led, :global(.cmd__choice:focus-visible) .dev__key--ctrl,
+  :global(.cmd__choice:focus-visible) .dev__key--k, :global(.cmd__choice:focus-visible) .dev__click, :global(.cmd__choice:focus-visible) .dev__rev,
+  :global(.cmd__choice:focus-visible) .dev__knob, :global(.cmd__choice:focus-visible) .dev__lever, :global(.cmd__choice:focus-visible) .dev__screen-bar { animation: none; }
 }
 </style>

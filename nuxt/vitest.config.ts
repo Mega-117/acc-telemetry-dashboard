@@ -252,7 +252,7 @@ export default defineConfig({
         'app/components/onboarding/OnboardingIntro.vue',
         'app/components/onboarding/OnboardingCommands.vue',
         'app/components/onboarding/OnboardingPanelReplica.vue',
-        'app/components/onboarding/OnboardingPanelShowcase.vue',
+        'app/components/onboarding/OnboardingWelcome.vue',
         'app/components/onboarding/OnboardingDeviceIcon.vue',
         'app/services/onboarding/commandPractice.ts',
         'app/services/controls/commandCapture.ts',
