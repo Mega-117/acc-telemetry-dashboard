@@ -245,10 +245,16 @@ function goToStats() {
 .grip-badge { display: inline-block; font-size: 9px; color: #c7c7c7; margin-left: 6px; text-decoration: none; }
 .last-drive__actions { display: flex; justify-content: center; gap: 24px; padding-top: 18px; }
 .last-drive__actions button { flex: 0 1 auto; min-width: 150px; }
-// 06/11 (user, large screens): Prossima gara a third of the column, Attività two thirds (each never under its content);
-// the bars stop at 320 px and sit in the middle of their card, so a tall window does not turn them into towers.
-.racing-overview__side { display: grid; grid-template-rows: 1fr 2fr; gap: 12px; min-width: 0; }
-.racing-overview__side :deep(.activity-card--racing .chart-area) { max-height: 320px; align-self: center; width: 100%; }
+// 07/11 (user): the 1fr/2fr split of 06/11 made the column three times the calendar, so with two races the standard
+// window scrolled. Prossima gara now takes the spare height (never under its content) and Attività keeps its own
+// size: the bars follow the window height between their minimum and 280 px, so they fit a normal window and do not
+// grow into towers on a large screen.
+.racing-overview__side { display: grid; grid-template-rows: 1fr auto; gap: 12px; min-width: 0; }
+.racing-overview__side :deep(.activity-card--racing) { min-height: 0; }
+.racing-overview__side :deep(.activity-card--racing .chart-area) {
+  flex: none; width: 100%;
+  height: clamp(var(--overview-chart-min-height, 165px), calc(var(--dashboard-viewport-height, 100dvh) - 640px), 280px);
+}
 .overview-error { color: #ffafba; padding: 12px; }
 .overview-error button { color: #fff; background: transparent; border: 1px solid #aaa; padding: 6px 12px; }
 .overview-placeholder > :not(.overview-loading-label) { visibility: hidden; }
