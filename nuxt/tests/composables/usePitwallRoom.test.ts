@@ -48,6 +48,8 @@ const fakes = vi.hoisted(() => ({
   resumeCommittedOnly: false,
   resumeAvailable: false,
   resumeLeftFirst: null as (() => Promise<void>) | null,
+  /** The room view keeps failing to load (network or denied while the resume settles). */
+  readRoomFails: false,
   joinCommittedOnly: false,
   /** Scarto fra orologio del server e orologio di questo PC (PIP-382). */
   clockOffsetMs: 0,
@@ -64,7 +66,7 @@ vi.mock('~/services/pitwall/pitwallRealtimeRoomService', () => ({
     toLocalMs: (serverMs: number) => serverMs,
     clockOffsetMs: () => fakes.clockOffsetMs,
     clockOutOfSync: () => Math.abs(fakes.clockOffsetMs ?? 0) > 30_000,
-    readRoom: async () => fakes.roomDoc,
+    readRoom: async () => { if (fakes.readRoomFails) throw new Error('Gara non raggiungibile.'); return fakes.roomDoc },
     joinRoom: async () => {
       fakes.calls.push('join')
       if (fakes.joinCommittedOnly) return { ok: false, committed: true, code: 'view-pending', reason: 'pitwall.roomErrors.viewPending' }
@@ -166,6 +168,7 @@ beforeEach(() => {
   fakes.resumeCommittedOnly = false
   fakes.resumeAvailable = false
   fakes.resumeLeftFirst = null
+  fakes.readRoomFails = false
   fakes.joinCommittedOnly = false
   fakes.clockOffsetMs = 0
   scope = effectScope()
@@ -579,6 +582,25 @@ describe('le azioni da manager, uscire e chiudere', () => {
     await settle()
     expect(fakes.calls).toContain('resume')
     expect(link.selectedRoomId.value).toBe('r1')
+  })
+
+  it('PIP-750 Codex final review 08/11: a confirmed resume whose view keeps failing stays selected and listening', async () => {
+    fakes.resumeAvailable = true
+    fakes.resumeCommittedOnly = true
+    fakes.readRoomFails = true
+    const link = build()
+    link.start()
+    await settle()
+    expect(fakes.calls).toContain('resume')
+    // The account is a member: the page keeps the room, waits for it, and the listeners deliver it.
+    expect(link.selectedRoomId.value).toBe('r1')
+    expect(link.lastError.value).toBeFalsy()
+    expect(link.room.value).toBeNull()
+    expect(fakes.pushRoom).not.toBeNull()
+    expect(fakes.pushMembers).not.toBeNull()
+    fakes.pushRoom?.(room({ hostUid: 'popo', managerUids: ['popo'], memberUids: ['popo', 'me'] }))
+    await settle()
+    expect(link.room.value?.roomId).toBe('r1')
   })
 
   it('PIP-750 live 08/11: a room left on this page never resumes, nor one where the account is live elsewhere', async () => {

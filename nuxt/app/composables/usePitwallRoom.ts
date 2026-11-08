@@ -384,8 +384,23 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
       const roomId = result.ok ? result.value.roomId : result.committed ? result.roomId : null
       if (!roomId || leftHere.has(roomId)) return
       resumeAttempts = 3
-      void selectRoom(roomId)
+      showResumedRoom(service_, roomId, result.ok ? result.value : null)
     }).catch(() => {}).finally(() => { resuming = false })
+  }
+  /**
+   * A confirmed resume is a membership, not a choice to verify again (Codex final
+   * review 08/11): no second read that, failing, would clear the selection and leave
+   * the account a member with nothing listening. The listeners deliver the room; until
+   * then the page shows it loading, and a refused listener goes through recoverOr.
+   */
+  function showResumedRoom(service_: PitwallRoomService, roomId: string, view: PitwallRoom | null): void {
+    clearFeedback()
+    detach()
+    const generation = roomGeneration
+    selectedRoomId.value = roomId
+    room.value = view
+    rawError.value = null
+    attach(service_, roomId, generation)
   }
 
   /** A stopped login must not publish into a later login, even for the same uid. */
