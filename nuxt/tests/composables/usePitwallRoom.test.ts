@@ -603,6 +603,29 @@ describe('le azioni da manager, uscire e chiudere', () => {
     expect(link.room.value?.roomId).toBe('r1')
   })
 
+  it('PIP-750 Codex fix review 09/11: a resumed room announces this connection once, whichever listener speaks first', async () => {
+    for (const membersFirst of [true, false]) {
+      fakes.presence.length = 0
+      fakes.resumeAvailable = true
+      fakes.resumeCommittedOnly = true
+      fakes.readRoomFails = true
+      const link = build()
+      link.start()
+      await settle()
+      const view = room({ hostUid: 'popo', managerUids: ['popo'], memberUids: ['popo', 'me'] })
+      if (membersFirst) fakes.pushMembers?.([member({ uid: 'popo' })])
+      fakes.pushRoom?.(view)
+      if (!membersFirst) fakes.pushMembers?.([member({ uid: 'popo' })])
+      await settle()
+      fakes.pushRoom?.(view)
+      fakes.pushMembers?.([member({ uid: 'popo' })])
+      await settle()
+      expect(fakes.presence).toEqual([{ kind: 'engineer', driving: false }])
+      scope.stop()
+      scope = effectScope()
+    }
+  })
+
   it('PIP-750 live 08/11: a room left on this page never resumes, nor one where the account is live elsewhere', async () => {
     const link = await open([member()])
     link.start()

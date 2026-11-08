@@ -559,6 +559,15 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
 
   function attach(service_: PitwallRoomService, roomId: string, generation: number): void {
     const recovering = () => recoveringGeneration === generation
+    // This connection is announced once, when both listeners have spoken: the
+    // membership snapshot confirms access, the room confirms the account is a
+    // member. Either may arrive first (a resumed room starts with no view).
+    let announced = false
+    const announceWhenConfirmed = () => {
+      if (announced || generation !== roomGeneration || !membersLoaded.value || !amMember.value) return
+      announced = true
+      void publishMyPresence()
+    }
     stopRoomWatch = service_.watchRoom(
       roomId,
       (next) => {
@@ -581,24 +590,20 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
           room.value = null
           return
         }
+        announceWhenConfirmed()
         for (const uid of [...(next?.memberUids ?? []), ...(next?.allowedUids ?? [])]) {
           void loadNickname(uid)
         }
       },
       (error) => { if (generation === roomGeneration && !recovering()) rawError.value = error?.message || 'Gara non raggiungibile.' }
     )
-    // The first membership snapshot confirms access before announcing this connection.
-    let announced = false
     stopMembersWatch = service_.watchMembers(
       roomId,
       (list) => {
         if (generation !== roomGeneration) return
         members.value = list
         membersLoaded.value = true
-        if (!announced) {
-          announced = true
-          void publishMyPresence()
-        }
+        announceWhenConfirmed()
       },
       (error) => {
         // Se intanto la gara e' sparita, l'ascolto negato e' la conseguenza,
