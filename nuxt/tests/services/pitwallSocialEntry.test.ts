@@ -34,8 +34,45 @@ describe('social room slot admission', () => {
   })
   it('preserves network failure instead of claiming the room is full', async () => {
     const s=setup(null,'network unavailable'); const result=await s.service.joinRoom('r')
-    expect(result).toEqual({ok:false,reason:'network unavailable'})
+    expect(result).toEqual({ ok: false, code: 'network', reason: 'pitwall.roomErrors.network' })
     expect(s.transact).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('PIP-750 entry details (Codex review 08/11)', () => {
+  function full(expiredDuplicate: boolean) {
+    const slots: Record<string, unknown> = {}
+    const occupancy: Record<string, unknown> = {}
+    for (let index = 0; index < 16; index++) {
+      const owner = index === 15 ? 'u14' : `u${index}`
+      slots[String(index)] = { uid: owner, reservedAt: index === 15 && expiredDuplicate ? 1 : 99_000 }
+      occupancy[owner] = { c: { connectedAt: 1, disconnectedAt: null, nickname: owner } }
+    }
+    const transact = vi.fn(async (path: string, change: (v: unknown) => unknown) => {
+      const proposed = change(slots[path.split('/').at(-1)!] ?? null)
+      return { committed: proposed != null && path.endsWith('/15') }
+    })
+    const io = { read: async (path: string) => ({ 'rooms/r/slots': slots, 'rooms/r/occupancy': occupancy } as Record<string, unknown>)[path] ?? null,
+      transact, serverNow: () => 100000, serverTimestamp: () => 100000, registerDisconnectUpdates: async () => {}, write: async () => {} } as unknown as PitwallRealtimeTransport
+    return { transact, io }
+  }
+  it('tries an expired duplicate seat of a present account instead of answering full', async () => {
+    const { transact, io } = full(true)
+    const service = createPitwallSocialLifecycle({ uid: 'guest', io, connectionId: () => 'guest-c', ensureConnection: async () => {}, watchFriends: () => () => {} })
+    const result = await service.joinRoom('r')
+    expect(transact.mock.calls.map(([path]) => path)).toContain('rooms/r/slots/15')
+    expect(result).not.toMatchObject({ code: 'full' })
+  })
+  it('a failed grace registration after the commit keeps the entry committed', async () => {
+    const { io } = full(true)
+    const lines: string[] = []
+    vi.spyOn(console, 'info').mockImplementation((line: unknown) => { lines.push(String(line)) })
+    const service = createPitwallSocialLifecycle({ uid: 'guest', io, connectionId: () => 'guest-c', ensureConnection: async () => {}, watchFriends: () => () => {},
+      adoptMembership: async () => { throw new Error('offline') } })
+    const result = await service.joinRoom('r')
+    expect(result).toMatchObject({ ok: false, committed: true, code: 'view-pending' })
+    expect(lines.some(line => line.includes('"event":"room_adopt_failed"'))).toBe(true)
+    vi.restoreAllMocks()
   })
 })
 

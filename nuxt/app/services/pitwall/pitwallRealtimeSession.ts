@@ -29,6 +29,8 @@ export function createPitwallRealtimeSession(io: PitwallRealtimeTransport, uid: 
   let directoryEntry: { roomId?: string, connectionId?: string, slot?: string } | null = null
   let ownConnections: Record<string, unknown> | null = null
   let confirmTimer: ReturnType<typeof setTimeout> | null = null
+  // PIP-750: room of a committed entry not yet announced by a presence (for the clean-stop handover).
+  let adoptedRoom: string | null = null
   function orphaned() {
     if (!currentRoom || !connectionId || !directoryEntry || !ownConnections || !directoryEntry.slot) return false
     if (directoryEntry.roomId !== currentRoom || directoryEntry.connectionId === connectionId) return false
@@ -49,7 +51,40 @@ export function createPitwallRealtimeSession(io: PitwallRealtimeTransport, uid: 
     busy = busy.then(async () => {
       if (token !== generation || !io.online() || currentRoom !== pointer.roomId || connectionId !== pointer.connectionId) return
       await io.write('', { [`directory/${uid}`]: pointer })
+      // PIP-750 F3: listeners denied while the pointer named the departed device can subscribe again.
+      for (const listener of connectionListeners) listener()
     }).catch(error => { for (const listener of errors) listener(error) })
+  }
+  /**
+   * PIP-750 F4: a committed membership gets the same disconnect grace as a published presence,
+   * and this session owns its occupancy from the moment the entry is reported complete.
+   */
+  function adoptMembership(roomId: string, id: string, nickname: string) {
+    const token = generation
+    const path = `rooms/${roomId}/occupancy/${uid}/${id}`
+    const adoption = busy.then(async () => {
+      if (token !== generation || connectionId !== id) return
+      // Owned first: a clean stop removes the occupancy even if the grace registration fails.
+      ownedPaths.add(path)
+      if (!io.online()) return
+      const cancel = await io.registerDisconnectUpdates({ [path]: { nickname: nickname.slice(0, 60), connectedAt: io.serverTimestamp(), disconnectedAt: io.serverTimestamp() } })
+      disconnectCancellations.add(cancel)
+    })
+    busy = adoption.catch(error => { for (const listener of errors) listener(error) })
+    return adoption
+  }
+  /**
+   * PIP-750: a clean stop by the device the directory names hands the pointer to another live device
+   * of the account in the same room, in the same write that removes this device. Otherwise the room
+   * rules would refuse the account until the failover repair, and its seat would look expired.
+   */
+  async function handover(room: string | null, id: string) {
+    if (!room || !id || io.namespace !== PITWALL_SOCIAL_ROOT) return {}
+    const directory = await io.read<{ roomId: string, connectionId: string, slot: string }>(`directory/${uid}`).catch(() => null)
+    if (!directory || directory.roomId !== room || directory.connectionId !== id) return {}
+    const occupancy = await io.read<Record<string, { disconnectedAt?: number | null }>>(`rooms/${room}/occupancy/${uid}`).catch(() => null)
+    const heir = Object.entries(occupancy ?? {}).find(([other, value]) => other !== id && value && value.disconnectedAt == null)?.[0]
+    return heir ? { [`directory/${uid}`]: { ...directory, connectionId: heir } } : {}
   }
   function watchFailover() {
     if (stopFailover || io.namespace !== PITWALL_SOCIAL_ROOT || typeof io.watch !== 'function') return
@@ -136,16 +171,26 @@ export function createPitwallRealtimeSession(io: PitwallRealtimeTransport, uid: 
       if (wanted && wanted.kind !== value.kind) recordUsage({ feature: `pitwall.${wanted.kind}`, active: false })
       wanted = value; return enqueue()
     },
+    adoptMembership(roomId: string, id: string, nickname: string) { adoptedRoom = roomId; return adoptMembership(roomId, id, nickname) },
     onReady(callback: () => void) { connectionListeners.add(callback); return () => { connectionListeners.delete(callback) } },
     onError(callback: (error: unknown) => void) { errors.add(callback); return () => { errors.delete(callback) } },
     async stop() {
       if (wanted) recordUsage({ feature: `pitwall.${wanted.kind}`, active: false })
       wanted = null; generation++; stopConnection(); stopFailover?.()
       await busy
-      connectionId = ''; signature = ''; currentRoom = null
+      const room = currentRoom ?? adoptedRoom
+      const id = connectionId
+      connectionId = ''; signature = ''; currentRoom = null; adoptedRoom = null
       if (ownedPaths.size && io.online()) {
-        const changes: Record<string, null> = Object.fromEntries([...ownedPaths].map(path => [path, null]))
-        await io.write('', changes)
+        const own: Record<string, unknown> = Object.fromEntries([...ownedPaths].map(path => [path, null]))
+        const heir = await handover(room, id)
+        try { await io.write('', { ...own, ...heir }) }
+        catch (error) {
+          // The heir device can stop at the same moment (its occupancy gone): the own
+          // records still go; that device's failover repair or exit settles the pointer.
+          if (!Object.keys(heir).length) throw error
+          await io.write('', own)
+        }
         for (const cancel of disconnectCancellations) await cancel()
       }
       ownedPaths.clear(); disconnectCancellations.clear()

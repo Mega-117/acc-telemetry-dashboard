@@ -35,6 +35,7 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
       if (!session.connectionId()) await session.update({ roomId: null, nickname: uid, kind: 'engineer', driving: false, sourceValid: false, runtimeSessionId: crypto.randomUUID() })
     },
     watchFriends: watchFriends ?? ((callback, error) => createPitwallRealtimeEngineerService({ db, engineerUid: uid }).watchTrustedUids(callback, error)),
+    adoptMembership: (roomId, connectionId, nickname) => session.adoptMembership(roomId, connectionId, nickname),
   }) : null
   const members = new Map<string, RealtimeConnection[]>()
   const memberReaders = new Map<string, number>()
@@ -351,9 +352,18 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
       } catch { /* A concurrent join or loss of access leaves cleanup to the next session. */ }
     }
   }
-  async function dispose() { stopped = true; mfdPublisher.stop(); stopReady(); await session.stop(); historicalIo?.dispose(); members.clear(); roomCache.clear() }
+  /** PIP-750 F3: after a denied room listener, whether the membership survived a device failover. */
+  async function confirmMembership(roomId: string): Promise<boolean> {
+    return social ? social.confirmMembership(roomId) : false
+  }
+  async function dispose() {
+    stopped = true; mfdPublisher.stop(); stopReady()
+    // PIP-750 F5: no entry or exit may commit after the session has removed this device.
+    await social?.dispose()
+    await session.stop(); historicalIo?.dispose(); members.clear(); roomCache.clear()
+  }
   return { uid, io, session, ...orders, outcomeRecovery, readRoom, watchRoom, watchRooms, watchMembers, publishPresence, clearPresence, clearEngineerPresence, deactivateDriver,
-    ensureRoomForVehicle, joinRoom, leaveRoom, closeRoom, closeDormantRooms, listRooms, invite, syncInvites, revoke, promote, dispose,
+    ensureRoomForVehicle, joinRoom, leaveRoom, closeRoom, closeDormantRooms, listRooms, invite, syncInvites, revoke, promote, dispose, confirmMembership,
     serverNow: io.serverNow, toLocalMs: (serverMs: number) => serverMs - io.clockOffsetMs(), clockOffsetMs: io.clockOffsetMs,
     clockOutOfSync: () => Math.abs(io.clockOffsetMs()) > 30_000, lastError: () => lastError }
 }

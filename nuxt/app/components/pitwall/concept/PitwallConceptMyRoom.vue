@@ -10,6 +10,7 @@ import {
 import type { PitwallConceptMyRoom, PitwallConceptPerson } from "~/utils/pitwallConcept";
 import type { PitwallIntentStatus } from "~/composables/usePitwallIntent";
 import { useI18n } from "~/i18n";
+import { describePitwallLinkError } from "~/services/pitwall/pitwallLink";
 
 const props = defineProps<{
   room: PitwallConceptMyRoom | null;
@@ -27,7 +28,9 @@ defineEmits<{
 }>();
 
 const { t } = useI18n();
-const nick = (id: string) => pitwallConceptNicknameById(id, props.people);
+// PIP-750: the open failure names its real cause, in the interface language.
+const reason = computed(() => describePitwallLinkError(props.pitwall.reason));
+const nick =(id: string) => pitwallConceptNicknameById(id, props.people);
 const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
 
 /** La gara mostrata: solo quando il Pitwall e' aperto, o quando la si guarda da un browser. */
@@ -101,11 +104,11 @@ const driving = computed(() => {
       <div class="pwc-race__who">
         <span class="pwc-avatar">{{ initials(meId ?? "") }}</span>
         <span class="pwc-race__copy">
-          <strong>{{ pitwall.reason ? t('pitwallConcept.myRoom.openingFailed') : t('pitwallConcept.myRoom.opening') }}</strong>
-          <small>{{ pitwall.reason ?? t('pitwallConcept.myRoom.openingRoom') }}</small>
+          <strong>{{ reason ? t('pitwallConcept.myRoom.openingFailed') : t('pitwallConcept.myRoom.opening') }}</strong>
+          <small>{{ reason ?? t('pitwallConcept.myRoom.openingRoom') }}</small>
         </span>
       </div>
-      <span class="pwc-chip is-waiting">{{ pitwall.reason ? t('pitwallConcept.myRoom.chipFailed') : t('pitwallConcept.myRoom.chipConnecting') }}</span>
+      <span class="pwc-chip is-waiting">{{ reason ? t('pitwallConcept.myRoom.chipFailed') : t('pitwallConcept.myRoom.chipConnecting') }}</span>
       <button
         type="button"
         class="pwc-link-btn"
@@ -128,7 +131,7 @@ const driving = computed(() => {
           <span v-if="room?.drivingKnown !== false && driving">{{ driving }}</span>
         </small>
         <!-- PIP-701: with the room open too, e.g. "ACC non manda i dati di gara (UDP)". -->
-        <small v-if="pitwall.reason" class="pwc-mine__notice" role="status">{{ pitwall.reason }}</small>
+        <small v-if="reason" class="pwc-mine__notice" role="status">{{ reason }}</small>
       </div>
       <div class="pwc-mine__actions">
         <button v-if="room" type="button" class="rc-btn rc-btn--compact" @click="$emit('open')">{{ t('pitwallConcept.myRoom.openPanel') }}</button>

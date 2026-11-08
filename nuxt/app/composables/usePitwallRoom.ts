@@ -41,6 +41,7 @@ import {
 } from '~/services/pitwall/pitwallLink'
 import { describePitwallClockSkew } from '~/services/pitwall/pitwallServerClock'
 import { pitwallInvitePointers } from '~/services/pitwall/pitwallNotificationInbox'
+import { roomErrorKey } from '~/services/pitwall/pitwallRoomErrors'
 
 // Le forme di vista (esito per campo, riga dell'equipaggio) vivono nel contratto.
 export type { PitwallCrewRow, PitwallFieldOutcome } from '~/services/pitwall/pitwallRoomContract'
@@ -422,7 +423,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   async function selectRoom(roomId: string | null): Promise<void> {
     clearFeedback()
     if (roomId && roomId !== selectedRoomId.value && amMember.value) {
-      rawError.value = 'Esci dalla stanza corrente prima di entrare in un’altra.'
+      rawError.value = roomErrorKey('in-another-room')
       return
     }
     if (roomId === selectedRoomId.value && (stopRoomWatch || loading.value)) {
@@ -450,13 +451,15 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
       if (isPitwallRoomInvited(current, myUid.value)) {
         const joined = await service_.joinRoom(roomId)
         if (generation !== roomGeneration) return
-        if (!joined.ok) {
+        // PIP-750 F9: a committed entry whose first view is late is still an entry:
+        // the room listener below delivers it.
+        if (!joined.ok && !joined.committed) {
           rawError.value = joined.reason
           selectedRoomId.value = null
           room.value = null
           return
         }
-        room.value = joined.value
+        if (joined.ok) room.value = joined.value
         notice.value = 'Sei entrato nella gara.'
       }
     } catch (error) {
@@ -467,6 +470,46 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
       return
     }
 
+    attach(service_, roomId, generation)
+  }
+
+  /**
+   * PIP-750 F3: a listener refused while the directory still named another device
+   * of this account (failover) is subscribed again once the membership is
+   * confirmed. Bounded; an explicit exit changes the generation first and ends it.
+   */
+  let recoveringGeneration = -1
+  let recoveries: number[] = []
+  function recoverOr(service_: PitwallRoomService, roomId: string, generation: number): void {
+    if (recoveringGeneration === generation) return
+    // One terminal path, whichever listener noticed first (Codex review 08/11).
+    const gone = () => {
+      recoveringGeneration = -1
+      if (generation !== roomGeneration || selectedRoomId.value !== roomId) return
+      detach()
+      selectedRoomId.value = null
+      room.value = null
+      notice.value = 'Il Pitwall è chiuso o la partecipazione è scaduta.'
+    }
+    const now = Date.now()
+    recoveries = recoveries.filter(at => now - at < 60_000)
+    if (recoveries.length >= 3) { gone(); return }
+    recoveries.push(now)
+    recoveringGeneration = generation
+    void (service_.confirmMembership?.(roomId) ?? Promise.resolve(false)).catch(() => false).then((kept) => {
+      if (generation !== roomGeneration || selectedRoomId.value !== roomId) { recoveringGeneration = -1; return }
+      if (!kept) { gone(); return }
+      recoveringGeneration = -1
+      emitPitwallDiagnostic('room_listeners_restored', { roomId, uid: myUid.value ?? undefined })
+      // Only the listeners: the chosen driver, the order being followed and the draft stay.
+      stopRoomWatch?.(); stopMembersWatch?.(); stopInFlightWatch?.()
+      stopRoomWatch = null; stopMembersWatch = null; stopInFlightWatch = null
+      attach(service_, roomId, generation)
+    })
+  }
+
+  function attach(service_: PitwallRoomService, roomId: string, generation: number): void {
+    const recovering = () => recoveringGeneration === generation
     stopRoomWatch = service_.watchRoom(
       roomId,
       (next) => {
@@ -476,10 +519,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
         // prima che l'ascolto dei membri - che senza stanza le regole negano -
         // dipinga un errore su una schermata che non esiste piu'.
         if (!next) {
-          detach()
-          selectedRoomId.value = null
-          room.value = null
-          notice.value = 'Il Pitwall è chiuso o la partecipazione è scaduta.'
+          recoverOr(service_, roomId, generation)
           return
         }
         room.value = next
@@ -496,7 +536,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
           void loadNickname(uid)
         }
       },
-      (error) => { if (generation === roomGeneration) rawError.value = error?.message || 'Gara non raggiungibile.' }
+      (error) => { if (generation === roomGeneration && !recovering()) rawError.value = error?.message || 'Gara non raggiungibile.' }
     )
     // The first membership snapshot confirms access before announcing this connection.
     let announced = false
@@ -514,8 +554,9 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
       (error) => {
         // Se intanto la gara e' sparita, l'ascolto negato e' la conseguenza,
         // non un errore da mostrare.
-        if (selectedRoomId.value !== roomId) return
-        rawError.value = error?.message || 'Equipaggio non leggibile.'
+        if (selectedRoomId.value !== roomId || generation !== roomGeneration || recovering()) return
+        void error
+        recoverOr(service_, roomId, generation)
       }
     )
     // PIP-516: every member sees an order already on its way, not only its sender.

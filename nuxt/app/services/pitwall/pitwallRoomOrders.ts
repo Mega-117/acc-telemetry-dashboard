@@ -33,7 +33,8 @@ import {
   type PitwallRoomOrder,
 } from './pitwallRoomContract'
 
-export type PitwallRoomResult<T> = { ok: true, value: T } | { ok: false, reason: string }
+// PIP-750: `code` names the cause for diagnostics; `committed` means the entry happened but its view is not loaded yet.
+export type PitwallRoomResult<T> = { ok: true, value: T } | { ok: false, reason: string, code?: string, committed?: true }
 
 export interface PitwallRoomOrdersOptions {
   db: Firestore

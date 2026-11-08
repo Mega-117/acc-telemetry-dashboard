@@ -62,5 +62,19 @@ export default {
       noDriver: 'No driver available',
       frameTitle: 'V4 online strategy',
     },
+    // PIP-750: the real reason an entry, exit or open did not happen.
+    roomErrors: {
+      inAnotherRoom: 'You are already in another room: leave it before joining this one.',
+      anotherDevice: 'Your account is in another room from another PC: leave it there, or close Pitwall on that PC, then try again.',
+      notReady: 'The Pitwall connection is not ready yet: try again in a moment.',
+      full: 'This room already has 16 participants.',
+      notAllowed: 'You cannot join: the friend who showed you this room has left, or you are no longer friends.',
+      viewPending: 'You joined: the room is loading.',
+      sessionEnded: 'Pitwall session ended: open the page again.',
+      network: 'No connection: check your network and try again.',
+      permissionDenied: 'The server refused the operation. The reason is in the Pitwall logs: try again, and report it if it happens again.',
+      unknown: 'The operation did not succeed: try again. The reason is in the Pitwall logs.',
+      accessLost: 'You no longer have access to this room: your participation expired, or the friend who showed it to you has left.',
+    },
   },
 } satisfies PartialDictionary

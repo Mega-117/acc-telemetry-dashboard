@@ -227,6 +227,10 @@ export default defineConfig({
         'app/services/pitwall/pitwallSocialRoom.ts',
         'app/services/pitwall/pitwallDiagnostics.ts',
         'app/services/pitwall/pitwallSocialLifecycle.ts',
+        // PIP-750: discovery split from the lifecycle; room error codes and their keys.
+        'app/services/pitwall/pitwallSocialDiscovery.ts',
+        'app/services/pitwall/pitwallRoomErrors.ts',
+        'app/services/pitwall/pitwallRoomErrorKeys.ts',
         'app/services/pitwall/pitwallRealtimeSession.ts',
         'app/services/pitwall/pitwallRealtimeTransport.ts',
         'app/services/pitwall/pitwallRealtimeOrders.ts',

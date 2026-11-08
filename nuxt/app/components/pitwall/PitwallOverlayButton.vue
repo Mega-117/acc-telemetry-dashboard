@@ -10,6 +10,7 @@ import { Headset, LoaderCircle } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { PitwallIntentStatus } from '~/composables/usePitwallIntent'
 import { useI18n } from '~/i18n'
+import { describePitwallLinkError } from '~/services/pitwall/pitwallLink'
 
 const props = defineProps<{
   /** Il ponte Electron dell'overlay, o `null` nel browser. */
@@ -32,8 +33,8 @@ const label = computed(() => {
 const hint = computed(() => {
   if (!status.value.available) return t('pitwall.overlayButton.hintUnavailable')
   if (status.value.state === 'open') return t('pitwall.overlayButton.hintOpen')
-  // The reason comes from the desktop program and stays as it was written.
-  if (status.value.state === 'arming') return t('pitwall.overlayButton.hintArming', { reason: status.value.reason ?? t('pitwall.overlayButton.armingDefault') })
+  // The reason comes from the desktop program; a room failure arrives as a key (PIP-750) and is translated here.
+  if (status.value.state === 'arming') return t('pitwall.overlayButton.hintArming', { reason: describePitwallLinkError(status.value.reason) ?? t('pitwall.overlayButton.armingDefault') })
   return t('pitwall.overlayButton.hintClosed')
 })
 

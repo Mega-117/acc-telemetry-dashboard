@@ -35,6 +35,7 @@ const fakes = vi.hoisted(() => ({
   nicknames: { me: 'RICO117', popo: 'popo' } as Record<string, string>,
   presence: [] as Array<{ kind: string, driving: boolean }>,
   pushMembers: null as ((list: unknown[]) => void) | null,
+  membersError: null as ((error: Error) => void) | null,
   pushRoom: null as ((room: unknown) => void) | null,
   pushRooms: null as ((list: unknown[]) => void) | null,
   pushOrder: null as ((order: unknown) => void) | null,
@@ -42,6 +43,9 @@ const fakes = vi.hoisted(() => ({
   calls: [] as string[],
   roomDoc: null as Record<string, unknown> | null,
   sendOk: true,
+  /** PIP-750 F3/F9: membership kept after a failover; an entry committed while its view is late. */
+  membershipKept: false,
+  joinCommittedOnly: false,
   /** Scarto fra orologio del server e orologio di questo PC (PIP-382). */
   clockOffsetMs: 0,
 }))
@@ -58,11 +62,19 @@ vi.mock('~/services/pitwall/pitwallRealtimeRoomService', () => ({
     clockOffsetMs: () => fakes.clockOffsetMs,
     clockOutOfSync: () => Math.abs(fakes.clockOffsetMs ?? 0) > 30_000,
     readRoom: async () => fakes.roomDoc,
-    joinRoom: async () => { fakes.calls.push('join'); return { ok: true, value: { ...fakes.roomDoc, memberUids: [...(fakes.roomDoc!.memberUids as string[]), uid] } } },
+    joinRoom: async () => {
+      fakes.calls.push('join')
+      if (fakes.joinCommittedOnly) return { ok: false, committed: true, code: 'view-pending', reason: 'pitwall.roomErrors.viewPending' }
+      return { ok: true, value: { ...fakes.roomDoc, memberUids: [...(fakes.roomDoc!.memberUids as string[]), uid] } }
+    },
+    confirmMembership: async () => { fakes.calls.push('confirm'); return fakes.membershipKept },
     // Staccare l'ascolto lo spegne davvero: chi chiude la gara non deve
     // ricevere la propria cancellazione come un avviso.
     watchRoom: (_id: string, onRoom: (room: unknown) => void) => { fakes.pushRoom = onRoom; return () => { if (fakes.pushRoom === onRoom) fakes.pushRoom = null } },
-    watchMembers: (_id: string, onList: (list: unknown[]) => void) => { fakes.pushMembers = onList; return () => { if (fakes.pushMembers === onList) fakes.pushMembers = null } },
+    watchMembers: (_id: string, onList: (list: unknown[]) => void, onError?: (error: Error) => void) => {
+      fakes.pushMembers = onList; fakes.membersError = onError ?? null
+      return () => { if (fakes.pushMembers === onList) fakes.pushMembers = null }
+    },
     publishPresence: async (_id: string, input: { kind: string, driving: boolean }) => {
       fakes.presence.push({ kind: input.kind, driving: input.driving })
       return { ok: true, value: true }
@@ -141,6 +153,8 @@ beforeEach(() => {
   fakes.pushOrder = null
   fakes.roomDoc = room()
   fakes.sendOk = true
+  fakes.membershipKept = false
+  fakes.joinCommittedOnly = false
   fakes.clockOffsetMs = 0
   scope = effectScope()
 })
@@ -213,7 +227,7 @@ describe('la connessione browser distinta dal runtime pilota', () => {
   it('clears the previous switch error on reselect, leave and account stop', async () => {
     const link = await open([member()])
     await link.selectRoom('other')
-    expect(link.lastError.value).toContain('Esci dalla stanza corrente')
+    expect(link.lastError.value).toContain('esci da quella prima di entrare qui')
     await link.selectRoom('r1')
     expect(link.lastError.value).toBeNull()
     await link.selectRoom('other')
@@ -481,10 +495,90 @@ describe('le azioni da manager, uscire e chiudere', () => {
     const link = await open([member({ uid: 'popo', nickname: 'popo' }), member()])
     expect(link.selectedRoomId.value).toBe('r1')
     fakes.pushRoom?.(null)
+    await settle()
+    expect(fakes.calls).toContain('confirm')
     expect(link.selectedRoomId.value).toBeNull()
     expect(link.room.value).toBeNull()
     expect(link.notice.value).toBe('Il Pitwall è chiuso o la partecipazione è scaduta.')
     expect(link.lastError.value).toBeNull()
+  })
+
+  it('PIP-750 F3: listeners refused during a device failover subscribe again and the room stays selected', async () => {
+    fakes.membershipKept = true
+    const link = await open([member()])
+    const firstListener = fakes.pushRoom
+    fakes.pushRoom?.(null)
+    await settle()
+    expect(fakes.calls).toContain('confirm')
+    expect(link.selectedRoomId.value).toBe('r1')
+    expect(link.notice.value).toBeNull()
+    expect(link.lastError.value).toBeNull()
+    expect(fakes.pushRoom).not.toBeNull()
+    expect(fakes.pushRoom).not.toBe(firstListener)
+    // The new subscription works: a fresh view arrives and is shown.
+    fakes.pushRoom?.(room({ label: 'after failover' }))
+    expect(link.room.value?.label).toBe('after failover')
+  })
+
+  it('PIP-750 F3: recovery keeps an explicitly chosen driver (Codex review 08/11)', async () => {
+    fakes.membershipKept = true
+    fakes.roomDoc = room({ membershipModel: 'social', memberUids: ['me', 'popo'] })
+    const a = member({ protocolVersion: 3, connected: true, driving: true })
+    const b = member({ uid: 'popo', nickname: 'popo', protocolVersion: 3, connected: true, driving: true })
+    const link = await open([a, b])
+    link.selectTarget('popo')
+    fakes.pushRoom?.(null)
+    await settle()
+    expect(link.selectedTargetUid.value).toBe('popo')
+    fakes.pushMembers?.([a, { ...b, connected: false }])
+    expect(link.selectedTargetUid.value).toBe('popo')
+  })
+
+  it('PIP-750 F3: a crew denial first, then a lost room, still ends in one terminal exit', async () => {
+    const link = await open([member()])
+    fakes.membersError?.(new Error('permission_denied'))
+    fakes.pushRoom?.(null)
+    await settle()
+    expect(link.selectedRoomId.value).toBeNull()
+    expect(link.notice.value).toBe('Il Pitwall è chiuso o la partecipazione è scaduta.')
+    expect(fakes.calls.filter(call => call === 'confirm')).toHaveLength(1)
+  })
+
+  it('PIP-750 F3: recovery is bounded, then the exit is told', async () => {
+    fakes.membershipKept = true
+    const link = await open([member()])
+    for (let attempt = 0; attempt < 3; attempt++) { fakes.pushRoom?.(null); await settle() }
+    expect(link.selectedRoomId.value).toBe('r1')
+    fakes.pushRoom?.(null)
+    await settle()
+    expect(link.selectedRoomId.value).toBeNull()
+    expect(fakes.calls.filter(call => call === 'confirm')).toHaveLength(3)
+  })
+
+  it('PIP-750 F3: an explicit exit is terminal, nothing subscribes again', async () => {
+    fakes.membershipKept = true
+    const link = await open([member()])
+    const listener = fakes.pushRoom
+    await link.leave()
+    listener?.(null)
+    await settle()
+    expect(fakes.calls).not.toContain('confirm')
+    expect(link.selectedRoomId.value).toBeNull()
+    expect(fakes.pushRoom).toBeNull()
+  })
+
+  it('PIP-750 F9: an entry committed while its view is late keeps the room and waits for the listener', async () => {
+    fakes.joinCommittedOnly = true
+    fakes.roomDoc = room({ hostUid: 'popo', managerUids: ['popo'], memberUids: ['popo'], allowedUids: ['me'] })
+    const link = build()
+    await link.selectRoom('r1')
+    await settle()
+    expect(fakes.calls).toContain('join')
+    expect(link.selectedRoomId.value).toBe('r1')
+    expect(link.lastError.value).toBeNull()
+    expect(fakes.pushRoom).not.toBeNull()
+    fakes.pushRoom?.(room({ hostUid: 'popo', managerUids: ['popo'], memberUids: ['popo', 'me'] }))
+    expect(link.room.value?.memberUids).toContain('me')
   })
 
   it('un profilo illeggibile lascia l identificativo, che e brutto ma vero', async () => {

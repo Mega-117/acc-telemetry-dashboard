@@ -9,6 +9,9 @@
 // I/O sta nei servizi che importano da qui.
 // ============================================
 
+import { useI18n, type TranslationKey } from '~/i18n'
+import { PITWALL_ROOM_ERROR_PREFIX } from './pitwallRoomErrorKeys'
+
 export const PITWALL_LINK_SCHEMA_VERSION = 1 as const
 
 /** Separatore dell'id del permesso: due account, un solo documento possibile. */
@@ -442,9 +445,12 @@ export function describePitwallOrderStatus(status: PitwallDisplayOrderStatus | n
 export function describePitwallLinkError(raw: string | null | undefined): string | null {
   if (!raw) return null
   const message = String(raw)
-  if (/permission_denied/i.test(message)) {
-    return 'Il Pitwall non è più accessibile: potrebbe essere stato chiuso o il tuo accesso revocato.'
-  }
+  const { t } = useI18n()
+  // PIP-750: room entry/exit/open failures arrive as a key that already names the real reason.
+  if (message.startsWith(PITWALL_ROOM_ERROR_PREFIX)) return t(message as TranslationKey)
+  // A room listener refused by the Rules: the membership expired or the sponsoring
+  // friend left. Nobody "closed" the Pitwall (the 07/11 message said so wrongly).
+  if (/permission_denied/i.test(message)) return t('pitwall.roomErrors.accessLost')
   if (/insufficient permissions|permission-denied/i.test(message)) {
     return 'Permesso negato: il pilota non ti ha autorizzato, oppure le regole di sicurezza non sono aggiornate.'
   }

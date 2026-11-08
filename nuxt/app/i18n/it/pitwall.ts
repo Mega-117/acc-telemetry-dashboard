@@ -62,5 +62,19 @@ export default {
       noDriver: 'Nessun pilota disponibile',
       frameTitle: 'Strategia V4 online',
     },
+    // PIP-750: il motivo vero per cui un ingresso, un'uscita o un'apertura non è riuscita.
+    roomErrors: {
+      inAnotherRoom: 'Sei già in un’altra stanza: esci da quella prima di entrare qui.',
+      anotherDevice: 'Il tuo account è in un’altra stanza da un altro PC: esci da lì, oppure chiudi il Pitwall su quel PC, poi riprova.',
+      notReady: 'Collegamento al Pitwall non ancora pronto: riprova fra un attimo.',
+      full: 'La stanza ha già 16 partecipanti.',
+      notAllowed: 'Non puoi entrare: l’amico che ti mostrava la stanza è uscito, oppure non siete più amici.',
+      viewPending: 'Sei entrato: la stanza si sta caricando.',
+      sessionEnded: 'Sessione Pitwall terminata: riapri la pagina.',
+      network: 'Connessione assente: controlla la rete e riprova.',
+      permissionDenied: 'Il server ha rifiutato l’operazione. Il motivo è nei log del Pitwall: riprova, e se si ripete segnalalo.',
+      unknown: 'Operazione non riuscita: riprova. Il motivo è nei log del Pitwall.',
+      accessLost: 'Non hai più accesso a questa stanza: la tua partecipazione è scaduta oppure l’amico che te la mostrava è uscito.',
+    },
   },
 } as const

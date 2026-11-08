@@ -40,8 +40,11 @@ witness_valid = (
     f"({witness}.exists() && {friends('auth.uid', sponsor)} &&"
     f" {room}.child('access').child({sponsor}).exists() && {alive(sponsor,conn)})"
 )
-own_conn = f"{r}.child('directory').child(auth.uid).child('connectionId').val()"
-own_alive = alive("auth.uid", own_conn)
+own_dir = f"{r}.child('directory').child(auth.uid)"
+own_conn = f"{own_dir}.child('connectionId').val()"
+# PIP-750: an account is a member only of the room its directory names. Access
+# left in another room (an interrupted cleanup) never authorizes reading it.
+own_alive = f"({own_dir}.child('roomId').val() == $room && {alive('auth.uid', own_conn)})"
 member = f"({verified} && {room}.child('access').child(auth.uid).exists() && {own_alive})"
 preview = f"({verified} && ({member} || {witness_valid}))"
 newroot = (  # root from rooms/$room/access/$uid
@@ -71,8 +74,11 @@ rooms["meta"][".write"] = (
 )
 rooms["meta"][".validate"] = rooms["meta"][".validate"].replace(".length == 16", ".length == 0")
 slotref = f"{newroot}.child('{ns}/directory').child($uid).child('slot').val()"
+# PIP-750: access is valid only next to a directory that names this room, so one
+# atomic update cannot create memberships in two rooms at once.
 slot_owned = (
-    f"{slotref} != null && {newroom}.child('slots').child({slotref}).child('uid').val() == $uid"
+    f"{slotref} != null && {newroot}.child('{ns}/directory').child($uid).child('roomId').val() =="
+    f" $room && {newroom}.child('slots').child({slotref}).child('uid').val() == $uid"
 )
 rooms["access"] = {
     ".read": preview,
@@ -86,15 +92,23 @@ rooms["access"] = {
 slot_uid = "data.child('uid').val()"
 slot_dir = f"{r}.child('directory').child({slot_uid})"
 slot_conn = f"{slot_dir}.child('connectionId').val()"
+# PIP-750: a reservation the owner's directory does not name (a duplicate left by
+# an interrupted join) also expires, even while the owner stays in the room.
 slot_expired = (
     f"(data.child('reservedAt').val() + 30000 <= now && ({slot_dir}.child('roomId').val() != $room"
-    f" || !{alive(slot_uid,slot_conn)}))"
+    f" || {slot_dir}.child('slot').val() != $slot || !{alive(slot_uid,slot_conn)}))"
 )
+# PIP-750: a release never removes the seat the directory names after the write:
+# a stale rollback or cleanup cannot delete a seat another device of the same
+# account has just committed.
+new_dir = f"{newroot}.child('{ns}/directory').child(auth.uid)"
+slot_referenced = f"({new_dir}.child('roomId').val() == $room && {new_dir}.child('slot').val() == $slot)"
 rooms["slots"] = {
     ".read": preview,
     "$slot": {
         ".write": (
-            f"{verified} && ((!newData.exists() && data.child('uid').val() == auth.uid) ||"
+            f"{verified} && ((!newData.exists() && data.child('uid').val() == auth.uid &&"
+            f" !{slot_referenced}) ||"
             f" ((!data.exists() || data.child('uid').val() == auth.uid || {slot_expired}) &&"
             f" newData.child('uid').val() == auth.uid && {admit} && {single}))"
         ),
@@ -136,7 +150,14 @@ rooms["occupancy"] = {
 social["directory"] = {
     "$uid": {
         ".read": f"{verified} && (auth.uid == $uid || {friends('auth.uid','$uid')})",
-        ".write": f"{verified} && auth.uid == $uid",
+        # PIP-750: the pointer cannot leave a room while this account keeps access
+        # there. Removing or moving it must remove that access in the same write.
+        ".write": (
+            f"{verified} && auth.uid == $uid && (!data.exists() || (newData.exists() &&"
+            " newData.child('roomId').val() == data.child('roomId').val()) ||"
+            f" !newData.parent().parent().child('rooms').child(data.child('roomId').val())"
+            ".child('access').child($uid).exists())"
+        ),
         ".validate": (
             "newData.hasChildren(['roomId','connectionId','slot']) &&"
             " newData.child('slot').isString() && newData.child('roomId').isString() &&"
