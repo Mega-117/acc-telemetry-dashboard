@@ -1,21 +1,24 @@
-// PIP-571: shared state of the introduction. In one sentence: it opens by itself only the very
-// first time a user starts Racer Core on this installation, and never again by itself (user
-// request 22/10, the usual "show once" pattern): it is marked as seen as soon as it appears, so
-// "Lo faccio dopo", "Salta" or quitting halfway do not bring it back. Impostazioni reopens it
-// from the start at any time.
+// PIP-571 / PIP-757: shared state of the introduction. In one sentence: it opens by itself only the
+// first time an account enters Racer Core (on any PC), and never again by itself (user decisions 22/10
+// and 08/11): it is marked as seen as soon as it appears, so "Lo faccio dopo", "Salta" or quitting
+// halfway do not bring it back. Impostazioni reopens it from the start at any time.
+// The rule (profile + this PC's copy, the higher wins) lives in services/onboarding/onboardingSeen.ts.
+import { doc, serverTimestamp } from 'firebase/firestore'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { trackedUpdateDoc } from '~/composables/useFirebaseTracker'
+import { db } from '~/config/firebase'
+import { loadOwnerDocument, rememberOwnerDocumentPatch } from '~/repositories/ownerDocumentRepository'
 import {
-  BROWSER_INSTALLATION_ID,
-  readOnboardingStatus,
-  writeOnboardingStatus,
+  evaluateOnboarding,
+  markOnboardingSeen,
+  profileSeenVersion,
+  REASON_CODE,
+  type OnboardingDeps,
 } from '~/services/onboarding/onboardingSeen'
+import { noteFeatureUse } from '~/services/usage/featureUseNote'
 
 export type OnboardingPhase = 'tour' | 'commands'
 export type OnboardingResult = 'done' | 'later'
-
-interface OnboardingRuntimeApi {
-  getRuntimeIdentity?: () => Promise<{ installationId?: string | null; fallback?: boolean } | null>
-}
 
 function storage(): Storage | null {
   try {
@@ -25,41 +28,44 @@ function storage(): Storage | null {
   }
 }
 
-async function resolveInstallationId(): Promise<string> {
-  if (typeof window === 'undefined') return BROWSER_INSTALLATION_ID
-  const api = (window as Window & { electronAPI?: OnboardingRuntimeApi }).electronAPI
-  if (!api?.getRuntimeIdentity) return BROWSER_INSTALLATION_ID
-  try {
-    const identity = await api.getRuntimeIdentity()
-    return identity?.installationId || BROWSER_INSTALLATION_ID
-  } catch {
-    return BROWSER_INSTALLATION_ID
+/** The account profile behind the rule: `users/{uid}.onboarding`, through the shared owner document. */
+function onboardingDeps(uid: string, isCurrent: () => boolean): OnboardingDeps {
+  return {
+    storage: storage(),
+    async readRemote() {
+      const owner = await loadOwnerDocument(uid, { caller: 'OnboardingSeen' })
+      return owner.exists ? profileSeenVersion(owner.data) : 0
+    },
+    async writeRemote(seenVersion) {
+      // The whole map: firestore.rules validOnboarding checks exactly these two fields.
+      await trackedUpdateDoc(doc(db, 'users', uid), { onboarding: { seenVersion, seenAt: serverTimestamp() } }, 'OnboardingSeen')
+      rememberOwnerDocumentPatch(uid, { onboarding: { seenVersion, seenAt: new Date().toISOString() } })
+    },
+    note: noteFeatureUse,
+    isCurrent,
   }
 }
 
 export function useOnboardingIntro() {
   const visible = useState<boolean>('onboarding-intro-visible', () => false)
   const startPhase = useState<OnboardingPhase>('onboarding-intro-start', () => 'tour')
-  // Owner (uid:installation) already evaluated in this session: never re-open by itself,
-  // even when the status could not be written.
+  // Account already evaluated (or being evaluated) in this session: never re-open by itself,
+  // even when nothing could be written.
   const evaluatedOwner = useState<string>('onboarding-intro-evaluated', () => '')
-  const owner = useState<{ uid: string; installationId: string } | null>('onboarding-intro-owner', () => null)
   // PIP-749: bumped by every open, so a reopen while the window is already up restarts it.
   const openings = useState<number>('onboarding-intro-openings', () => 0)
   const { currentUser } = useFirebaseAuth()
 
-  /** Opens the intro by itself only when this user on this installation has never seen it. */
+  /** Opens the intro by itself only when this account has not seen the current version anywhere. */
   const showIfFirstTime = async (): Promise<boolean> => {
     const uid = currentUser.value?.uid
-    if (!uid || visible.value) return false
-    const installationId = await resolveInstallationId()
-    const key = `${uid}:${installationId}`
-    if (evaluatedOwner.value === key) return false
-    evaluatedOwner.value = key
-    owner.value = { uid, installationId }
-    if (readOnboardingStatus(storage(), uid, installationId) !== 'unseen') return false
-    // Seen from the moment it appears: the first launch is the only automatic one.
-    writeOnboardingStatus(storage(), uid, installationId, 'done')
+    if (!uid || visible.value || evaluatedOwner.value === uid) return false
+    evaluatedOwner.value = uid
+    const isCurrent = () => currentUser.value?.uid === uid
+    // Waits for the profile (short timeout): never shown early, never shown twice.
+    const reason = await evaluateOnboarding(uid, onboardingDeps(uid, isCurrent))
+    // Opened from Impostazioni meanwhile: already on screen, and already recorded by open().
+    if (!reason || !isCurrent() || visible.value) return false
     startPhase.value = 'tour'
     visible.value = true
     return true
@@ -68,28 +74,19 @@ export function useOnboardingIntro() {
   /** Re-opens on demand (Impostazioni) from the first card, regardless of the status. */
   const open = async () => {
     const uid = currentUser.value?.uid
-    if (uid) owner.value = { uid, installationId: await resolveInstallationId() }
     startPhase.value = 'tour'
     visible.value = true
     openings.value++
+    noteFeatureUse({ event: 'onboarding.opened', reason: REASON_CODE.manual, remote: 0 })
+    // Seen on every PC of the account from now on (a manual open is never a repeat).
+    if (uid) void markOnboardingSeen(uid, onboardingDeps(uid, () => currentUser.value?.uid === uid), { blind: false }).catch(() => {})
   }
 
-  /** Remembers how it ended for this user on this installation (the window may stay open). */
-  const save = (result: OnboardingResult) => {
-    // PIP-749: never under another account (logout and login while the window was open).
-    if (owner.value && owner.value.uid === currentUser.value?.uid) {
-      writeOnboardingStatus(storage(), owner.value.uid, owner.value.installationId, result === 'done' ? 'done' : 'commands-pending')
-    }
-  }
+  /** Closes. Nothing to record: it was recorded as seen when it appeared, however it ends. */
+  const close = () => { visible.value = false }
 
-  /** Closes and remembers how it ended. */
-  const close = (result: OnboardingResult) => {
-    visible.value = false
-    save(result)
-  }
+  /** PIP-749: the account changed while the window was open: it was not theirs, drop it. */
+  const abandon = () => { visible.value = false }
 
-  /** PIP-749: the account changed while the window was open: drop it without saving anything. */
-  const abandon = () => { visible.value = false; owner.value = null }
-
-  return { visible, startPhase, openings, showIfFirstTime, open, save, close, abandon }
+  return { visible, startPhase, openings, showIfFirstTime, open, close, abandon }
 }

@@ -1,6 +1,8 @@
 // PIP-632: una riga nel diario diagnostico quando si usa una funzione nuova, per sapere cosa
 // usano davvero i tester e verificare la checklist dai pacchetti R2. Solo nome e conteggi:
 // il programma accetta una lista chiusa di eventi e scarta tutto il resto. Nel browser non fa nulla.
+import type { OnboardingNote } from '~/services/onboarding/onboardingSeen'
+
 export type FeatureUseNote =
   | { event: 'stats.opened', sessions: number }
   | { event: 'telemetry.opened', laps: number }
@@ -23,6 +25,8 @@ export type FeatureUseNote =
   | { event: 'page.shown' | 'page.slow', page: number, ms: number }
   /** PIP-740: one sync cycle towards Firebase (stuck: a session failing two cycles in a row while online). */
   | { event: 'sync.sessions', uploaded: number, unchanged: number, skipped: number, errors: number, stuck: number, offline: number, cycleFailed?: number }
+  /** PIP-757: the introduction opened, stayed closed thanks to the profile, or opened twice for the account (KO). */
+  | OnboardingNote
 
 type Bridge = { noteFeatureUse?: (note: FeatureUseNote) => void }
 

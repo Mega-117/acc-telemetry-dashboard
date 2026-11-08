@@ -12,7 +12,6 @@ const mock = await vi.hoisted(async () => {
     startPhase: ref<'tour' | 'commands'>('tour'),
     showIfFirstTime: vi.fn(async () => false),
     open: vi.fn(),
-    save: vi.fn(),
     close: vi.fn(),
     abandon: vi.fn(),
     openings: ref(0),
@@ -23,7 +22,7 @@ const mock = await vi.hoisted(async () => {
 // PIP-749: Inizia lands on the Panoramica.
 vi.mock('vue-router', async (orig) => ({ ...(await orig<typeof import('vue-router')>()), useRouter: () => mock.router }))
 vi.mock('~/composables/useOnboardingIntro', () => ({
-  useOnboardingIntro: () => ({ visible: mock.visible, startPhase: mock.startPhase, openings: mock.openings, showIfFirstTime: mock.showIfFirstTime, open: mock.open, save: mock.save, close: mock.close, abandon: mock.abandon }),
+  useOnboardingIntro: () => ({ visible: mock.visible, startPhase: mock.startPhase, openings: mock.openings, showIfFirstTime: mock.showIfFirstTime, open: mock.open, close: mock.close, abandon: mock.abandon }),
 }))
 vi.mock('~/composables/useFirebaseAuth', () => ({ useFirebaseAuth: () => ({ currentUser: mock.currentUser }) }))
 vi.mock('~/composables/usePublicPath', () => ({ usePublicPath: () => ({ getPublicPath: (p: string) => `/base${p}` }) }))
@@ -118,11 +117,10 @@ describe('OnboardingIntro (PIP-571)', () => {
     wrapper.unmount()
   })
 
-  it('ends on a last screen: saved at once, closed by Inizia, telling done from later', async () => {
+  it('ends on a last screen, closed by Inizia, telling done from later', async () => {
     const wrapper = mountIntro(); await open()
     await click('[data-onboarding-skip]')
     await click('[data-done]')
-    expect(mock.save).toHaveBeenLastCalledWith('done')
     expect(mock.close).not.toHaveBeenCalled()
     expect(q('[data-onboarding-finish]')!.textContent).toContain('per la pista')
     // The key just chosen, drawn as a key, next to Ctrl+K.
@@ -131,15 +129,14 @@ describe('OnboardingIntro (PIP-571)', () => {
     expect((q('[data-rail-step]') as HTMLButtonElement).disabled).toBe(true)
     mock.router.push.mockClear(); mock.router.currentRoute.value = { path: '/sessioni' }
     await click('[data-onboarding-start]')
-    expect(mock.close).toHaveBeenLastCalledWith('done')
+    expect(mock.close).toHaveBeenCalledTimes(1)
     expect(mock.router.push).toHaveBeenCalledWith('/panoramica')
     mock.visible.value = false; await flushPromises(); await open()
     await click('[data-onboarding-skip]')
     await click('[data-later]')
-    expect(mock.save).toHaveBeenLastCalledWith('later')
     expect(q('[data-onboarding-finish]')!.textContent).toContain('Impostazioni → Comandi')
     q('[data-onboarding-intro]')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await flushPromises()
-    expect(mock.close).toHaveBeenLastCalledWith('later')
+    expect(mock.close).toHaveBeenCalledTimes(2)
     expect(mock.router.push).toHaveBeenCalledTimes(2)
     // Already on the Panoramica: no second navigation.
     mock.router.push.mockClear(); mock.router.currentRoute.value = { path: '/panoramica' }
@@ -190,10 +187,9 @@ describe('OnboardingIntro (PIP-571)', () => {
     expect(stubCalls).toEqual(['pause'])
     await click('[data-later-cancel]')
     expect(stubCalls).toEqual(['pause', 'resume'])
-    expect(mock.save).not.toHaveBeenCalled()
+    expect(q('[data-onboarding-finish]')).toBeNull()
     stubCalls.length = 0
     await click('[data-cmd-later]'); await click('[data-cmd-later-confirm]')
-    expect(mock.save).toHaveBeenLastCalledWith('later')
     // PIP-749: leaving with "Sì, dopo" must not make the departing key list listen again.
     expect(stubCalls).toEqual(['pause'])
     expect(q('[data-onboarding-finish]')).not.toBeNull()

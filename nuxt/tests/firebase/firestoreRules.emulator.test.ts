@@ -382,6 +382,32 @@ describe('fresh user provisioning contract', () => {
     await assertSucceeds(deleteDoc(userRef))
   })
 
+  it('PIP-757: the owner records the introduction seen (version + server time); bad shapes and other accounts are refused', async () => {
+    const db = testEnv.authenticatedContext(FRESH_PILOT_UID, { email: FRESH_PILOT_EMAIL, email_verified: true }).firestore()
+    const userRef = doc(db, `users/${FRESH_PILOT_UID}`)
+    await assertSucceeds(setDoc(userRef, initialPilotUserPayload(FRESH_PILOT_UID)))
+    // The very write of the app (useOnboardingIntro writeRemote).
+    await assertSucceeds(updateDoc(userRef, { onboarding: { seenVersion: 3, seenAt: serverTimestamp() } }))
+    await assertSucceeds(updateDoc(userRef, { onboarding: { seenVersion: 1000, seenAt: Timestamp.fromMillis(Date.UTC(2026, 10, 9)) } }))
+    // Other owner fields still update with the map in place (it is re-validated each time).
+    await assertSucceeds(updateDoc(userRef, { equipment: { wheel: 'QA Wheel' } }))
+    for (const onboarding of [
+      { seenVersion: 0, seenAt: serverTimestamp() },
+      { seenVersion: 1001, seenAt: serverTimestamp() },
+      { seenVersion: 2.5, seenAt: serverTimestamp() },
+      { seenVersion: '3', seenAt: serverTimestamp() },
+      { seenVersion: 3, seenAt: '2026-11-09T10:00:00.000Z' },
+      { seenVersion: 3 },
+      { seenAt: serverTimestamp() },
+      { seenVersion: 3, seenAt: serverTimestamp(), extra: true },
+    ]) await assertFails(updateDoc(userRef, { onboarding }))
+    await assertFails(updateDoc(userRef, { onboarding: 3 }))
+    const other = testEnv.authenticatedContext(SECOND_PILOT_UID, { email_verified: true }).firestore()
+    await assertFails(updateDoc(doc(other, `users/${FRESH_PILOT_UID}`), { onboarding: { seenVersion: 3, seenAt: serverTimestamp() } }))
+    const saved = (await assertSucceeds(getDoc(userRef))).data()!
+    expect(saved.onboarding.seenVersion).toBe(1000)
+  })
+
   it('rifiuta tutta la batch se la directory non coincide con il ruolo autorevole', async () => {
     const db = testEnv.authenticatedContext(FRESH_PILOT_UID, {
       email: FRESH_PILOT_EMAIL,

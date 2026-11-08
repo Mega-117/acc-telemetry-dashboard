@@ -84,9 +84,8 @@ const single = (event?: MouseEvent) => !event || event.detail < 2
 const next = (event?: MouseEvent) => { if (single(event)) goTo(current.value + 1) }
 const previous = (event?: MouseEvent) => { if (single(event)) goTo(current.value - 1) }
 const toCommands = () => goTo(steps.length)
-// The status is saved as soon as the setup ends, so closing the app on the last screen keeps it.
+// PIP-757: nothing to save here: the introduction was recorded as seen when it appeared.
 const toFinish = (how: OnboardingResult, key: string | null = null) => {
-  intro.save(how)
   result.value = how
   menuKey.value = key
   confirmLater.value = false
@@ -100,7 +99,7 @@ const PANORAMICA = '/panoramica'
 const start = () => {
   // Once only: a double click or Esc during the closing fade must not navigate twice.
   if (!intro.visible.value) return
-  intro.close(result.value)
+  intro.close()
   if (router && router.currentRoute.value.path !== PANORAMICA) void router.push(PANORAMICA)
 }
 const onEscape = () => {
