@@ -622,16 +622,17 @@ service cloud.firestore {
 
     // PIP-757: the introduction seen by the account, on any PC. Small and closed: the version (a whole
     // number, 1..1000), when (a server timestamp) and how it was seen (by itself, from Impostazioni, or
-    // carried from an old copy on a PC). Re-validated on every owner update, like consent.
+    // carried from an old copy on a PC). Re-validated on every owner update, like consent. `how` may be
+    // missing (records of the first PIP-757 build): unknown origin, checked when present.
     function validOnboarding(onboarding) {
       return onboarding is map
              && onboarding.keys().hasOnly(['seenVersion', 'seenAt', 'how'])
-             && onboarding.keys().hasAll(['seenVersion', 'seenAt', 'how'])
+             && onboarding.keys().hasAll(['seenVersion', 'seenAt'])
              && onboarding.seenVersion is int
              && onboarding.seenVersion >= 1
              && onboarding.seenVersion <= 1000
              && onboarding.seenAt is timestamp
-             && onboarding.how in ['auto', 'manual', 'unknown'];
+             && (!onboarding.keys().hasAny(['how']) || onboarding.how in ['auto', 'manual', 'unknown']);
     }
 
     // PIP-757: once recorded, the version never goes down nor disappears (a slower client cannot

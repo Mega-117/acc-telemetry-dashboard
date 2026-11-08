@@ -397,7 +397,6 @@ describe('fresh user provisioning contract', () => {
       { seenVersion: '3', seenAt: serverTimestamp(), how: 'auto' },
       { seenVersion: 3, seenAt: '2026-11-09T10:00:00.000Z', how: 'auto' },
       { seenVersion: 3, seenAt: serverTimestamp(), how: 'other' },
-      { seenVersion: 3, seenAt: serverTimestamp() },
       { seenVersion: 3, how: 'auto' },
       { seenAt: serverTimestamp(), how: 'auto' },
       { seenVersion: 3, seenAt: serverTimestamp(), how: 'auto', extra: true },
@@ -419,6 +418,27 @@ describe('fresh user provisioning contract', () => {
     await assertFails(updateDoc(doc(other, `users/${FRESH_PILOT_UID}`), { onboarding: { seenVersion: 6, seenAt: serverTimestamp(), how: 'auto' } }))
     const saved = (await assertSucceeds(getDoc(userRef))).data()!
     expect(saved.onboarding).toMatchObject({ seenVersion: 5, how: 'unknown' })
+  })
+
+  it('PIP-757 (Codex 2nd review): a record without `how` (first commit) blocks no profile update, and the transaction adds it', async () => {
+    const db = testEnv.authenticatedContext(FRESH_PILOT_UID, { email: FRESH_PILOT_EMAIL, email_verified: true }).firestore()
+    const userRef = doc(db, `users/${FRESH_PILOT_UID}`)
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `users/${FRESH_PILOT_UID}`),
+        initialPilotUserPayload(FRESH_PILOT_UID, { onboarding: { seenVersion: 3, seenAt: Timestamp.fromMillis(Date.UTC(2026, 10, 9)) } }))
+    })
+    // Name, equipment, consent: other profile updates keep working.
+    await assertSucceeds(updateDoc(userRef, { nickname: 'Renamed', equipment: { wheel: 'QA Wheel' } }))
+    await assertSucceeds(updateDoc(userRef, { consent: { termsVersion: '2026-10-27' } }))
+    // `how` is still checked when present, and the record without it cannot be lowered.
+    await assertFails(updateDoc(userRef, { onboarding: { seenVersion: 3, seenAt: serverTimestamp(), how: 'other' } }))
+    await assertFails(updateDoc(userRef, { onboarding: { seenVersion: 2, seenAt: serverTimestamp() } }))
+    // The app's transaction, finding version 3 without `how`, migrates it as of unknown origin.
+    expect(await assertSucceeds(saveOnboardingSeen(update => runTransaction(db, update), userRef, 3, 'auto')))
+      .toEqual({ written: false, profile: { version: 3, how: null } })
+    const saved = (await getDoc(userRef)).data()!
+    expect(saved.onboarding).toMatchObject({ seenVersion: 3, how: 'unknown' })
+    expect(saved.onboarding.seenAt.toMillis()).toBe(Date.UTC(2026, 10, 9))
   })
 
   it('rifiuta tutta la batch se la directory non coincide con il ruolo autorevole', async () => {

@@ -38,9 +38,10 @@ export type OnboardingNote =
   | { event: 'onboarding.opened', reason: number, remote: number }
   /** It stayed closed because the profile remembered it while this PC did not (the fix at work). */
   | { event: 'onboarding.skipped', remote: number }
-  /** KO: it opened by itself here without the profile, and another PC had also opened it by itself. */
+  /** KO: it opened by itself here (without the profile, or racing another PC on the same old value), and
+   *  the profile says another PC had also opened it by itself. */
   | { event: 'onboarding.repeat', seen: number }
-  /** Undetermined: opened by itself here without the profile, and the profile was written another way
+  /** Undetermined: opened by itself here, and the profile already held it written another way
    *  (from Impostazioni, an old key, or an older record). Never a KO. */
   | { event: 'onboarding.overlap', seen: number }
 
@@ -63,9 +64,9 @@ export interface OnboardingDeps {
   isCurrent: () => boolean
 }
 
-/** How this PC opened it, until the profile has it: `blind` = by itself without the profile's answer;
- *  `tried` = a write was attempted (it may have landed even if it reported a failure). */
-interface Opened { how: 'auto' | 'manual', blind: boolean, tried: boolean }
+/** How this PC opened it, until the profile has it. `tried` = a write was attempted (it may have landed
+ *  even if it reported a failure, so a later "already there" may be this PC's own write). */
+interface Opened { how: 'auto' | 'manual', tried: boolean }
 
 function validVersion(value: unknown): number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= ONBOARDING_MAX_VERSION ? value : 0
@@ -126,7 +127,7 @@ function readOpened(deps: OnboardingDeps, uid: string): Opened | null {
   try {
     const value = JSON.parse(raw) as Partial<Opened>
     if (value.how !== 'auto' && value.how !== 'manual') return null
-    return { how: value.how, blind: value.blind === true, tried: value.tried === true }
+    return { how: value.how, tried: value.tried === true }
   } catch { return null }
 }
 
@@ -157,11 +158,12 @@ export function decideOnboarding(local: number, remote: number | null): Onboardi
 }
 
 /**
- * The profile already has it. A blind automatic open here is a repeat only when the profile says it was
- * opened by itself elsewhere too, and this PC never wrote it; any other origin is undetermined.
+ * The profile already has it, not from this PC (which never wrote it). If this PC opened it by itself
+ * (without the profile's answer, or racing another PC that read the same old value), it is a repeat
+ * when the profile says it was opened by itself elsewhere too; any other origin is undetermined.
  */
 function settle(deps: OnboardingDeps, uid: string, profile: RemoteSeen, opened: Opened | null, wasTried: boolean) {
-  if (opened?.how === 'auto' && opened.blind && !wasTried) {
+  if (opened?.how === 'auto' && !wasTried) {
     deps.note(profile.how === 'auto'
       ? { event: 'onboarding.repeat', seen: profile.version }
       : { event: 'onboarding.overlap', seen: profile.version })
@@ -205,14 +207,14 @@ export async function syncOnboardingRemote(uid: string, deps: OnboardingDeps, kn
 }
 
 /**
- * Records "seen" as it appears: this PC at once, then the profile. `blind`: an automatic open decided
- * without the profile's answer; `known`: the profile's record when it did answer.
+ * Records "seen" as it appears: this PC at once, then the profile (never awaited by the opening).
+ * `known`: the profile's record when it answered in time (no second read).
  */
 export async function markOnboardingSeen(uid: string, deps: OnboardingDeps,
-  { how, blind, known }: { how: 'auto' | 'manual', blind: boolean, known?: RemoteSeen }) {
+  { how, known }: { how: 'auto' | 'manual', known?: RemoteSeen }) {
   rememberSeen(deps, uid, ONBOARDING_VERSION)
   const before = readOpened(deps, uid)
-  writeOpened(deps, uid, { how: before?.how ?? how, blind: blind || !!before?.blind, tried: !!before?.tried })
+  writeOpened(deps, uid, { how: before?.how ?? how, tried: !!before?.tried })
   return syncOnboardingRemote(uid, deps, known)
 }
 
@@ -242,6 +244,6 @@ export async function evaluateOnboarding(uid: string, deps: OnboardingDeps): Pro
     return 'closed'
   }
   deps.note({ event: 'onboarding.opened', reason: REASON_CODE[decision.reason], remote: remote ? 1 : 0 })
-  void markOnboardingSeen(uid, deps, { how: 'auto', blind: !remote, known: remote ?? undefined }).catch(() => {})
+  void markOnboardingSeen(uid, deps, { how: 'auto', known: remote ?? undefined }).catch(() => {})
   return decision.reason
 }

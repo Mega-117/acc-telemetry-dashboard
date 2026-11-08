@@ -95,7 +95,7 @@ export function useOnboardingIntro() {
     openings.value++
     noteFeatureUse({ event: 'onboarding.opened', reason: REASON_CODE.manual, remote: 0 })
     // Seen on every PC of the account from now on.
-    if (uid) void markOnboardingSeen(uid, onboardingDeps(uid, () => currentUser.value?.uid === uid, memory), { how: 'manual', blind: false }).catch(() => {})
+    if (uid) void markOnboardingSeen(uid, onboardingDeps(uid, () => currentUser.value?.uid === uid, memory), { how: 'manual' }).catch(() => {})
   }
 
   /** Closes. Nothing to record: it was recorded as seen when it appeared, however it ends. */

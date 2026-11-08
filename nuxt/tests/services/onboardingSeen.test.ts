@@ -243,7 +243,7 @@ describe('onboardingSeen: the launches (PIP-757)', () => {
     const machine = pc(), account = profile(), notes: OnboardingNote[] = []
     const d = deps(machine, account, notes)
     const read = d.readRemote
-    d.readRemote = async () => { await markOnboardingSeen('u1', deps(machine, profile()), { how: 'manual', blind: false }); return read() }
+    d.readRemote = async () => { await markOnboardingSeen('u1', deps(machine, profile()), { how: 'manual' }); return read() }
     expect(await evaluateOnboarding('u1', d)).toBe('closed')
     expect(notes).toEqual([])
   })
@@ -260,12 +260,35 @@ describe('onboardingSeen: the launches (PIP-757)', () => {
     expect(notes).toHaveLength(2)
   })
 
+  it('Codex 2nd review: two PCs online both read 0 and open by themselves; the second transaction finds it -> repeat', async () => {
+    const account = profile(), notes: OnboardingNote[] = []
+    // A: opens with the profile's answer and writes 3 (auto).
+    expect(await evaluateOnboarding('u1', deps(pc(), account))).toBe('firstTime')
+    await flush()
+    expect(account).toMatchObject({ version: 3, how: 'auto' })
+    // B read 0 just before A's write (stale answer), opened by itself, then its transaction finds 3.
+    const b = deps(pc(), account, notes)
+    b.readRemote = async () => ({ version: 0, how: null })
+    expect(await evaluateOnboarding('u1', b)).toBe('firstTime')
+    await flush()
+    expect(notes).toEqual([{ event: 'onboarding.opened', reason: 1, remote: 1 }, { event: 'onboarding.repeat', seen: 3 }])
+    expect(account.writes).toBe(1)
+    // The same race with A's open from Impostazioni: undetermined.
+    const manual = profile(), rows: OnboardingNote[] = []
+    await markOnboardingSeen('u2', deps(pc(), manual), { how: 'manual' })
+    const c = deps(pc(), manual, rows)
+    c.readRemote = async () => ({ version: 0, how: null })
+    expect(await evaluateOnboarding('u2', c)).toBe('firstTime')
+    await flush()
+    expect(rows.map(r => r.event)).toEqual(['onboarding.opened', 'onboarding.overlap'])
+  })
+
   it('Codex 6: opened blind on A, then by hand on B: A records an undetermined overlap, never a repeat', async () => {
     const a = pc(), account = profile(0, null, { online: false }), notes: OnboardingNote[] = []
     expect(await evaluateOnboarding('u1', deps(a, account, notes))).toBe('firstTime')
     await flush()
     account.online = true
-    expect(await markOnboardingSeen('u1', deps(pc(), account), { how: 'manual', blind: false })).toBe('written')
+    expect(await markOnboardingSeen('u1', deps(pc(), account), { how: 'manual' })).toBe('written')
     expect(await syncOnboardingRemote('u1', deps(relaunch(a), account, notes))).toBe('already')
     expect(notes).toEqual([{ event: 'onboarding.opened', reason: 1, remote: 0 }, { event: 'onboarding.overlap', seen: 3 }])
     // Carried from an old key elsewhere ('unknown'), or a record without `how`: undetermined too.
@@ -292,10 +315,10 @@ describe('onboardingSeen: the launches (PIP-757)', () => {
 
   it('a manual open records it as seen everywhere and is never a repeat', async () => {
     const machine = pc(), account = profile(3), notes: OnboardingNote[] = []
-    expect(await markOnboardingSeen('u1', deps(machine, account, notes), { how: 'manual', blind: false })).toBe('already')
+    expect(await markOnboardingSeen('u1', deps(machine, account, notes), { how: 'manual' })).toBe('already')
     expect(notes).toEqual([])
     const fresh = profile()
-    expect(await markOnboardingSeen('u2', deps(machine, fresh, notes), { how: 'manual', blind: false })).toBe('written')
+    expect(await markOnboardingSeen('u2', deps(machine, fresh, notes), { how: 'manual' })).toBe('written')
     expect(fresh).toMatchObject({ version: 3, how: 'manual' })
     expect(await evaluateOnboarding('u2', deps(pc(), fresh))).toBe('closed')
   })

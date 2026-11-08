@@ -12,7 +12,11 @@ export async function saveOnboardingSeen(run: RunTransaction, profile: DocumentR
     // Not provisioned yet: nothing to raise; this PC keeps it and retries at a later launch.
     if (!snapshot.exists()) throw new Error('onboarding: profile missing')
     const current = profileSeen(snapshot.data())
-    if (current.version >= version) return { written: false, profile: current }
+    if (current.version >= version) {
+      // A record without `how` (first PIP-757 build) is completed as of unknown origin, nothing else changes.
+      if (!current.how) transaction.update(profile, { 'onboarding.how': 'unknown' })
+      return { written: false, profile: current }
+    }
     // The whole map: firestore.rules validOnboarding checks exactly these fields.
     transaction.update(profile, { onboarding: { seenVersion: version, seenAt: serverTimestamp(), how } })
     return { written: true, profile: { version, how } }
