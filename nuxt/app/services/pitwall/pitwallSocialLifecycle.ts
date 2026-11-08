@@ -182,18 +182,13 @@ export function createPitwallSocialLifecycle(options: {
     return null
   }
 
-  async function joinNow(roomId: string, resuming?: SocialDirectoryEntry): Promise<JoinResult> {
+  async function joinNow(roomId: string): Promise<JoinResult> {
     let reservedSlot: string | null = null
     let joined = false
     try {
       await options.ensureConnection()
       assertOpen()
       const current = await io.read<SocialDirectoryEntry>(`directory/${uid}`)
-      // A resume continues only the membership it found: an exit or an entry made
-      // meanwhile by another device of the account is never undone (Codex 08/11).
-      if (resuming && (current?.roomId !== resuming.roomId || current.connectionId !== resuming.connectionId)) {
-        throw new PitwallRoomError('not-allowed')
-      }
       if (current && current.roomId !== roomId) await releaseStale(current, false)
       const connectionId = options.connectionId()
       if (!connectionId) throw new PitwallRoomError('not-ready')
@@ -421,9 +416,64 @@ export function createPitwallSocialLifecycle(options: {
     ])
     if (!room?.memberUids.includes(uid) || !room.reconnectingUids?.includes(uid)) return null
     if (Object.keys(occupancy?.[uid] ?? {}).includes(options.connectionId())) return null
-    const result = await joinNow(directory.roomId, directory)
+    const result = await resumeCommit(directory)
     if (result.ok || result.committed) diagnostic('room_resumed', directory.roomId)
     return result.ok ? result : { ...result, roomId: directory.roomId }
+  }
+
+  /**
+   * A resume is not an entry (Codex final review 08/11): it never creates access or a
+   * seat, it only moves the existing membership to this connection. The commit is one
+   * transaction on the directory, from exactly the entry the resume found: an exit
+   * completed meanwhile by another device (directory gone) or a newer pointer aborts it,
+   * whatever a sponsor would let a fresh entry do. Before that, only this connection's
+   * occupancy is written; it goes again if the transaction does not commit.
+   */
+  async function resumeCommit(found: SocialDirectoryEntry): Promise<JoinResult> {
+    const { roomId } = found
+    let occupancyPath: string | null = null
+    let joined = false
+    try {
+      assertOpen()
+      const connectionId = options.connectionId()
+      if (!connectionId) throw new PitwallRoomError('not-ready')
+      if (found.slot == null) throw new PitwallRoomError('not-allowed')
+      const nickname = uid
+      occupancyPath = `rooms/${roomId}/occupancy/${uid}/${connectionId}`
+      await io.registerDisconnectUpdates({ [occupancyPath]: null })
+      try {
+        await io.write('', { [occupancyPath]: { nickname, connectedAt: io.serverTimestamp(), disconnectedAt: null } })
+      }
+      catch (cause) {
+        if (!isDenied(cause)) throw cause
+        throw new PitwallRoomError('not-allowed', cause)
+      }
+      const pointer = { roomId, connectionId, slot: found.slot }
+      // The local cache may be empty: proposing "nothing" for an empty value lets the server
+      // answer with the real entry, and only the entry the resume found is moved.
+      const moved = await io.transact<SocialDirectoryEntry>(`directory/${uid}`, current => current == null ? null
+        : current.roomId === found.roomId && current.connectionId === found.connectionId && current.slot === found.slot ? pointer : undefined)
+        .catch((cause) => {
+          if (isDenied(cause)) throw new PitwallRoomError('not-allowed', cause)
+          throw cause
+        })
+      if (!moved.committed || moved.value?.roomId !== roomId || moved.value.connectionId !== connectionId) {
+        throw new PitwallRoomError('not-allowed')
+      }
+      joined = true
+      await adopt(roomId, connectionId, nickname)
+      const room = await readCommitted(roomId)
+      if (!room) return { ok: false, committed: true, code: 'view-pending', reason: roomErrorKey('view-pending') }
+      return { ok: true, value: room }
+    }
+    catch (error) {
+      const result = failure('join', roomId, error)
+      return joined ? { ...result, committed: true as const } : result
+    }
+    finally {
+      // Not resumed: this connection's occupancy goes (an own removal is always allowed).
+      if (occupancyPath && !joined) await io.write('', { [occupancyPath]: null }).catch(() => {})
+    }
   }
 
   /** Refuses new entries and exits; resolves once the one in progress has finished. */

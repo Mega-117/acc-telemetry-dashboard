@@ -529,6 +529,36 @@ describe('PIP-750 discovery, late views and failover', () => {
     expect(await at('directory/B')).toBeNull()
   })
 
+  it('S25e: an exit completed by another PC after the resume checked the directory is never undone (Codex final review 08/11)', async () => {
+    const { B, roomId } = await guestInRoom()
+    const fresh = await reload(B)
+    expect(await at(`admissions/${roomId}/B`)).toBeTruthy()          // a sponsor: the Rules alone would allow a new entry
+    const otherPc = await participant('B')
+    // After the resume has checked the directory, before it writes in the room: the other PC
+    // presses "Esci" and the exit completes (at the seat read, or at the disconnect registration
+    // of the room occupancy that precedes the commit, whichever comes first).
+    let exited = false
+    const exitOnce = async () => { if (!exited) { exited = true; expect((await otherPc.leaveRoom(roomId)).ok).toBe(true) } }
+    const register = fresh.io.registerDisconnectUpdates.bind(fresh.io)
+    vi.spyOn(fresh.io, 'registerDisconnectUpdates').mockImplementation((async (changes: Record<string, unknown>) => {
+      if (Object.keys(changes).some(path => path.startsWith(`rooms/${roomId}/occupancy/B/`))) await exitOnce()
+      return register(changes)
+    }) as typeof fresh.io.registerDisconnectUpdates)
+    const read = fresh.io.read.bind(fresh.io)
+    vi.spyOn(fresh.io, 'read').mockImplementation((async (path: string) => {
+      if (path === `rooms/${roomId}/slots`) await exitOnce()
+      return read(path)
+    }) as typeof fresh.io.read)
+    const resumed = await fresh.resumeRoom()
+    expect(exited).toBe(true)
+    expect(resumed).not.toMatchObject({ ok: true })
+    expect(resumed).not.toMatchObject({ committed: true })
+    expect(await at(`rooms/${roomId}/access/B`)).toBeNull()
+    expect(await at('directory/B')).toBeNull()
+    expect(await at(`rooms/${roomId}/occupancy/B`)).toBeNull()
+    expect(Object.values(await at(`rooms/${roomId}/slots`) ?? {}).filter((value: any) => value.uid === 'B')).toHaveLength(0)
+  })
+
   it('S25c: a membership held by another live device of the account is not taken over', async () => {
     const { roomId, B } = await guestInRoom()
     const other = await participant('B')
