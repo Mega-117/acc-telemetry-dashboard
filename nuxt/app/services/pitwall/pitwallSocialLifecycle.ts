@@ -181,13 +181,18 @@ export function createPitwallSocialLifecycle(options: {
     return null
   }
 
-  async function joinNow(roomId: string): Promise<JoinResult> {
+  async function joinNow(roomId: string, resuming?: SocialDirectoryEntry): Promise<JoinResult> {
     let reservedSlot: string | null = null
     let joined = false
     try {
       await options.ensureConnection()
       assertOpen()
       const current = await io.read<SocialDirectoryEntry>(`directory/${uid}`)
+      // A resume continues only the membership it found: an exit or an entry made
+      // meanwhile by another device of the account is never undone (Codex 08/11).
+      if (resuming && (current?.roomId !== resuming.roomId || current.connectionId !== resuming.connectionId)) {
+        throw new PitwallRoomError('not-allowed')
+      }
       if (current && current.roomId !== roomId) await releaseStale(current, false)
       const connectionId = options.connectionId()
       if (!connectionId) throw new PitwallRoomError('not-ready')
@@ -398,6 +403,28 @@ export function createPitwallSocialLifecycle(options: {
     return false
   }
 
+  /**
+   * A page reload or a restart within the 30 s grace: the directory still names the
+   * previous connection of this account, which is gone. The new connection takes the
+   * same membership and seat. Nothing to resume after an explicit exit (no directory),
+   * after the grace (no membership) or while another device of the account is live there.
+   */
+  async function resumeNow(): Promise<JoinResult | null> {
+    await options.ensureConnection()
+    assertOpen()
+    const directory = await io.read<SocialDirectoryEntry>(`directory/${uid}`)
+    if (!directory) return null
+    const [room, occupancy] = await Promise.all([
+      readRoom(directory.roomId).catch(() => null),
+      io.read<SocialOccupancy>(`rooms/${directory.roomId}/occupancy`).catch(() => null),
+    ])
+    if (!room?.memberUids.includes(uid) || !room.reconnectingUids?.includes(uid)) return null
+    if (Object.keys(occupancy?.[uid] ?? {}).includes(options.connectionId())) return null
+    const result = await joinNow(directory.roomId, directory)
+    if (result.ok || result.committed) diagnostic('room_resumed', directory.roomId)
+    return result.ok ? result : { ...result, roomId: directory.roomId }
+  }
+
   /** Refuses new entries and exits; resolves once the one in progress has finished. */
   function dispose() {
     disposed = true
@@ -407,6 +434,7 @@ export function createPitwallSocialLifecycle(options: {
   return {
     readRoom, watchRoom, watchRooms, createRoom, confirmMembership, dispose,
     joinRoom: (roomId: string) => serialize(() => joinNow(roomId)).catch(error => failure('join', roomId, error)),
+    resumeRoom: () => serialize(() => resumeNow()).catch(error => failure('join', undefined, error)),
     leaveRoom: (roomId: string) => serialize(() => leaveNow(roomId)).catch(error => failure('leave', roomId, error)),
   }
 }

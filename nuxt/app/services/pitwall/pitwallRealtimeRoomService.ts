@@ -352,6 +352,10 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
       } catch { /* A concurrent join or loss of access leaves cleanup to the next session. */ }
     }
   }
+  /** PIP-750: after a page reload within the grace, the new connection takes the same membership. */
+  async function resumeRoom() {
+    return social ? social.resumeRoom() : null
+  }
   /** PIP-750 F3: after a denied room listener, whether the membership survived a device failover. */
   async function confirmMembership(roomId: string): Promise<boolean> {
     return social ? social.confirmMembership(roomId) : false
@@ -363,7 +367,7 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
     await session.stop(); historicalIo?.dispose(); members.clear(); roomCache.clear()
   }
   return { uid, io, session, ...orders, outcomeRecovery, readRoom, watchRoom, watchRooms, watchMembers, publishPresence, clearPresence, clearEngineerPresence, deactivateDriver,
-    ensureRoomForVehicle, joinRoom, leaveRoom, closeRoom, closeDormantRooms, listRooms, invite, syncInvites, revoke, promote, dispose, confirmMembership,
+    ensureRoomForVehicle, joinRoom, leaveRoom, closeRoom, closeDormantRooms, listRooms, invite, syncInvites, revoke, promote, dispose, confirmMembership, resumeRoom,
     serverNow: io.serverNow, toLocalMs: (serverMs: number) => serverMs - io.clockOffsetMs(), clockOffsetMs: io.clockOffsetMs,
     clockOutOfSync: () => Math.abs(io.clockOffsetMs()) > 30_000, lastError: () => lastError }
 }

@@ -27,7 +27,7 @@ export function roomErrorCode(error: unknown): PitwallRoomErrorCode {
   return 'unknown'
 }
 
-export interface RoomFailure { ok: false, reason: string, code: PitwallRoomErrorCode, committed?: true }
+export interface RoomFailure { ok: false, reason: string, code: PitwallRoomErrorCode, committed?: true, roomId?: string }
 export type JoinResult = { ok: true, value: PitwallRoom } | RoomFailure
 
 /** Every failed entry, open, exit or stale cleanup leaves one diagnostic with its code and the raw cause. */

@@ -45,6 +45,9 @@ const fakes = vi.hoisted(() => ({
   sendOk: true,
   /** PIP-750 F3/F9: membership kept after a failover; an entry committed while its view is late. */
   membershipKept: false,
+  resumeCommittedOnly: false,
+  resumeAvailable: false,
+  resumeLeftFirst: null as (() => Promise<void>) | null,
   joinCommittedOnly: false,
   /** Scarto fra orologio del server e orologio di questo PC (PIP-382). */
   clockOffsetMs: 0,
@@ -68,6 +71,12 @@ vi.mock('~/services/pitwall/pitwallRealtimeRoomService', () => ({
       return { ok: true, value: { ...fakes.roomDoc, memberUids: [...(fakes.roomDoc!.memberUids as string[]), uid] } }
     },
     confirmMembership: async () => { fakes.calls.push('confirm'); return fakes.membershipKept },
+    resumeRoom: async () => {
+      fakes.calls.push('resume')
+      if (fakes.resumeLeftFirst) await fakes.resumeLeftFirst()
+      if (!fakes.resumeAvailable) return null
+      return fakes.resumeCommittedOnly ? { ok: false, committed: true, code: 'view-pending', reason: 'pitwall.roomErrors.viewPending', roomId: 'r1' } : { ok: true, value: fakes.roomDoc }
+    },
     // Staccare l'ascolto lo spegne davvero: chi chiude la gara non deve
     // ricevere la propria cancellazione come un avviso.
     watchRoom: (_id: string, onRoom: (room: unknown) => void) => { fakes.pushRoom = onRoom; return () => { if (fakes.pushRoom === onRoom) fakes.pushRoom = null } },
@@ -154,6 +163,9 @@ beforeEach(() => {
   fakes.roomDoc = room()
   fakes.sendOk = true
   fakes.membershipKept = false
+  fakes.resumeCommittedOnly = false
+  fakes.resumeAvailable = false
+  fakes.resumeLeftFirst = null
   fakes.joinCommittedOnly = false
   fakes.clockOffsetMs = 0
   scope = effectScope()
@@ -542,6 +554,44 @@ describe('le azioni da manager, uscire e chiudere', () => {
     expect(link.selectedRoomId.value).toBeNull()
     expect(link.notice.value).toBe('Il Pitwall è chiuso o la partecipazione è scaduta.')
     expect(fakes.calls.filter(call => call === 'confirm')).toHaveLength(1)
+  })
+
+  it('PIP-750 live 08/11: after a page reload a reconnecting membership is resumed and selected', async () => {
+    fakes.resumeAvailable = true
+    fakes.roomDoc = room({ hostUid: 'popo', managerUids: ['popo'], memberUids: ['popo', 'me'], reconnectingUids: ['me'] } as Partial<PitwallRoom>)
+    const link = build()
+    link.start()
+    fakes.pushRooms?.([fakes.roomDoc])
+    await settle()
+    expect(fakes.calls).toContain('resume')
+    expect(link.selectedRoomId.value).toBe('r1')
+    // One attempt per room and page: a later list does not resume again.
+    fakes.pushRooms?.([fakes.roomDoc])
+    await settle()
+    expect(fakes.calls.filter(call => call === 'resume')).toHaveLength(1)
+  })
+
+  it('PIP-750 live 08/11: the resume runs at start even if discovery shows nothing, and a committed resume is selected', async () => {
+    fakes.resumeAvailable = true
+    fakes.resumeCommittedOnly = true
+    const link = build()
+    link.start()
+    await settle()
+    expect(fakes.calls).toContain('resume')
+    expect(link.selectedRoomId.value).toBe('r1')
+  })
+
+  it('PIP-750 live 08/11: a room left on this page never resumes, nor one where the account is live elsewhere', async () => {
+    const link = await open([member()])
+    link.start()
+    expect(fakes.pushRooms).not.toBeNull()
+    await link.leave()
+    fakes.pushRooms?.([room({ memberUids: ['me'], reconnectingUids: ['me'] } as Partial<PitwallRoom>)])
+    await settle()
+    fakes.pushRooms?.([room({ roomId: 'r2', memberUids: ['me'], reconnectingUids: [] } as Partial<PitwallRoom>)])
+    await settle()
+    expect(fakes.calls).not.toContain('resume')
+    expect(link.selectedRoomId.value).toBeNull()
   })
 
   it('PIP-750 F3: recovery is bounded, then the exit is told', async () => {

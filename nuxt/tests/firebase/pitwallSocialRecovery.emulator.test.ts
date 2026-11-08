@@ -471,6 +471,72 @@ describe('PIP-750 discovery, late views and failover', () => {
     expect(await at(`connections/A/${own}`)).toBeNull()
   })
 
+  // Live test 08/11: a guest reloading the browser page was shown "reconnecting" for 30 s, then dropped out.
+  async function guestInRoom() {
+    const A = await participant('A')
+    const roomId = await open(A, 'Reload')
+    await publish(A, roomId)
+    const B = await participant('B')
+    expect((await joinThroughDiscovery(B, roomId)).ok).toBe(true)
+    await publish(B, roomId)
+    const slot = (await at('directory/B')).slot
+    return { A, B, roomId, slot }
+  }
+  async function reload(service: Service) {
+    const old = service.session.connectionId()
+    goOffline(service.io.database)
+    await vi.waitFor(async () => expect((await at(`connections/${service.uid}/${old}`))).toBeNull())
+    return participant(service.uid)
+  }
+
+  it('S25: a page reload within the grace resumes the same membership and seat on the new connection', async () => {
+    const { A, B, roomId, slot } = await guestInRoom()
+    const fresh = await reload(B)
+    const resumed = await fresh.resumeRoom()
+    expect(resumed).toMatchObject({ ok: true, value: { roomId } })
+    const directory = await at('directory/B')
+    expect(directory).toMatchObject({ roomId, slot, connectionId: fresh.session.connectionId() })
+    const presence = await at(`rooms/${roomId}/occupancy/B/${fresh.session.connectionId()}`)
+    expect(presence?.connectedAt).toEqual(expect.any(Number))
+    expect(presence?.disconnectedAt).toBeUndefined()
+    expect(Object.values(await at(`rooms/${roomId}/slots`)).filter((value: any) => value.uid === 'B')).toHaveLength(1)
+    await vi.waitFor(async () => expect((await A.readRoom(roomId))?.reconnectingUids).toEqual([]))
+  })
+
+  it('S25b: after an explicit exit a reload resumes nothing', async () => {
+    const { B, roomId } = await guestInRoom()
+    expect((await B.leaveRoom(roomId)).ok).toBe(true)
+    const fresh = await reload(B)
+    expect(await fresh.resumeRoom()).toBeNull()
+    expect(await at(`rooms/${roomId}/access/B`)).toBeNull()
+  })
+
+  it('S25d: an exit made by another device while the resume is deciding is never undone', async () => {
+    const { B, roomId } = await guestInRoom()
+    const fresh = await reload(B)
+    const read = fresh.io.read.bind(fresh.io)
+    vi.spyOn(fresh.io, 'read').mockImplementation((async (path: string) => {
+      if (path === `rooms/${roomId}/occupancy`) {
+        const value = await read(path)
+        // Between the eligibility check and the entry, the account leaves from another PC.
+        await admin(db => update(ref(db, ROOT), { [`rooms/${roomId}/access/B`]: null, [`rooms/${roomId}/occupancy/B`]: null, 'directory/B': null }))
+        return value
+      }
+      return read(path)
+    }) as typeof fresh.io.read)
+    expect(await fresh.resumeRoom()).toMatchObject({ ok: false, code: 'not-allowed' })
+    expect(await at(`rooms/${roomId}/access/B`)).toBeNull()
+    expect(await at('directory/B')).toBeNull()
+  })
+
+  it('S25c: a membership held by another live device of the account is not taken over', async () => {
+    const { roomId, B } = await guestInRoom()
+    const other = await participant('B')
+    expect(await other.resumeRoom()).toBeNull()
+    expect((await at('directory/B')).connectionId).toBe(B.session.connectionId())
+    expect(roomId).toBeTruthy()
+  })
+
   it('S24: every failed entry, open or exit leaves one diagnostic with its code', async () => {
     const rows = diagnostics()
     const A = await participant('A')

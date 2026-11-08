@@ -352,6 +352,37 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   function applyRooms(list: PitwallRoom[]): void {
     discoveryError.value = null
     rooms.value = list
+    resumeIfReconnecting(list)
+  }
+
+  /**
+   * PIP-750 (live test 08/11): after a page reload the account is still a member for
+   * the 30 s grace, shown "reconnecting", but nothing took the membership back, so it
+   * expired. The service resumes it on this connection, then the room is selected as
+   * after an entry. Tried at start (discovery may show nothing: Codex 08/11) and when
+   * discovery shows this account reconnecting; at most 3 attempts per page, and a
+   * room left or closed here never resumes.
+   */
+  const leftHere = new Set<string>()
+  let resumeAttempts = 0
+  let resuming = false
+  function resumeIfReconnecting(list: PitwallRoom[] | null): void {
+    const me = myUid.value
+    if (!me || selectedRoomId.value || loading.value || resuming || resumeAttempts >= 3) return
+    if (list && !list.some(candidate => !candidate.closedAt && candidate.memberUids.includes(me)
+      && candidate.reconnectingUids?.includes(me) && !leftHere.has(candidate.roomId))) return
+    const service_ = service()
+    if (!service_?.resumeRoom) return
+    resumeAttempts++
+    resuming = true
+    const current = currentAccount(service_)
+    void service_.resumeRoom().then((result) => {
+      if (!result || !current() || selectedRoomId.value) return
+      const roomId = result.ok ? result.value.roomId : result.committed ? result.roomId : null
+      if (!roomId || leftHere.has(roomId)) return
+      resumeAttempts = 3
+      void selectRoom(roomId)
+    }).catch(() => {}).finally(() => { resuming = false })
   }
 
   /** A stopped login must not publish into a later login, even for the same uid. */
@@ -704,6 +735,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     const service_ = service()
     const roomId = selectedRoomId.value
     if (!service_ || !roomId) return
+    leftHere.add(roomId)
     const current = currentAccount(service_)
     detach()
     try {
@@ -731,6 +763,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     const service_ = service()
     const roomId = selectedRoomId.value
     if (!service_ || !roomId) return
+    leftHere.add(roomId)
     const current = currentAccount(service_)
     const social = room.value?.membershipModel === 'social'
     const guests = social ? [] : (room.value?.allowedUids ?? []).filter(guest => !room.value?.memberUids.includes(guest)).slice(0, 20)
@@ -755,10 +788,12 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     if (tickTimer) clearInterval(tickTimer)
     tickTimer = setInterval(() => { nowTick.value = serverNowMs() }, 5_000)
     watchRooms()
+    resumeIfReconnecting(null)
   }
 
   function stop(): void {
     accountGeneration++
+    leftHere.clear(); resumeAttempts = 0
     loading.value = false
     clearFeedback()
     void clearPresence()
