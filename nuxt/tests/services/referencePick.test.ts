@@ -79,6 +79,19 @@ describe('library client and loading (PIP-650)', () => {
     expect(await useReferenceLibrary({ entries: odd, traces: ref({}), sessionToken: () => 't', sectorTimesOf: () => null })
       .loadOtherDrivers(() => true, deps(oddFetch), { game: 'acc', track: 'Hungaroring', car: 'ferrari_296_gt3', variant: null }, { myUid: 'me', myBestMs: 101500, mine })).toBeNull()
     expect(odd.value).toEqual([])
+    // PIP-751: a lap whose trace does not cover its own time (saved 1.7 s short) is never suggested.
+    const shortBody = (() => {
+      const time = Array.from({ length: 2201 }, (_, i) => i * (100.5 - 1.7) / 2200)
+      return gzipSync(Buffer.from(JSON.stringify({ schema: 'acc.laptrace.v1', grid_step_m: 2, meta: { track: 'Hungaroring', car: 'ferrari_296_gt3', lap_time_s: 100.5, complete: true, valid: true },
+        channels: { time_s: time, speed_kmh: time, brake_pct: time.map(() => 0), throttle_pct: time.map(() => 100) } })))
+    })()
+    const short = ref<Entry[]>([])
+    const shortFetch = (async (url: string) => url.includes('/v1/library?')
+      ? new Response(JSON.stringify({ entries: [e('b', 'u4', 100500), e('f', 'u5', 20000)] }))
+      : new Response(url.includes('/lap/b') ? shortBody : bodies.f)) as unknown as typeof fetch
+    expect(await useReferenceLibrary({ entries: short, traces: ref({}), sessionToken: () => 't', sectorTimesOf: () => null })
+      .loadOtherDrivers(() => true, deps(shortFetch), { game: 'acc', track: 'Hungaroring', car: 'ferrari_296_gt3', variant: null }, { myUid: 'me', myBestMs: 101500, mine })).toBeNull()
+    expect(short.value).toEqual([])
     // A stale load adds nothing.
     const stale = ref<Entry[]>([])
     await useReferenceLibrary({ entries: stale, traces: ref({}), sessionToken: () => 't', sectorTimesOf: () => null })
@@ -87,6 +100,7 @@ describe('library client and loading (PIP-650)', () => {
     // R2 check (fix_signals PIP-650): loaded and discarded laps; a stale load notes nothing.
     expect(notes).toEqual([
       { event: 'laps.library_loaded', laps: 2, rejected: 0 },
+      { event: 'laps.library_loaded', laps: 0, rejected: 2 },
       { event: 'laps.library_loaded', laps: 0, rejected: 2 },
     ])
   })

@@ -173,7 +173,8 @@ export function useReferenceLibrary(o: {
           const trace = normalizeLapTrace(raw)
           // Review: the library holds what uploaders declared; the lap itself must agree before it becomes a
           // reference: same track, car and layout, complete and valid, the declared time, a believable speed.
-          const believable = !!trace && trace.complete && trace.valid === true && same(trace.track, where.track) && same(trace.car, where.car)
+          // PIP-751: and a trace that covers its own lap time (one saved short is never suggested).
+          const believable = !!trace && trace.complete && trace.valid === true && traceCoversLap(trace).covers && same(trace.track, where.track) && same(trace.car, where.car)
             && same(trace.variant, where.variant) && Math.abs(trace.lapTimeS * 1000 - e.lapTimeMs) <= 100
             && trace.lengthM / trace.lapTimeS * 3.6 <= 330
           return believable ? { trace: trace!, entry: { id: `library:${e.libId}`, lapNumber: 0, lapTimeMs: e.lapTimeMs, valid: true, complete: true, origin: 'library', sessionToken: '',
