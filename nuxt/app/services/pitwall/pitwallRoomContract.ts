@@ -87,6 +87,9 @@ export type PitwallRoomRole = (typeof PITWALL_ROOM_ROLES)[number]
 
 export type PitwallExecutorReason = 'ready' | 'nobody-driving' | 'multiple-driving' | 'empty-room'
 
+/** Account bookmark in pitwallRoomsV1/directory: which room, connection and slot it holds. */
+export interface SocialDirectoryEntry { roomId: string, connectionId: string, slot?: string }
+
 /** La stanza di una gara, come vive su Firestore. */
 export interface PitwallRoom {
   /** Local projection: social discovery grants access, not a personal invitation. */

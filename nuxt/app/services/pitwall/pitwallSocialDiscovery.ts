@@ -2,7 +2,7 @@ import type { PitwallRealtimeTransport } from './pitwallRealtimeTransport'
 import { emitPitwallDiagnostic } from './pitwallDiagnostics'
 import { pitwallIoErrorCode } from './pitwallIoMetrics'
 import type { PitwallRoom } from './pitwallRoomContract'
-import type { SocialDirectoryEntry } from './pitwallSocialLifecycle'
+import type { SocialDirectoryEntry } from './pitwallRoomContract'
 
 /**
  * Discovery of friends' rooms: directories, sponsor connections and admission

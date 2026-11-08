@@ -7,7 +7,8 @@ import { nextSocialExpiry, socialMemberUids, socialMemberNicknames, socialReconn
 import { PITWALL_FAILOVER_CONFIRM_MS } from './pitwallRealtimeSession'
 import { PitwallRoomError, isDenied, isNetwork, roomErrorKey, roomFailure, type JoinResult, type RoomFailure } from './pitwallRoomErrors'
 
-export interface SocialDirectoryEntry { roomId: string, connectionId: string, slot?: string }
+import type { SocialDirectoryEntry } from './pitwallRoomContract'
+export type { SocialDirectoryEntry }
 interface SocialSlot { uid: string, reservedAt: number }
 export interface SocialRoomState {
   meta: RealtimeRoomMeta & { closedAt?: string | null }
