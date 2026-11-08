@@ -14,6 +14,8 @@ export type FeatureUseNote =
   | { event: 'laps.stint_card', kind: number, reference: number, bestMismatch: number }
   /** PIP-737 (dev.12): segments moved before the braking, and the Panoramica entered with the last visit's data. */
   | { event: 'laps.segments', segments: number, badBounds: number }
+  /** PIP-751: the shown pair against ACC's lap times (comparable 0/1, ms always >= 0). */
+  | { event: 'laps.gap_check', comparable: number, spanGapMs: number, mismatch: number }
   | { event: 'overview.remembered', changed: number, older: number }
   /** PIP-743: the Dati page's laps against the logger's counters and the Sessioni list summary. */
   | { event: 'data.session_check', laps: number, lapsOff: number, validOff: number, off: number, bestOff: number }

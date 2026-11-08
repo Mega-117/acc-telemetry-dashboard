@@ -128,6 +128,8 @@ export default defineConfig({
         'app/services/telemetry/lapAnalysis.ts',
         'app/services/telemetry/mapPositions.ts',
         'app/services/telemetry/segmentApproach.ts',
+        // PIP-751: does a trace cover the lap ACC timed (the gate of delta, segments and measured sectors).
+        'app/services/telemetry/traceCoverage.ts',
         'app/components/overlay/ControlKNumberField.vue',
         'app/services/auth/dashboardEntryRecovery.ts',
         'app/components/overlay/PressureTestPanel.vue',

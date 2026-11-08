@@ -30,6 +30,8 @@
   &.active { background: #ffffff1a; } }
 .sector-name { grid-area: name; color: #fff; font: italic 700 15px 'Racer Display', 'Arial Narrow', sans-serif; text-transform: uppercase; }
 .sector-time { grid-area: time; align-self: center; color: #b3b3b8; font: 600 12px 'Inter', sans-serif; }
+// PIP-751: whose time it is ("Tu" / "You"), small and quiet beside the number.
+.sector-who { margin-right: 3px; color: #8a8a90; font: 700 9px 'Inter', sans-serif; letter-spacing: .08em; text-transform: uppercase; }
 .sector-gap { grid-area: gap; min-height: 28px; }
 // 05/11 (user): the sector delta is a band too (.corner-bar).
 .sector-gap { font: 700 14px 'Inter', sans-serif; }

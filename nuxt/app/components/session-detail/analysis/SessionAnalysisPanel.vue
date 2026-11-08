@@ -38,6 +38,7 @@ import { useWheelForward } from '~/composables/useWheelForward'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { readSessionLaps, withArchiveFallback } from '~/services/telemetry/sessionLapLoading'
 import { useTrackEdges } from '~/composables/useTrackEdges'
+import { useLapPairCoverage } from '~/composables/useLapPairCoverage'
 import { useI18n } from '~/i18n'
 
 const props = defineProps<{
@@ -277,18 +278,19 @@ const lap = computed(() => traces.value[lapId.value] ?? null)
 // Track edges for the maps: desktop app or, in the browser, the site's files (PIP-636).
 const edges = useTrackEdges(lap, api)
 const reference = computed(() => refId.value && refId.value !== lapId.value ? traces.value[refId.value] ?? null : null)
+const { deltaReference, note: coverageNote, sectorTip, covers } = useLapPairCoverage({ lap, reference, lapId, refId, traces }) // PIP-751
 const lapEntry = computed(() => entries.value.find(e => e.id === lapId.value) ?? null)
 // Also when Tu and Riferimento are the same lap (one lap only): the sector times still show, with zero gaps.
 const refEntry = computed(() => refId.value ? entries.value.find(e => e.id === refId.value) ?? null : null)
 // PIP-645: corners from the session's best valid lap (else the reference, else yours): the same numbers and
 // boundaries whatever reference is picked, so the session statistics of Semplice never move with it.
-const sessionBest = computed(() => entries.value.filter(e => (e.origin === 'local' || e.origin === 'pilot') && e.valid && e.complete).sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0] ?? null)
+const sessionBest = computed(() => entries.value.filter(e => (e.origin === 'local' || e.origin === 'pilot') && e.valid && e.complete && covers(e.id)).sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0] ?? null)
 // 06/11 (user): each segment starts before its braking (withApproach), on the same trace the corners come from.
 const cornerSource = computed(() => (sessionBest.value && traces.value[sessionBest.value.id]) ?? reference.value ?? lap.value ?? emptyTrace())
 const corners = computed(() => withApproach(detectCorners(cornerSource.value), cornerSource.value))
 // PIP-737 spy: the moved boundaries checked against the detected ones (KO: a gap, an overlap, a lost or moved segment).
 watch(corners, c => { if (c.length) noteFeatureUse({ event: 'laps.segments', ...segmentsCheck(detectCorners(cornerSource.value), c) }) })
-const comparison = computed(() => lap.value && reference.value ? compareCorners(lap.value, reference.value, corners.value) : [])
+const comparison = computed(() => lap.value && deltaReference.value ? compareCorners(lap.value, deltaReference.value, corners.value) : [])
 const worst = computed(() => [...comparison.value].sort((a, b) => b.timeLostS - a.timeLostS).filter(c => c.timeLostS >= 0.03).slice(0, 3))
 const totalDelta = computed(() => lap.value && reference.value ? lap.value.lapTimeS - reference.value.lapTimeS : null)
 // Charts aligned by track position, as MoTeC and Garage 61: the reference dot sits at the same point.
@@ -367,10 +369,10 @@ watch(() => props.active, on => { if (on !== false) nextTick(() => { measureTrac
 // What the charts show now, and the way back to the whole lap (Garage 61 reset, Esc, double click).
 const wholeView = computed(() => !zoomRange.value && selectedSector.value === null && selectedCorner.value === null)
 // PIP-635: quanto perdi nel tratto che guardi (curva, settore o zoom), fisso: senza cercarlo in fondo al delta.
-const stretchLoss = computed(() => wholeView.value || !lap.value || !reference.value ? null
-  : zoomRange.value ? stretchDelta(lap.value, reference.value, range.value)
+const stretchLoss = computed(() => wholeView.value || !lap.value || !deltaReference.value ? null
+  : zoomRange.value ? stretchDelta(lap.value, deltaReference.value, range.value)
     // Same numbers as the lists on the left: the corner table and the official sector times.
-    : selectedSector.value !== null ? (sectorGaps.value[selectedSector.value] ? sectorGaps.value[selectedSector.value]!.gap / 1000 : stretchDelta(lap.value, reference.value, range.value))
+    : selectedSector.value !== null ? (typeof sectorGaps.value[selectedSector.value]?.gap === 'number' ? sectorGaps.value[selectedSector.value]!.gap! / 1000 : stretchDelta(lap.value, deltaReference.value, range.value))
       : comparison.value.find(c => c.corner.number === selectedCorner.value)?.timeLostS ?? null)
 function wholeLap() { selectedCorner.value = null; selectedSector.value = null; zoomRange.value = null }
 const lossScope = ref<'lap' | 'session'>('lap')
@@ -399,7 +401,7 @@ const stintSummary = computed(() => stintBlock.value ? props.stintSummaries?.[st
 watch(() => { const s = stintSummary.value; return s ? JSON.stringify([stintBlock.value?.stint, s.kind, s.bestMs, s.refBestMs, s.avgMs, s.refAvgMs]) : '' }, (k) => { const s = stintSummary.value; if (!k || !s) return
   noteFeatureUse({ event: 'laps.stint_card', kind: s.kind === 'qualify' ? 1 : 0, reference: stintVerdict(s).length, bestMismatch: s.bestMs !== null && !props.laps.some(r => (r.stint ?? 1) === stintBlock.value?.stint && r.lap_time_ms === s.bestMs) ? 1 : 0 }) }, { immediate: true })
 // PIP-646: any reference gets sector times, measured at the same points of the lap.
-const { sectorList, sectorGaps } = useSectorCompare({ lap, reference, lapTimes: computed(() => sectorTimes(lapEntry.value)), refTimes: computed(() => sectorTimes(refEntry.value)) })
+const { sectorList, sectorGaps } = useSectorCompare({ lap, reference: deltaReference, lapTimes: computed(() => sectorTimes(lapEntry.value)), refTimes: computed(() => sectorTimes(refEntry.value)) })
 const selectedSector = ref<number | null>(null)
 // Tracce: a stretch zoomed with the mouse (drag, wheel) wins over the sector or the corner.
 const zoomRange = ref<[number, number] | null>(null)
@@ -412,7 +414,7 @@ const range = computed<[number, number]>(() => {
   const corner = selectedCorner.value !== null ? corners.value[selectedCorner.value - 1] : null
   return corner ? [corner.start, corner.end] : [0, 1]
 })
-const { focus, focusZone } = useFocusZone({ lap, reference, comparison, worst, range, wholeView, selectedSector, selectedCorner, zoomRange })
+const { focus, focusZone } = useFocusZone({ lap, reference: deltaReference, comparison, worst, range, wholeView, selectedSector, selectedCorner, zoomRange })
 function selectSector(index: number) {
   selectedCorner.value = null
   selectedSector.value = selectedSector.value === index ? null : index
@@ -447,7 +449,7 @@ const heat = deltaHeat
 function emptyTrace(): LapTraceView { return { gameId: 'acc', variant: null, sessionId: null, track: '', car: '', lapTimeS: 0, source: '', complete: false, valid: null, fuelL: null, conditions: null, gridStepM: 2, lengthM: 0, channels: {} } }
 // PIP-635: the time in the stretch you look at sits in the Delta header (Garage 61, Delta), fixed. 05/11 (user): the
 // number only - the strip above already names the stretch.
-const deltaRow = computed<ChartRow[]>(() => reference.value ? [{ key: 'delta', title: t('telemetry.rows.delta'), unit: 's', channels: [], delta: true, height: 70,
+const deltaRow = computed<ChartRow[]>(() => deltaReference.value ? [{ key: 'delta', title: t('telemetry.rows.delta'), unit: 's', channels: [], delta: true, height: 70,
   ...(stretchLoss.value !== null ? { note: formatDelta(stretchLoss.value), noteTone: stretchLoss.value > 0 ? 'loss' as const : stretchLoss.value < 0 ? 'gain' as const : null } : {}) }] : [])
 const speedRow: ChartRow = { key: 'speed', title: t('telemetry.rows.speed'), unit: 'km/h', channels: [{ name: 'speed_kmh' }], height: 100 }
 // One channel per chart: every chart shows only your line and the reference's.
@@ -465,7 +467,7 @@ const traceRows = computed(() => [speedRow, ...pedalRows, steerRow, gearRow])
 
 // PIP-619: air/road and grip of each lap (from the lap, else this session's laps): like for like.
 const sessionEntries = computed(() => entries.value.filter(e => e.origin === 'local' || e.origin === 'pilot'))
-const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Semplice on the whole session
+const zones = useSessionZones(computed(() => sessionEntries.value.filter(e => covers(e.id))), traces, corners) // PIP-645 (PIP-751: covering laps only)
 </script>
 
 <template>
@@ -499,6 +501,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
     </Teleport>
     <p v-if="linkError" class="analysis-note analysis-note--warn" role="alert">{{ linkError }}</p>
     <p v-if="refNote" class="analysis-note analysis-note--warn">{{ refNote }}</p>
+    <p v-if="coverageNote && !loading" class="analysis-note analysis-note--warn" role="status" data-testid="coverage-note">{{ coverageNote }}</p>
 
     <p v-if="skipped" class="analysis-note">{{ t('telemetry.skipped', { count: skipped }) }}</p>
     <TraceSkeleton v-if="loading" :height="traceHeight" :label="t('telemetry.loading')" />
@@ -515,13 +518,10 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
         <!-- 05/11 (user): no title ("Settore 1, 2, 3" already says it); each card stands out on its own ground. -->
         <section class="side-box side-box--sectors" :aria-label="t('telemetry.sectorsTitle')">
           <div v-if="sectorGaps.length" class="sector-rows" :class="{ 'has-active': selectedSector !== null && !zoomRange }">
-            <button v-for="(g, i) in sectorGaps" :key="i" type="button" class="sector-row" :class="{ active: selectedSector === i }" :title="t('telemetry.sectorTitle', { time: (g.ref / 1000).toFixed(3) })" @click="selectSector(i)">
-              <span class="sector-name">{{ t('telemetry.sectorN', { n: i + 1 }) }}</span>
-              <span class="sector-time">{{ (g.ref / 1000).toFixed(3) }}</span>
-              <span class="sector-gap corner-bar" :class="[`is-${deltaLevel(g.gap / 1000)}`, g.gap > 0 ? 'is-loss' : 'is-gain']">
-                <span class="corner-bar__fill" :style="{ width: `${deltaBars(sectorGaps.map(x => x.gap))[i]}%` }" />
-                <span class="corner-bar__value">{{ formatDelta(g.gap / 1000) }}</span>
-              </span>
+            <button v-for="(g, i) in sectorGaps" :key="i" type="button" class="sector-row" :class="{ active: selectedSector === i }" :title="sectorTip(g)" @click="selectSector(i)">
+              <span class="sector-name">{{ t('telemetry.sectorN', { n: i + 1 }) }}</span><span class="sector-time"><small class="sector-who">{{ t('telemetry.sectorYou') }}</small> {{ g.mine !== null ? (g.mine / 1000).toFixed(3) : '--' }}</span>
+              <span v-if="g.gap !== null" class="sector-gap corner-bar" :class="[`is-${deltaLevel(g.gap / 1000)}`, g.gap > 0 ? 'is-loss' : 'is-gain']">
+                <span class="corner-bar__fill" :style="{ width: `${deltaBars(sectorGaps.map(x => x.gap ?? 0))[i]}%` }" /><span class="corner-bar__value">{{ formatDelta(g.gap / 1000) }}</span></span>
             </button>
           </div>
           <p v-else class="analysis-note">{{ t('telemetry.noSectors') }}</p>
@@ -566,7 +566,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
             <SessionZonesCard v-else :insight="zones.insight.value" :selected="selectedCorner" :total-laps="zones.totalLaps.value" @select="selectCorner($event)" />
           </template>
         </UnderMapSlides>
-        <div v-if="reference && deltaPlace === 'centre'" ref="deltaWrap">
+        <div v-if="deltaReference && deltaPlace === 'centre'" ref="deltaWrap">
           <AnalysisCharts :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaHeight" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
         </div>
       </div>
@@ -577,7 +577,7 @@ const zones = useSessionZones(sessionEntries, traces, corners) // PIP-645: Sempl
         <TraceStrip :sectors="visibleSectors" :corners="visibleCorners" :selected-sector="selectedSector" :selected-corner="selectedCorner" :can-step="canStep"
           @sector="selectSector" @corner="selectCorner" @step="goStep" />
         <!-- 01/11: the delta first, fixed with the bar while the other charts scroll under it. -->
-        <AnalysisCharts v-if="reference && deltaPlace === 'top'" class="tracce-delta" :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaTopHeight" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
+        <AnalysisCharts v-if="deltaReference && deltaPlace === 'top'" class="tracce-delta" :lap="lap" :reference="reference" :rows="deltaRow" :range="range" :cursor="cursor" :ref-cursor="refCursor" :row-height="deltaTopHeight" :focus="focusZone" zoomable @hover="cursor = $event" @zoom="onZoom" />
         </div>
         <!-- 05/11 (user): the charts scroll in their own box under the strip and the delta, never behind them. -->
         <div ref="chartScroll" class="tracce-scroll">

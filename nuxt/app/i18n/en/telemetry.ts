@@ -28,7 +28,17 @@ export default {
     sectorsTitle: 'Track sectors',
     sectorN: 'Sector {n}',
     gapLabel: 'Gap',
-    sectorTitle: 'Reference {time} s · click to zoom',
+    // PIP-751: the box shows your time; the tooltip names both.
+    sectorYou: 'You',
+    sectorTitle: 'You {you} s · Reference {ref} s · click to zoom',
+    sectorTitleYou: 'You {you} s · click to zoom',
+    // PIP-751: a trace that does not cover its lap: no delta, segments or measured sectors from it.
+    coverage: {
+      you: 'Your lap trace does not cover its official ACC lap time ({gap} s off): the delta, segments and measured sectors are not shown. The gap above is the official one.',
+      ref: 'The reference trace does not cover its official ACC lap time ({gap} s off): the delta, segments and measured sectors are not shown. The gap above is the official one.',
+      both: 'Neither lap trace covers its official ACC lap time (up to {gap} s off): the delta, segments and measured sectors are not shown. The gap above is the official one.',
+      pair: 'The two traces do not add up with the official ACC times (the delta would end {gap} s away from the gap): the delta, segments and measured sectors are not shown. The gap above is the official one.',
+    },
     noSectors: 'Sector times not available for these laps.',
     lossTitle: 'Where you lose most',
     cornerHead: 'Segment',

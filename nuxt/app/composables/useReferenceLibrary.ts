@@ -17,6 +17,7 @@ import { pickReferences, type ReferenceConditions } from '~/services/telemetry/r
 import { loadPublicNickname } from '~/repositories/publicProfileRepository'
 import { noteFeatureUse } from '~/services/usage/featureUseNote'
 import { useI18n } from '~/i18n'
+import { traceCoversLap } from '~/services/telemetry/traceCoverage'
 
 /** One lap of the Telemetria menus. Only "local"/"pilot" laps of the shown session can be "Tu". */
 export interface Entry {
@@ -119,18 +120,21 @@ export function useReferenceLibrary(o: {
 
   /** The Giro ideale: your best sectors (this session and your faster laps here with this car), stitched. */
   function refreshIdeal() {
-    const pool = o.entries.value.filter(e => e.valid && e.complete && (e.origin === 'local' || e.origin === 'pilot'))
+    // PIP-751 (Codex 08/11): only traces that cover their lap: a short one would stitch sectors from the wrong
+    // places of the lap and give its time as the baseline.
+    const covers = (e: Entry) => !!o.traces.value[e.id] && traceCoversLap(o.traces.value[e.id]!).covers
+    const pool = o.entries.value.filter(e => e.valid && e.complete && (e.origin === 'local' || e.origin === 'pilot') && covers(e))
     const best = [...pool].sort((a, b) => a.lapTimeMs - b.lapTimeMs)[0]
     const bestTrace = best && o.traces.value[best.id]
     // dev.10 (user 05/11): one segment per corner (TrackTitan's theoretical lap), the sectors as fallback.
     const bounds = bestTrace ? segmentBounds(bestTrace, sectorBounds(bestTrace, o.sectorTimesOf(best)?.map(t => t ?? 0))) : null
-    const laps = bestTrace ? [bestTrace, ...pool.filter(e => e !== best).map(e => o.traces.value[e.id]).filter((t): t is LapTraceView => !!t), ...historyTraces] : []
+    const laps = bestTrace ? [bestTrace, ...pool.filter(e => e !== best).map(e => o.traces.value[e.id]).filter((t): t is LapTraceView => !!t), ...historyTraces.filter(t => traceCoversLap(t).covers)] : []
     const ideal = bounds ? stitchIdealLap(laps, bounds, MAX_JOIN_KMH) : null
     // Like for like (review): the potential is measured on the traces, start to finish, as the ideal lap is;
     // the official times of a lap and its trace can differ by a few hundredths at the line.
     const measured = laps.map(t => (channelAt(t, 'time_s', 1) ?? Infinity) - (channelAt(t, 'time_s', 0) ?? 0))
     const potentialS = ideal ? ideal.trace.lapTimeS - Math.min(...measured) : 0
-    const fastestMs = Math.min(...pool.map(e => e.lapTimeMs), ...o.entries.value.filter(e => e.origin === 'best' && !e.note).map(e => e.lapTimeMs))
+    const fastestMs = Math.min(...pool.map(e => e.lapTimeMs), ...o.entries.value.filter(e => e.origin === 'best' && !e.note && covers(e)).map(e => e.lapTimeMs))
     const wasIdeal = o.refId?.value === IDEAL_ID
     o.entries.value = o.entries.value.filter(e => e.id !== IDEAL_ID)
     // Worth showing only when it beats your best lap; when it is the best lap itself, the dialog says so.

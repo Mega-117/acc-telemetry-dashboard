@@ -27,7 +27,17 @@ export default {
     sectorsTitle: 'Settori della pista',
     sectorN: 'Settore {n}',
     gapLabel: 'Distacco',
-    sectorTitle: 'Riferimento {time} s · clic per ingrandire',
+    // PIP-751: the box shows your time; the tooltip names both.
+    sectorYou: 'Tu',
+    sectorTitle: 'Tu {you} s · Riferimento {ref} s · clic per ingrandire',
+    sectorTitleYou: 'Tu {you} s · clic per ingrandire',
+    // PIP-751: a trace that does not cover its lap: no delta, segments or measured sectors from it.
+    coverage: {
+      you: 'La traccia del tuo giro non copre il suo tempo ufficiale di ACC (scarto {gap} s): delta, segmenti e settori misurati non sono mostrati. Il distacco in alto è quello ufficiale.',
+      ref: 'La traccia del riferimento non copre il suo tempo ufficiale di ACC (scarto {gap} s): delta, segmenti e settori misurati non sono mostrati. Il distacco in alto è quello ufficiale.',
+      both: 'Le tracce dei due giri non coprono i tempi ufficiali di ACC (scarto fino a {gap} s): delta, segmenti e settori misurati non sono mostrati. Il distacco in alto è quello ufficiale.',
+      pair: 'Le due tracce non tornano con i tempi ufficiali di ACC (il delta finirebbe {gap} s lontano dal distacco): delta, segmenti e settori misurati non sono mostrati. Il distacco in alto è quello ufficiale.',
+    },
     noSectors: 'Tempi dei settori non disponibili per questi giri.',
     lossTitle: 'Dove perdi di più',
     cornerHead: 'Segmento',

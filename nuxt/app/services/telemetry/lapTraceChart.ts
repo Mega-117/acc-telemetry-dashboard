@@ -7,6 +7,7 @@
  */
 
 import { isGameId } from './gameIdentity'
+import { completeUnderPolicy } from './traceCoverage'
 
 export const LAP_TRACE_SCHEMA = 'acc.laptrace.v1'
 export const COMMON_LAP_TRACE_SCHEMA = 'racercore.laptrace.v1'
@@ -100,7 +101,8 @@ export function normalizeLapTrace(raw: unknown): LapTraceView | null {
     car: String(meta.car ?? ''),
     lapTimeS: Number(meta.lap_time_s) || 0,
     source: String(meta.source ?? ''),
-    complete: meta.complete === true,
+    // PIP-751: under the 'exclude' policy a trace that does not cover its lap counts as incomplete.
+    complete: completeUnderPolicy(meta.complete === true, { lapTimeS: Number(meta.lap_time_s) || 0, channels: out }),
     valid: typeof meta.valid === 'boolean' ? meta.valid : null,
     fuelL: typeof meta.fuel_l === 'number' && Number.isFinite(meta.fuel_l) ? meta.fuel_l : null,
     stintFuelL: typeof meta.extra?.stint_fuel_l === 'number' && Number.isFinite(meta.extra.stint_fuel_l) && meta.extra.stint_fuel_l >= 0 ? meta.extra.stint_fuel_l : null,

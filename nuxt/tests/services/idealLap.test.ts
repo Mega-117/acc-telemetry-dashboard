@@ -117,4 +117,15 @@ describe('useReferenceLibrary (PIP-646)', () => {
     await library.loadBestLaps(() => false, bridge, 'spa', 'bmw')
     expect(entries.value).toHaveLength(1)
   })
+  it('PIP-751: a trace that does not cover its lap (saved 1.7 s short) never feeds the ideal lap', () => {
+    // Lap b's trace runs 73.9 s for an official 75.6 s: its S2 and S3 look quicker than lap a's, which they were not.
+    const short = { ...lap([30.2, 19.3, 24.4]), lapTimeS: 75.6 }
+    const entries = ref<Entry[]>([
+      { id: 'a', lapNumber: 1, lapTimeMs: 75000, valid: true, complete: true, origin: 'local', sessionToken: 't' },
+      { id: 'b', lapNumber: 2, lapTimeMs: 75600, valid: true, complete: true, origin: 'local', sessionToken: 't' }])
+    const sectors: Record<string, number[]> = { a: [30000, 20000, 25000], b: [30200, 20300, 25100] }
+    const library = useReferenceLibrary({ entries, traces: ref({ a: lap([30, 20, 25]), b: short }), sessionToken: () => 't', sectorTimesOf: e => sectors[e.id] })
+    library.refreshIdeal()
+    expect(entries.value.some(e => e.id === 'ideal')).toBe(false)
+  })
 })
