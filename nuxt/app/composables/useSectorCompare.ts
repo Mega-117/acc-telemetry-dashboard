@@ -44,7 +44,8 @@ export function useSectorCompare(o: {
     // Measured on both traces at the same points: the gap stays like for like.
     const a = bounds.value && o.lap.value && o.reference.value ? measureSectorTimes(o.lap.value, bounds.value) : null
     const b = a && o.reference.value ? measureSectorTimes(o.reference.value, bounds.value!) : null
-    if (a && b) return b.map((t, i) => ({ mine: a[i]! * 1000, ref: t * 1000, gap: (a[i]! - t) * 1000 }))
+    // Your time stays ACC's when it exists (Codex 08/11): only the reference's and the like-for-like gap are measured.
+    if (a && b) return b.map((t, i) => ({ mine: mine?.[i] ?? a[i]! * 1000, ref: t * 1000, gap: (a[i]! - t) * 1000 }))
     // PIP-751: no comparable reference, your official times still say where your lap went.
     return mine ? mine.map(t => ({ mine: t, ref: null, gap: null })) : []
   })

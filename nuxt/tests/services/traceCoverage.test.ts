@@ -49,6 +49,8 @@ describe('traceCoversLap (PIP-751)', () => {
     const measured = useSectorCompare({ lap: ref(hunFast), reference: ref(hunSlow), lapTimes: ref(real.hun_l6.sectorTimesMs), refTimes: ref(null) })
     expect(measured.sectorGaps.value).toHaveLength(3)
     expect(Math.abs(measured.sectorGaps.value.reduce((s, g) => s + g.gap!, 0) / 1000 - header)).toBeLessThan(0.05)
+    // Codex 08/11: your times stay ACC's whatever reference is picked; only the gap is measured.
+    expect(measured.sectorGaps.value.map(g => g.mine)).toEqual(real.hun_l6.sectorTimesMs)
   })
 
   it('a quarter second is the rule, both ways; never stretched', () => {
