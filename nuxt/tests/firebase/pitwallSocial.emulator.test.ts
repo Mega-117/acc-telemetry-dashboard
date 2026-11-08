@@ -125,6 +125,36 @@ describe('social rooms with real Firebase rules', () => {
     expect((await A.publishOutcome(roomId, sent.value, { status: 'applied', method: 'mfd-v4', diary: 'verified' })).ok).toBe(true)
     expect((await get(ref(db, path))).val().result.diary).toBe('verified')
   })
+  it('PIP-747: a driver not at the wheel tells the room why, with the rules of the room presence', async () => {
+    const A = await participant('A'), B = await participant('B')
+    const created = await A.ensureRoomForVehicle({ fingerprint: '', label: 'Reason party' })
+    if (!created.ok) throw new Error(created.reason)
+    const roomId = created.value.roomId
+    await publish(A, roomId, true)
+    let bRooms: any[] = []
+    stops.push(B.watchRooms(value => { bRooms = value }))
+    await vi.waitFor(() => expect(bRooms).toHaveLength(1))
+    expect((await B.joinRoom(roomId)).ok).toBe(true); await publish(B, roomId)
+    let members: any[] = []
+    stops.push(B.watchMembers(roomId, value => { members = value }))
+    // The desktop of A is in an ACC menu: demoted to a plain member, it keeps the reason.
+    expect((await A.publishPresence(roomId, { nickname: 'A', kind: 'driver', driving: false, runtimeSessionId: 'A',
+      strategy: { fuelToAdd: 10 }, reasonCode: 'menu-open' })).ok).toBe(true)
+    await vi.waitFor(() => expect(members.find(member => member.uid === 'A')).toMatchObject({ kind: 'engineer', driverReason: 'menu-open' }))
+    // Back at the wheel: no reason left behind.
+    expect((await A.publishPresence(roomId, { nickname: 'A', kind: 'driver', driving: true, runtimeSessionId: 'A',
+      strategy: { fuelToAdd: 10 }, reasonCode: 'menu-open' })).ok).toBe(true)
+    await vi.waitFor(() => expect(members.find(member => member.uid === 'A')).toMatchObject({ kind: 'driver', driving: true, driverReason: null }))
+    const own = env.authenticatedContext('A', { email_verified: true }).database() as unknown as Database
+    const path = `${ROOT}/connections/A/${A.session.connectionId()}`
+    const current = (await get(ref(own, path))).val()
+    expect(current.reasonCode).toBeUndefined()
+    const write = (reasonCode: unknown) => set(ref(own, path), { ...current, reasonCode, updatedAt: serverTimestamp() })
+    await write('x'.repeat(40))
+    await assertFails(write('x'.repeat(41)))
+    await assertFails(write(7))
+    await assertFails(write(''))
+  })
   it('PIP-507: a V4 context computed in the box after a session change reaches the room when the driver drives again', async () => {
     const A = await participant('A')
     const created = await A.ensureRoomForVehicle({ fingerprint: '', label: 'Session change' })

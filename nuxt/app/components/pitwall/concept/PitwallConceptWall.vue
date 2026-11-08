@@ -21,6 +21,7 @@ import {
 } from "~/utils/pitwallConcept";
 import type { PitwallConceptMember, PitwallConceptPerson, PitwallConceptRace } from "~/utils/pitwallConcept";
 import { useI18n } from "~/i18n";
+import { describePitwallDriverReason } from "~/services/pitwall/pitwallDriverReason";
 
 const props = defineProps<{
   race: PitwallConceptRace;
@@ -103,8 +104,9 @@ const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
       <span
         class="pwc-chip"
         :class="member.driving ? 'is-always' : 'is-waiting'"
+        :title="!member.driving && member.online && member.driverReason ? describePitwallDriverReason(member.driverReason) : undefined"
       >
-        {{ member.driving ? t('pitwallConcept.wall.driving') : member.reconnecting ? t('pitwallConcept.wall.reconnecting') : member.connecting ? t('pitwallConcept.wall.connecting') : member.role === 'invited' ? describePitwallConceptMember(member) : t('pitwallConcept.wall.notReported') }}
+        {{ member.driving ? t('pitwallConcept.wall.driving') : member.reconnecting ? t('pitwallConcept.wall.reconnecting') : member.connecting ? t('pitwallConcept.wall.connecting') : member.role === 'invited' ? describePitwallConceptMember(member) : member.online && member.driverReason ? describePitwallDriverReason(member.driverReason, 'short') : t('pitwallConcept.wall.notReported') }}
       </span>
       <span class="pwc-person__actions">
         <button

@@ -1,4 +1,5 @@
 import type { PitwallRoom, PitwallRoomMember, PitwallRoomOrder } from './pitwallRoomContract'
+import { normalizePitwallDriverReason } from './pitwallDriverReason'
 
 export type RoomRole = 'manager' | 'member' | 'invited'
 export interface RealtimeRoomMeta {
@@ -25,6 +26,8 @@ export interface RealtimeConnection {
   updatedAt: number
   car?: string | null
   track?: string | null
+  /** PIP-747: why a desktop is not at the wheel (pitwallDriverReason.ts). Diagnostic only; old clients omit it. */
+  reasonCode?: string
 }
 export interface RealtimeMfd {
   uid: string
@@ -55,7 +58,9 @@ export function memberFromRealtime(connection: RealtimeConnection, mfd: Realtime
     // PIP-516: keep the two facts apart so the engineer sees why a driver cannot receive.
     inCar: connection.driving, sourceValid: connection.sourceValid,
     updatedAtMs: connection.updatedAt, protocolVersion: 3, connected: true, connectionId: connection.connectionId,
-    crew: ownMfd?.crew, strategy: ownMfd?.strategy }
+    crew: ownMfd?.crew, strategy: ownMfd?.strategy,
+    // PIP-747: shown only, never used to decide; a member at the wheel has no reason.
+    driverReason: connection.driving && connection.sourceValid ? null : normalizePitwallDriverReason(connection.reasonCode) }
 }
 
 export function activeDriver(connections: RealtimeConnection[]): RealtimeConnection | null {

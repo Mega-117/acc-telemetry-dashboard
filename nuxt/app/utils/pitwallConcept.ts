@@ -11,6 +11,7 @@
 //
 // Il modello si ri-esporta da qui, cosi' chi consuma il prototipo ha un import
 // solo. La direzione resta una: la logica conosce il modello, mai il contrario.
+import { describePitwallDriverReason } from '~/services/pitwall/pitwallDriverReason'
 import { PITWALL_SOCIAL_CAPACITY } from '~/services/pitwall/pitwallSocialRoom'
 import { useI18n } from '~/i18n'
 import {
@@ -465,6 +466,7 @@ export function describePitwallConceptMember(member: PitwallConceptMember): stri
   if (member.connecting) return t('pitwallConcept.member.connecting')
   if (member.driving) return t('pitwallConcept.member.driving')
   if (member.role === 'invited') return t('pitwallConcept.member.invited')
+  if (member.online && member.driverReason) return describePitwallDriverReason(member.driverReason, 'short')
   if (member.role === 'manager') return member.online ? t('pitwallConcept.member.manager') : t('pitwallConcept.member.managerOffline')
   return member.online ? t('pitwallConcept.member.present') : t('pitwallConcept.member.offline')
 }

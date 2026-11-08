@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 3ce723ffbf3ba0c96a8b337568dea274955e7326f47fd3d1453ab5a5d03012f5 -->
+<!-- Generated V4 online; SHA256 a72884529cb15102e70a8808aa35489538c846fd9c9b254bdfeb77869cc25678 -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -1115,7 +1115,14 @@ log('info','la prima volta, lettura della forma del menu — pensa lui.');
       globalThis.v4PresetObserved = null;
       globalThis.v4PresetCompleted = false;
       CREW = await api('/crew');
-      if (plan.driverId != null && (!CREW?.drivers?.[plan.driverId] || driverLabelV4(CREW.drivers[plan.driverId]) !== plan.driverName)) throw new Error('Equipaggio o nome pilota cambiato.');
+      // PIP-747: identity is the EntryList index inside the order's context, never the display name
+      // (names over 60 characters were cut on one side only). The runner's crew must be exactly the
+      // crew frozen in the context; stale or reordered crews are refused before any input.
+      if (plan.driverId != null) {
+        var crewKey = function (drivers) { return JSON.stringify((drivers || []).map(function (d) { return [d.first || '', d.last || '', d.short || '']; })); };
+        if (!Array.isArray(plan.expectedCrew) || !CREW?.drivers?.[plan.driverId] || crewKey(CREW.drivers) !== crewKey(plan.expectedCrew))
+          throw new Error('Equipaggio cambiato rispetto all’ordine: nessun input inviato.');
+      }
       document.getElementById('gap').value = plan.stepMs;
       var intent = { applyPitStrategy: plan.operation === 'preset', pitStrategy: plan.pitStrategy,
         fuel: plan.fuelLiters, changeTyre: plan.changeTyres, compound: plan.compound === 'wet' ? 'Wet' : 'Dry',

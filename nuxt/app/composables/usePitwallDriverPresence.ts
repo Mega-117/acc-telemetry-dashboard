@@ -1,3 +1,4 @@
+import { normalizePitwallDriverReason } from '~/services/pitwall/pitwallDriverReason'
 import { onScopeDispose, ref, watch, type Ref } from 'vue'
 import { PRODUCT } from '../../shared/productIdentity'
 import { db } from '~/config/firebase'
@@ -9,7 +10,7 @@ import type { PitwallDriverStatus, PitwallRoomDriverHandle } from '~/services/pi
 import { registerPitwallIntentControls, setPitwallIntentStatus } from '~/composables/usePitwallIntent'
 import { createSteadyDriving } from '~/services/pitwall/pitwallSteadyDriving'
 
-type LocalState = Awaited<ReturnType<NonNullable<PitwallDriverElectronApi['pitwallGetStrategyState']>>> & { driverState?: string }
+type LocalState = Awaited<ReturnType<NonNullable<PitwallDriverElectronApi['pitwallGetStrategyState']>>> & { driverState?: string, driverReasonCode?: string | null }
 interface Bridge extends PitwallDriverElectronApi {
   localIdentityRole?: string
   onLocalRuntimeAuthChanged?: (callback: () => void) => () => void
@@ -110,6 +111,10 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
         electronApi: bridge, bindMain: value => options.jobsEnabled.value
           ? bridge.pitwallSetRealtimeConnection!(value) : Promise.resolve(),
         readTrustedUids: async () => { await firstFriends; return friends },
+        // PIP-747: why this PC is not at the wheel, also when there is no vehicle to publish (menu, replay, stale data).
+        // An older desktop sends no field at all: no reason rather than a made-up "unknown".
+        readDriverReason: () => !local || local.driverState === 'driving' || !('driverReasonCode' in local) ? null
+          : normalizePitwallDriverReason(local.driverReasonCode) ?? 'unknown',
         readVehicle: async () => {
           const state = local
           const vehicle = state?.vehicle

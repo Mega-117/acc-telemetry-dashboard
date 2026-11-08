@@ -76,5 +76,18 @@ export default {
       unknown: 'Operazione non riuscita: riprova. Il motivo è nei log del Pitwall.',
       accessLost: 'Non hai più accesso a questa stanza: la tua partecipazione è scaduta oppure l’amico che te la mostrava è uscito.',
     },
+    // PIP-747: why the driver cannot receive a strategy (code from the desktop, pitwallDriverReason.ts).
+    driverReason: {
+      'profile-missing': { short: 'Nome ACC assente', help: 'Nome ACC assente: compila almeno il nome o il cognome nel profilo di ACC.' },
+      'broadcasting-unavailable': { short: 'Dati equipaggio assenti', help: 'ACC non manda i dati dell’equipaggio: controlla la configurazione UDP Broadcasting di ACC.' },
+      'identity-ambiguous': { short: 'Nome ACC ambiguo', help: 'Il nome ACC non si distingue nell’equipaggio: usa un nome diverso dai compagni.' },
+      'other-driver': { short: 'Guida un compagno', help: 'Sta guidando un compagno: manda la strategia al suo PC.' },
+      'menu-open': { short: 'Menu ACC aperto', help: 'Menu di ACC aperto (pausa, box o Setup): torna in abitacolo, poi reinvia.' },
+      'telemetry-stale': { short: 'Dati ACC fermi', help: 'I dati di ACC non arrivano aggiornati: controlla che Racer Core legga il gioco.' },
+      'game-not-live': { short: 'Non in pista', help: 'ACC non è in una sessione di guida: entra in pista.' },
+      replay: { short: 'Replay', help: 'ACC sta mostrando un replay: torna alla guida.' },
+      'human-control-unconfirmed': { short: 'Guida non confermata', help: 'ACC non conferma che la vettura sia guidata da te (non dall’IA): riprendi il controllo.' },
+      unknown: { short: 'Non disponibile', help: 'Il pilota non può ricevere la strategia adesso.' },
+    },
   },
 } as const

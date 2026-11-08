@@ -9,6 +9,7 @@ import { createPitwallChangePublisher } from './pitwallChangePublisher'
 import { roomFromRealtime, memberFromRealtime, type RealtimeConnection, type RealtimeMfd, type RealtimeRoomMeta, type RoomRole } from './pitwallRealtimeProtocol'
 import { createPitwallRealtimeTransport, type PitwallRealtimeTransport } from './pitwallRealtimeTransport'
 import { boundPitwallCrew, boundPitwallStrategy } from './pitwallLink'
+import { normalizePitwallDriverReason } from './pitwallDriverReason'
 import { PITWALL_MAX_ROOM_ALLOWED, PITWALL_VEHICLE_POINTER_TTL_MS, type PitwallRoom, type PitwallRoomMember, type PitwallVehiclePointer } from './pitwallRoomContract'
 import type { PitwallRoomResult } from './pitwallRoomOrders'
 
@@ -176,12 +177,14 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
     }
   }
 
-  async function publishPresence(roomId: string | null, input: { nickname: string, kind: 'driver' | 'engineer', driving: boolean, runtimeSessionId: string, crew?: unknown, strategy?: unknown, car?: string | null, track?: string | null }): Promise<PitwallRoomResult<true>> {
+  async function publishPresence(roomId: string | null, input: { nickname: string, kind: 'driver' | 'engineer', driving: boolean, runtimeSessionId: string, crew?: unknown, strategy?: unknown, car?: string | null, track?: string | null, reasonCode?: string | null }): Promise<PitwallRoomResult<true>> {
     try {
       if (stopped) throw new Error('Sessione Pitwall terminata.')
+      // PIP-747: a driver that is not at the wheel says why. Omitted (never undefined) when there is nothing to say.
+      const reasonCode = input.kind === 'driver' && !input.driving ? normalizePitwallDriverReason(input.reasonCode) : null
       const presence = { roomId, nickname: input.nickname.slice(0, 60), kind: input.kind, driving: input.driving,
         sourceValid: input.kind === 'driver' && input.strategy != null, runtimeSessionId: input.runtimeSessionId,
-        car: input.car ?? null, track: input.track ?? null }
+        car: input.car ?? null, track: input.track ?? null, ...(reasonCode ? { reasonCode } : {}) }
       if (input.kind === 'driver') driverPresence = presence
       else engineerPresence = presence
       if (input.kind === 'driver') {
@@ -196,25 +199,37 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
     } catch (error) { return failure(error) }
   }
 
+  function withoutReason<T extends { reasonCode?: string }>(value: T): Omit<T, 'reasonCode'> {
+    const { reasonCode: _reason, ...rest } = value
+    void _reason
+    return rest
+  }
+
   async function publishEffectivePresence() {
     if (stopped) return
     // The page owns membership; only a valid active driver may take execution priority.
     const driverActive = driverPresence?.roomId && driverPresence.driving && driverPresence.sourceValid
     const fallback = engineerPresence ?? driverPresence
+    // PIP-747: the demoted driver keeps saying why it is not at the wheel, but only in the room its driver
+    // presence belongs to (Codex: never label an engineer in another room, never after leaving/deactivating).
+    const { reasonCode: _ownReason, ...base } = fallback ?? {} as NonNullable<typeof fallback>
+    void _ownReason
+    const reasonCode = driverPresence?.reasonCode && driverPresence.roomId && driverPresence.roomId === fallback?.roomId
+      ? driverPresence.reasonCode : null
     localPresence = driverActive ? driverPresence : fallback
-      ? { ...fallback, kind: 'engineer', driving: false, sourceValid: false } : null
+      ? { ...base, kind: 'engineer', driving: false, sourceValid: false, ...(reasonCode ? { reasonCode } : {}) } : null
     if (localPresence) await session.update(localPresence)
   }
 
   async function clearPresence(roomId: string) {
     if (engineerPresence?.roomId === roomId) engineerPresence = { ...engineerPresence, roomId: null }
-    if (driverPresence?.roomId === roomId) driverPresence = { ...driverPresence, roomId: null, driving: false, sourceValid: false }
+    if (driverPresence?.roomId === roomId) driverPresence = { ...withoutReason(driverPresence), roomId: null, driving: false, sourceValid: false }
     mfdPublisher.reset(); mfdWanted = null
     await publishEffectivePresence()
   }
   async function deactivateDriver() {
     if (!driverPresence) return
-    driverPresence = { ...driverPresence, kind: 'engineer', roomId: null, driving: false, sourceValid: false }
+    driverPresence = { ...withoutReason(driverPresence), kind: 'engineer', roomId: null, driving: false, sourceValid: false }
     mfdPublisher.reset(); mfdWanted = null
     await publishEffectivePresence()
   }

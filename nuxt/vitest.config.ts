@@ -225,6 +225,8 @@ export default defineConfig({
         'app/services/pitwall/pitwallIoMetrics.ts',
         'app/services/pitwall/pitwallRealtimeProtocol.ts',
         'app/services/pitwall/pitwallSocialRoom.ts',
+        // PIP-747: the driver reason code, its normalization and its texts.
+        'app/services/pitwall/pitwallDriverReason.ts',
         'app/services/pitwall/pitwallDiagnostics.ts',
         'app/services/pitwall/pitwallSocialLifecycle.ts',
         // PIP-750: discovery split from the lifecycle; room error codes and their keys.

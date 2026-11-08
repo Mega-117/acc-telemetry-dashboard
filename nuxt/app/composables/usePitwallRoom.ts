@@ -229,7 +229,9 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     if (!current) return []
     const byUid = new Map<string, PitwallRoomMember>()
     for (const member of members.value) {
-      if (!byUid.has(member.uid) || member.kind === 'driver') byUid.set(member.uid, member)
+      const known = byUid.get(member.uid)
+      // PIP-747: a desktop that explains why it is not at the wheel beats a plain browser presence.
+      if (!known || member.kind === 'driver' || (known.kind !== 'driver' && member.driverReason && !known.driverReason)) byUid.set(member.uid, member)
     }
     const rows: PitwallCrewRow[] = current.memberUids.map((uid) => {
       const presence = byUid.get(uid)
@@ -246,6 +248,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
           || roomDriving.value.conflicting.some(member => member.uid === uid),
         invited: false,
         isSelf: uid === myUid.value,
+        driverReason: isPitwallMemberFresh(presence, nowTick.value) && presence?.driverReason ? presence.driverReason : null,
       }
     })
     for (const uid of current.allowedUids) {

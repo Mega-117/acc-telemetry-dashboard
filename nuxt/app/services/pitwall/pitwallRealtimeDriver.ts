@@ -6,6 +6,8 @@ import { PITWALL_SOCIAL_ROOT } from './pitwallSocialRoom'
 
 type Options = Pick<PitwallRoomDriverOptions, 'uid' | 'nickname' | 'runtimeSessionId' | 'electronApi' | 'readVehicle' | 'readTrustedUids' | 'onStatus'> & {
   service: PitwallRealtimeRoomService
+  /** PIP-747: the desktop's reason code when this PC is not at the wheel (diagnostic only). */
+  readDriverReason?: () => string | null
   bindMain: (value: { connectionId: string, roomId: string | null, online: boolean }) => Promise<unknown>
 }
 
@@ -157,7 +159,7 @@ export function startPitwallRealtimeDriver(options: Options): PitwallRoomDriverH
     }
     const presence = await rooms.publishPresence(room?.roomId ?? null, { nickname: options.nickname, kind: 'driver',
       runtimeSessionId: options.runtimeSessionId, driving: vehicle?.driving ?? false, crew: vehicle?.crew, strategy: vehicle?.strategy,
-      car: vehicle?.label, track: vehicle?.track })
+      car: vehicle?.label, track: vehicle?.track, reasonCode: vehicle?.driving ? null : options.readDriverReason?.() ?? null })
     if (!presence.ok) reason = presence.reason
     else reason = wanted && !room ? 'Si apre appena ACC e la vettura sono disponibili.'
       // PIP-701: the pilot hears it too, not only the engineer.

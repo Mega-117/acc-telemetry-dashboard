@@ -115,6 +115,7 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
         online: row.online,
         connecting: row.connecting,
         reconnecting: row.reconnecting,
+        ...(!row.driving && row.driverReason ? { driverReason: row.driverReason } : {}),
       }))
     }
     return [

@@ -197,6 +197,12 @@ social["admissions"] = {
 social["connections"]["$uid"][".read"] = (
     f"{verified} && (auth.uid == $uid || {friends('auth.uid','$uid')})"
 )
+# PIP-747: why a desktop is not at the wheel, a short code (pitwallDriverReason.ts). Diagnostic
+# only: no rule reads it. Optional, so clients that omit it keep working; the rules before this
+# one already tolerated it (no $other on the connection).
+social["connections"]["$uid"]["$connection"]["reasonCode"] = {
+    ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 40"
+}
 
 # MFD snapshots are now per account and runtime connection.
 mfd = rooms["mfd"]

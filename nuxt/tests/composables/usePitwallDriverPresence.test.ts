@@ -94,4 +94,15 @@ describe('Pitwall presence on demand', () => {
     expect(vehicle).toEqual({ fingerprint: null, label: 'Gara in corso', track: 'hungaroring', driving: true,
       crew: null, strategy: { ...car, fittedTyreSet: 3 } })
   })
+  it('PIP-747: the desktop reason reaches the presence even without a vehicle (menu, replay, stale data)', async () => {
+    const state = { live: false, fresh: false, driverState: 'offline', driverReasonCode: 'replay' }
+    ;(window as unknown as { electronAPI: { pitwallGetStrategyState: unknown } }).electronAPI.pitwallGetStrategyState = vi.fn(async () => state)
+    start(ref(true)); await settle()
+    const options = f.driver.mock.calls[0]![0]
+    expect(await options.readVehicle()).toBeNull()
+    expect(options.readDriverReason()).toBe('replay')
+    // An older desktop without the field: no invented reason.
+    delete (state as { driverReasonCode?: string }).driverReasonCode
+    expect(options.readDriverReason()).toBeNull()
+  })
 })

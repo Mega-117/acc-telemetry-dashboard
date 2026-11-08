@@ -259,7 +259,8 @@ describe('fotografia della vettura nella presenza', () => {
     })))
     expect(crew).toHaveLength(16)
     expect(crew?.[2]?.current).toBe(true)
-    expect(crew?.[0]?.name.length).toBeLessThanOrEqual(60)
+    // PIP-747: display only, bounded; the order no longer compares names (EntryList index).
+    expect(crew?.[0]?.name.length).toBeLessThanOrEqual(160)
   })
 
   it('senza equipaggio non si inventa una lista', () => {

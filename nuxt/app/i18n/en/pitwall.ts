@@ -76,5 +76,18 @@ export default {
       unknown: 'The operation did not succeed: try again. The reason is in the Pitwall logs.',
       accessLost: 'You no longer have access to this room: your participation expired, or the friend who showed it to you has left.',
     },
+    // PIP-747: why the driver cannot receive a strategy (code from the desktop, pitwallDriverReason.ts).
+    driverReason: {
+      'profile-missing': { short: 'ACC name missing', help: 'ACC name missing: enter at least a first or last name in your ACC profile.' },
+      'broadcasting-unavailable': { short: 'Crew data missing', help: 'ACC is not sending the crew data: check ACC’s UDP Broadcasting configuration.' },
+      'identity-ambiguous': { short: 'ACC name ambiguous', help: 'Your ACC name cannot be told apart in the crew: use a name different from your teammates.' },
+      'other-driver': { short: 'Teammate driving', help: 'A teammate is driving: send the strategy to their computer.' },
+      'menu-open': { short: 'ACC menu open', help: 'ACC menu open (pause, pit box or Setup): go back to the cockpit, then send again.' },
+      'telemetry-stale': { short: 'ACC data stale', help: 'ACC data is not up to date: check that Racer Core is reading the game.' },
+      'game-not-live': { short: 'Not on track', help: 'ACC is not in a driving session: go on track.' },
+      replay: { short: 'Replay', help: 'ACC is showing a replay: go back to driving.' },
+      'human-control-unconfirmed': { short: 'Driving not confirmed', help: 'ACC does not confirm that you (not the AI) control the car: take control again.' },
+      unknown: { short: 'Unavailable', help: 'The driver cannot receive a strategy right now.' },
+    },
   },
 } satisfies PartialDictionary

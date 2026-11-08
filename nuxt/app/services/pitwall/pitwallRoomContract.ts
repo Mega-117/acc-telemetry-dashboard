@@ -1,3 +1,4 @@
+import type { PitwallDriverReasonCode } from './pitwallDriverReason'
 // ============================================
 // Contratto della Race Room, lato frontend.
 //
@@ -163,6 +164,8 @@ export interface PitwallRoomMember {
   updatedAtMs: number
   crew?: unknown
   strategy?: unknown
+  /** PIP-747: why this desktop is not at the wheel (pitwallDriverReason.ts). Shown only, never authorizes. */
+  driverReason?: PitwallDriverReasonCode | null
 }
 
 export interface PitwallRoomOrder {
@@ -512,4 +515,6 @@ export interface PitwallCrewRow {
   /** Invitato ma non ancora entrato. */
   invited: boolean
   isSelf: boolean
+  /** PIP-747: perche' il suo PC non e' al volante (solo se presente e non in guida). */
+  driverReason?: PitwallDriverReasonCode | null
 }

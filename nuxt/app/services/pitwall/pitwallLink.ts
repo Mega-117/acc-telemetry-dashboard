@@ -229,7 +229,8 @@ export function boundPitwallCrew(crew: unknown): PitwallCrewMember[] | null {
     const entry = member as { driverIndex?: unknown, name?: unknown, current?: unknown }
     return {
       driverIndex: Number.isInteger(entry?.driverIndex) ? entry.driverIndex as number : index,
-      name: String(entry?.name ?? '').slice(0, 60),
+      // PIP-747: display only (the order chooses the driver by EntryList index); ACC names are at most 32+32.
+      name: String(entry?.name ?? '').slice(0, 160),
       current: entry?.current === true,
     }
   })

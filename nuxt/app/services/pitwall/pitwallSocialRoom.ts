@@ -1,3 +1,4 @@
+import { describePitwallDriverReason, type PitwallDriverReasonCode } from './pitwallDriverReason'
 /** Social lifetime is independent of ACC availability and car identity. */
 export const PITWALL_SOCIAL_ROOT = 'pitwallRoomsV1'
 export const PITWALL_RECONNECT_GRACE_MS = 30_000
@@ -48,7 +49,7 @@ export function eligibleSocialDrivers<T extends { uid: string, connectionId?: st
   return drivers.filter(member => counts.get(member.uid) === 1)
 }
 
-export type DriverReceiveState = 'ready' | 'menu' | 'not-connected' | 'offline' | 'applying' | 'none'
+export type DriverReceiveState = 'ready' | 'menu' | 'not-ready' | 'not-connected' | 'offline' | 'applying' | 'none'
 export interface RoomOrderInFlight { orderId: string, targetUid: string, senderUid: string, status: 'pending' | 'applying' }
 
 /**
@@ -57,18 +58,27 @@ export interface RoomOrderInFlight { orderId: string, targetUid: string, senderU
  * physics; menus, ESC and the setup screen are not driving. One order at a
  * time per room: an order already on its way blocks the next one.
  */
-export function driverReceiveState<T extends { uid: string, nickname: string, kind: string, driving: boolean, inCar?: boolean, sourceValid?: boolean }>(
+export function driverReceiveState<T extends { uid: string, nickname: string, kind: string, driving: boolean, inCar?: boolean, sourceValid?: boolean, driverReason?: PitwallDriverReasonCode | null }>(
   freshMembers: T[], allMembers: T[], selectedUid: string | null, inFlight: RoomOrderInFlight | null,
-): { state: DriverReceiveState, label: string, uid: string | null } {
+  describe: (code: PitwallDriverReasonCode) => string = code => describePitwallDriverReason(code),
+): { state: DriverReceiveState, label: string, uid: string | null, reasonCode?: PitwallDriverReasonCode } {
   const name = (uid: string | null) => allMembers.find(member => member.uid === uid)?.nickname || 'il pilota'
   if (inFlight) return { state: 'applying', label: `Strategia in corso verso ${name(inFlight.targetUid)}`, uid: inFlight.targetUid }
   const drivers = (list: T[]) => list.filter(member => member.kind === 'driver' && (!selectedUid || member.uid === selectedUid))
   const fresh = drivers(freshMembers)
   const target = fresh.find(member => member.driving) ?? (fresh.length === 1 ? fresh[0] : null)
   if (target?.driving) return { state: 'ready', label: `${target.nickname}: può ricevere la strategia`, uid: target.uid }
+  // PIP-747: the driver's desktop says why it cannot receive (menu, one-name profile, UDP, teammate...).
+  const explained = (member: T, code: PitwallDriverReasonCode) => ({ state: code === 'menu-open' ? 'menu' as const : 'not-ready' as const,
+    label: `${member.nickname}: ${describe(code)}`, uid: member.uid, reasonCode: code })
+  if (target?.driverReason) return explained(target, target.driverReason)
   if (target && target.sourceValid === false) return { state: 'not-connected', label: `${target.nickname}: gioco non collegato`, uid: target.uid }
   if (target) return { state: 'menu', label: `${target.nickname} non è in guida: invio possibile quando torna in pista`, uid: target.uid }
   if (fresh.length > 1) return { state: 'none', label: 'Più piloti nella stanza: scegli il destinatario', uid: null }
+  // A desktop that is not at the wheel publishes itself as a plain member, with its reason.
+  const waiting = freshMembers.filter(member => member.kind !== 'driver' && member.driverReason && (!selectedUid || member.uid === selectedUid))
+  const [single] = waiting
+  if (waiting.length === 1 && single?.driverReason) return explained(single, single.driverReason)
   const known = drivers(allMembers)
   if (known.length) return { state: 'offline', label: `${known[0]!.nickname} è offline`, uid: known[0]!.uid }
   return { state: 'none', label: 'Nessun pilota nella stanza', uid: null }

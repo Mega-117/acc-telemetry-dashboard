@@ -1,3 +1,4 @@
+import type { PitwallDriverReasonCode } from '~/services/pitwall/pitwallDriverReason'
 // Il modello del Pit Wall Concept: i tipi e i dati di partenza.
 //
 // Tipi e fixture stanno insieme perche' descrivono la stessa cosa - com'e'
@@ -53,6 +54,8 @@ export interface PitwallConceptMember {
   /** Ha il volante adesso: lo dice ACC, non un bottone. */
   driving: boolean
   online: boolean
+  /** PIP-747: perche' il suo PC non e' al volante, detto dal PC stesso (codice stabile). */
+  driverReason?: PitwallDriverReasonCode | null
 }
 
 /** Perche' questa gara ti compare senza che tu abbia fatto niente. */
