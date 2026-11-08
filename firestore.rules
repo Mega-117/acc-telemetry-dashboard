@@ -621,15 +621,25 @@ service cloud.firestore {
     }
 
     // PIP-757: the introduction seen by the account, on any PC. Small and closed: the version (a whole
-    // number, 1..1000) and when (a server timestamp). Re-validated on every owner update, like consent.
+    // number, 1..1000), when (a server timestamp) and how it was seen (by itself, from Impostazioni, or
+    // carried from an old copy on a PC). Re-validated on every owner update, like consent.
     function validOnboarding(onboarding) {
       return onboarding is map
-             && onboarding.keys().hasOnly(['seenVersion', 'seenAt'])
-             && onboarding.keys().hasAll(['seenVersion', 'seenAt'])
+             && onboarding.keys().hasOnly(['seenVersion', 'seenAt', 'how'])
+             && onboarding.keys().hasAll(['seenVersion', 'seenAt', 'how'])
              && onboarding.seenVersion is int
              && onboarding.seenVersion >= 1
              && onboarding.seenVersion <= 1000
-             && onboarding.seenAt is timestamp;
+             && onboarding.seenAt is timestamp
+             && onboarding.how in ['auto', 'manual', 'unknown'];
+    }
+
+    // PIP-757: once recorded, the version never goes down nor disappears (a slower client cannot
+    // overwrite a higher version saved meanwhile). Profiles without it stay free to update.
+    function onboardingNeverLowered() {
+      return !resource.data.keys().hasAny(['onboarding'])
+             || (request.resource.data.keys().hasAny(['onboarding'])
+                 && request.resource.data.onboarding.seenVersion >= resource.data.onboarding.get('seenVersion', 0));
     }
 
     // Decision 27/10: instant notification bell. A small pointer written by the sender into the recipient's
@@ -694,6 +704,7 @@ service cloud.firestore {
              ])
              && (!request.resource.data.keys().hasAny(['consent']) || validConsent(request.resource.data.consent))
              && (!request.resource.data.keys().hasAny(['onboarding']) || validOnboarding(request.resource.data.onboarding))
+             && onboardingNeverLowered()
              && request.resource.data.get('role', null) == resource.data.get('role', null)
              && request.resource.data.get('coachId', null) == resource.data.get('coachId', null)
              && request.resource.data.get('createdAt', null) == resource.data.get('createdAt', null)

@@ -13,6 +13,10 @@ const mock = await vi.hoisted(async () => {
     offline: false,
     denied: false,
     notes: [] as unknown[],
+    // A profile read that waits until released (Codex 4 and 5).
+    slow: false,
+    waiting: [] as Array<() => void>,
+    release() { for (const resolve of this.waiting.splice(0)) resolve() },
   }
 })
 vi.mock('~/composables/useFirebaseAuth', () => ({ useFirebaseAuth: () => ({ currentUser: mock.currentUser }) }))
@@ -20,18 +24,31 @@ vi.mock('~/config/firebase', () => ({ db: {} }))
 vi.mock('firebase/firestore', () => ({ doc: (_db: unknown, ...path: string[]) => ({ path: path.join('/') }), serverTimestamp: () => 'SERVER_TIME' }))
 vi.mock('~/repositories/ownerDocumentRepository', () => ({
   loadOwnerDocument: vi.fn(async (uid: string) => {
+    if (mock.slow) await new Promise<void>(resolve => mock.waiting.push(resolve))
     if (mock.offline) throw new Error('unavailable')
     const data = mock.profiles.get(uid) ?? null
     return { uid, exists: !!data, data, revision: null, readAt: 0 }
   }),
   rememberOwnerDocumentPatch: vi.fn(),
 }))
+// The real transaction code (onboardingProfile.ts) over an in-memory profile.
 vi.mock('~/composables/useFirebaseTracker', () => ({
-  trackedUpdateDoc: vi.fn(async (ref: { path: string }, patch: Record<string, unknown>) => {
+  trackedRunTransaction: vi.fn(async (_db: unknown, _caller: string, _ref: unknown, update: (tx: unknown) => Promise<unknown>) => {
     if (mock.offline) throw new Error('unavailable')
-    if (mock.denied) throw new Error('permission-denied')
-    const uid = ref.path.split('/')[1]!
-    mock.profiles.set(uid, { ...(mock.profiles.get(uid) ?? {}), ...patch })
+    let pending: [string, Record<string, unknown>] | null = null
+    const result = await update({
+      get: async (ref: { path: string }) => {
+        const data = mock.profiles.get(ref.path.split('/')[1]!)
+        return { exists: () => !!data, data: () => data }
+      },
+      update: (ref: { path: string }, patch: Record<string, unknown>) => { pending = [ref.path.split('/')[1]!, patch] },
+    })
+    if (pending) {
+      if (mock.denied) throw new Error('permission-denied')
+      const [uid, patch] = pending as [string, Record<string, unknown>]
+      mock.profiles.set(uid, { ...(mock.profiles.get(uid) ?? {}), ...patch })
+    }
+    return result
   }),
 }))
 vi.mock('~/services/usage/featureUseNote', () => ({ noteFeatureUse: (note: unknown) => mock.notes.push(note) }))
@@ -50,6 +67,8 @@ beforeEach(() => {
   mock.offline = false
   mock.denied = false
   mock.notes.length = 0
+  mock.slow = false
+  mock.waiting.length = 0
   vi.stubGlobal('useState', (key: string, init: () => unknown) => {
     if (!states.has(key)) states.set(key, ref(init()))
     return states.get(key)!
@@ -65,7 +84,7 @@ describe('useOnboardingIntro (PIP-571 / PIP-757)', () => {
     expect(intro.startPhase.value).toBe('tour')
     await flush()
     expect(seen('u1')).toBe(3)
-    expect((mock.profiles.get('u1')!.onboarding as { seenAt: unknown }).seenAt).toBe('SERVER_TIME')
+    expect(mock.profiles.get('u1')!.onboarding).toEqual({ seenVersion: 3, seenAt: 'SERVER_TIME', how: 'auto' })
     expect(readLocalSeenVersion(window.localStorage, 'u1')).toBe(3)
     expect(mock.notes).toEqual([{ event: 'onboarding.opened', reason: 1, remote: 1 }])
     intro.close()
@@ -101,8 +120,8 @@ describe('useOnboardingIntro (PIP-571 / PIP-757)', () => {
     window.localStorage.setItem('racercore.onboarding.seen.v3:u7:inst-a', 'commands-pending')
     expect(await useOnboardingIntro().showIfFirstTime()).toBe(false)
     await flush()
-    // Nothing pending from this PC (the old key never asked for it): the profile stays as it is.
-    expect(seen('u7')).toBeUndefined()
+    // Codex 1: the old key is carried to the profile, so a new PC does not show it again.
+    expect(mock.profiles.get('u7')!.onboarding).toMatchObject({ seenVersion: 3, how: 'unknown' })
   })
 
   it('offline or rules not published: this PC decides and remembers; no loop', async () => {
@@ -153,6 +172,32 @@ describe('useOnboardingIntro (PIP-571 / PIP-757)', () => {
     await intro.showIfFirstTime()
     intro.abandon()
     expect(intro.visible.value).toBe(false)
+  })
+
+  it('Codex 4: a read cancelled by a logout does not block the same account logging back in', async () => {
+    mock.currentUser.value = { uid: 'u1' }; mock.profiles.set('u1', {}); mock.slow = true
+    const intro = useOnboardingIntro()
+    const first = intro.showIfFirstTime()
+    mock.currentUser.value = null
+    mock.release()
+    expect(await first).toBe(false)
+    mock.currentUser.value = { uid: 'u1' }
+    const second = intro.showIfFirstTime()
+    await flush(); mock.release()
+    expect(await second).toBe(true)
+    // Decided now: not a third time in this session.
+    expect(await intro.showIfFirstTime()).toBe(false)
+  })
+
+  it('Codex 5: opened and closed by hand while the profile loads: the automatic one does not open it again', async () => {
+    mock.currentUser.value = { uid: 'u1' }; mock.profiles.set('u1', {}); mock.slow = true
+    const intro = useOnboardingIntro()
+    const auto = intro.showIfFirstTime()
+    await intro.open(); intro.close()
+    mock.release(); await flush(); mock.release()
+    expect(await auto).toBe(false)
+    expect(intro.visible.value).toBe(false)
+    expect(await intro.showIfFirstTime()).toBe(false)
   })
 
   it('the account changing while the profile loads shows nothing for the old one', async () => {

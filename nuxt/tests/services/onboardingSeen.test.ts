@@ -1,17 +1,21 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  createOnboardingMemory,
   decideOnboarding,
   evaluateOnboarding,
+  localSeen,
   markOnboardingSeen,
   ONBOARDING_VERSION,
-  profileSeenVersion,
+  profileSeen,
   readLocalSeenVersion,
   readWithin,
   REMOTE_TIMEOUT_MS,
   syncOnboardingRemote,
   writeLocalSeenVersion,
   type OnboardingDeps,
+  type OnboardingMemory,
   type OnboardingNote,
+  type SeenHow,
 } from '~/services/onboarding/onboardingSeen'
 
 /** One PC's localStorage. */
@@ -26,25 +30,37 @@ function memoryStorage() {
     get length() { return map.size },
   }
 }
+/** A storage that is full or blocked: reads nothing back, refuses every write. */
+const fullStorage = () => ({ getItem: () => null, setItem: () => { throw new Error('QuotaExceededError') }, removeItem: () => {}, key: () => null, length: 0 })
 
 /** The account profile `users/{uid}`, shared by every PC; `rules: false` = rules not published yet. */
-function profile(seenVersion = 0, { online = true, rules = true } = {}) {
-  return { seenVersion, online, rules, writes: 0 }
+function profile(version = 0, how: SeenHow | null = version ? 'auto' : null, { online = true, rules = true } = {}) {
+  return { version, how, online, rules, writes: 0 }
 }
 type Profile = ReturnType<typeof profile>
 
-function deps(storage: ReturnType<typeof memoryStorage> | null, account: Profile, notes: OnboardingNote[] = [], current = () => true): OnboardingDeps {
+/** One PC: its storage and this app session's memory (a relaunch is a new memory, same storage). */
+type Pc = { storage: OnboardingDeps['storage'], memory: OnboardingMemory }
+function pc(storage: OnboardingDeps['storage'] = memoryStorage()): Pc { return { storage, memory: createOnboardingMemory() } }
+const relaunch = (machine: Pc): Pc => ({ storage: machine.storage, memory: createOnboardingMemory() })
+
+function deps(machine: Pc, account: Profile, notes: OnboardingNote[] = [], current = () => true): OnboardingDeps {
   return {
-    storage,
+    storage: machine.storage,
+    memory: machine.memory,
     readRemote: async () => {
       if (!account.online) throw new Error('unavailable')
-      return account.seenVersion
+      return { version: account.version, how: account.how }
     },
-    writeRemote: async (version) => {
+    // Like saveOnboardingSeen: a transaction that never lowers the version.
+    writeRemote: async (version, how) => {
       if (!account.online) throw new Error('unavailable')
       if (!account.rules) throw new Error('permission-denied')
+      if (account.version >= version) return { written: false, profile: { version: account.version, how: account.how } }
       account.writes++
-      account.seenVersion = version
+      account.version = version
+      account.how = how
+      return { written: true, profile: { version, how } }
     },
     note: note => notes.push(note),
     isCurrent: current,
@@ -66,13 +82,14 @@ describe('onboardingSeen: the rule (PIP-757)', () => {
     expect(decideOnboarding(1, 2)).toEqual({ show: true, reason: 'newVersion', seen: 2 })
   })
 
-  it('reads the profile version, ignoring malformed values', () => {
-    expect(profileSeenVersion({ onboarding: { seenVersion: 3, seenAt: 'x' } })).toBe(3)
-    expect(profileSeenVersion({})).toBe(0)
-    expect(profileSeenVersion(null)).toBe(0)
-    expect(profileSeenVersion({ onboarding: { seenVersion: '3' } })).toBe(0)
-    expect(profileSeenVersion({ onboarding: { seenVersion: 2.5 } })).toBe(0)
-    expect(profileSeenVersion({ onboarding: { seenVersion: 5000 } })).toBe(0)
+  it('reads the profile record, ignoring malformed values', () => {
+    expect(profileSeen({ onboarding: { seenVersion: 3, seenAt: 'x', how: 'manual' } })).toEqual({ version: 3, how: 'manual' })
+    expect(profileSeen({ onboarding: { seenVersion: 3, how: 'other' } })).toEqual({ version: 3, how: null })
+    expect(profileSeen({})).toEqual({ version: 0, how: null })
+    expect(profileSeen(null)).toEqual({ version: 0, how: null })
+    expect(profileSeen({ onboarding: { seenVersion: '3', how: 'auto' } })).toEqual({ version: 0, how: null })
+    expect(profileSeen({ onboarding: { seenVersion: 2.5 } }).version).toBe(0)
+    expect(profileSeen({ onboarding: { seenVersion: 5000 } }).version).toBe(0)
   })
 
   it('maps the old per-installation keys of this account to their version, never lowers the copy', () => {
@@ -105,125 +122,181 @@ describe('onboardingSeen: the rule (PIP-757)', () => {
     await expect(slow).resolves.toBeNull()
     vi.useRealTimers()
     await expect(readWithin(async () => { throw new Error('offline') })).resolves.toBeNull()
-    await expect(readWithin(async () => 2)).resolves.toBe(2)
+    await expect(readWithin(async () => ({ version: 2, how: null }))).resolves.toEqual({ version: 2, how: null })
   })
 })
 
 describe('onboardingSeen: the launches (PIP-757)', () => {
-  it('a new account sees it once: recorded on this PC and in the profile at once', async () => {
-    const pc = memoryStorage(), account = profile(), notes: OnboardingNote[] = []
-    expect(await evaluateOnboarding('u1', deps(pc, account, notes))).toBe('firstTime')
+  it('a new account sees it once: recorded on this PC and in the profile at once, as an automatic open', async () => {
+    const machine = pc(), account = profile(), notes: OnboardingNote[] = []
+    expect(await evaluateOnboarding('u1', deps(machine, account, notes))).toBe('firstTime')
     await flush()
-    expect(account.seenVersion).toBe(3)
-    expect(readLocalSeenVersion(pc, 'u1')).toBe(3)
+    expect(account).toMatchObject({ version: 3, how: 'auto' })
+    expect(readLocalSeenVersion(machine.storage, 'u1')).toBe(3)
     expect(notes).toEqual([{ event: 'onboarding.opened', reason: 1, remote: 1 }])
-    expect(await evaluateOnboarding('u1', deps(pc, account, notes))).toBeNull()
+    expect(await evaluateOnboarding('u1', deps(relaunch(machine), account, notes))).toBe('closed')
   })
 
   it('an account that saw v2 (old key on this PC) sees v3 once, then never', async () => {
-    const pc = memoryStorage(), account = profile(), notes: OnboardingNote[] = []
-    pc.setItem('racercore.onboarding.seen.v2:u1:inst-a', '1')
-    expect(await evaluateOnboarding('u1', deps(pc, account, notes))).toBe('newVersion')
+    const machine = pc(), account = profile(), notes: OnboardingNote[] = []
+    machine.storage!.setItem('racercore.onboarding.seen.v2:u1:inst-a', '1')
+    expect(await evaluateOnboarding('u1', deps(machine, account, notes))).toBe('newVersion')
     await flush()
     expect(notes[0]).toEqual({ event: 'onboarding.opened', reason: 2, remote: 1 })
-    expect(await evaluateOnboarding('u1', deps(pc, account, notes))).toBeNull()
+    expect(await evaluateOnboarding('u1', deps(relaunch(machine), account, notes))).toBe('closed')
     // The profile alone saying v2 also counts as a new version.
-    expect(await evaluateOnboarding('u2', deps(memoryStorage(), profile(2)))).toBe('newVersion')
+    expect(await evaluateOnboarding('u2', deps(pc(), profile(2)))).toBe('newVersion')
   })
 
   it('an account that saw v3 on another PC does not see it on a new PC (the old per-installation key would)', async () => {
-    const newPc = memoryStorage(), account = profile(3), notes: OnboardingNote[] = []
-    expect(await evaluateOnboarding('u1', deps(newPc, account, notes))).toBeNull()
+    const newPc = pc(), account = profile(3), notes: OnboardingNote[] = []
+    expect(await evaluateOnboarding('u1', deps(newPc, account, notes))).toBe('closed')
     expect(notes).toEqual([{ event: 'onboarding.skipped', remote: 3 }])
-    expect(readLocalSeenVersion(newPc, 'u1')).toBe(3) // next launch decides without waiting
+    expect(readLocalSeenVersion(newPc.storage, 'u1')).toBe(3) // next launch decides without waiting
     expect(account.writes).toBe(0)
   })
 
+  it('Codex 1: an old v3 key on this PC is carried to the profile, so a new PC does not show it again', async () => {
+    const oldPc = pc(), account = profile()
+    oldPc.storage!.setItem('racercore.onboarding.seen.v3:u1:inst-a', '1')
+    expect(await evaluateOnboarding('u1', deps(oldPc, account))).toBe('closed')
+    await flush()
+    expect(account).toMatchObject({ version: 3, how: 'unknown' })
+    expect(await evaluateOnboarding('u1', deps(pc(), account))).toBe('closed')
+  })
+
   it('without network: this PC decides alone; the profile is written at a later launch', async () => {
-    const pc = memoryStorage(), account = profile(0, { online: false }), notes: OnboardingNote[] = []
-    expect(await evaluateOnboarding('u1', deps(pc, account, notes))).toBe('firstTime')
+    const machine = pc(), account = profile(0, null, { online: false }), notes: OnboardingNote[] = []
+    expect(await evaluateOnboarding('u1', deps(machine, account, notes))).toBe('firstTime')
     await flush()
     expect(notes).toEqual([{ event: 'onboarding.opened', reason: 1, remote: 0 }])
-    expect(account.seenVersion).toBe(0)
+    expect(account.version).toBe(0)
     // Offline relaunch: closed (this PC remembers), nothing written yet.
-    expect(await evaluateOnboarding('u1', deps(pc, account, notes))).toBeNull()
+    expect(await evaluateOnboarding('u1', deps(relaunch(machine), account, notes))).toBe('closed')
     await flush()
     expect(account.writes).toBe(0)
     // Back online: the next launch catches the profile up, no repeat (the account had not seen it).
     account.online = true
-    expect(await evaluateOnboarding('u1', deps(pc, account, notes))).toBeNull()
+    expect(await evaluateOnboarding('u1', deps(relaunch(machine), account, notes))).toBe('closed')
     await flush()
-    expect(account.seenVersion).toBe(3)
-    expect(notes.filter(n => n.event === 'onboarding.repeat')).toEqual([])
-    expect(await syncOnboardingRemote('u1', deps(pc, account))).toBe('none')
+    expect(account).toMatchObject({ version: 3, how: 'auto' })
+    expect(notes.filter(n => n.event !== 'onboarding.opened')).toEqual([])
   })
 
   it('rules not published (write denied): this PC still remembers; retried at each launch until it lands', async () => {
-    const pc = memoryStorage(), account = profile(0, { rules: false })
-    expect(await evaluateOnboarding('u1', deps(pc, account))).toBe('firstTime')
+    const machine = pc(), account = profile(0, null, { rules: false })
+    expect(await evaluateOnboarding('u1', deps(machine, account))).toBe('firstTime')
     await flush()
-    expect(account.seenVersion).toBe(0)
-    expect(await evaluateOnboarding('u1', deps(pc, account))).toBeNull()
-    expect(await syncOnboardingRemote('u1', deps(pc, account))).toBe('retry')
+    expect(account.version).toBe(0)
+    expect(await evaluateOnboarding('u1', deps(relaunch(machine), account))).toBe('closed')
+    expect(await syncOnboardingRemote('u1', deps(relaunch(machine), account))).toBe('retry')
     account.rules = true
-    expect(await syncOnboardingRemote('u1', deps(pc, account))).toBe('written')
-    expect(account.seenVersion).toBe(3)
+    expect(await syncOnboardingRemote('u1', deps(relaunch(machine), account))).toBe('written')
+    expect(account.version).toBe(3)
+  })
+
+  it('Codex 3: storage full or blocked: the session memory still writes the profile and keeps it closed', async () => {
+    const machine = pc(fullStorage()), account = profile()
+    expect(await evaluateOnboarding('u1', deps(machine, account))).toBe('firstTime')
+    await flush()
+    expect(account.version).toBe(3)
+    expect(localSeen(machine, 'u1')).toBe(3)
+    expect(await evaluateOnboarding('u1', deps(machine, account))).toBe('closed')
+  })
+
+  it('Codex 2: a higher version saved by another client after our read is kept (the write never lowers it)', async () => {
+    const machine = pc(), account = profile(), notes: OnboardingNote[] = []
+    const d = deps(machine, account, notes)
+    const read = d.readRemote
+    d.readRemote = async () => { const seen = await read(); account.version = 7; account.how = 'manual'; return seen }
+    expect(await evaluateOnboarding('u1', d)).toBe('firstTime')
+    await flush()
+    expect(account).toMatchObject({ version: 7, how: 'manual', writes: 0 })
+    expect(localSeen(machine, 'u1')).toBe(7)
   })
 
   it('another user on the same PC is a different account: theirs to see once', async () => {
-    const pc = memoryStorage(), first = profile(), second = profile()
-    expect(await evaluateOnboarding('u1', deps(pc, first))).toBe('firstTime')
+    const machine = pc(), first = profile(), second = profile()
+    expect(await evaluateOnboarding('u1', deps(machine, first))).toBe('firstTime')
     await flush()
-    expect(await evaluateOnboarding('u2', deps(pc, second))).toBe('firstTime')
+    expect(await evaluateOnboarding('u2', deps(machine, second))).toBe('firstTime')
     await flush()
-    expect(await evaluateOnboarding('u1', deps(pc, first))).toBeNull()
-    expect(await evaluateOnboarding('u2', deps(pc, second))).toBeNull()
+    expect(await evaluateOnboarding('u1', deps(relaunch(machine), first))).toBe('closed')
+    expect(await evaluateOnboarding('u2', deps(relaunch(machine), second))).toBe('closed')
     // An account that saw it elsewhere is not shown it here because someone else's copy is on this PC.
-    expect(await evaluateOnboarding('u3', deps(pc, profile(3)))).toBeNull()
+    expect(await evaluateOnboarding('u3', deps(machine, profile(3)))).toBe('closed')
   })
 
-  it('the account changing while the profile is read: nothing is shown or written for the old one', async () => {
-    const pc = memoryStorage(), account = profile(), notes: OnboardingNote[] = []
+  it('the account changing while the profile is read: cancelled, nothing shown or written for the old one', async () => {
+    const machine = pc(), account = profile(), notes: OnboardingNote[] = []
     let current = true
-    const d = deps(pc, account, notes, () => current)
-    d.readRemote = async () => { current = false; return 0 }
-    expect(await evaluateOnboarding('u1', d)).toBeNull()
+    const d = deps(machine, account, notes, () => current)
+    d.readRemote = async () => { current = false; return { version: 0, how: null } }
+    expect(await evaluateOnboarding('u1', d)).toBe('cancelled')
     await flush()
     expect(notes).toEqual([])
-    expect(readLocalSeenVersion(pc, 'u1')).toBe(0)
+    expect(localSeen(machine, 'u1')).toBe(0)
     expect(account.writes).toBe(0)
   })
 
-  it('KO spy: opened blind on a new PC while the profile already said seen -> one repeat row', async () => {
-    const pc = memoryStorage(), account = profile(3, { online: false }), notes: OnboardingNote[] = []
-    expect(await evaluateOnboarding('u1', deps(pc, account, notes))).toBe('firstTime')
+  it('Codex 5: opened by hand during the wait: the evaluation re-reads this PC and stays closed', async () => {
+    const machine = pc(), account = profile(), notes: OnboardingNote[] = []
+    const d = deps(machine, account, notes)
+    const read = d.readRemote
+    d.readRemote = async () => { await markOnboardingSeen('u1', deps(machine, profile()), { how: 'manual', blind: false }); return read() }
+    expect(await evaluateOnboarding('u1', d)).toBe('closed')
+    expect(notes).toEqual([])
+  })
+
+  it('KO spy: opened blind here while another PC had also opened it by itself -> one repeat row', async () => {
+    const machine = pc(), account = profile(3, 'auto', { online: false }), notes: OnboardingNote[] = []
+    expect(await evaluateOnboarding('u1', deps(machine, account, notes))).toBe('firstTime')
     await flush()
     account.online = true
-    expect(await syncOnboardingRemote('u1', deps(pc, account, notes))).toBe('already')
+    expect(await syncOnboardingRemote('u1', deps(relaunch(machine), account, notes))).toBe('already')
     expect(notes).toEqual([{ event: 'onboarding.opened', reason: 1, remote: 0 }, { event: 'onboarding.repeat', seen: 3 }])
     expect(account.writes).toBe(0)
-    expect(await syncOnboardingRemote('u1', deps(pc, account, notes))).toBe('none')
+    expect(await syncOnboardingRemote('u1', deps(relaunch(machine), account, notes))).toBe('already')
+    expect(notes).toHaveLength(2)
+  })
+
+  it('Codex 6: opened blind on A, then by hand on B: A records an undetermined overlap, never a repeat', async () => {
+    const a = pc(), account = profile(0, null, { online: false }), notes: OnboardingNote[] = []
+    expect(await evaluateOnboarding('u1', deps(a, account, notes))).toBe('firstTime')
+    await flush()
+    account.online = true
+    expect(await markOnboardingSeen('u1', deps(pc(), account), { how: 'manual', blind: false })).toBe('written')
+    expect(await syncOnboardingRemote('u1', deps(relaunch(a), account, notes))).toBe('already')
+    expect(notes).toEqual([{ event: 'onboarding.opened', reason: 1, remote: 0 }, { event: 'onboarding.overlap', seen: 3 }])
+    // Carried from an old key elsewhere ('unknown'), or a record without `how`: undetermined too.
+    for (const how of ['unknown', null] as const) {
+      const other = pc(), seen = profile(3, how, { online: false }), rows: OnboardingNote[] = []
+      await evaluateOnboarding('u2', deps(other, seen, rows)); await flush()
+      seen.online = true
+      await syncOnboardingRemote('u2', deps(other, seen, rows))
+      expect(rows.map(r => r.event)).toEqual(['onboarding.opened', 'onboarding.overlap'])
+    }
   })
 
   it('no false repeat: our own write that landed but reported a failure is not a repeat', async () => {
-    const pc = memoryStorage(), account = profile(0, { online: false }), notes: OnboardingNote[] = []
-    expect(await evaluateOnboarding('u1', deps(pc, account, notes))).toBe('firstTime')
+    const machine = pc(), account = profile(0, null, { online: false }), notes: OnboardingNote[] = []
+    expect(await evaluateOnboarding('u1', deps(machine, account, notes))).toBe('firstTime')
     await flush()
     account.online = true
-    const d = deps(pc, account, notes)
-    d.writeRemote = async (version) => { account.seenVersion = version; throw new Error('deadline-exceeded') }
+    const d = deps(machine, account, notes)
+    d.writeRemote = async (version, how) => { account.version = version; account.how = how; throw new Error('deadline-exceeded') }
     expect(await syncOnboardingRemote('u1', d)).toBe('retry')
-    expect(await syncOnboardingRemote('u1', deps(pc, account, notes))).toBe('already')
-    expect(notes.filter(n => n.event === 'onboarding.repeat')).toEqual([])
+    expect(await syncOnboardingRemote('u1', deps(relaunch(machine), account, notes))).toBe('already')
+    expect(notes.filter(n => n.event !== 'onboarding.opened')).toEqual([])
   })
 
   it('a manual open records it as seen everywhere and is never a repeat', async () => {
-    const pc = memoryStorage(), account = profile(3), notes: OnboardingNote[] = []
-    expect(await markOnboardingSeen('u1', deps(pc, account, notes), { blind: false })).toBe('already')
+    const machine = pc(), account = profile(3), notes: OnboardingNote[] = []
+    expect(await markOnboardingSeen('u1', deps(machine, account, notes), { how: 'manual', blind: false })).toBe('already')
     expect(notes).toEqual([])
     const fresh = profile()
-    expect(await markOnboardingSeen('u2', deps(pc, fresh, notes), { blind: false })).toBe('written')
-    expect(fresh.seenVersion).toBe(3)
-    expect(await evaluateOnboarding('u2', deps(memoryStorage(), fresh))).toBeNull()
+    expect(await markOnboardingSeen('u2', deps(machine, fresh, notes), { how: 'manual', blind: false })).toBe('written')
+    expect(fresh).toMatchObject({ version: 3, how: 'manual' })
+    expect(await evaluateOnboarding('u2', deps(pc(), fresh))).toBe('closed')
   })
 })

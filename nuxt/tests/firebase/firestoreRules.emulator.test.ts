@@ -11,6 +11,7 @@ import {
   collection,
   collectionGroup,
   deleteDoc,
+  deleteField,
   doc,
   documentId,
   getCountFromServer,
@@ -38,6 +39,7 @@ import { buildPublicProfileRepair } from '~/services/auth/userProvisioningServic
 import { refreshSyncProjections, type ProjectionWrite } from '~/services/sync/syncProjectionRefreshService'
 import { inspectFirebaseStructureState } from '~/services/sync/firebaseStructureHealthService'
 import { repairPilotDirectoryFromUser } from '~/services/pilotDirectoryProjectionService'
+import { saveOnboardingSeen } from '~/services/onboarding/onboardingProfile'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 const PROJECT_ID = 'accsuite117'
@@ -382,30 +384,41 @@ describe('fresh user provisioning contract', () => {
     await assertSucceeds(deleteDoc(userRef))
   })
 
-  it('PIP-757: the owner records the introduction seen (version + server time); bad shapes and other accounts are refused', async () => {
+  it('PIP-757: the owner records the introduction seen (version, server time, how); bad shapes and other accounts are refused', async () => {
     const db = testEnv.authenticatedContext(FRESH_PILOT_UID, { email: FRESH_PILOT_EMAIL, email_verified: true }).firestore()
     const userRef = doc(db, `users/${FRESH_PILOT_UID}`)
     await assertSucceeds(setDoc(userRef, initialPilotUserPayload(FRESH_PILOT_UID)))
-    // The very write of the app (useOnboardingIntro writeRemote).
-    await assertSucceeds(updateDoc(userRef, { onboarding: { seenVersion: 3, seenAt: serverTimestamp() } }))
-    await assertSucceeds(updateDoc(userRef, { onboarding: { seenVersion: 1000, seenAt: Timestamp.fromMillis(Date.UTC(2026, 10, 9)) } }))
-    // Other owner fields still update with the map in place (it is re-validated each time).
-    await assertSucceeds(updateDoc(userRef, { equipment: { wheel: 'QA Wheel' } }))
+    // A legacy profile without the field still takes other owner updates.
+    await assertSucceeds(updateDoc(userRef, { equipment: { wheel: 'Legacy Wheel' } }))
     for (const onboarding of [
-      { seenVersion: 0, seenAt: serverTimestamp() },
-      { seenVersion: 1001, seenAt: serverTimestamp() },
-      { seenVersion: 2.5, seenAt: serverTimestamp() },
-      { seenVersion: '3', seenAt: serverTimestamp() },
-      { seenVersion: 3, seenAt: '2026-11-09T10:00:00.000Z' },
-      { seenVersion: 3 },
-      { seenAt: serverTimestamp() },
-      { seenVersion: 3, seenAt: serverTimestamp(), extra: true },
+      { seenVersion: 0, seenAt: serverTimestamp(), how: 'auto' },
+      { seenVersion: 1001, seenAt: serverTimestamp(), how: 'auto' },
+      { seenVersion: 2.5, seenAt: serverTimestamp(), how: 'auto' },
+      { seenVersion: '3', seenAt: serverTimestamp(), how: 'auto' },
+      { seenVersion: 3, seenAt: '2026-11-09T10:00:00.000Z', how: 'auto' },
+      { seenVersion: 3, seenAt: serverTimestamp(), how: 'other' },
+      { seenVersion: 3, seenAt: serverTimestamp() },
+      { seenVersion: 3, how: 'auto' },
+      { seenAt: serverTimestamp(), how: 'auto' },
+      { seenVersion: 3, seenAt: serverTimestamp(), how: 'auto', extra: true },
     ]) await assertFails(updateDoc(userRef, { onboarding }))
     await assertFails(updateDoc(userRef, { onboarding: 3 }))
+    // The very write of the app: one transaction that only raises it (saveOnboardingSeen).
+    const write = (version: number, how: 'auto' | 'manual' | 'unknown') =>
+      saveOnboardingSeen(update => runTransaction(db, update), userRef, version, how)
+    expect(await assertSucceeds(write(3, 'auto'))).toEqual({ written: true, profile: { version: 3, how: 'auto' } })
+    // Other owner fields still update with the map in place (it is re-validated each time).
+    await assertSucceeds(updateDoc(userRef, { equipment: { wheel: 'QA Wheel' } }))
+    await assertSucceeds(updateDoc(userRef, { onboarding: { seenVersion: 3, seenAt: serverTimestamp(), how: 'manual' } }))
+    await assertSucceeds(updateDoc(userRef, { onboarding: { seenVersion: 5, seenAt: Timestamp.fromMillis(Date.UTC(2026, 10, 9)), how: 'unknown' } }))
+    // Never lowered, never removed: a slower client cannot undo a higher version saved meanwhile.
+    await assertFails(updateDoc(userRef, { onboarding: { seenVersion: 3, seenAt: serverTimestamp(), how: 'auto' } }))
+    await assertFails(updateDoc(userRef, { onboarding: deleteField() }))
+    expect(await assertSucceeds(write(3, 'auto'))).toEqual({ written: false, profile: { version: 5, how: 'unknown' } })
     const other = testEnv.authenticatedContext(SECOND_PILOT_UID, { email_verified: true }).firestore()
-    await assertFails(updateDoc(doc(other, `users/${FRESH_PILOT_UID}`), { onboarding: { seenVersion: 3, seenAt: serverTimestamp() } }))
+    await assertFails(updateDoc(doc(other, `users/${FRESH_PILOT_UID}`), { onboarding: { seenVersion: 6, seenAt: serverTimestamp(), how: 'auto' } }))
     const saved = (await assertSucceeds(getDoc(userRef))).data()!
-    expect(saved.onboarding.seenVersion).toBe(1000)
+    expect(saved.onboarding).toMatchObject({ seenVersion: 5, how: 'unknown' })
   })
 
   it('rifiuta tutta la batch se la directory non coincide con il ruolo autorevole', async () => {

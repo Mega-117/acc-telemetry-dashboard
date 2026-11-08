@@ -255,6 +255,7 @@ export default defineConfig({
         'app/components/settings/IntroPanel.vue',
         'app/pages/impostazioni.vue',
         'app/services/onboarding/onboardingSeen.ts',
+        'app/services/onboarding/onboardingProfile.ts',
         'app/services/onboarding/onboardingSteps.ts',
         'app/composables/useOnboardingIntro.ts',
         'app/components/onboarding/OnboardingIntro.vue',
