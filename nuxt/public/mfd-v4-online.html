@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 11a82ceb696ee53a78a454d5caf7e97d72ce4dc7805a483129027c3d80c62363 -->
+<!-- Generated V4 online; SHA256 bba6b7ef5f2a4c22857e939416c9cb335caac951d9ef38e07bbde804aa1cd754 -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -1877,9 +1877,10 @@ else globalThis.MfdV4Contract = exported;
   // Minimal layout (user 09/11): rows grouped under short headings, short
   // labels, preset last. Presentation only: rows keep their data-f and the
   // canonical inputs; the source-tag and check cells are hidden by the theme.
-  var GROUPS = [['Benzina', ['fuel']], ['Gomme', ['changeTyre', 'compound', 'tyreSet', 'fl', 'fr', 'rl', 'rr']],
-    ['Freni', ['brakes', 'brakeFront', 'brakeRear']], ['Riparazioni', ['susp', 'body']], ['Pilota', ['driverIdx']],
-    ['Preset', ['applyPitStrategy', 'pitStrategy']]];
+  // Preset first (user 09/11): loading a preset replaces everything below it.
+  var GROUPS = [['Preset', ['applyPitStrategy', 'pitStrategy']], ['Benzina', ['fuel']],
+    ['Gomme', ['changeTyre', 'compound', 'tyreSet', 'fl', 'fr', 'rl', 'rr']],
+    ['Freni', ['brakes', 'brakeFront', 'brakeRear']], ['Riparazioni', ['susp', 'body']], ['Pilota', ['driverIdx']]];
   var LABEL = { fuel: 'Da aggiungere (L)', changeTyre: 'Cambia gomme', tyreSet: 'Set', fl: 'FL', fr: 'FR', rl: 'RL', rr: 'RR',
     brakes: 'Sostituisci', brakeFront: 'Anteriore', brakeRear: 'Posteriore', driverIdx: 'Cambio pilota',
     applyPitStrategy: 'Carica solo il preset', pitStrategy: 'Numero' };

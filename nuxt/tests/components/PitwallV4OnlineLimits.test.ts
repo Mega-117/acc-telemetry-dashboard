@@ -230,13 +230,13 @@ it('one source of limits: the form, the receiver and the RTDB order rules agree'
   agree('FL', `newData.val() >= ${limits.pressure.min} && newData.val() <= ${limits.pressure.max}`)
 })
 
-it('minimal layout (09/11): groups in reading order, preset last, short labels, no technical source tags shown', () => {
+it('minimal layout (09/11): groups in reading order, preset first, short labels, no technical source tags shown', () => {
   const f = form()
   f.snapshot({ strategy: car() })
   const rows = [...f.w.document.querySelectorAll('#form tr')].map((tr: any) => tr.classList.contains('v4-group') ? `#${tr.textContent}` : tr.dataset.f)
-  expect(rows).toEqual(['#Benzina', 'fuel', '#Gomme', 'changeTyre', 'compound', 'tyreSet', 'fl', 'fr', 'rl', 'rr',
-    '#Freni', 'brakes', 'brakeFront', 'brakeRear', '#Riparazioni', 'susp', 'body', '#Pilota', 'driverIdx',
-    '#Preset', 'applyPitStrategy', 'pitStrategy'])
+  expect(rows).toEqual(['#Preset', 'applyPitStrategy', 'pitStrategy', '#Benzina', 'fuel',
+    '#Gomme', 'changeTyre', 'compound', 'tyreSet', 'fl', 'fr', 'rl', 'rr',
+    '#Freni', 'brakes', 'brakeFront', 'brakeRear', '#Riparazioni', 'susp', 'body', '#Pilota', 'driverIdx'])
   expect(f.q('tr[data-f="fl"] td.lb').textContent).toBe('FL')
   expect(f.q('tr[data-f="fl"]').classList.contains('v4-half')).toBe(true)
   // Fixed ranges are not repeated on screen; the fuel range (it depends on the car) is.
