@@ -19,7 +19,11 @@ import { shiftFlashDue, shiftFlashLeadArmed } from '~/utils/dashboardPresentatio
 export const SHIFT_TRACE_BATCH = 10
 export const SHIFT_TRACE_LATE_RPM = 200
 export const SHIFT_TRACE_ONSET_MAX_MS = 3_000
-/** PIP-755: ACC passes through neutral between two gears; longer than this it is a real neutral (logger: SHIFT_NEUTRAL_MAX_S). */
+/**
+ * PIP-755: ACC passes through neutral between two gears; longer than this it is a real neutral (logger:
+ * SHIFT_NEUTRAL_MAX_S). The same bound for a gap in the data (coordinator 09/11): shorter, the rise
+ * resumes; longer, it ends with no verdict.
+ */
 export const SHIFT_TRACE_NEUTRAL_MAX_MS = 500
 
 export interface ShiftTraceFrame {
@@ -92,6 +96,7 @@ export function createShiftTraceAggregator(report: (summary: ShiftTraceSummary) 
   let prev: { gear: number; rpm: number; flash: boolean } | null = null
   let onset: { rpm: number; at: number; lead: boolean } | null = null
   let neutralAt: number | null = null
+  let gapAt: number | null = null   // first sample of a gap in the data
   // The first sample of this rise where the light was due, and whether the lead made it due.
   let firstDue: { at: number; lead: boolean } | null = null
   let lit = false   // the light was on at some sample of this rise
@@ -103,11 +108,16 @@ export function createShiftTraceAggregator(report: (summary: ShiftTraceSummary) 
 
   /**
    * The rise ends, whatever ends it (shift, lift, rpm drop, engine not eligible, a long neutral,
-   * missing data): a light that was due and never lit is a missed onset, counted before any reset
-   * (fourth Codex review 09/11: a long neutral or a data gap erased a real KO).
+   * another car): a light that was due and never lit is a missed onset, counted before any reset
+   * (fourth Codex review 09/11: a long neutral erased a real KO). Missing data never judges.
    */
   function endRise() {
     if (firstDue && !lit) (firstDue.lead ? lead : plain).missed++
+    firstDue = null; lit = false
+  }
+
+  /** A long gap in the data ends the rise with no verdict: no data, nothing to judge. */
+  function dropRise() {
     firstDue = null; lit = false
   }
 
@@ -131,7 +141,15 @@ export function createShiftTraceAggregator(report: (summary: ShiftTraceSummary) 
       else if (targetRpm === null) health.noTarget++
       else if (gear === null || rpm === null || !Number.isFinite(gear) || !Number.isFinite(rpm)) health.noGearOrRpm++
       if (frameCar === null || targetRpm === null || gear === null || rpm === null
-        || !Number.isFinite(gear) || !Number.isFinite(rpm)) { endRise(); prev = null; onset = null; neutralAt = null; return }
+        || !Number.isFinite(gear) || !Number.isFinite(rpm)) {
+        // Coordinator 09/11: a dropped sample is not the light failing; the rise waits for data.
+        gapAt ??= frame.now
+        return
+      }
+      if (gapAt !== null) {
+        if (frame.now - gapAt > SHIFT_TRACE_NEUTRAL_MAX_MS) { dropRise(); prev = null; onset = null; neutralAt = null }
+        gapAt = null
+      }
       if (frameCar !== car || targetRpm !== target) {
         // Another car or shift point: the batch would mix two rules.
         // The batch of the old car or shift point is dropped: its rise ends with it.

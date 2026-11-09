@@ -114,21 +114,41 @@ describe('PIP-704 hud.shift', () => {
     expect(report.mock.calls[0]![0]).toMatchObject({ plainMissed: 1, leadMissed: 0 })
   })
 
-  it('fourth Codex review: a due and dark rise is missed even when a long neutral or missing data ends it', () => {
-    for (const end of ['neutral', 'no-data'] as const) {
-      const report = vi.fn()
-      const trace = createShiftTraceAggregator(report, 1)
-      trace.feed(frame(0, 3, 7000, false))
-      trace.feed(frame(60, 3, 7200, false))                    // armed, due, light off
-      if (end === 'neutral') {
-        trace.feed(frame(120, 0, 6000, false))
-        trace.feed(frame(720, 0, 5000, false))                  // 600 ms: a real neutral
-      } else trace.feed(frame(120, 3, 7300, false, { rpm: null }))
-      trace.feed(frame(780, 4, 6000, false))
-      trace.feed(frame(840, 4, 7180, true))                     // the next rise, on time
-      trace.feed(frame(900, 5, 5200, false))
-      expect(report.mock.calls[0]![0]).toMatchObject({ leadMissed: 1, leadOnTime: 1 })
-    }
+  it('fourth Codex review: a due and dark rise is missed when a long neutral ends it', () => {
+    const report = vi.fn()
+    const trace = createShiftTraceAggregator(report, 1)
+    trace.feed(frame(0, 3, 7000, false))
+    trace.feed(frame(60, 3, 7200, false))                    // armed, due, light off
+    trace.feed(frame(120, 0, 6000, false))
+    trace.feed(frame(720, 0, 5000, false))                  // 600 ms: a real neutral
+    trace.feed(frame(780, 4, 6000, false))
+    trace.feed(frame(840, 4, 7180, true))                     // the next rise, on time
+    trace.feed(frame(900, 5, 5200, false))
+    expect(report.mock.calls[0]![0]).toMatchObject({ leadMissed: 1, leadOnTime: 1 })
+  })
+
+  it('coordinator 09/11: a dropped sample never makes a miss; the rise resumes and is judged on its samples', () => {
+    const report = vi.fn()
+    const trace = createShiftTraceAggregator(report, 1)
+    trace.feed(frame(0, 3, 7000, false))
+    trace.feed(frame(60, 3, 7200, false))                    // due at N, still dark
+    trace.feed(frame(120, 3, 7300, false, { rpm: null }))     // N+1 dropped
+    trace.feed(frame(180, 3, 7380, true))                     // lit at N+2: late by the measured 120 ms
+    trace.feed(frame(240, 4, 5200, false))
+    expect(report.mock.calls[0]![0]).toMatchObject({ leadMissed: 0, leadLate: 1, lateMsMax: 120, shifts: 1 })
+  })
+
+  it('coordinator 09/11: a gap longer than 0.5 s ends the rise with no verdict at all', () => {
+    const report = vi.fn()
+    const trace = createShiftTraceAggregator(report, 1)
+    trace.feed(frame(0, 3, 7000, false))
+    trace.feed(frame(60, 3, 7200, false))                    // due, dark
+    trace.feed(frame(120, 3, 7300, false, { rpm: null }))     // no data from here...
+    trace.feed(frame(700, 3, 7300, false, { rpm: null }))
+    trace.feed(frame(760, 3, 7000, false))                    // ...for 640 ms
+    trace.feed(frame(820, 3, 7180, true))                     // a new rise, on time
+    trace.feed(frame(880, 4, 5200, false))
+    expect(report.mock.calls[0]![0]).toMatchObject({ leadMissed: 0, leadLate: 0, leadOnTime: 1, plainMissed: 0 })
   })
 
   it('third Codex review: the page feeds the model own prerequisites to the trace', async () => {
