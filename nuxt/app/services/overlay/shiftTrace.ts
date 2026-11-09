@@ -160,6 +160,9 @@ export function createShiftTraceAggregator(report: (summary: ShiftTraceSummary) 
       // this the trace saw N -> g+1 and counted no upshift at all (R2 08/11: upshifts=0).
       if (gear === 0 && prev && prev.gear >= 1) {
         neutralAt ??= frame.now
+        // Fifth Codex review 09/11: a neutral observed past 0.5 s already ends the rise here, so a
+        // later gap in the data cannot drop a miss the neutral had already proved.
+        if (frame.now - neutralAt > SHIFT_TRACE_NEUTRAL_MAX_MS) { endRise(); prev = null; onset = null; neutralAt = null }
         return
       }
       if (neutralAt !== null) {

@@ -127,6 +127,21 @@ describe('PIP-704 hud.shift', () => {
     expect(report.mock.calls[0]![0]).toMatchObject({ leadMissed: 1, leadOnTime: 1 })
   })
 
+  it('fifth Codex review: a miss proved by a long neutral survives a data gap that follows it', () => {
+    const report = vi.fn()
+    const trace = createShiftTraceAggregator(report, 1)
+    trace.feed(frame(0, 3, 7000, false))
+    trace.feed(frame(60, 3, 7200, false))                    // armed, due, light off
+    trace.feed(frame(120, 0, 6000, false))
+    trace.feed(frame(720, 0, 5000, false))                  // neutral observed for 600 ms
+    trace.feed(frame(780, 0, 5000, false, { rpm: null }))     // then no data...
+    trace.feed(frame(1400, 0, 5000, false, { rpm: null }))
+    trace.feed(frame(1460, 4, 6000, false))                   // ...for over 0.5 s
+    trace.feed(frame(1520, 4, 7180, true))                    // the next rise, on time
+    trace.feed(frame(1580, 5, 5200, false))
+    expect(report.mock.calls[0]![0]).toMatchObject({ leadMissed: 1, leadOnTime: 1 })
+  })
+
   it('coordinator 09/11: a dropped sample never makes a miss; the rise resumes and is judged on its samples', () => {
     const report = vi.fn()
     const trace = createShiftTraceAggregator(report, 1)
