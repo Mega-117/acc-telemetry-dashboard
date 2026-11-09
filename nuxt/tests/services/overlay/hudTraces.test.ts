@@ -7,7 +7,7 @@ import type { SectorHudEntry } from '~/composables/useLiveStatePoller'
 
 describe('PIP-704 hud.shift', () => {
   const frame = (now: number, gear: number, rpm: number, flash: boolean, extra: Partial<ShiftTraceFrame> = {}): ShiftTraceFrame =>
-    ({ now, car: 'ferrari_296_gt3', gear, rpm, flash, targetRpm: 7300, ...extra })
+    ({ now, car: 'ferrari_296_gt3', gear, rpm, flash, targetRpm: 7300, throttle: 1, brake: 0, ...extra })
 
   function upshift(feed: (f: ShiftTraceFrame) => void, t: number, gear: number, onsetRpm: number | null, shiftRpm: number) {
     feed(frame(t, gear, 6000, false))
@@ -23,7 +23,7 @@ describe('PIP-704 hud.shift', () => {
     expect(report).toHaveBeenCalledOnce()
     expect(report.mock.calls[0]![0]).toEqual({ car: 'ferrari_296_gt3', targetRpm: 7300, shifts: 10, flashed: 10,
       onsetRpmMedian: 7160, upshiftRpmMedian: 7340, leadMsMedian: 250, beforeFlash: 0, late: 0,
-      leadOnsets: 0, leadOnsetRpmMedian: null, plainOnsets: 10, plainOnsetRpmMedian: 7160 }) // no throttle: lead not armed
+      leadOnsets: 10, leadOnsetRpmMedian: 7160, plainOnsets: 0, plainOnsetRpmMedian: null, leadOnTime: 10, leadEarly: 0, leadLate: 0, plainOnTime: 0, plainEarly: 0, plainLate: 0, lateMsMax: null })
   })
 
   it('counts shifts before the flash and late shifts', () => {
@@ -60,7 +60,7 @@ describe('PIP-704 hud.shift', () => {
     }
     expect(report.mock.calls[0]![0]).toEqual({ car: 'ferrari_296_gt3', targetRpm: 7300, shifts: 2, flashed: 2,
       onsetRpmMedian: 7160, upshiftRpmMedian: 7340, leadMsMedian: 320, beforeFlash: 0, late: 0,
-      leadOnsets: 0, leadOnsetRpmMedian: null, plainOnsets: 2, plainOnsetRpmMedian: 7160 })
+      leadOnsets: 2, leadOnsetRpmMedian: 7160, plainOnsets: 0, plainOnsetRpmMedian: null, leadOnTime: 2, leadEarly: 0, leadLate: 0, plainOnTime: 0, plainEarly: 0, plainLate: 0, lateMsMax: null })
     expect(trace.takeHealth()).toMatchObject({ upshifts: 2, reports: 1 })
   })
 
@@ -76,6 +76,42 @@ describe('PIP-704 hud.shift', () => {
     }
     expect(report.mock.calls[0]![0]).toMatchObject({ onsetRpmMedian: 7235, leadOnsets: 1, leadOnsetRpmMedian: 7160,
       plainOnsets: 1, plainOnsetRpmMedian: 7310 })
+  })
+
+  // Second Codex review 09/11: every onset judged against the sample where the light was first due.
+  function rise(feed: (f: ShiftTraceFrame) => void, t: number, gear: number, samples: Array<[number, boolean, number?]>) {
+    samples.forEach(([rpm, flash, throttle], i) => feed(frame(t + i * 60, gear, rpm, flash, { throttle: throttle ?? 1 })))
+    feed(frame(t + samples.length * 60, gear + 1, 5200, false))
+  }
+
+  it('second Codex review: one late onset among nine on time is a KO count, the median stays info', () => {
+    const report = vi.fn()
+    const trace = createShiftTraceAggregator(report)
+    for (let i = 0; i < 9; i++) rise(f => trace.feed(f), i * 1000, 3, [[7000, false], [7180, true], [7360, true]])
+    rise(f => trace.feed(f), 9000, 3, [[7000, false], [7200, false], [7380, false], [7500, true]])
+    expect(report.mock.calls[0]![0]).toMatchObject({ leadOnsetRpmMedian: 7180, leadOnTime: 9, leadLate: 1, lateMsMax: 120 })
+  })
+
+  it('second Codex review: a lead that arms only after the point lights correctly at the point', () => {
+    const report = vi.fn()
+    const trace = createShiftTraceAggregator(report, 1)
+    rise(f => trace.feed(f), 0, 3, [[7000, false, 0.3], [7290, false, 0.3], [7310, true, 1]])
+    expect(report.mock.calls[0]![0]).toMatchObject({ plainOnTime: 1, plainLate: 0, leadOnTime: 0, leadLate: 0, leadEarly: 0 })
+  })
+
+  it('second Codex review: a lift starts a new rise; its light is judged on its own samples', () => {
+    const report = vi.fn()
+    const trace = createShiftTraceAggregator(report, 1)
+    rise(f => trace.feed(f), 0, 3, [[7000, false], [7180, true], [6800, false], [7000, false], [7170, true], [7350, true]])
+    expect(report.mock.calls[0]![0]).toMatchObject({ leadOnTime: 2, leadLate: 0, lateMsMax: null })
+  })
+
+  it('second Codex review: a light late after the point, or lit before it was due, is counted', () => {
+    const report = vi.fn()
+    const trace = createShiftTraceAggregator(report, 2)
+    rise(f => trace.feed(f), 0, 3, [[7000, false, 0.3], [7350, false, 0.3], [7800, true, 0.3]])  // plain, late
+    rise(f => trace.feed(f), 1000, 4, [[7000, false], [7100, true], [7300, true]])               // lit 50 rpm too soon
+    expect(report.mock.calls[0]![0]).toMatchObject({ plainLate: 1, lateMsMax: 60, leadEarly: 1, leadOnTime: 0, plainOnTime: 0 })
   })
 
   it('PIP-755: a real neutral (over 0.5 s) or a downshift through neutral is no upshift', () => {
