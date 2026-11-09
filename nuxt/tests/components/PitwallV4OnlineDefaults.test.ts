@@ -62,6 +62,36 @@ it('pressure defaults: the driver current MFD values when valid, otherwise 26.0'
   expect(g.w.S).toMatchObject({ fl: 26.4, fr: 26.5, rl: 25.8, rr: 25.9 })
 })
 
+// Codex review 4 (P2): a default is not a user choice. It follows the live
+// mounted set until the user edits it; the mounted set always blocks the send.
+it('the set default follows the live mounted set; the mounted set shows its reason and blocks', () => {
+  const f = form(); f.snapshot({}, { fittedTyreSet: 3, pressures })
+  expect(f.w.S.tyreSet).toBe(4)
+  f.snapshot({}, { fittedTyreSet: 4, pressures })
+  expect(f.w.S.tyreSet).toBe(5); expect(f.q('input[data-f="tyreSet"]').value).toBe('5')
+  f.q('#apply').click(); expect(f.submits().at(-1)).toMatchObject({ tyreSet: 5 })
+  f.snapshot({ busy: false }, { fittedTyreSet: 4, pressures })
+  const input = f.q('input[data-f="tyreSet"]'); input.value = '4'
+  input.dispatchEvent(new f.w.Event('input', { bubbles: true })); input.dispatchEvent(new f.w.Event('change', { bubbles: true }))
+  expect(f.q('tr[data-f="tyreSet"] .v4-issue').textContent).toBe('Set 4 montato sulla vettura adesso: scegline un altro.')
+  const before = f.submits().length; f.q('#apply').click(); expect(f.submits()).toHaveLength(before)
+  f.snapshot({}, { fittedTyreSet: 9, pressures }) // user value: no longer follows live
+  expect(f.w.S.tyreSet).toBe(4); expect(f.q('tr[data-f="tyreSet"] .v4-issue')).toBeNull()
+})
+
+it('pressure defaults follow live until edited; limits checked on the raw value, then rounded', () => {
+  const f = form(); f.snapshot({}, { pressures: { FL: 20.26, FR: 35.04, RL: 24.3999, RR: 35.0000004 } })
+  expect(f.w.S).toMatchObject({ fl: 26, fr: 26, rl: 24.4, rr: 35 })
+  f.snapshot({}, { pressures })
+  expect(f.w.S).toMatchObject({ fl: 26.4, fr: 26.5, rl: 25.8, rr: 25.9 })
+  const fl = f.q('input[data-f="fl"]'); fl.value = '27'
+  fl.dispatchEvent(new f.w.Event('input', { bubbles: true })); fl.dispatchEvent(new f.w.Event('change', { bubbles: true }))
+  f.snapshot({}, { pressures: { FL: 24, FR: 24, RL: 24, RR: 24 } })
+  expect(f.w.S).toMatchObject({ fl: 27, fr: 24, rl: 24, rr: 24 })
+  f.snapshot({ ready: false, strategy: null }) // driver gone: the last defaults stay
+  expect(f.w.S).toMatchObject({ fl: 27, fr: 24 })
+})
+
 it('a saved user value wins over every default; the rest is filled', () => {
   const f = form()
   f.snapshot({ draft: { fuel: 12, tyreSet: 9, fl: 28, compound: 'Wet', changeTyre: false, initializedFields: ['fuel', 'tyreSet', 'fl', 'compound', 'changeTyre'] } },

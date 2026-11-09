@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 bd918eee02699948c96f3c338ab77a83bfd888f21f9159489969eac67251f759 -->
+<!-- Generated V4 online; SHA256 5504409f3d68a02add9906ec8cba72f0a0b9ffb3b9c7cc62d71cbc3affbbdb37 -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -1470,10 +1470,11 @@ else globalThis.MfdV4Contract = exported;
     brakeFront: 1, brakeRear: 1, susp: true, body: true };
   var TWO_STATE = ['applyPitStrategy', 'changeTyre', 'brakes', 'susp', 'body'];
   // Next set after the one mounted (50 -> 49), never the mounted one, which the
-  // receiver refuses; mounted set unknown -> 1. Live-based = seeded once.
+  // receiver refuses; mounted set unknown -> 1. A default is not a user choice:
+  // it follows the live mounted set until the user edits the field.
   function defaultTyreSet(strategy) {
     var mounted = strategy?.fittedTyreSet, L = MfdV4Contract.LIMITS.tyreSet;
-    if (!Number.isInteger(mounted) || mounted < L.min || mounted > L.max) return { value: L.min, live: false };
+    if (!Number.isInteger(mounted) || mounted < L.min || mounted > L.max) return { value: S.tyreSet ?? L.min, live: false };
     return { value: mounted === L.max ? L.max - 1 : mounted + 1, live: true };
   }
   function applyDefaults(strategy) {
@@ -1487,17 +1488,20 @@ else globalThis.MfdV4Contract = exported;
     ['pitStrategy', 'fuel', 'brakeFront', 'brakeRear'].forEach(function (key) {
       if (!initializedFields.has(key) && S[key] == null) put(key, FIXED[key], true);
     });
-    if (!initializedFields.has('tyreSet')) { var set = defaultTyreSet(strategy); put('tyreSet', set.value, set.live); }
+    if (!initializedFields.has('tyreSet')) put('tyreSet', defaultTyreSet(strategy).value, false);
     // Pressures: the driver's current MFD values when known and inside the
-    // limits, otherwise 26.0 until they arrive (never a clamped live value).
+    // limits, otherwise 26.0 until they arrive. They follow live until the user
+    // edits them. The RAW value is checked (tolerance for float noise such as
+    // 24.3999), then rounded: 20.26 or 35.04 are out, never rounded in.
     var P = MfdV4Contract.LIMITS.pressure;
     ['FL', 'FR', 'RL', 'RR'].forEach(function (wheel) {
       var key = wheel.toLowerCase();
       if (initializedFields.has(key)) return;
-      var live = strategy?.pressures?.[wheel];
-      live = Number.isFinite(live) ? Math.round(live * 10) / 10 : null;
-      var ok = live != null && live >= P.min && live <= P.max;
-      put(key, ok ? live : 26, ok);
+      var raw = strategy?.pressures?.[wheel];
+      var ok = Number.isFinite(raw) && raw >= P.min - 1e-6 && raw <= P.max + 1e-6;
+      if (ok) put(key, Math.round(raw * 10) / 10, false);
+      // Live out of limits -> 26.0; live absent (driver gone) keeps the last default.
+      else if (Number.isFinite(raw) || S[key] == null) put(key, 26, false);
     });
     return changed;
   }
@@ -1768,6 +1772,11 @@ else globalThis.MfdV4Contract = exported;
       var limit = C.fuelLimit(capacity());
       if (!limit.ok) return limit.reason;
     }
+    // Whatever its origin, the set mounted on the car now is refused by the
+    // receiver: say so here and block the send.
+    var l = id === 'tyreSet' ? live() : null;
+    if (l && Number.isInteger(l.fittedTyreSet) && l.fittedTyreSet === S.tyreSet)
+      return 'Set ' + S.tyreSet + ' montato sulla vettura adesso: scegline un altro.';
     return C.fieldIssue(LIMIT_OF[id], S[id], capacity());
   }
   function blocking() {

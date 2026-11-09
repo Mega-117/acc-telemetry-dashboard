@@ -73,9 +73,9 @@ function onlineForm() {
   return { w, post, snapshot, field, edit }
 }
 
-// PIP-761 (user 09/11): every field has a default; live values seed pressures
-// and the tyre set once, then never follow later car changes.
-it('fills defaults, then delayed live pressures and set once, without following later car changes', () => {
+// PIP-761 (user 09/11): every field has a default; the live-based ones (set,
+// pressures) follow live updates until the user edits them (Codex review 4).
+it('fills defaults, then live pressures and set, following live until edited', () => {
   const { w, snapshot, field } = onlineForm()
   snapshot({ ready: false, strategy: null })
   expect(w.S).toMatchObject({ applyPitStrategy: false, pitStrategy: 1, fuel: 0, changeTyre: true, compound: 'Dry', tyreSet: 1,
@@ -84,7 +84,7 @@ it('fills defaults, then delayed live pressures and set once, without following 
   snapshot({ strategy: { fuelToAdd: 30, tyreSet: 2, compound: 'wet', fittedTyreSet: 4, pressures: { FL: 25.15 } } })
   expect(w.S).toMatchObject({ fuel: 0, tyreSet: 5, compound: 'Dry', fl: 25.2, fr: 26 })
   snapshot({ strategy: { fuelToAdd: 40, fittedTyreSet: 7, pressures: { FL: 27, FR: 26.4 } } })
-  expect(w.S).toMatchObject({ fuel: 0, tyreSet: 5, fl: 25.2, fr: 26.4 })
+  expect(w.S).toMatchObject({ fuel: 0, tyreSet: 8, fl: 27, fr: 26.4 })
 })
 
 it('preserves edited and deliberately cleared fields when delayed telemetry arrives', () => {
@@ -123,9 +123,11 @@ it('restores draft choices including explicit blanks while filling remaining unk
 })
 
 it('updates LIVE indicators in place while preserving input identity, typing and outgoing intent', () => {
-  const { w, snapshot, field, post } = onlineForm()
+  const { w, snapshot, field, post, edit } = onlineForm()
   snapshot({ strategy: { fuelToAdd: 15, tyreSet: 1, fittedTyreSet: 1, pressures: { FL: 25, FR: 25, RL: 25, RR: 25 } } })
-  Object.assign(w.S, { fuel: 15, changeTyre: true, compound: 'Dry', brakes: false, susp: false, body: false })
+  // User-chosen values (defaults would follow live, PIP-761): only the indicators move.
+  for (const [name, value] of [['fuel', '15'], ['tyreSet', '2'], ['fl', '25'], ['fr', '25'], ['rl', '25'], ['rr', '25']]) edit(name, value)
+  Object.assign(w.S, { changeTyre: true, compound: 'Dry', brakes: false, susp: false, body: false })
   w.renderForm()
   const indicator = (name: string) => w.document.querySelector(`tr[data-f="${name}"] .chk`).textContent
   expect(indicator('fuel')).toBe('✓'); expect(indicator('fl')).toBe('✓'); expect(indicator('tyreSet')).toBe('✓')
