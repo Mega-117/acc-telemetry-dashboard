@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 fe868bf46049cc53bdba468585e8d174a60cb495d03649303ef1a7894203ca3f -->
+<!-- Generated V4 online; SHA256 5726005b5c545640c45ee3163136b33b30716e9725c1570dfdbe1f2db467b4ef -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -1881,7 +1881,24 @@ else globalThis.MfdV4Contract = exported;
   // structural rebuild (readiness, order start/end, crew, a toggle) keeps the
   // field being typed: raw text ("27,5", taken before the canonical number
   // input could sanitize it), focus and selection/caret.
+  // Never replace the element the user is composing in (IME): a structural
+  // rebuild waits for compositionend and runs once right after it. Meanwhile
+  // the send button follows availability (busy / driver not ready).
+  var composing = false, pendingRender = false;
+  formEl.addEventListener('compositionstart', function () { composing = true; });
+  formEl.addEventListener('compositionend', function () {
+    composing = false;
+    // After the browser's own commit (input may follow compositionend).
+    if (pendingRender) setTimeout(function () { if (!composing && pendingRender) { pendingRender = false; renderForm(); } }, 0);
+  });
   renderForm = function () {
+    if (composing) {
+      pendingRender = true;
+      var s = shot();
+      bA.disabled = busy || !s || !s.ready;
+      etichettaBottone(); aggiornaSpie();
+      return;
+    }
     var active = document.activeElement;
     var focused = active && formEl.contains(active) && active.dataset && active.dataset.f
       ? { id: active.dataset.f, tag: active.tagName, numeric: active.dataset.numeric === '1', value: active.value,

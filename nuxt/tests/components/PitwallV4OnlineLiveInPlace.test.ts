@@ -72,6 +72,31 @@ it('a focused default field is never written by live data, not even its state', 
   expect(f.w.S.fl).toBe(27); expect(fl.value).toBe('27')
 })
 
+// Codex round 7 (P2): never replace the element the user is composing in (IME).
+it.each([
+  ['availability', { ready: false }],
+  ['crew', { crew: [{ driverIndex: 0, name: 'Test Driver' }, { driverIndex: 1, name: 'Second Driver' }] }],
+])('a %s change during an IME composition waits for compositionend: 8 L is sent, never 88', async (_kind, change) => {
+  const f = form(); f.live(25)
+  const fuel = f.q('input[data-f="fuel"]'); fuel.focus()
+  const ev = (type: string, data = '') => fuel.dispatchEvent(new f.w.CompositionEvent(type, { bubbles: true, data }))
+  ev('compositionstart'); fuel.value = '8'; ev('compositionupdate', '8')
+  fuel.dispatchEvent(new f.w.Event('input', { bubbles: true }))
+  f.live(25, change)                                          // structural change mid-composition
+  expect(f.q('input[data-f="fuel"]')).toBe(fuel)             // element not replaced
+  expect(f.w.document.activeElement).toBe(fuel); expect(fuel.value).toBe('8')
+  if ('ready' in change) expect(f.q('#apply').disabled).toBe(true) // the send follows availability meanwhile
+  ev('compositionend', '8')
+  await new Promise(resolve => f.w.setTimeout(resolve, 0)); await new Promise(resolve => setTimeout(resolve, 0))
+  const now = f.q('input[data-f="fuel"]')
+  expect(now).not.toBe(fuel)                                  // the postponed rebuild ran once, after the composition
+  expect(now.value).toBe('8'); expect(f.w.document.activeElement).toBe(now)
+  if ('crew' in change) expect(f.q('select[data-f="driverEntryIndex"]').textContent).toContain('Second Driver')
+  f.commit(now); f.live(25)
+  f.q('#apply').click()
+  expect(f.submits()).toEqual([expect.objectContaining({ fuelLiters: 8 })])
+})
+
 it('a structural rebuild while another field is being typed keeps its text, focus and selection', () => {
   const f = form(); f.live(25)
   const fuel = f.q('input[data-f="fuel"]'); fuel.focus(); f.type(fuel, '27,5'); fuel.setSelectionRange(1, 3)
