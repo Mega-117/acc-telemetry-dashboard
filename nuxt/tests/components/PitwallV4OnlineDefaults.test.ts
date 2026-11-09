@@ -51,7 +51,8 @@ it('tyre set default: the set after the mounted one, 50 -> 49, unknown -> 1, nev
   for (const unknown of [undefined, null, 0, 51, 2.5]) {
     const g = form(); g.snapshot({}, { fittedTyreSet: unknown }); expect(g.w.S.tyreSet).toBe(1)
   }
-  expect(f.q('tr[data-f="tyreSet"] .v4-hint').textContent).toContain('il set dopo quello montato')
+  // The default rule is a tooltip on the field, not a line of text (minimal layout 09/11).
+  expect(f.q('input[data-f="tyreSet"]').title).toContain('il set dopo quello montato')
 })
 
 it('pressure defaults: the driver current MFD values when valid, otherwise 26.0', () => {

@@ -38,8 +38,12 @@ function form() {
 it('shows the driver current MFD values: null as a dash, zero kept, never stale or of another context', () => {
   const f = form()
   f.snapshot({ strategy: car({ fuelToAdd: 0, tyreSet: null, pressures: { FL: 26, FR: 26.1, RL: 25.5, RR: 25.6 } }) })
-  expect(f.q('tr.v4-head').textContent).toContain('Adesso nel MFD del pilota')
-  expect(f.now('fuel')).toBe('0 L'); expect(f.now('tyreSet')).toBe('—'); expect(f.now('fr')).toBe('26,1'); expect(f.now('compound')).toBe('Dry')
+  // Minimal layout (09/11): no header row; the current value sits next to each field.
+  expect(f.q('tr.v4-head')).toBeNull()
+  expect(f.now('fuel')).toBe('0 L'); expect(f.now('tyreSet')).toBe('—');
+  expect(f.q('td.v4-now[data-now="tyreSet"]').classList.contains('v4-now-empty')).toBe(true)
+  expect(f.q('td.v4-now[data-now="fuel"]').classList.contains('v4-now-empty')).toBe(false)
+  expect(f.now('fr')).toBe('26,1'); expect(f.now('compound')).toBe('Dry')
   f.snapshot({ ready: false, strategy: car({ fuelToAdd: 12 }) })
   expect(f.now('fuel')).toBe('—'); expect(f.now('fl')).toBe('—')
   f.snapshot({ strategy: car({ fuelToAdd: 12, mfdV4: { ready: true, reason: null, contextId: 'b'.repeat(64), maxFuel: 110 } }) })
@@ -51,7 +55,9 @@ it('shows the driver current MFD values: null as a dash, zero kept, never stale 
 it('unknown car with a valid live tank: limit shown, litres TO ADD sent as typed (110 tank, 30 in MFD, 40 -> 40)', () => {
   const f = form(); f.snapshot(); f.ready()
   expect(f.q('tr[data-f="fuel"] .v4-limit').textContent).toBe('0–110 L')
-  expect(f.q('tr[data-f="fuel"] td.lb').textContent).toBe('Benzina da aggiungere (L)')
+  // Litres TO ADD, under the "Benzina" heading (minimal layout 09/11).
+  expect(f.q('tr[data-f="fuel"] td.lb').textContent).toBe('Da aggiungere (L)')
+  expect(f.q('tr[data-f="fuel"]').previousElementSibling.textContent).toBe('Benzina')
   f.edit('fuel', '40'); f.q('#apply').click()
   expect(f.submits()).toEqual([expect.objectContaining({ operation: 'strategy', fuelLiters: 40 })])
 })
@@ -220,4 +226,25 @@ it('one source of limits: the form, the receiver and the RTDB order rules agree'
   agree('pitStrategy', `newData.val() >= ${limits.pitStrategy.min} && newData.val() <= ${limits.pitStrategy.max}`)
   agree('brakeFront', `newData.val() >= ${limits.brakePads.min} && newData.val() <= ${limits.brakePads.max}`)
   agree('FL', `newData.val() >= ${limits.pressure.min} && newData.val() <= ${limits.pressure.max}`)
+})
+
+it('minimal layout (09/11): groups in reading order, preset last, short labels, no technical source tags shown', () => {
+  const f = form()
+  f.snapshot({ strategy: car() })
+  const rows = [...f.w.document.querySelectorAll('#form tr')].map((tr: any) => tr.classList.contains('v4-group') ? `#${tr.textContent}` : tr.dataset.f)
+  expect(rows).toEqual(['#Benzina', 'fuel', '#Gomme', 'changeTyre', 'compound', 'tyreSet', 'fl', 'fr', 'rl', 'rr',
+    '#Freni', 'brakes', 'brakeFront', 'brakeRear', '#Riparazioni', 'susp', 'body', '#Pilota', 'driverIdx',
+    '#Preset', 'applyPitStrategy', 'pitStrategy'])
+  expect(f.q('tr[data-f="fl"] td.lb').textContent).toBe('FL')
+  expect(f.q('tr[data-f="fl"]').classList.contains('v4-half')).toBe(true)
+  // Fixed ranges are not repeated on screen; the fuel range (it depends on the car) is.
+  expect(f.q('tr[data-f="fl"] .v4-limit').classList.contains('v4-quiet')).toBe(true)
+  expect(f.q('tr[data-f="fuel"] .v4-limit').classList.contains('v4-quiet')).toBe(false)
+  // The canonical source-tag cell still exists (canonical code writes it) but the theme hides it.
+  const css = [...f.w.document.querySelectorAll('style')].map((s: any) => s.textContent).join('\n')
+  expect(css).toContain('#form tr[data-f] > td:nth-child(3)')
+  expect(f.q('#refresh-draft').textContent).toBe('Usa valori attuali')
+  // A crew with names needs no explanatory note under the driver select.
+  f.snapshot({ strategy: car(), crew: [{ driverIndex: 0, name: 'Test Driver' }] })
+  expect(f.q('tr[data-f="driverIdx"] div')).toBeNull()
 })

@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 5726005b5c545640c45ee3163136b33b30716e9725c1570dfdbe1f2db467b4ef -->
+<!-- Generated V4 online; SHA256 11baa602a9fb1875dbafff2e2369423348468f622002d45f67127dcfca0471bc -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -170,6 +170,40 @@ tr.v4-bad input[data-numeric] { border-color: #ff6178; }
 #form.preset-only tr[data-f]:not([data-f=applyPitStrategy]):not([data-f=pitStrategy]) { opacity: .35; }
 tr.v4-preset-note td { padding: 8px 10px; color: #ffc400; background: #ffc40010; border-left: 3px solid #ffc400; font-size: 12px; }
 .v4-hint { display: block; margin-top: 3px; color: #8b8b94; font-size: 10px; }
+
+/* Minimal layout (user 09/11): groups with short headings, one column, the
+   driver's current value in grey next to the field. Technical source tags,
+   check marks, layout diagnostics and the method legend are not shown. */
+.draft-heading, #layout, .legend, #form tr[data-f] > td:nth-child(3), #form tr[data-f] > td:last-child { display: none; }
+#form, #form > tbody { display: flex; flex-wrap: wrap; max-width: 640px; }
+#form tr { display: flex; align-items: center; gap: 12px; width: 100%; padding: 5px 0; }
+#form tr.v4-half { width: 50%; }
+#form td { display: block; height: auto; padding: 0; border: 0; }
+#form td.lb { width: 136px; flex: none; color: #c9c9cf; }
+#form tr.v4-half td.lb { width: 84px; }
+#form tr.v4-group { padding: 18px 0 4px; margin-top: 6px; border-top: 1px solid #ffffff18; }
+#form tr.v4-group:first-child { margin-top: 0; padding-top: 4px; border-top: 0; }
+#form tr.v4-group th { padding: 0; color: #f0f0f3; font-size: 13px; font-weight: 600; letter-spacing: 0; text-transform: none; text-align: left; }
+td.v4-now { min-width: 0; padding: 0; border: 0; color: #9a9aa3; font-size: 12px; }
+td.v4-now::before { content: 'ora '; color: #8b8b94; }
+td.v4-now.v4-now-empty { visibility: hidden; }
+.v4-limit.v4-quiet { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+#form tr.v4-preset-note td { padding: 8px 10px; border: 1px solid #ffc40055; background: #ffc4000c; color: #ffd75a; }
+#strategy-result { border: 1px solid #16bd9166; border-left-width: 1px; }
+#strategy-result[data-problem=true] { border-color: #ff617866; }
+#conn { color: #c9c9cf; }
+/* One column, in reading order: status, fields, actions. */
+.wrap > .panel:first-child { display: flex; flex-direction: column; gap: 0; }
+#conn, .ctl { width: 100%; max-width: 640px; box-sizing: border-box; }
+#conn { order: 0; margin-bottom: 4px; }
+#form { order: 1; }
+.ctl { order: 2; margin-top: 16px; }
+#form select { min-width: 150px; max-width: 240px; }
+.v4-crew-missing { margin-top: 4px; color: #9a9aa3; font-size: 12px; }
+@media(max-width:680px) {
+ #form tr.v4-half { width: 100%; }
+ #form td.lb, #form tr.v4-half td.lb { width: 110px; }
+}
 </style></head>
 <body>
 <div class="wrap">
@@ -1043,8 +1077,12 @@ renderForm = function () {
   (crew && crew.drivers || []).forEach(function(d,i) { select.add(new Option(driverLabelV4(d), String(i))); });
   select.value = S.driverEntryIndex == null ? '' : String(S.driverEntryIndex);
   select.disabled = S.applyPitStrategy || busy || document.getElementById('apply').disabled;
+  // Only the case that changes what the user can do is explained (09/11: no
+  // redundant notes; the name check in the MFD is the engine's job).
+  if (crew) { row.children[1].replaceChildren(select); return; }
   var hint = document.createElement('div');
-  hint.textContent = crew ? 'Il nome selezionato viene verificato nel MFD.' : 'Equipaggio non disponibile dal logger. Puoi inviare gli altri campi senza cambio pilota.';
+  hint.className = 'v4-crew-missing';
+  hint.textContent = 'Equipaggio non disponibile: si possono inviare gli altri campi.';
   row.children[1].replaceChildren(select, hint);
 };
 formEl.addEventListener('change', function(e) {
@@ -1590,7 +1628,7 @@ else globalThis.MfdV4Contract = exported;
     verificationOrder: verificationOrder, invalidatedChecks: Array.from(invalidatedChecks) }); }
   var refresh = document.createElement('button');
   refresh.id = 'refresh-draft'; refresh.className = 'alt';
-  refresh.type = 'button'; refresh.textContent = 'Ripristina dai dati live';
+  refresh.type = 'button'; refresh.textContent = 'Usa valori attuali';
   var confirmation = document.createElement('div');
   confirmation.className = 'draft-confirm'; confirmation.hidden = true;
   confirmation.setAttribute('role', 'group'); confirmation.setAttribute('aria-label', 'Conferma ripristino bozza');
@@ -1706,7 +1744,7 @@ else globalThis.MfdV4Contract = exported;
     if (busy) confirmation.hidden = true;
     devTools.hidden = snapshot.development !== true;
     if (!snapshot.development) document.getElementById('gap').value = 60;
-    document.getElementById('connTxt').textContent = busy ? 'Invio in corso al PC del pilota.' : snapshot.reason || 'PC del pilota pronto. Valori iniziali dai dati disponibili; completa le scelte mancanti.';
+    document.getElementById('connTxt').textContent = busy ? 'Invio in corso al PC del pilota.' : snapshot.reason || 'Pilota pronto';
     if (busy) {
       showResult('Invio in corso', 'Attendo l’esito dal PC del pilota.', false);
       logEl.textContent = 'Invio in corso: attendo il nuovo esito dal PC del pilota.';
@@ -1820,15 +1858,39 @@ else globalThis.MfdV4Contract = exported;
     b.addEventListener('click', function () { step(id, direction); });
     return b;
   }
+  // Minimal layout (user 09/11): rows grouped under short headings, short
+  // labels, preset last. Presentation only: rows keep their data-f and the
+  // canonical inputs; the source-tag and check cells are hidden by the theme.
+  var GROUPS = [['Benzina', ['fuel']], ['Gomme', ['changeTyre', 'compound', 'tyreSet', 'fl', 'fr', 'rl', 'rr']],
+    ['Freni', ['brakes', 'brakeFront', 'brakeRear']], ['Riparazioni', ['susp', 'body']], ['Pilota', ['driverIdx']],
+    ['Preset', ['applyPitStrategy', 'pitStrategy']]];
+  var LABEL = { fuel: 'Da aggiungere (L)', changeTyre: 'Cambia gomme', tyreSet: 'Set', fl: 'FL', fr: 'FR', rl: 'RL', rr: 'RR',
+    brakes: 'Sostituisci', brakeFront: 'Anteriore', brakeRear: 'Posteriore', driverIdx: 'Cambio pilota',
+    applyPitStrategy: 'Carica solo il preset', pitStrategy: 'Numero' };
+  var HALF = { fl: 1, fr: 1, rl: 1, rr: 1, brakeFront: 1, brakeRear: 1, susp: 1, body: 1 };
+  function group() {
+    GROUPS.forEach(function (g) {
+      var first = true;
+      g[1].forEach(function (id) {
+        var tr = formEl.querySelector('tr[data-f="' + id + '"]');
+        if (!tr) return;
+        if (first) {
+          var head = document.createElement('tr'); head.className = 'v4-group';
+          head.innerHTML = '<th colspan="5"></th>'; head.firstChild.textContent = g[0];
+          formEl.appendChild(head); first = false;
+        }
+        formEl.appendChild(tr);
+        if (LABEL[id]) tr.querySelector('td.lb').textContent = LABEL[id];
+        if (HALF[id]) tr.classList.add('v4-half');
+      });
+    });
+  }
   function decorate() {
     var focused = document.activeElement;
     formEl.classList.toggle('preset-only', !!S.applyPitStrategy);
-    var head = document.createElement('tr'); head.className = 'v4-head';
-    head.innerHTML = '<th>Campo</th><th>Da inviare</th><th></th><th>Adesso nel MFD del pilota</th><th></th>';
-    formEl.prepend(head);
+    group();
     formEl.querySelectorAll('tr[data-f]').forEach(function (tr) {
       var id = tr.dataset.f, input = tr.querySelector('input[data-f="' + id + '"]');
-      if (id === 'fuel') tr.querySelector('td.lb').textContent = 'Benzina da aggiungere (L)';
       if (input && LIMIT_OF[id]) {
         // Text, not number: "27,5" (Italian comma) is read as 27.5, anything
         // else is shown as an error instead of silently becoming empty.
@@ -1839,13 +1901,12 @@ else globalThis.MfdV4Contract = exported;
         input.before(minus); input.after(plus);
         var hint = document.createElement('span'); hint.className = 'v4-limit';
         hint.textContent = r ? show(r.min, r.step) + '–' + show(r.max, r.step) + r.unit : 'max ?';
+        // Only the fuel limit changes with the car: the fixed ranges are not
+        // repeated on screen (tooltip and screen readers keep them).
+        if (id !== 'fuel') { hint.classList.add('v4-quiet'); input.title = 'Valori ammessi: ' + hint.textContent; }
         plus.after(hint);
-        if (id === 'tyreSet') {
-          // PIP-761: the default rule (online-panel.js defaultTyreSet), in short.
-          var rule = document.createElement('span'); rule.className = 'v4-hint';
-          rule.textContent = 'Predefinito: il set dopo quello montato (50 → 49; montato ignoto → 1)';
-          hint.after(rule);
-        }
+        // PIP-761: the default rule (online-panel.js defaultTyreSet), as a tooltip.
+        if (id === 'tyreSet') input.title += '. Predefinito: il set dopo quello montato (50 → 49; montato ignoto → 1)';
       }
       var now = document.createElement('td'); now.className = 'v4-now'; now.dataset.now = id;
       tr.lastElementChild.before(now);
@@ -1864,6 +1925,7 @@ else globalThis.MfdV4Contract = exported;
     formEl.querySelectorAll('td.v4-now').forEach(function (cell) {
       var text = currentText(cell.dataset.now);
       if (cell.textContent !== text) cell.textContent = text;
+      cell.classList.toggle('v4-now-empty', text === dash);
     });
     var fuelHint = formEl.querySelector('tr[data-f="fuel"] .v4-limit'), r = range('fuel');
     if (fuelHint) fuelHint.textContent = r ? '0–' + r.max + ' L' : 'max ?';
