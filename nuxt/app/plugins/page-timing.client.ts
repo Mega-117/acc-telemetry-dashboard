@@ -1,10 +1,11 @@
-import { createNavigationClock, pageShown } from '~/services/monitoring/pageTiming'
+import { createNavigationClock, createStartupMark, pageShown, pageTimingNote } from '~/services/monitoring/pageTiming'
 import { noteFeatureUse } from '~/services/usage/featureUseNote'
 
 // PIP-742: a page that takes a second or more to appear after the click reaches the diary (R2 KO).
 export default defineNuxtPlugin(() => {
   const router = useRouter()
   const clock = createNavigationClock(() => performance.now())
+  const isStartup = createStartupMark()
   const nextPaint = () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
 
   router.beforeEach((to, from) => {
@@ -18,6 +19,7 @@ export default defineNuxtPlugin(() => {
     await nextPaint()
     const shown = pageShown(to.path, started, performance.now())
     if (!shown) return
-    noteFeatureUse({ event: shown.slow ? 'page.slow' : 'page.shown', page: shown.page, ms: shown.ms })
+    // PIP-755: only a page of the main window can be its start-up page.
+    noteFeatureUse(pageTimingNote(shown, isStartup()))
   })
 })

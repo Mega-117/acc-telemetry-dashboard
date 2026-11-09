@@ -22,7 +22,7 @@ export type FeatureUseNote =
   /** PIP-743: the Dati page's laps against the logger's counters and the Sessioni list summary. */
   | { event: 'data.session_check', laps: number, lapsOff: number, validOff: number, off: number, bestOff: number }
   /** PIP-742: a page of the main window appearing after a click (page: closed list of codes). */
-  | { event: 'page.shown' | 'page.slow', page: number, ms: number }
+  | { event: 'page.shown' | 'page.slow', page: number, ms: number, startup?: number }
   /** PIP-740: one sync cycle towards Firebase (stuck: a session failing two cycles in a row while online). */
   | { event: 'sync.sessions', uploaded: number, unchanged: number, skipped: number, errors: number, stuck: number, offline: number, cycleFailed?: number }
   /** PIP-757: the introduction opened, stayed closed thanks to the profile, or opened twice for the account (KO). */

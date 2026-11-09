@@ -44,6 +44,38 @@ describe('PIP-704 hud.shift', () => {
     expect(report.mock.calls[0]![0]).toMatchObject({ flashed: 0, beforeFlash: 1, leadMsMedian: null })
   })
 
+  it('PIP-755: ACC passes through neutral between two gears; that is still an upshift', () => {
+    // R2 08/11: 11 hud.shift_health rows with ~4700 frames and upshifts=0 (the logger's own
+    // ShiftTracker, g -> N -> g+1, counted 10 upshifts at a time in the same sessions).
+    const report = vi.fn()
+    const trace = createShiftTraceAggregator(report, 2)
+    for (const [t, gear] of [[0, 3], [1000, 4]] as const) {
+      trace.feed(frame(t, gear, 6000, false))
+      trace.feed(frame(t + 100, gear, 7160, true))
+      trace.feed(frame(t + 300, gear, 7340, true))
+      trace.feed(frame(t + 330, 0, 7300, false))   // neutral, ~50-100 ms in ACC
+      trace.feed(frame(t + 380, 0, 6800, false))
+      trace.feed(frame(t + 420, gear + 1, 5200, false))
+    }
+    expect(report.mock.calls[0]![0]).toEqual({ car: 'ferrari_296_gt3', targetRpm: 7300, shifts: 2, flashed: 2,
+      onsetRpmMedian: 7160, upshiftRpmMedian: 7340, leadMsMedian: 320, beforeFlash: 0, late: 0 })
+    expect(trace.takeHealth()).toMatchObject({ upshifts: 2, reports: 1 })
+  })
+
+  it('PIP-755: a real neutral (over 0.5 s) or a downshift through neutral is no upshift', () => {
+    const report = vi.fn()
+    const trace = createShiftTraceAggregator(report, 1)
+    trace.feed(frame(0, 3, 7000, false))
+    trace.feed(frame(50, 0, 3000, false))
+    trace.feed(frame(700, 0, 3000, false))
+    trace.feed(frame(750, 4, 5200, false))      // neutral held 0.7 s: a stop, not a shift
+    trace.feed(frame(1000, 4, 7000, false))
+    trace.feed(frame(1050, 0, 7000, false))
+    trace.feed(frame(1100, 3, 7500, false))     // downshift through neutral
+    expect(report).not.toHaveBeenCalled()
+    expect(trace.takeHealth().upshifts).toBe(0)
+  })
+
   it('a downshift, another car or missing data never counts', () => {
     const report = vi.fn()
     const trace = createShiftTraceAggregator(report, 1)

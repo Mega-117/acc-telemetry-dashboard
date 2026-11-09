@@ -11,6 +11,8 @@
 export const SHIFT_TRACE_BATCH = 10
 export const SHIFT_TRACE_LATE_RPM = 200
 export const SHIFT_TRACE_ONSET_MAX_MS = 3_000
+/** PIP-755: ACC passes through neutral between two gears; longer than this it is a real neutral (logger: SHIFT_NEUTRAL_MAX_S). */
+export const SHIFT_TRACE_NEUTRAL_MAX_MS = 500
 
 export interface ShiftTraceFrame {
   now: number
@@ -60,6 +62,7 @@ export function createShiftTraceAggregator(report: (summary: ShiftTraceSummary) 
   let target: number | null = null
   let prev: { gear: number; rpm: number; flash: boolean } | null = null
   let onset: { rpm: number; at: number } | null = null
+  let neutralAt: number | null = null
   let onsets: number[] = [], upshifts: number[] = [], leads: number[] = []
   let flashed = 0, beforeFlash = 0, late = 0
   let health: ShiftTraceHealth = { frames: 0, noCar: 0, noTarget: 0, noGearOrRpm: 0, upshifts: 0, reports: 0 }
@@ -83,10 +86,21 @@ export function createShiftTraceAggregator(report: (summary: ShiftTraceSummary) 
       else if (targetRpm === null) health.noTarget++
       else if (gear === null || rpm === null || !Number.isFinite(gear) || !Number.isFinite(rpm)) health.noGearOrRpm++
       if (frameCar === null || targetRpm === null || gear === null || rpm === null
-        || !Number.isFinite(gear) || !Number.isFinite(rpm)) { prev = null; onset = null; return }
+        || !Number.isFinite(gear) || !Number.isFinite(rpm)) { prev = null; onset = null; neutralAt = null; return }
       if (frameCar !== car || targetRpm !== target) {
         // Another car or shift point: the batch would mix two rules.
-        car = frameCar; target = targetRpm; clear(); prev = null; onset = null
+        car = frameCar; target = targetRpm; clear(); prev = null; onset = null; neutralAt = null
+      }
+      // PIP-755: ACC passes through neutral between two gears (g -> N -> g+1, as the logger's
+      // ShiftTracker knows): the gear, its last rpm and the flash onset wait across it. Without
+      // this the trace saw N -> g+1 and counted no upshift at all (R2 08/11: upshifts=0).
+      if (gear === 0 && prev && prev.gear >= 1) {
+        neutralAt ??= frame.now
+        return
+      }
+      if (neutralAt !== null) {
+        if (frame.now - neutralAt > SHIFT_TRACE_NEUTRAL_MAX_MS) { prev = null; onset = null }
+        neutralAt = null
       }
       // Codex 02/11: a flash followed by a lift belongs to no shift: it expires after 3 s.
       if (onset && frame.now - onset.at > SHIFT_TRACE_ONSET_MAX_MS) onset = null

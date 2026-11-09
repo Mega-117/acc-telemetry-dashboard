@@ -46,9 +46,28 @@ export function createNavigationClock(now: () => number) {
 
 export type PageShown ={ page: number, ms: number, slow: number }
 
+/**
+ * PIP-755: the window's first page shown is its start-up (the app opening the Panoramica after
+ * the account answers), not a click: R2 08/11 had only those as KO, 5-23 s after the start.
+ * True once per window, for the first navigation that is actually painted.
+ */
+export function createStartupMark() {
+  let shown = false
+  return (): boolean => {
+    const first = !shown
+    shown = true
+    return first
+  }
+}
+
 export function pageShown(path: string, startedAt: number, paintedAt: number): PageShown | null {
   const page = pageCode(path)
   if (page === null || !Number.isFinite(startedAt) || !Number.isFinite(paintedAt) || paintedAt < startedAt) return null
   const ms = Math.round(paintedAt - startedAt)
   return { page, ms, slow: ms >= SLOW_PAGE_MS ? 1 : 0 }
+}
+
+/** The diary note of a page shown (PIP-742), with `startup` (PIP-755): 1 for the window's first page. */
+export function pageTimingNote(shown: PageShown, startup: boolean) {
+  return { event: shown.slow ? 'page.slow' as const : 'page.shown' as const, page: shown.page, ms: shown.ms, startup: startup ? 1 : 0 }
 }

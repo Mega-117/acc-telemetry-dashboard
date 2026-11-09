@@ -1,5 +1,27 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { createNavigationClock, pageCode, pageShown, SLOW_PAGE_MS } from '~/services/monitoring/pageTiming'
+import { createNavigationClock, createStartupMark, pageCode, pageShown, pageTimingNote, SLOW_PAGE_MS } from '~/services/monitoring/pageTiming'
+
+describe('start-up page (PIP-755)', () => {
+  it('the window first page is its start-up, every later page is a click', () => {
+    // R2 08/11 (3e818519, 0.5.3): the Panoramica 1717 ms, the first page 7 s after the app opened.
+    const isStartup = createStartupMark()
+    const first = pageShown('/', 0, 1717)!
+    expect(pageTimingNote(first, isStartup())).toEqual({ event: 'page.slow', page: 1, ms: 1717, startup: 1 })
+    expect(pageTimingNote(pageShown('/sessioni/x', 0, 1381)!, isStartup())).toEqual({ event: 'page.slow', page: 3, ms: 1381, startup: 0 })
+    expect(pageTimingNote(pageShown('/dati', 0, 20)!, isStartup())).toEqual({ event: 'page.shown', page: 8, ms: 20, startup: 0 })
+    expect(createStartupMark()()).toBe(true) // one mark per window
+  })
+
+  it('the plugin marks only a page of the main window, after the paint', () => {
+    const plugin = readFileSync(resolve(process.cwd(), 'app/plugins/page-timing.client.ts'), 'utf8')
+    const guard = plugin.indexOf('if (!shown) return')
+    expect(guard).toBeGreaterThan(-1)
+    expect(plugin.indexOf('noteFeatureUse(pageTimingNote(shown, isStartup()))')).toBeGreaterThan(guard)
+    expect(plugin.match(/isStartup\(\)/g)).toHaveLength(1)
+  })
+})
 
 describe('page timing spy (PIP-742)', () => {
   it('main-window pages get their code, never the path; other windows are not pages', () => {
