@@ -141,6 +141,56 @@ it('a draft saved ticked by the old form reopens unticked (reload never restores
   expect(f.submits()).toEqual([expect.objectContaining({ operation: 'strategy', fuelLiters: 60 })])
 })
 
+// Codex review P2 (1): no silent clamp anywhere (pads 5 -> 4, preset 31 -> 30 before).
+it('out-of-limit pads and preset stay as typed with the reason, and block the send', () => {
+  const f = form(); f.snapshot(); f.ready()
+  Object.assign(f.w.S, { brakes: true, brakeFront: 2, brakeRear: 2 }); f.w.renderForm()
+  f.edit('brakeFront', '5')
+  expect(f.w.S.brakeFront).toBe(2); expect(f.field('brakeFront').value).toBe('5')
+  expect(f.issue('brakeFront')).toBe('5: Fuori limite: 1–4.')
+  f.q('#apply').click(); expect(f.submits()).toEqual([])
+  const tick = f.field('applyPitStrategy'); tick.checked = true; tick.dispatchEvent(new f.w.Event('change', { bubbles: true }))
+  f.edit('pitStrategy', '31')
+  expect(f.w.S.pitStrategy).toBe(1); expect(f.field('pitStrategy').value).toBe('31')
+  expect(f.issue('pitStrategy')).toBe('31: Fuori limite: 1–30.')
+  f.q('#apply').click(); expect(f.submits()).toEqual([])
+  f.edit('pitStrategy', '2,5'); expect(f.issue('pitStrategy')).toBe('2,5: Numero intero.')
+  f.edit('pitStrategy', '30'); f.q('#apply').click()
+  expect(f.submits()).toEqual([{ version: 1, contextId, stepMs: 60, operation: 'preset', pitStrategy: 30 }])
+})
+
+// Codex review P2 (2): a preset send passes the same validation.
+it('a non-numeric preset never sends the previous preset', () => {
+  const f = form(); f.snapshot(); f.ready()
+  const tick = f.field('applyPitStrategy'); tick.checked = true; tick.dispatchEvent(new f.w.Event('change', { bubbles: true }))
+  f.edit('pitStrategy', '2'); f.edit('pitStrategy', 'abc')
+  expect(f.w.S.pitStrategy).toBe(2); expect(f.issue('pitStrategy')).toBe('Valore non numerico: abc')
+  f.q('#apply').click()
+  expect(f.submits()).toEqual([])
+  expect(f.q('#strategy-result').textContent).toContain('Valore non numerico: abc')
+  // A typo in a strategy field does not block the preset: it is not part of it.
+  const g = form(); g.snapshot(); g.ready(); g.edit('fuel', 'xx')
+  const tick2 = g.field('applyPitStrategy'); tick2.checked = true; tick2.dispatchEvent(new g.w.Event('change', { bubbles: true }))
+  g.q('#apply').click(); expect(g.submits()).toEqual([expect.objectContaining({ operation: 'preset' })])
+})
+
+// Codex review P2 (3): only fields that are part of the order block it.
+it('a typo in a field excluded from the order does not block it, and returns when the field applies again', () => {
+  const f = form(); f.snapshot(); f.ready()
+  Object.assign(f.w.S, { changeTyre: true, compound: 'Dry', tyreSet: 3, fl: 26, fr: 26, rl: 26, rr: 26 }); f.w.renderForm()
+  f.edit('fl', 'abc'); expect(f.issue('fl')).toBe('Valore non numerico: abc')
+  f.q('#apply').click(); expect(f.submits()).toEqual([])
+  const tyres = f.field('changeTyre'); tyres.checked = false; tyres.dispatchEvent(new f.w.Event('change', { bubbles: true }))
+  expect(f.issue('fl')).toBeNull()
+  f.q('#apply').click()
+  expect(f.submits()).toEqual([expect.objectContaining({ operation: 'strategy', changeTyres: false })])
+  expect(f.submits()[0].pressures).toBeUndefined()
+  f.snapshot({ busy: false })
+  tyres.checked = true; f.field('changeTyre').checked = true
+  f.field('changeTyre').dispatchEvent(new f.w.Event('change', { bubbles: true }))
+  expect(f.issue('fl')).toBe('Valore non numerico: abc'); expect(f.field('fl').value).toBe('abc')
+})
+
 it('one source of limits: the form, the receiver and the RTDB order rules agree', () => {
   const html = readFileSync(new URL('../../public/mfd-v4-online.html', import.meta.url), 'utf8')
   const limits = JSON.parse(html.match(/globalThis\.MfdV4Limits = (\{.*?\});\r?\n/)![1])

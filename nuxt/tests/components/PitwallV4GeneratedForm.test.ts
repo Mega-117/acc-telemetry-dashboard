@@ -141,13 +141,16 @@ it('updates LIVE indicators in place while preserving input identity, typing and
   expect(submit).toMatchObject({ operation: 'strategy', fuelLiters: 18, tyreSet: 2, changeTyres: true, pressures: { FL: 25, FR: 25, RL: 25, RR: 25 } })
 })
 
-it('keeps canonical numeric clamping visible after committing a focused edit', () => {
+// PIP-761 (Codex P2): the canonical 1-4 clamp is no longer silent: the typed
+// value stays, the reason is shown, nothing is corrected.
+it('keeps an out-of-limit pad value as typed after committing a focused edit', () => {
   const { w, snapshot, field, edit } = onlineForm()
   snapshot({ strategy: { fuelToAdd: 15 } })
-  w.S.brakes = true; w.renderForm()
+  w.S.brakes = true; w.S.brakeFront = 2; w.renderForm()
   field('brakeFront').focus(); edit('brakeFront', '8')
-  expect(w.S.brakeFront).toBe(4)
-  expect(field('brakeFront').value).toBe('4')
+  expect(w.S.brakeFront).toBe(2)
+  expect(field('brakeFront').value).toBe('8')
+  expect(w.document.querySelector('tr[data-f="brakeFront"] .v4-issue').textContent).toBe('8: Fuori limite: 1–4.')
 })
 
 it('defers initial values during an order and seeds them as soon as it finishes', () => {

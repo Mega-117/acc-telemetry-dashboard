@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 eb7031921f4943d33c462d71ea5ada090aee47ca74e4c245f61af1f1cdd1d7e2 -->
+<!-- Generated V4 online; SHA256 f4f78b875930789e4003fe5d93f4d1af418b53f4fd59b3c9bfaf1636137cd442 -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -1513,7 +1513,8 @@ else globalThis.MfdV4Contract = exported;
     }
     // PIP-761: a value the form marks (comma typo, out of limits, over the
     // car's tank) blocks the send; nothing is reduced or rounded silently.
-    var blocking = p.operation === 'strategy' ? globalThis.MfdV4OnlineFields?.blocking() : null;
+    // Preset sends pass the same check (only the preset field applies then).
+    var blocking = globalThis.MfdV4OnlineFields?.blocking() ?? null;
     var checked = blocking ? { ok: false, reason: blocking } : MfdV4Contract.validatePlan(p);
     if (checked.ok) {
       var capacity = MfdV4Contract.checkCapacity(checked.plan, globalThis.MfdV4OnlineFields?.capacity() ?? null);
@@ -1671,7 +1672,12 @@ else globalThis.MfdV4Contract = exported;
   var LIMIT_OF = { fuel: 'fuelLiters', tyreSet: 'tyreSet', fl: 'pressure', fr: 'pressure', rl: 'pressure', rr: 'pressure',
     brakeFront: 'brakePads', brakeRear: 'brakePads', pitStrategy: 'pitStrategy' };
   var WHEEL = { fl: 'FL', fr: 'FR', rl: 'RL', rr: 'RR' };
-  var invalid = {};   // field -> raw text that is not a number (e.g. "27,5,1"): never sent
+  // field -> { raw, reason }: text kept as typed (not a number, or out of a
+  // limit the canonical handler would clamp). Never sent, never corrected.
+  var invalid = {};
+  // The canonical panel clamps these on change (pads 1-4, preset 1-30): an
+  // out-of-limit value is stopped here, before it can become a silent 4 or 30.
+  var CLAMPED = { brakeFront: true, brakeRear: true, pitStrategy: true };
   var dash = '—';
   function shot() { return globalThis.MfdV4OnlineSnapshot ? globalThis.MfdV4OnlineSnapshot() : null; }
   // Live values are "current" only from a ready driver whose snapshot belongs
@@ -1712,8 +1718,10 @@ else globalThis.MfdV4Contract = exported;
     return WHEEL[id] ? show(value, 0.1) : String(value);
   }
   function issue(id) {
-    if (invalid[id] != null) return 'Valore non numerico: ' + invalid[id];
-    if (!LIMIT_OF[id] || S.applyPitStrategy || inattivo(id)) return null;
+    // Only a field that is part of the order can block it (inattivo also
+    // encodes preset mode); its error comes back when it applies again.
+    if (!LIMIT_OF[id] || inattivo(id)) return null;
+    if (invalid[id]) return invalid[id].reason;
     if (id === 'fuel') {
       var limit = C.fuelLimit(capacity());
       if (!limit.ok) return limit.reason;
@@ -1756,7 +1764,7 @@ else globalThis.MfdV4Contract = exported;
         // Text, not number: "27,5" (Italian comma) is read as 27.5, anything
         // else is shown as an error instead of silently becoming empty.
         input.type = 'text'; input.inputMode = 'decimal'; input.dataset.numeric = '1';
-        if (invalid[id] != null && document.activeElement !== input) input.value = invalid[id];
+        if (invalid[id] && document.activeElement !== input) input.value = invalid[id].raw;
         var minus = button(id, -1), plus = button(id, 1), r = range(id);
         minus.disabled = plus.disabled = input.disabled || !r;
         input.before(minus); input.after(plus);
@@ -1803,8 +1811,10 @@ else globalThis.MfdV4Contract = exported;
     var input = event.target, id = input.dataset && input.dataset.f;
     if (!id || input.dataset.numeric !== '1') return;
     var raw = input.value.trim().replace(',', '.');
-    if (raw === '' || /^\d+(\.\d+)?$/.test(raw)) { delete invalid[id]; input.value = raw; return; }
-    invalid[id] = input.value;
+    var number = /^\d+(\.\d+)?$/.test(raw);
+    var limit = number && CLAMPED[id] ? C.fieldIssue(LIMIT_OF[id], Number(raw)) : null;
+    if (raw === '' || (number && !limit)) { delete invalid[id]; input.value = raw; return; }
+    invalid[id] = { raw: input.value, reason: number ? input.value + ': ' + limit : 'Valore non numerico: ' + input.value };
     event.stopImmediatePropagation();
     refresh();
   }, true);
