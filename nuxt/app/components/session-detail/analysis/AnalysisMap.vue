@@ -4,7 +4,7 @@
 // Corner zoom: the two racing lines, yours blue and the reference amber.
 // Two dots follow the cursor: you (blue, filled) and the reference (amber, hollow).
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { deltaTrend, finishLine, glideFrame, fractions, lapDelta, mapPoints, worldToMap, type Corner, type MapPoint } from '~/services/telemetry/lapAnalysis'
+import { deltaTrend, finishLine, glideFrame, fractions, lapDelta, lapMapLine, mapPoints, worldToMap, type Corner, type MapPoint } from '~/services/telemetry/lapAnalysis'
 import { hasMapPositions } from '~/services/telemetry/mapPositions'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { placeMapLabels } from '~/services/telemetry/mapLabelPlacement'
@@ -57,7 +57,12 @@ const edgePaths = computed(() => {
   const right = props.edges.right.map(([x, z]) => project(x, z))
   return { left: path(left), right: path(right), surface: path([...left, ...[...right].reverse()]) }
 })
-const lapPoints = computed(() => mapRef.value ? mapPoints(props.lap, at, W.value, H.value, 18, mapRef.value) : base.value)
+// PIP-760: your lap's own line (full or recovered coordinates, holes never bridged). Where it has no coordinates
+// (laps saved before late October, the stretch a MoTeC repair could not recover) gain and loss, which depend on the
+// distance only, are drawn on the reference's line and the note says so: never a made-up line of your lap.
+const own = computed(() => base.value ? lapMapLine(props.lap, at, W.value, H.value, 18, frame.value) : null)
+const ownAt = (i: number) => own.value?.points[i] ?? null
+const ownJoined = (i: number) => !!own.value?.joined[i]
 const zoomed = computed(() => props.zoom && props.selected !== null && !!props.corners[props.selected - 1])
 const lapsMode = computed(() => props.colorMode === 'laps')
 const focusRange = computed<[number, number] | null>(() => {
@@ -77,28 +82,55 @@ function resetView() { view.value = null; follow.value = true }
 watch(focusRange, resetView)
 const trend = computed(() => props.reference ? deltaTrend(lapDelta(props.lap, props.reference, at)) : null)
 const path = (points: MapPoint[] | null) => points?.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ') ?? ''
+// Each stretch of your lap: on its own line when recorded, else on the reference's (borrowed), else not drawn.
+const stretches = computed(() => {
+  const points = base.value
+  if (!points) return []
+  return points.slice(1).map((_, i) => {
+    if (ownJoined(i)) return { a: ownAt(i)!, b: ownAt(i + 1)!, borrowed: false }
+    return mapRef.value ? { a: points[i]!, b: points[i + 1]!, borrowed: true } : null
+  })
+})
 const segments = computed(() => {
-  const points = lapPoints.value
-  if (!points || zoomed.value || lapsMode.value) return []
   const corner = props.selected !== null ? props.corners[props.selected - 1] : null
-  return points.slice(1).map((p, i) => {
+  // Zoomed in or one colour per lap, your own line is drawn plain (lapRuns): only the borrowed stretches keep the
+  // gain/loss colours, so a corner zoom never loses them silently (PIP-760).
+  const ownLinesShown = zoomed.value || lapsMode.value
+  return stretches.value.flatMap((s, i) => {
+    if (!s || (ownLinesShown && !s.borrowed)) return []
     const change = trend.value?.[i] ?? 0
     // Your lap against the reference: gaining green, losing red, even grey.
     const zone = props.zoneColors?.find(z => at[i]! >= z.start && at[i]! < z.end)
     const color = props.zoneColors ? zone?.color ?? '#8a8a90'
       : !trend.value ? '#38bdf8' : change < -0.002 ? '#3ddc5a' : change > 0.002 ? '#ff5a6e' : '#8a8a90'
     const inside = !corner || (at[i]! >= corner.start && at[i]! <= corner.end)
-    return { x1: points[i]!.x, y1: points[i]!.y, x2: p.x, y2: p.y, color, opacity: inside ? 1 : 0.3 }
+    return [{ x1: s.a.x, y1: s.a.y, x2: s.b.x, y2: s.b.y, color, opacity: inside ? 1 : 0.3, borrowed: s.borrowed }]
   })
 })
+// Your own line as separate runs: a hole in the coordinates breaks it, never a chord across the track.
+const lapRuns = computed(() => {
+  const runs: MapPoint[][] = []
+  let run: MapPoint[] = []
+  stretches.value.forEach((s, i) => {
+    if (s && !s.borrowed) { if (!run.length) run.push(s.a); run.push(s.b) } else if (run.length) { runs.push(run); run = [] }
+    if (i === stretches.value.length - 1 && run.length) runs.push(run)
+  })
+  return runs
+})
+// PIP-760: which geometry the colours use, said whenever a stretch is drawn on the reference's line.
+const geometryNote = computed(() => !stretches.value.some(s => s?.borrowed) ? null
+  : t(own.value ? 'telemetry.map.onReferencePartial' : 'telemetry.map.onReference'))
 const dot = (points: MapPoint[] | null, fraction: number | null) => fraction === null || !points ? null : points[Math.round(fraction * (POINTS - 1))] ?? null
-const lapDot = computed(() => dot(lapPoints.value, props.cursor))
+// Your position along the lap: on your own line, else (no coordinates there) on the reference's at the same distance.
+const lapPointAt = (i: number) => ownAt(i) ?? (mapRef.value ? base.value?.[i] ?? null : null)
+const lapDot = computed(() => props.cursor === null ? null : lapPointAt(Math.round(props.cursor * (POINTS - 1))))
 // Garage 61: an arrow shows which way the car goes at the cursor.
 const lapArrow = computed(() => {
-  const points = lapPoints.value
-  if (!points || props.cursor === null) return null
+  if (props.cursor === null) return null
   const i = Math.min(Math.round(props.cursor * (POINTS - 1)), POINTS - 2)
-  const a = points[i]!, b = points[i + 1]!
+  const s = stretches.value[i]
+  if (!s) return null
+  const { a, b } = s
   return { x: a.x, y: a.y, angle: (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI }
 })
 const refDot = computed(() => mapRef.value ? dot(base.value, props.refCursor ?? props.cursor) : null)
@@ -319,7 +351,7 @@ function onMove(event: PointerEvent) {
     <polyline v-if="sector" :points="sector.path" class="map-sector" />
     <template v-if="zoomed || lapsMode">
       <polyline v-if="mapRef" :points="path(base)" class="map-ref" />
-      <polyline :points="path(lapPoints)" class="map-lap-line" />
+      <polyline v-for="(run, r) in lapRuns" :key="`run-${r}`" :points="path(run)" class="map-lap-line" />
     </template>
     <line v-for="(s, i) in segments" :key="i" :x1="s.x1" :y1="s.y1" :x2="s.x2" :y2="s.y2" :stroke="s.color" :stroke-opacity="s.opacity" class="map-lap" />
     <!-- Finish line: white and black, across the track -->
@@ -345,6 +377,8 @@ function onMove(event: PointerEvent) {
     <circle v-if="refDot" :cx="refDot.x" :cy="refDot.y" :r="5 * zoomScale" class="map-dot-ref" />
     <path v-if="lapArrow" :transform="`translate(${lapArrow.x} ${lapArrow.y}) rotate(${lapArrow.angle}) scale(${zoomScale})`" d="M8 0 L-6 -6 L-3 0 L-6 6 Z" class="map-arrow" />
   </svg>
+  <!-- PIP-760: which geometry the colours use, when (part of) your lap has no coordinates. -->
+  <p v-if="geometryNote" class="map-note" data-testid="map-geometry-note">{{ geometryNote }}</p>
   </div>
   <p v-else class="map-none">{{ t('telemetry.map.none') }}</p>
 </template>
@@ -397,4 +431,5 @@ html.map-grabbing, html.map-grabbing * { user-select: none !important; }
 .map-dot-lap { fill: #38bdf8; stroke: #fff; stroke-width: calc(1.5px * var(--z, 1)); }
 .map-dot-ref { fill: #0a0a0f; stroke: #fbbf24; stroke-width: calc(2px * var(--z, 1)); }
 .map-none { color: #8a8a90; font-size: 12px; }
+.map-note { margin: 4px 0 0; color: #8a8a90; font-size: 11px; line-height: 1.35; }
 </style>

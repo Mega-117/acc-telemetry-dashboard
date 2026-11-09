@@ -162,6 +162,9 @@ export default {
       resetAria: 'Reset the map view',
       resetTitle: 'Initial view (also double click)',
       none: 'Map not available: this lap has no coordinates.',
+      // PIP-760: gain and loss drawn on the reference's line where your lap has no coordinates.
+      onReference: 'Your lap has no coordinates: gain and loss are drawn on the reference line.',
+      onReferencePartial: 'A stretch of your lap has no coordinates: there, gain and loss are on the reference line.',
     },
     car: {
       title: 'Car',

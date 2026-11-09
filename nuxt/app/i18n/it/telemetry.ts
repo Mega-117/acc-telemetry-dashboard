@@ -161,6 +161,9 @@ export default {
       resetAria: "Rimetti la mappa com'era",
       resetTitle: 'Inquadratura iniziale (anche doppio clic)',
       none: 'Mappa non disponibile: questo giro non ha le coordinate.',
+      // PIP-760: gain and loss drawn on the reference's line where your lap has no coordinates.
+      onReference: 'Il tuo giro non ha le coordinate: guadagno e perdita sono disegnati sulla linea del riferimento.',
+      onReferencePartial: 'Un tratto del tuo giro non ha le coordinate: lì guadagno e perdita sono sulla linea del riferimento.',
     },
     car: {
       title: 'Auto',

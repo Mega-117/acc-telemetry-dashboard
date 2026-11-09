@@ -7,7 +7,7 @@
  */
 import type { LapTraceView } from './lapTraceChart'
 import { useI18n } from '~/i18n'
-import { hasMapPositions } from './mapPositions'
+import { hasMapPositions, ownMapPositions } from './mapPositions'
 
 /** Levels have no values in between: the logger stores them as steps (PIP-617). */
 const DISCRETE = new Set(['gear', 'engine_map', 'traction_control', 'traction_control_2', 'abs'])
@@ -449,6 +449,41 @@ export function worldToMap(frame: LapTraceView, at: number[], width: number, hei
     const p = turn(x, z, rotationDeg)
     return { x: offsetX + (p.x - minX) * scale, y: offsetY + (p.y - minY) * scale }
   }
+}
+
+/**
+ * PIP-760: the lap's own line on the map, with the frame's transform, from full or recovered (partial) coordinates.
+ * `points[i]` is null where the lap has no recorded coordinate; `joined[i]` says whether the stretch from `at[i]` to
+ * `at[i+1]` was recorded throughout (no sample missing between them): a hole is never bridged by a chord.
+ * Null when the lap has no coordinates of its own or the frame cannot frame the map.
+ */
+export function lapMapLine(trace: LapTraceView, at: number[], width: number, height: number, padding = 10, frame: LapTraceView = trace,
+  rotationDeg = ACC_MAP_ROTATION_DEG): { points: (MapPoint | null)[], joined: boolean[] } | null {
+  const own = ownMapPositions(trace)
+  const project = worldToMap(frame, at, width, height, padding, rotationDeg)
+  if (!own || !project) return null
+  const { xs, zs } = own
+  const last = xs.length - 1
+  const missingBefore = [0]
+  for (let k = 0; k <= last; k++) missingBefore.push(missingBefore[k]! + (xs[k] === null || zs[k] === null ? 1 : 0))
+  const value = (values: readonly (number | null)[], low: number, high: number, t: number) => {
+    const a = values[low], b = values[high]
+    if (a === null || a === undefined) return null
+    if (t === 0) return a
+    return b === null || b === undefined ? null : a + (b - a) * t
+  }
+  const where = at.map(f => Math.min(Math.max(f, 0), 1) * last)
+  const points = where.map((p) => {
+    const low = Math.floor(p), high = Math.min(low + 1, last), t = high > low ? p - low : 0
+    const x = value(xs, low, high, t), z = value(zs, low, high, t)
+    return x === null || z === null ? null : project(x, z)
+  })
+  const joined = points.slice(1).map((p, i) => {
+    if (!p || !points[i]) return false
+    const from = Math.floor(where[i]!), to = Math.min(Math.ceil(where[i + 1]!), last)
+    return missingBefore[to + 1]! - missingBefore[from]! === 0
+  })
+  return { points, joined }
 }
 
 /** Finish line: a short tick across the track at the start of the lap. */

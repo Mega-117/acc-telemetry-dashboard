@@ -36,9 +36,17 @@ export interface LapTraceView {
   gridStepM: number
   lengthM: number
   channels: Record<string, number[]>
+  /**
+   * PIP-760: channels recovered from the lap's original trace (MoTeC repair), `null` where nothing was recorded.
+   * Kept apart so no generic chart ever draws a hole as a value; only who knows holes reads them (the map).
+   */
+  partialChannels?: Record<string, (number | null)[]>
 }
 
 const CORE_CHANNELS = ['time_s', 'speed_kmh', 'brake_pct', 'throttle_pct']
+// PIP-760, the partial channel contract (logger model.py CORE_CHANNELS, lapUploadPayload.js, Worker lapReader.mjs):
+// these channels are never partial; any other one may hold `null` where nothing was recorded.
+const FULL_CHANNELS = new Set(['time_s', 'speed_kmh', 'brake_pct', 'throttle_pct', 'steer_deg', 'gear'])
 
 export interface LapConditions { airC: number | null, roadC: number | null, grip: string | null }
 
@@ -78,14 +86,18 @@ export function normalizeLapTrace(raw: unknown): LapTraceView | null {
   if (meta.track_variant != null && (typeof meta.track_variant !== 'string' || !meta.track_variant.trim())) return null
   if (typeof meta.lap_time_s !== 'number' || !Number.isFinite(meta.lap_time_s) || meta.lap_time_s <= 0) return null
   const out: Record<string, number[]> = {}
+  const partial: Record<string, (number | null)[]> = {}
   let length: number | null = null
   for (const name of Object.keys(channels)) {
     const values = channels[name]
     if (!Array.isArray(values) || values.length < 2) return null
-    if (values.some(value => typeof value !== 'number' || !Number.isFinite(value))) return null
+    const mayMiss = !FULL_CHANNELS.has(name)
+    if (values.some(value => !(mayMiss && value === null) && (typeof value !== 'number' || !Number.isFinite(value)))) return null
     if (length === null) length = values.length
     if (values.length !== length) return null
-    out[name] = values as number[]
+    if (!values.includes(null)) out[name] = values as number[]
+    else if (values.every(value => value === null)) return null
+    else partial[name] = values as (number | null)[]
   }
   for (const required of data.schema === LAP_TRACE_SCHEMA ? CORE_CHANNELS : ['time_s']) {
     if (!out[required]) return null
@@ -115,6 +127,7 @@ export function normalizeLapTrace(raw: unknown): LapTraceView | null {
     gridStepM: gridStep,
     lengthM: (length! - 1) * gridStep,
     channels: out,
+    ...(Object.keys(partial).length ? { partialChannels: partial } : {}),
   }
 }
 

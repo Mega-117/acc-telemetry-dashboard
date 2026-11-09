@@ -129,10 +129,13 @@ export async function readLapBody(response: Response): Promise<unknown> {
     throw invalidLap('unreadable')
   }
   // PIP-648: encoded laps keep their channels under `channels_qd` (older readers refuse them cleanly).
-  const body = parsed as { encoding?: unknown, channels?: Record<string, unknown>, channels_qd?: Record<string, unknown> } | null
+  const body = parsed as { encoding?: unknown, channels?: Record<string, unknown>, channels_qd?: Record<string, unknown>, channels_partial_qd?: Record<string, unknown> } | null
   const channels = body?.encoding === undefined ? body?.channels : body?.channels_qd
   if (!channels || typeof channels !== 'object') throw invalidLap('channels')
-  const entries = Object.values(channels)
+  // PIP-760: the partial channels count towards the same limits.
+  const partial = body?.encoding === undefined ? {} : body?.channels_partial_qd ?? {}
+  if (!partial || typeof partial !== 'object') throw invalidLap('channels')
+  const entries = [...Object.values(channels), ...Object.values(partial)]
   if (entries.length > LAP_DOWNLOAD_LIMITS.channels || entries.some(v => !Array.isArray(v) || v.length > LAP_DOWNLOAD_LIMITS.samples)) {
     throw invalidLap('tooMany')
   }
@@ -148,24 +151,34 @@ export function decodeLapChannels(payload: Record<string, unknown>): Record<stri
   if (payload.encoding === undefined) return payload
   const decimals = payload.channel_decimals as Record<string, unknown> | undefined
   if (payload.encoding !== 'qdelta1' || !decimals || typeof decimals !== 'object') throw invalidLap('format')
-  const channels: Record<string, number[]> = {}
+  const channels: Record<string, (number | null)[]> = {}
   // Same bound as the writer (2^40): every delta and every running sum stays an exact integer.
   const exact = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n) && Math.abs(n) <= MAX_SCALED
-  for (const [name, deltas] of Object.entries(payload.channels_qd as Record<string, unknown[]>)) {
+  // PIP-760: partial channels travel under `channels_partial_qd` (lapUploadPayload.js): `null` = not recorded, and
+  // the running sum resumes from the last recorded value. normalizeLapTrace then keeps them apart.
+  const partial = (payload.channels_partial_qd ?? {}) as Record<string, unknown[]>
+  const decode = (name: string, deltas: unknown[], mayMiss: boolean) => {
     const d = decimals[name]
     if (typeof d !== 'number' || !Number.isInteger(d) || d < 0 || d > 6) throw invalidLap('format')
     const scale = 10 ** d
     let sum = 0
     channels[name] = deltas.map((delta) => {
+      if (delta === null && mayMiss) return null
       if (!exact(delta) || !exact(sum + delta)) throw invalidLap('unreadable')
       sum += delta
       return sum / scale
     })
   }
+  for (const [name, deltas] of Object.entries(payload.channels_qd as Record<string, unknown[]>)) decode(name, deltas, false)
+  for (const [name, deltas] of Object.entries(partial)) {
+    if (name in channels || !Array.isArray(deltas)) throw invalidLap('format')
+    decode(name, deltas, true)
+  }
   const rest = { ...payload }
   delete rest.encoding
   delete rest.channel_decimals
   delete rest.channels_qd
+  delete rest.channels_partial_qd
   return { ...rest, channels }
 }
 
