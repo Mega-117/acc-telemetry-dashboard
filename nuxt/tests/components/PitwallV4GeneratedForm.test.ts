@@ -73,23 +73,25 @@ function onlineForm() {
   return { w, post, snapshot, field, edit }
 }
 
-it('initializes delayed and partial telemetry once, including zero, without following later car changes', () => {
+// PIP-761 (user 09/11): every field has a default; live values seed pressures
+// and the tyre set once, then never follow later car changes.
+it('fills defaults, then delayed live pressures and set once, without following later car changes', () => {
   const { w, snapshot, field } = onlineForm()
   snapshot({ ready: false, strategy: null })
-  snapshot({ strategy: { fuelToAdd: 0 } })
-  expect(w.S.fuel).toBe(0)
+  expect(w.S).toMatchObject({ applyPitStrategy: false, pitStrategy: 1, fuel: 0, changeTyre: true, compound: 'Dry', tyreSet: 1,
+    fl: 26, fr: 26, rl: 26, rr: 26, brakes: false, brakeFront: 1, brakeRear: 1, susp: true, body: true, driverEntryIndex: null })
   expect(field('fuel').value).toBe('0')
-  snapshot({ strategy: { fuelToAdd: 30, tyreSet: 2, compound: 'dry', pressures: { FL: 25.15 } } })
-  expect(w.S).toMatchObject({ fuel: 0, tyreSet: 3, compound: 'Dry', fl: 25.2, fr: null })
-  snapshot({ strategy: { fuelToAdd: 40, pressures: { FL: 27, FR: 26 } } })
-  expect(w.S).toMatchObject({ fuel: 0, fl: 25.2, fr: 26 })
+  snapshot({ strategy: { fuelToAdd: 30, tyreSet: 2, compound: 'wet', fittedTyreSet: 4, pressures: { FL: 25.15 } } })
+  expect(w.S).toMatchObject({ fuel: 0, tyreSet: 5, compound: 'Dry', fl: 25.2, fr: 26 })
+  snapshot({ strategy: { fuelToAdd: 40, fittedTyreSet: 7, pressures: { FL: 27, FR: 26.4 } } })
+  expect(w.S).toMatchObject({ fuel: 0, tyreSet: 5, fl: 25.2, fr: 26.4 })
 })
 
 it('preserves edited and deliberately cleared fields when delayed telemetry arrives', () => {
   const { w, snapshot, edit } = onlineForm()
   snapshot({ ready: false, strategy: null })
   edit('fuel', '12'); edit('fuel', '')
-  snapshot({ strategy: { fuelToAdd: 30, tyreSet: 2 } })
+  snapshot({ strategy: { fuelToAdd: 30, tyreSet: 2, fittedTyreSet: 2 } })
   expect(w.S.fuel).toBeNull()
   expect(w.S.tyreSet).toBe(3)
   edit('fuel', '17')
@@ -115,15 +117,15 @@ it('restores draft choices including explicit blanks while filling remaining unk
   first.edit('fuel', '12'); first.edit('fuel', '')
   const draft = (first.post.mock.calls.filter((c: any) => c[0].type === 'draft').at(-1)![0] as any).value
   const second = onlineForm()
-  second.snapshot({ draft, strategy: { fuelToAdd: 30, tyreSet: 2 } })
+  second.snapshot({ draft, strategy: { fuelToAdd: 30, tyreSet: 2, fittedTyreSet: 2 } })
   expect(second.w.S.fuel).toBeNull()
   expect(second.w.S.tyreSet).toBe(3)
 })
 
 it('updates LIVE indicators in place while preserving input identity, typing and outgoing intent', () => {
   const { w, snapshot, field, post } = onlineForm()
-  snapshot({ strategy: { fuelToAdd: 15, tyreSet: 1, pressures: { FL: 25, FR: 25, RL: 25, RR: 25 } } })
-  Object.assign(w.S, { changeTyre: true, compound: 'Dry', brakes: false, susp: false, body: false })
+  snapshot({ strategy: { fuelToAdd: 15, tyreSet: 1, fittedTyreSet: 1, pressures: { FL: 25, FR: 25, RL: 25, RR: 25 } } })
+  Object.assign(w.S, { fuel: 15, changeTyre: true, compound: 'Dry', brakes: false, susp: false, body: false })
   w.renderForm()
   const indicator = (name: string) => w.document.querySelector(`tr[data-f="${name}"] .chk`).textContent
   expect(indicator('fuel')).toBe('✓'); expect(indicator('fl')).toBe('✓'); expect(indicator('tyreSet')).toBe('✓')
@@ -153,12 +155,12 @@ it('keeps an out-of-limit pad value as typed after committing a focused edit', (
   expect(w.document.querySelector('tr[data-f="brakeFront"] .v4-issue').textContent).toBe('8: Fuori limite: 1–4.')
 })
 
-it('defers initial values during an order and seeds them as soon as it finishes', () => {
+it('defers live seeding during an order and seeds as soon as it finishes', () => {
   const { w, snapshot } = onlineForm()
-  snapshot({ busy: true, strategy: { fuelToAdd: 15 } })
-  expect(w.S.fuel).toBeNull()
-  snapshot({ busy: false, strategy: { fuelToAdd: 15 } })
-  expect(w.S.fuel).toBe(15)
+  snapshot({ busy: true, strategy: { pressures: { FL: 25, FR: 25, RL: 25, RR: 25 } } })
+  expect(w.S.fl).toBe(26)
+  snapshot({ busy: false, strategy: { pressures: { FL: 25, FR: 25, RL: 25, RR: 25 } } })
+  expect(w.S.fl).toBe(25)
 })
 
 it('confirms replacing edited live fields, supports cancel and never submits on restore', () => {
@@ -223,8 +225,9 @@ it('canonical generated form handles unknowns, dependencies, names, zero and pre
     } } }))
   }
   snapshot()
-  expect(w.S.fuel).toBe(0); expect(w.S.changeTyre).toBe(null)
-  expect(w.document.querySelector('input[data-f=changeTyre]').indeterminate).toBe(true)
+  expect(w.S.fuel).toBe(0); expect(w.S.changeTyre).toBe(true)
+  expect(w.document.querySelector('input[data-f=changeTyre]').indeterminate).toBe(false)
+  expect(w.document.querySelector('input[data-f=changeTyre]').checked).toBe(true)
   expect(w.document.querySelector('select[data-f=driverEntryIndex]').textContent).toContain('Enrico Saiani')
   expect(w.document.querySelector('select[data-f=driverEntryIndex]').disabled).toBe(false)
   snapshot({ ready: false })
@@ -275,7 +278,7 @@ it('keeps the operational console inside the closed development accordion', () =
 })
 it('exposes validation and remote failures outside developer console, without stale success during send', () => {
   const { w, snapshot, post } = onlineForm()
-  snapshot()
+  snapshot(); w.S.fuel = null // a deliberate blank: the only way a defaulted draft is incomplete
   w.document.getElementById('apply').click()
   const result = w.document.getElementById('strategy-result')
   expect(result.hidden).toBe(false)

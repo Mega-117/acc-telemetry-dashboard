@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 908e3f715825650d5817ec37b9def57e12359ce3242c4134f7b58f62742972ef -->
+<!-- Generated V4 online; SHA256 bd918eee02699948c96f3c338ab77a83bfd888f21f9159489969eac67251f759 -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -169,6 +169,7 @@ input[data-numeric] { width: 64px; text-align: right; }
 tr.v4-bad input[data-numeric] { border-color: #ff6178; }
 #form.preset-only tr[data-f]:not([data-f=applyPitStrategy]):not([data-f=pitStrategy]) { opacity: .35; }
 tr.v4-preset-note td { padding: 8px 10px; color: #ffc400; background: #ffc40010; border-left: 3px solid #ffc400; font-size: 12px; }
+.v4-hint { display: block; margin-top: 3px; color: #8b8b94; font-size: 10px; }
 </style></head>
 <body>
 <div class="wrap">
@@ -1462,6 +1463,44 @@ else globalThis.MfdV4Contract = exported;
     });
     return changed;
   }
+  // PIP-761 (user 09/11): every field has a default, so a fresh draft is
+  // sendable untouched. A user (or already seeded) value wins; booleans and the
+  // compound are never left unset, also after restoring an old draft with nulls.
+  var FIXED = { applyPitStrategy: false, pitStrategy: 1, fuel: 0, changeTyre: true, brakes: false,
+    brakeFront: 1, brakeRear: 1, susp: true, body: true };
+  var TWO_STATE = ['applyPitStrategy', 'changeTyre', 'brakes', 'susp', 'body'];
+  // Next set after the one mounted (50 -> 49), never the mounted one, which the
+  // receiver refuses; mounted set unknown -> 1. Live-based = seeded once.
+  function defaultTyreSet(strategy) {
+    var mounted = strategy?.fittedTyreSet, L = MfdV4Contract.LIMITS.tyreSet;
+    if (!Number.isInteger(mounted) || mounted < L.min || mounted > L.max) return { value: L.min, live: false };
+    return { value: mounted === L.max ? L.max - 1 : mounted + 1, live: true };
+  }
+  function applyDefaults(strategy) {
+    var changed = false;
+    function put(key, value, seeded) {
+      if (S[key] !== value) { S[key] = value; changed = true; }
+      if (seeded) initializedFields.add(key);
+    }
+    TWO_STATE.forEach(function (key) { if (typeof S[key] !== 'boolean') put(key, FIXED[key], true); });
+    if (S.compound !== 'Dry' && S.compound !== 'Wet') put('compound', 'Dry', true);
+    ['pitStrategy', 'fuel', 'brakeFront', 'brakeRear'].forEach(function (key) {
+      if (!initializedFields.has(key) && S[key] == null) put(key, FIXED[key], true);
+    });
+    if (!initializedFields.has('tyreSet')) { var set = defaultTyreSet(strategy); put('tyreSet', set.value, set.live); }
+    // Pressures: the driver's current MFD values when known and inside the
+    // limits, otherwise 26.0 until they arrive (never a clamped live value).
+    var P = MfdV4Contract.LIMITS.pressure;
+    ['FL', 'FR', 'RL', 'RR'].forEach(function (wheel) {
+      var key = wheel.toLowerCase();
+      if (initializedFields.has(key)) return;
+      var live = strategy?.pressures?.[wheel];
+      live = Number.isFinite(live) ? Math.round(live * 10) / 10 : null;
+      var ok = live != null && live >= P.min && live <= P.max;
+      put(key, ok ? live : 26, ok);
+    });
+    return changed;
+  }
   function send(type, value) { parent.postMessage({ channel: 'mfd-v4-online', type: type, value: value }, '*'); }
   etichettaBottone = function () {
     bA.textContent = busy ? 'INVIO IN CORSO…' : S.applyPitStrategy ? 'Invia solo il preset ' + S.pitStrategy : 'Invia strategia' + (snapshot?.recipientLabel ? ' a ' + snapshot.recipientLabel : '');
@@ -1475,15 +1514,11 @@ else globalThis.MfdV4Contract = exported;
     bA.disabled = busy || !snapshot?.ready;
     nativeRender();
     renderTyreBadge();
+    // PIP-761 (user 09/11): two states only, ticked or empty; the compound is
+    // always chosen (Dry by default): no "da scegliere" third state.
     formEl.querySelectorAll('input[type=checkbox]').forEach(function (input) {
-      var key = input.dataset.f;
-      input.indeterminate = S[key] == null;
-      input.setAttribute('aria-label', (S[key] == null ? 'Da scegliere: ' : '') + key);
+      input.indeterminate = false; input.setAttribute('aria-label', input.dataset.f);
     });
-    var compound = formEl.querySelector('select[data-f=compound]');
-    if (compound && S.compound == null) {
-      compound.add(new Option('Da scegliere', ''), 0); compound.value = '';
-    }
     formEl.querySelectorAll('input,select').forEach(function (input) { if (busy) input.disabled = true; });
     document.getElementById('gap').disabled = busy;
     bA.disabled = busy || !snapshot?.ready;
@@ -1621,17 +1656,21 @@ else globalThis.MfdV4Contract = exported;
     var redraw = !initialized || crewChanged || previousReady !== snapshot.ready || busy !== (snapshot.busy === true) || crewIdentityV4 !== snapshot.contextId;
     if (!initialized) {
       if (snapshot.draft) {
+        // The load-time defaults are not user values: the draft decides again.
+        initializedFields.clear();
         Object.keys(S).forEach(function(key) {
           if (!Object.prototype.hasOwnProperty.call(snapshot.draft, key)) return;
           S[key] = key === 'applyPitStrategy' ? false : snapshot.draft[key];
-          if (S[key] != null || snapshot.draft.initializedFields?.includes(key)) initializedFields.add(key);
+          // A draft lists its user/seeded fields; an older one without the list counts its values.
+          var seeded = Array.isArray(snapshot.draft.initializedFields) ? snapshot.draft.initializedFields.includes(key) : S[key] != null;
+          if (seeded) initializedFields.add(key);
         });
       }
       document.getElementById('gap').value = snapshot.development ? snapshot.draft?.stepMs || 60 : 60;
       edited = snapshot.draft ? snapshot.draft.edited !== false : false;
       initialized = true;
     }
-    if (snapshot.busy !== true && snapshot.strategy && seedStrategy(snapshot.strategy, false)) redraw = true;
+    if (snapshot.busy !== true && applyDefaults(snapshot.strategy)) redraw = true;
     if ((crewSignature !== null && crewChanged) || (crewIdentityV4 && crewIdentityV4 !== snapshot.contextId)) S.driverEntryIndex = null;
     crewSignature = nextCrewSignature;
     crewIdentityV4 = snapshot.contextId;
@@ -1663,7 +1702,7 @@ else globalThis.MfdV4Contract = exported;
   // Remote displays only current snapshots supplied by the authenticated room.
   poll = async function () {};
   logEl.textContent = 'Pronto: scegli la strategia da inviare al PC del pilota.';
-  renderForm(); send('ready', null);
+  applyDefaults(null); renderForm(); send('ready', null);
 })();
 
 // PIP-761: engineer form only (generated after online-panel.js). Adds, per row,
@@ -1774,6 +1813,12 @@ else globalThis.MfdV4Contract = exported;
         var hint = document.createElement('span'); hint.className = 'v4-limit';
         hint.textContent = r ? show(r.min, r.step) + '–' + show(r.max, r.step) + r.unit : 'max ?';
         plus.after(hint);
+        if (id === 'tyreSet') {
+          // PIP-761: the default rule (online-panel.js defaultTyreSet), in short.
+          var rule = document.createElement('span'); rule.className = 'v4-hint';
+          rule.textContent = 'Predefinito: il set dopo quello montato (50 → 49; montato ignoto → 1)';
+          hint.after(rule);
+        }
       }
       var now = document.createElement('td'); now.className = 'v4-now'; now.dataset.now = id;
       tr.lastElementChild.before(now);
