@@ -46,17 +46,33 @@ export function createNavigationClock(now: () => number) {
 
 export type PageShown ={ page: number, ms: number, slow: number }
 
+type Route = { path: string, matched: readonly unknown[] }
+
 /**
- * PIP-755: the window's first page shown is its start-up (the app opening the Panoramica after
- * the account answers), not a click: R2 08/11 had only those as KO, 5-23 s after the start.
- * True once per window, for the first navigation that is actually painted.
+ * PIP-742/PIP-755: the clock of the main window's navigations, with their start-up mark.
+ * The window's initial navigation (from the router's start) is never timed. A navigation the app
+ * starts before the user has touched the window continues that initial navigation (the root page
+ * sending to the Panoramica after the start: the R2 08/11 KO, 5-23 s after the start): startup.
+ * Once the user has clicked or typed, every navigation is theirs (Codex review 09/11: after a
+ * direct load of /panoramica the first click was marked startup and its 1.8 s hidden).
  */
-export function createStartupMark() {
-  let shown = false
-  return (): boolean => {
-    const first = !shown
-    shown = true
-    return first
+export function createPageTimingRecorder(now: () => number) {
+  const clock = createNavigationClock(now)
+  const startup = new WeakMap<object, boolean>()
+  let userActed = false
+  return {
+    noteUserInput() { userActed = true },
+    start(to: Route, from: Route) {
+      if (from.matched.length === 0 || to.path === from.path) return
+      clock.start(to)
+      startup.set(to, !userActed)
+    },
+    take(to: Route): { startedAt: number, startup: boolean } | null {
+      const startedAt = clock.take(to)
+      const wasStartup = startup.get(to) === true
+      startup.delete(to)
+      return startedAt === null ? null : { startedAt, startup: wasStartup }
+    },
   }
 }
 

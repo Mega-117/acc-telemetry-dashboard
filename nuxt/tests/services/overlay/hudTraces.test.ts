@@ -22,7 +22,8 @@ describe('PIP-704 hud.shift', () => {
     for (let i = 0; i < 10; i++) upshift(f => trace.feed(f), i * 1000, 2 + (i % 3), 7160, 7340)
     expect(report).toHaveBeenCalledOnce()
     expect(report.mock.calls[0]![0]).toEqual({ car: 'ferrari_296_gt3', targetRpm: 7300, shifts: 10, flashed: 10,
-      onsetRpmMedian: 7160, upshiftRpmMedian: 7340, leadMsMedian: 250, beforeFlash: 0, late: 0 })
+      onsetRpmMedian: 7160, upshiftRpmMedian: 7340, leadMsMedian: 250, beforeFlash: 0, late: 0,
+      leadOnsets: 0, leadOnsetRpmMedian: null, plainOnsets: 10, plainOnsetRpmMedian: 7160 }) // no throttle: lead not armed
   })
 
   it('counts shifts before the flash and late shifts', () => {
@@ -58,8 +59,23 @@ describe('PIP-704 hud.shift', () => {
       trace.feed(frame(t + 420, gear + 1, 5200, false))
     }
     expect(report.mock.calls[0]![0]).toEqual({ car: 'ferrari_296_gt3', targetRpm: 7300, shifts: 2, flashed: 2,
-      onsetRpmMedian: 7160, upshiftRpmMedian: 7340, leadMsMedian: 320, beforeFlash: 0, late: 0 })
+      onsetRpmMedian: 7160, upshiftRpmMedian: 7340, leadMsMedian: 320, beforeFlash: 0, late: 0,
+      leadOnsets: 0, leadOnsetRpmMedian: null, plainOnsets: 2, plainOnsetRpmMedian: 7160 })
     expect(trace.takeHealth()).toMatchObject({ upshifts: 2, reports: 1 })
+  })
+
+  it('Codex review 09/11: each onset says if the 150 rpm lead was armed (throttle >= 0.5, brake <= 0.1)', () => {
+    const report = vi.fn()
+    const trace = createShiftTraceAggregator(report, 2)
+    // Full throttle: the lead lights at 7160. Partial throttle: the flash waits for the point, 7310.
+    for (const [t, gear, onsetRpm, throttle] of [[0, 3, 7160, 1], [1000, 4, 7310, 0.3]] as const) {
+      trace.feed(frame(t, gear, 6000, false, { throttle, brake: 0 }))
+      trace.feed(frame(t + 100, gear, onsetRpm, true, { throttle, brake: 0 }))
+      trace.feed(frame(t + 300, gear, 7400, true, { throttle, brake: 0 }))
+      trace.feed(frame(t + 350, gear + 1, 5200, false, { throttle, brake: 0 }))
+    }
+    expect(report.mock.calls[0]![0]).toMatchObject({ onsetRpmMedian: 7235, leadOnsets: 1, leadOnsetRpmMedian: 7160,
+      plainOnsets: 1, plainOnsetRpmMedian: 7310 })
   })
 
   it('PIP-755: a real neutral (over 0.5 s) or a downshift through neutral is no upshift', () => {

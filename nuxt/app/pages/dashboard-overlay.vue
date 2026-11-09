@@ -133,6 +133,9 @@ watch(liveModel, (live) => {
     rpm: own && typeof state.rpm === 'number' ? state.rpm : null,
     flash: live.shiftFlash,
     targetRpm: own ? hudSourcePolicy(state).shiftRpm ?? null : null,
+    // Codex review 09/11: whether the 150 rpm lead was armed at the flash onset.
+    throttle: own && typeof state.gas === 'number' ? state.gas : null,
+    brake: own && typeof state.brake === 'number' ? state.brake : null,
   })
 })
 

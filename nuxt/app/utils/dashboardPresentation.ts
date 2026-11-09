@@ -261,13 +261,17 @@ export const SHIFT_FLASH_LEAD_RPM = 150
 export const SHIFT_FLASH_MIN_THROTTLE = 0.5
 export const SHIFT_FLASH_MAX_BRAKE = 0.1
 
+/** The 150 rpm lead applies (on the throttle, off the brake); the shift trace records it per onset. */
+export function shiftFlashLeadArmed(throttle: number | null, brake: number | null): boolean {
+  if (throttle === null || !(throttle >= SHIFT_FLASH_MIN_THROTTLE)) return false
+  return brake !== null && brake <= SHIFT_FLASH_MAX_BRAKE
+}
+
 export function shiftFlashDue(
   rpm: number, threshold: number, throttle: number | null, brake: number | null,
 ): boolean {
   if (rpm >= threshold) return true
-  if (throttle === null || !(throttle >= SHIFT_FLASH_MIN_THROTTLE)) return false
-  if (brake === null || !(brake <= SHIFT_FLASH_MAX_BRAKE)) return false
-  return rpm >= threshold - SHIFT_FLASH_LEAD_RPM
+  return shiftFlashLeadArmed(throttle, brake) && rpm >= threshold - SHIFT_FLASH_LEAD_RPM
 }
 
 /**

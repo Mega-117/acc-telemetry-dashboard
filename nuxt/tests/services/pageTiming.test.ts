@@ -1,25 +1,45 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { createNavigationClock, createStartupMark, pageCode, pageShown, pageTimingNote, SLOW_PAGE_MS } from '~/services/monitoring/pageTiming'
+import { createNavigationClock, createPageTimingRecorder, pageCode, pageShown, pageTimingNote, SLOW_PAGE_MS } from '~/services/monitoring/pageTiming'
 
 describe('start-up page (PIP-755)', () => {
-  it('the window first page is its start-up, every later page is a click', () => {
-    // R2 08/11 (3e818519, 0.5.3): the Panoramica 1717 ms, the first page 7 s after the app opened.
-    const isStartup = createStartupMark()
-    const first = pageShown('/', 0, 1717)!
-    expect(pageTimingNote(first, isStartup())).toEqual({ event: 'page.slow', page: 1, ms: 1717, startup: 1 })
-    expect(pageTimingNote(pageShown('/sessioni/x', 0, 1381)!, isStartup())).toEqual({ event: 'page.slow', page: 3, ms: 1381, startup: 0 })
-    expect(pageTimingNote(pageShown('/dati', 0, 20)!, isStartup())).toEqual({ event: 'page.shown', page: 8, ms: 20, startup: 0 })
-    expect(createStartupMark()()).toBe(true) // one mark per window
+  const START = { path: '/', matched: [] }
+  const route = (path: string) => ({ path, matched: [{}] })
+
+  function run(recorder: ReturnType<typeof createPageTimingRecorder>, to: ReturnType<typeof route>, from: { path: string, matched: unknown[] }, paintedAt: number) {
+    recorder.start(to, from)
+    const timed = recorder.take(to)
+    if (!timed) return null
+    return pageTimingNote(pageShown(to.path, timed.startedAt, paintedAt)!, timed.startup)
+  }
+
+  it('the root page sending to the Panoramica before any input is the start-up', () => {
+    // R2 08/11 (3e818519, 0.5.3): the Panoramica 1717 ms, 7 s after the app opened.
+    const recorder = createPageTimingRecorder(() => 0)
+    const root = route('/')
+    expect(run(recorder, root, START, 0)).toBeNull() // the initial navigation is never timed
+    expect(run(recorder, route('/panoramica'), root, 1717)).toEqual({ event: 'page.slow', page: 1, ms: 1717, startup: 1 })
+    recorder.noteUserInput()
+    expect(run(recorder, route('/sessioni/x'), route('/panoramica'), 1381)).toEqual({ event: 'page.slow', page: 3, ms: 1381, startup: 0 })
   })
 
-  it('the plugin marks only a page of the main window, after the paint', () => {
+  it('after a direct load of a page the first click is a click (Codex review 09/11)', () => {
+    const recorder = createPageTimingRecorder(() => 0)
+    const panoramica = route('/panoramica')
+    expect(run(recorder, panoramica, START, 0)).toBeNull()
+    recorder.noteUserInput()
+    expect(run(recorder, route('/sessioni'), panoramica, 1800)).toEqual({ event: 'page.slow', page: 2, ms: 1800, startup: 0 })
+  })
+
+  it('the plugin feeds clicks and keys, and marks after the paint', () => {
     const plugin = readFileSync(resolve(process.cwd(), 'app/plugins/page-timing.client.ts'), 'utf8')
+    expect(plugin).toContain("for (const type of ['pointerdown', 'keydown'] as const)")
+    expect(plugin).toContain('recorder.noteUserInput()')
+    expect(plugin).toContain('recorder.start(to, from)')
     const guard = plugin.indexOf('if (!shown) return')
     expect(guard).toBeGreaterThan(-1)
-    expect(plugin.indexOf('noteFeatureUse(pageTimingNote(shown, isStartup()))')).toBeGreaterThan(guard)
-    expect(plugin.match(/isStartup\(\)/g)).toHaveLength(1)
+    expect(plugin.indexOf('noteFeatureUse(pageTimingNote(shown, timed.startup))')).toBeGreaterThan(guard)
   })
 })
 
