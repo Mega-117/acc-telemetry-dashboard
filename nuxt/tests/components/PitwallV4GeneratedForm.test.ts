@@ -122,27 +122,36 @@ it('restores draft choices including explicit blanks while filling remaining unk
   expect(second.w.S.tyreSet).toBe(3)
 })
 
+// PIP-761: live data moves the indicators; defaults (set, pressures) follow it,
+// a field holding user input (committed or still being typed) is never touched.
 it('updates LIVE indicators in place while preserving input identity, typing and outgoing intent', () => {
   const { w, snapshot, field, post, edit } = onlineForm()
-  snapshot({ strategy: { fuelToAdd: 15, tyreSet: 1, fittedTyreSet: 1, pressures: { FL: 25, FR: 25, RL: 25, RR: 25 } } })
-  // User-chosen values (defaults would follow live, PIP-761): only the indicators move.
-  for (const [name, value] of [['fuel', '15'], ['tyreSet', '2'], ['fl', '25'], ['fr', '25'], ['rl', '25'], ['rr', '25']]) edit(name, value)
+  const live = (fuelToAdd: number, tyreSet: number, FL: number) => snapshot({ strategy: { fuelToAdd, tyreSet, fittedTyreSet: 1, pressures: { FL, FR: 25, RL: 25, RR: 25 } } })
+  live(15, 1, 25)
+  expect(w.S).toMatchObject({ fl: 25, fr: 25, tyreSet: 2 }) // defaults from live
+  edit('fuel', '15'); edit('fr', '27,5')                      // user input
   Object.assign(w.S, { changeTyre: true, compound: 'Dry', brakes: false, susp: false, body: false })
   w.renderForm()
   const indicator = (name: string) => w.document.querySelector(`tr[data-f="${name}"] .chk`).textContent
-  expect(indicator('fuel')).toBe('✓'); expect(indicator('fl')).toBe('✓'); expect(indicator('tyreSet')).toBe('✓')
+  expect(indicator('fuel')).toBe('✓'); expect(indicator('fl')).toBe('✓'); expect(indicator('tyreSet')).toBe('✓'); expect(indicator('fr')).toBe('✗')
   const fuel = field('fuel'); fuel.focus(); fuel.value = '18'
   fuel.dispatchEvent(new w.Event('input', { bubbles: true }))
-  snapshot({ strategy: { fuelToAdd: 30, tyreSet: 2, pressures: { FL: 26, FR: 25, RL: 25, RR: 25 } } })
-  expect(indicator('fuel')).toBe('✗'); expect(indicator('fl')).toBe('✗'); expect(indicator('tyreSet')).toBe('✗')
+  // Live changes only where the user holds the value: indicators move in place, no rebuild.
+  live(30, 2, 25)
+  expect(indicator('fuel')).toBe('✗'); expect(indicator('fl')).toBe('✓'); expect(indicator('tyreSet')).toBe('✗')
   expect(field('fuel')).toBe(fuel); expect(w.document.activeElement).toBe(fuel); expect(fuel.value).toBe('18')
-  fuel.dispatchEvent(new w.Event('change', { bubbles: true }))
-  snapshot({ strategy: { fuelToAdd: 18, tyreSet: 1, pressures: { FL: 25, FR: 25, RL: 25, RR: 25 } } })
+  // A default follows live (rebuild): typed text, focus and user values survive.
+  live(30, 2, 26)
+  expect(w.S.fl).toBe(26); expect(indicator('fl')).toBe('✓')
+  expect(field('fuel').value).toBe('18'); expect(w.document.activeElement).toBe(field('fuel'))
+  expect(w.S.fr).toBe(27.5); expect(field('fr').value).toBe('27.5')
+  field('fuel').dispatchEvent(new w.Event('change', { bubbles: true }))
+  live(18, 1, 26)
   expect(indicator('fuel')).toBe('✓'); expect(indicator('fl')).toBe('✓')
   expect(w.document.getElementById('apply').textContent).toBe('Invia strategia')
   w.document.getElementById('apply').click()
   const submit = (post.mock.calls.find((c: any) => c[0].type === 'submit')![0] as any).value
-  expect(submit).toMatchObject({ operation: 'strategy', fuelLiters: 18, tyreSet: 2, changeTyres: true, pressures: { FL: 25, FR: 25, RL: 25, RR: 25 } })
+  expect(submit).toMatchObject({ operation: 'strategy', fuelLiters: 18, tyreSet: 2, changeTyres: true, pressures: { FL: 26, FR: 27.5, RL: 25, RR: 25 } })
 })
 
 // PIP-761 (Codex P2): the canonical 1-4 clamp is no longer silent: the typed

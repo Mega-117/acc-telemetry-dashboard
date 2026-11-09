@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 5504409f3d68a02add9906ec8cba72f0a0b9ffb3b9c7cc62d71cbc3affbbdb37 -->
+<!-- Generated V4 online; SHA256 c4003b91506d3c2f61625c0d7a2bb0e5c90a45e8ed9c114a814d9607441b0a64 -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -1859,7 +1859,18 @@ else globalThis.MfdV4Contract = exported;
     });
   }
   var renderBefore = renderForm;
-  renderForm = function () { renderBefore(); decorate(); };
+  // A rebuild (live update, readiness) never touches what the user is typing:
+  // the raw text ("27,5") is taken before the canonical number input could
+  // sanitize it to "" and put back, with focus, once the field is text again.
+  renderForm = function () {
+    var active = document.activeElement;
+    var typing = active && formEl.contains(active) && active.dataset && active.dataset.numeric === '1'
+      ? { id: active.dataset.f, value: active.value } : null;
+    renderBefore(); decorate();
+    if (!typing) return;
+    var input = formEl.querySelector('input[data-f="' + typing.id + '"]');
+    if (input && !input.disabled) { input.value = typing.value; input.focus(); }
+  };
   var checksBefore = aggiornaSpie;
   aggiornaSpie = function () { checksBefore(); refresh(); };
   // Capture runs before the canonical change handler: normalize the comma or

@@ -41,15 +41,16 @@ it('a fresh draft is sendable untouched: every field has its default', () => {
 })
 
 it('tyre set default: the set after the mounted one, 50 -> 49, unknown -> 1, never the mounted set', () => {
+  // One form: the default follows the live mounted set, so every value is reachable by snapshots.
+  const f = form()
   for (let mounted = 1; mounted <= 50; mounted++) {
-    const f = form(); f.snapshot({}, { fittedTyreSet: mounted })
+    f.snapshot({}, { fittedTyreSet: mounted })
     expect(f.w.S.tyreSet).toBe(mounted === 50 ? 49 : mounted + 1)
     expect(f.w.S.tyreSet).not.toBe(mounted)
   }
   for (const unknown of [undefined, null, 0, 51, 2.5]) {
-    const f = form(); f.snapshot({}, { fittedTyreSet: unknown }); expect(f.w.S.tyreSet).toBe(1)
+    const g = form(); g.snapshot({}, { fittedTyreSet: unknown }); expect(g.w.S.tyreSet).toBe(1)
   }
-  const f = form(); f.snapshot()
   expect(f.q('tr[data-f="tyreSet"] .v4-hint').textContent).toContain('il set dopo quello montato')
 })
 
@@ -90,6 +91,21 @@ it('pressure defaults follow live until edited; limits checked on the raw value,
   expect(f.w.S).toMatchObject({ fl: 27, fr: 24, rl: 24, rr: 24 })
   f.snapshot({ ready: false, strategy: null }) // driver gone: the last defaults stay
   expect(f.w.S).toMatchObject({ fl: 27, fr: 24 })
+})
+
+// Codex review 5 (P2): a live rebuild never wipes text the user is typing.
+it('typing "27,5" in FR survives a live update that moves FL, and is sent as 27.5', () => {
+  const f = form(); f.snapshot({}, { fittedTyreSet: 3, pressures: { FL: 25, FR: 25, RL: 25, RR: 25 } })
+  const fr = f.q('input[data-f="fr"]'); fr.focus(); fr.value = '27,5'
+  fr.dispatchEvent(new f.w.Event('input', { bubbles: true }))
+  f.snapshot({}, { fittedTyreSet: 3, pressures: { FL: 26, FR: 25, RL: 25, RR: 25 } })
+  expect(f.w.S.fl).toBe(26)
+  const typed = f.q('input[data-f="fr"]')
+  expect(typed.value).toBe('27,5'); expect(f.w.document.activeElement).toBe(typed)
+  typed.dispatchEvent(new f.w.Event('change', { bubbles: true }))
+  expect(f.w.S.fr).toBe(27.5)
+  f.q('#apply').click()
+  expect(f.submits()).toEqual([expect.objectContaining({ pressures: { FL: 26, FR: 27.5, RL: 25, RR: 25 } })])
 })
 
 it('a saved user value wins over every default; the rest is filled', () => {
