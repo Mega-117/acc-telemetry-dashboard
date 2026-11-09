@@ -56,7 +56,9 @@ it('unknown car with a valid live tank: limit shown, litres TO ADD sent as typed
   const f = form(); f.snapshot(); f.ready()
   expect(f.q('tr[data-f="fuel"] .v4-limit').textContent).toBe('0–110 L')
   // Litres TO ADD, under the "Benzina" heading (minimal layout 09/11).
-  expect(f.q('tr[data-f="fuel"] td.lb').textContent).toBe('Da aggiungere (L)')
+  // The car-dependent range sits under the label, so the field column keeps one width.
+  expect(f.q('tr[data-f="fuel"] td.lb').firstChild.textContent).toBe('Da aggiungere (L)')
+  expect(f.q('tr[data-f="fuel"] td.lb .v4-limit').textContent).toBe('0–110 L')
   expect(f.q('tr[data-f="fuel"]').previousElementSibling.textContent).toBe('Benzina')
   f.edit('fuel', '40'); f.q('#apply').click()
   expect(f.submits()).toEqual([expect.objectContaining({ operation: 'strategy', fuelLiters: 40 })])
