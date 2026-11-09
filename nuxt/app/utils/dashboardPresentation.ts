@@ -261,6 +261,15 @@ export const SHIFT_FLASH_LEAD_RPM = 150
 export const SHIFT_FLASH_MIN_THROTTLE = 0.5
 export const SHIFT_FLASH_MAX_BRAKE = 0.1
 
+/**
+ * The flash can show at all: fresh live data, ignition on, engine running. One source for the
+ * presentation and the shift trace (third Codex review 09/11: without it the trace saw the light
+ * due while it was rightly off, and the onset after it as late).
+ */
+export function shiftFlashEligible(state: Pick<FastOverlayState, 'isFresh' | 'isLive' | 'ignitionOn' | 'isEngineRunning'>): boolean {
+  return state.isFresh && state.isLive && state.ignitionOn && state.isEngineRunning
+}
+
 /** The 150 rpm lead applies (on the throttle, off the brake); the shift trace records it per onset. */
 export function shiftFlashLeadArmed(throttle: number | null, brake: number | null): boolean {
   if (throttle === null || !(throttle >= SHIFT_FLASH_MIN_THROTTLE)) return false
@@ -350,10 +359,7 @@ export function buildDashboardPresentation(
     shiftThresholdRatio: referenceVisible && options.rpmReference && threshold !== null && maxRpm !== null
       ? clamp(threshold / maxRpm, 0, 1) : null,
     rpmBand,
-    shiftFlash: state.isFresh
-      && state.isLive
-      && state.ignitionOn
-      && state.isEngineRunning
+    shiftFlash: shiftFlashEligible(state)
       && threshold !== null
       && rpmValid
       && shiftFlashDue(rpm, threshold, state.gas, state.brake),

@@ -7,7 +7,7 @@ import type { SectorHudEntry } from '~/composables/useLiveStatePoller'
 
 describe('PIP-704 hud.shift', () => {
   const frame = (now: number, gear: number, rpm: number, flash: boolean, extra: Partial<ShiftTraceFrame> = {}): ShiftTraceFrame =>
-    ({ now, car: 'ferrari_296_gt3', gear, rpm, flash, targetRpm: 7300, throttle: 1, brake: 0, ...extra })
+    ({ now, car: 'ferrari_296_gt3', gear, rpm, flash, targetRpm: 7300, throttle: 1, brake: 0, eligible: true, ...extra })
 
   function upshift(feed: (f: ShiftTraceFrame) => void, t: number, gear: number, onsetRpm: number | null, shiftRpm: number) {
     feed(frame(t, gear, 6000, false))
@@ -23,7 +23,7 @@ describe('PIP-704 hud.shift', () => {
     expect(report).toHaveBeenCalledOnce()
     expect(report.mock.calls[0]![0]).toEqual({ car: 'ferrari_296_gt3', targetRpm: 7300, shifts: 10, flashed: 10,
       onsetRpmMedian: 7160, upshiftRpmMedian: 7340, leadMsMedian: 250, beforeFlash: 0, late: 0,
-      leadOnsets: 10, leadOnsetRpmMedian: 7160, plainOnsets: 0, plainOnsetRpmMedian: null, leadOnTime: 10, leadEarly: 0, leadLate: 0, plainOnTime: 0, plainEarly: 0, plainLate: 0, lateMsMax: null })
+      leadOnsets: 10, leadOnsetRpmMedian: 7160, plainOnsets: 0, plainOnsetRpmMedian: null, leadOnTime: 10, leadEarly: 0, leadLate: 0, plainOnTime: 0, plainEarly: 0, plainLate: 0, lateMsMax: null, leadMissed: 0, plainMissed: 0 })
   })
 
   it('counts shifts before the flash and late shifts', () => {
@@ -60,7 +60,7 @@ describe('PIP-704 hud.shift', () => {
     }
     expect(report.mock.calls[0]![0]).toEqual({ car: 'ferrari_296_gt3', targetRpm: 7300, shifts: 2, flashed: 2,
       onsetRpmMedian: 7160, upshiftRpmMedian: 7340, leadMsMedian: 320, beforeFlash: 0, late: 0,
-      leadOnsets: 2, leadOnsetRpmMedian: 7160, plainOnsets: 0, plainOnsetRpmMedian: null, leadOnTime: 2, leadEarly: 0, leadLate: 0, plainOnTime: 0, plainEarly: 0, plainLate: 0, lateMsMax: null })
+      leadOnsets: 2, leadOnsetRpmMedian: 7160, plainOnsets: 0, plainOnsetRpmMedian: null, leadOnTime: 2, leadEarly: 0, leadLate: 0, plainOnTime: 0, plainEarly: 0, plainLate: 0, lateMsMax: null, leadMissed: 0, plainMissed: 0 })
     expect(trace.takeHealth()).toMatchObject({ upshifts: 2, reports: 1 })
   })
 
@@ -97,6 +97,39 @@ describe('PIP-704 hud.shift', () => {
     const trace = createShiftTraceAggregator(report, 1)
     rise(f => trace.feed(f), 0, 3, [[7000, false, 0.3], [7290, false, 0.3], [7310, true, 1]])
     expect(report.mock.calls[0]![0]).toMatchObject({ plainOnTime: 1, plainLate: 0, leadOnTime: 0, leadLate: 0, leadEarly: 0 })
+  })
+
+  it('third Codex review: a rise that ends with the light due and never lit is a missed onset', () => {
+    const report = vi.fn()
+    const trace = createShiftTraceAggregator(report)
+    for (let i = 0; i < 9; i++) rise(f => trace.feed(f), i * 1000, 3, [[7000, false], [7180, true], [7360, true]])
+    rise(f => trace.feed(f), 9000, 3, [[7000, false], [7200, false], [7500, false]])   // dark up to the shift
+    expect(report.mock.calls[0]![0]).toMatchObject({ leadOnTime: 9, leadMissed: 1, plainMissed: 0, leadLate: 0 })
+  })
+
+  it('third Codex review: a lift with the light due and dark is missed too; a rise never due is not', () => {
+    const report = vi.fn()
+    const trace = createShiftTraceAggregator(report, 1)
+    rise(f => trace.feed(f), 0, 3, [[7000, false, 0.3], [7350, false, 0.3], [6800, false, 0.3], [7100, false, 0.3]])
+    expect(report.mock.calls[0]![0]).toMatchObject({ plainMissed: 1, leadMissed: 0 })
+  })
+
+  it('third Codex review: the page feeds the model own prerequisites to the trace', async () => {
+    const { readFileSync } = await import('node:fs')
+    const page = readFileSync('app/pages/dashboard-overlay.vue', 'utf8')
+    expect(page).toContain('eligible: shiftFlashEligible(state),')
+    const presentation = readFileSync('app/utils/dashboardPresentation.ts', 'utf8')
+    expect(presentation).toContain('shiftFlash: shiftFlashEligible(state)')
+  })
+
+  it('third Codex review: with the engine not eligible the light is rightly off and nothing is due', () => {
+    const report = vi.fn()
+    const trace = createShiftTraceAggregator(report, 1)
+    trace.feed(frame(0, 3, 7000, false))
+    trace.feed(frame(60, 3, 7400, false, { eligible: false }))   // ignition off or engine stopped
+    trace.feed(frame(120, 3, 7450, true))                         // eligible again: lit at once
+    trace.feed(frame(180, 4, 5200, false))
+    expect(report.mock.calls[0]![0]).toMatchObject({ plainOnTime: 1, plainLate: 0, plainMissed: 0, leadMissed: 0 })
   })
 
   it('second Codex review: a lift starts a new rise; its light is judged on its own samples', () => {
@@ -245,7 +278,7 @@ describe('02/11 hud.shift health', () => {
   it('says why no hud.shift arrives: frames skipped by reason, upshifts seen, reports sent', () => {
     const trace = createShiftTraceAggregator(() => {}, 2)
     const feed = (gear: number, extra: Partial<ShiftTraceFrame> = {}) =>
-      trace.feed({ now: 0, car: 'ferrari_296_gt3', gear, rpm: 7000, flash: false, targetRpm: 7300, ...extra })
+      trace.feed({ now: 0, car: 'ferrari_296_gt3', gear, rpm: 7000, flash: false, targetRpm: 7300, eligible: true, ...extra })
     feed(2, { targetRpm: null })
     feed(2, { car: null })
     feed(2, { rpm: null })

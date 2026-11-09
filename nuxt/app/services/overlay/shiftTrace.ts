@@ -29,6 +29,8 @@ export interface ShiftTraceFrame {
   rpm: number | null
   flash: boolean
   targetRpm: number | null
+  /** The model's own prerequisites (shiftFlashEligible): when false the light is rightly off. */
+  eligible: boolean
   /** Throttle and brake (0-1) of the frame: whether the lead was armed at the onset. */
   throttle?: number | null
   brake?: number | null
@@ -55,9 +57,12 @@ export interface ShiftTraceSummary {
   plainEarly: number
   plainLate: number
   lateMsMax: number | null
+  /** Third Codex review: rises that ended (shift, lift, rpm drop) with the light due and never lit. */
+  leadMissed: number
+  plainMissed: number
 }
 
-type OnsetVerdict = { onTime: number, early: number, late: number }
+type OnsetVerdict = { onTime: number, early: number, late: number, missed: number }
 
 function median(values: number[]): number | null {
   const sorted = [...values].sort((a, b) => a - b)
@@ -89,7 +94,8 @@ export function createShiftTraceAggregator(report: (summary: ShiftTraceSummary) 
   let neutralAt: number | null = null
   // The first sample of this rise where the light was due, and whether the lead made it due.
   let firstDue: { at: number; lead: boolean } | null = null
-  let lead: OnsetVerdict = { onTime: 0, early: 0, late: 0 }, plain: OnsetVerdict = { onTime: 0, early: 0, late: 0 }
+  let lit = false   // the light was on at some sample of this rise
+  let lead: OnsetVerdict = { onTime: 0, early: 0, late: 0, missed: 0 }, plain: OnsetVerdict = { onTime: 0, early: 0, late: 0, missed: 0 }
   let lateMsMax: number | null = null
   let onsets: number[] = [], upshifts: number[] = [], leads: number[] = [], leadOnsets: number[] = [], plainOnsets: number[] = []
   let flashed = 0, beforeFlash = 0, late = 0
@@ -98,7 +104,7 @@ export function createShiftTraceAggregator(report: (summary: ShiftTraceSummary) 
   function clear() {
     onsets = []; upshifts = []; leads = []; leadOnsets = []; plainOnsets = []
     flashed = beforeFlash = late = 0
-    lead = { onTime: 0, early: 0, late: 0 }; plain = { onTime: 0, early: 0, late: 0 }; lateMsMax = null
+    lead = { onTime: 0, early: 0, late: 0, missed: 0 }; plain = { onTime: 0, early: 0, late: 0, missed: 0 }; lateMsMax = null
   }
 
   return {
@@ -115,10 +121,10 @@ export function createShiftTraceAggregator(report: (summary: ShiftTraceSummary) 
       else if (targetRpm === null) health.noTarget++
       else if (gear === null || rpm === null || !Number.isFinite(gear) || !Number.isFinite(rpm)) health.noGearOrRpm++
       if (frameCar === null || targetRpm === null || gear === null || rpm === null
-        || !Number.isFinite(gear) || !Number.isFinite(rpm)) { prev = null; onset = null; neutralAt = null; firstDue = null; return }
+        || !Number.isFinite(gear) || !Number.isFinite(rpm)) { prev = null; onset = null; neutralAt = null; firstDue = null; lit = false; return }
       if (frameCar !== car || targetRpm !== target) {
         // Another car or shift point: the batch would mix two rules.
-        car = frameCar; target = targetRpm; clear(); prev = null; onset = null; neutralAt = null; firstDue = null
+        car = frameCar; target = targetRpm; clear(); prev = null; onset = null; neutralAt = null; firstDue = null; lit = false
       }
       // PIP-755: ACC passes through neutral between two gears (g -> N -> g+1, as the logger's
       // ShiftTracker knows): the gear, its last rpm and the flash onset wait across it. Without
@@ -128,14 +134,18 @@ export function createShiftTraceAggregator(report: (summary: ShiftTraceSummary) 
         return
       }
       if (neutralAt !== null) {
-        if (frame.now - neutralAt > SHIFT_TRACE_NEUTRAL_MAX_MS) { prev = null; onset = null; firstDue = null }
+        if (frame.now - neutralAt > SHIFT_TRACE_NEUTRAL_MAX_MS) { prev = null; onset = null; firstDue = null; lit = false }
         neutralAt = null
       }
       // Codex 02/11: a flash followed by a lift belongs to no shift: it expires after 3 s.
       if (onset && frame.now - onset.at > SHIFT_TRACE_ONSET_MAX_MS) onset = null
       const throttle = frame.throttle ?? null, brake = frame.brake ?? null
-      const due = shiftFlashDue(rpm, targetRpm, throttle, brake)
-      if (!prev || gear !== prev.gear || (!due && !frame.flash)) firstDue = null   // a new rise
+      const due = frame.eligible && shiftFlashDue(rpm, targetRpm, throttle, brake)
+      if (!prev || gear !== prev.gear || (!due && !frame.flash)) {
+        // The rise ends (shift, lift, rpm drop, engine not eligible): due and never lit = missed.
+        if (firstDue && !lit) (firstDue.lead ? lead : plain).missed++
+        firstDue = null; lit = false
+      }
       if (due && !firstDue) firstDue = { at: frame.now, lead: rpm < targetRpm }
       if (prev && gear === prev.gear && frame.flash && !prev.flash) {
         // Lit while not due: early (lead when the lead was armed below the point, plain otherwise).
@@ -148,6 +158,7 @@ export function createShiftTraceAggregator(report: (summary: ShiftTraceSummary) 
         } else verdict.onTime++
         onset = { rpm: Math.round(rpm), at: frame.now, lead: isLead }
       }
+      if (frame.flash) lit = true
       if (prev && prev.gear >= 1 && gear === prev.gear + 1) {
         health.upshifts++
         const upshiftRpm = Math.round(prev.rpm)
@@ -166,7 +177,8 @@ export function createShiftTraceAggregator(report: (summary: ShiftTraceSummary) 
             leadOnsets: leadOnsets.length, leadOnsetRpmMedian: median(leadOnsets),
             plainOnsets: plainOnsets.length, plainOnsetRpmMedian: median(plainOnsets),
             leadOnTime: lead.onTime, leadEarly: lead.early, leadLate: lead.late,
-            plainOnTime: plain.onTime, plainEarly: plain.early, plainLate: plain.late, lateMsMax })
+            plainOnTime: plain.onTime, plainEarly: plain.early, plainLate: plain.late, lateMsMax,
+            leadMissed: lead.missed, plainMissed: plain.missed })
           clear()
         }
       }
