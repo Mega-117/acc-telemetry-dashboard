@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 a72884529cb15102e70a8808aa35489538c846fd9c9b254bdfeb77869cc25678 -->
+<!-- Generated V4 online; SHA256 eb7031921f4943d33c462d71ea5ada090aee47ca74e4c245f61af1f1cdd1d7e2 -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -155,6 +155,20 @@ input[type=checkbox] { width: 15px; height: 15px; accent-color: #21ff83; }
 #strategy-result span { margin-top: 5px; line-height: 1.5; }
 #strategy-result[data-problem=true] { border-color: #ff6178; background: #291318; }
 .new-tyre-badge { display: inline-block; margin: 4px 0 4px 12px; padding: 3px 7px; color: #eafcf5; background: #12392c; border: 1px solid #287b59; font-size: 11px; font-weight: 700; white-space: nowrap; vertical-align: middle; }
+
+/* PIP-761: limits, -/+ steps, the driver's current MFD column, preset-only lock. */
+.sm { display: none; }
+#form { max-width: 760px; border-collapse: collapse; }
+#form tr.v4-head th { padding: 6px 4px; color: #b3b3b8; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; text-align: left; border-bottom: 1px solid #ffffff25; }
+#form tr.v4-head th:nth-child(4) { color: #8fb8ff; }
+td.v4-now { min-width: 96px; padding-left: 12px; border-left: 1px solid #ffffff20; color: #8fb8ff; font-variant-numeric: tabular-nums; white-space: nowrap; }
+input[data-numeric] { width: 64px; text-align: right; }
+.ctl button.v4-step, button.v4-step { min-height: 28px; width: 28px; padding: 0; margin: 0 2px; font-size: 15px; line-height: 1; clip-path: none; vertical-align: middle; }
+.v4-limit { margin-left: 8px; color: #8b8b94; font-size: 11px; white-space: nowrap; }
+.v4-issue { margin-top: 4px; color: #ff6178; font-size: 11px; line-height: 1.4; }
+tr.v4-bad input[data-numeric] { border-color: #ff6178; }
+#form.preset-only tr[data-f]:not([data-f=applyPitStrategy]):not([data-f=pitStrategy]) { opacity: .35; }
+tr.v4-preset-note td { padding: 8px 10px; color: #ffc400; background: #ffc40010; border-left: 3px solid #ffc400; font-size: 12px; }
 </style></head>
 <body>
 <div class="wrap">
@@ -1195,10 +1209,55 @@ log('info','la prima volta, lettura della forma del menu — pensa lui.');
 })();
 
 </script>
-<script>'use strict';
+<script>globalThis.MfdV4Limits = {"version":1,"_sources":{"fuelLiters":"Litres TO ADD, 0..MaxFuel step 1. MaxFuel = ACC shared memory statics of the driver's car, read live (ACC Drive StrategyVM.cs:231 / TelemetryVM.cs:226 / StaticInfo.cs:43). transportMax is the RTDB order cap (database.rules.json), not a car value.","pressure":"20.3-35.0 step 0.1, Dry and Wet alike (ACC Drive StrategyNewOldView.xaml:96-108).","tyreSet":"1-50, Dry only with tyre change (ACC Drive StrategyNewOldView.xaml:89, StrategyModel.cs:130).","brakePads":"1-4: Racer Core limit (not found in ACC Drive).","pitStrategy":"1-30: Racer Core limit (not found in ACC Drive)."},"fuelLiters":{"min":0,"step":1,"transportMax":140,"capacityMax":250},"pressure":{"min":20.3,"max":35.0,"step":0.1},"tyreSet":{"min":1,"max":50,"step":1},"brakePads":{"min":1,"max":4,"step":1},"pitStrategy":{"min":1,"max":30,"step":1}};
+'use strict';
 const METHOD = 'mfd-v4';
 const WHEELS = ['FL', 'FR', 'RL', 'RR'];
+// PIP-761: one source for every field limit, shared by the engineer form
+// (inlined by scripts/build_mfd_v4_online.py), this receiver contract and the
+// service loop (field_adjust.py). Sources per field are in limits.json.
+const LIMITS = typeof module !== 'undefined' ? require('./limits.json') : globalThis.MfdV4Limits;
 const integer = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
+const onTenth = v => Math.abs(v * 10 - Math.round(v * 10)) < .00001;
+const pressureOk = v => typeof v === 'number' && Number.isFinite(v) && v >= LIMITS.pressure.min && v <= LIMITS.pressure.max && onTenth(v);
+const decimal = v => String(v).replace('.', ',');
+// The plan schema has a fixed field set (RTDB rules); limits travel as data
+// the receiver re-checks, never as new plan fields.
+const outOfLimits = (field, reason) => ({ ok: false, code: 'out-of-limits', field, reason });
+
+// PIP-761: the fuel field is litres TO ADD, 0..MaxFuel of the driver's car.
+// MaxFuel is read live (ACC statics); there is no default: missing, zero,
+// NaN or absurd = no fuel order. The order transport caps it at transportMax.
+function fuelLimit(capacity) {
+    const f = LIMITS.fuelLiters;
+    if (typeof capacity !== 'number' || !Number.isFinite(capacity) || capacity <= 0 || capacity > f.capacityMax)
+        return { ok: false, max: null, reason: 'Capacità del serbatoio non disponibile dal PC del pilota: invio della strategia bloccato (solo il preset resta possibile).' };
+    const max = Math.min(Math.floor(capacity), f.transportMax);
+    return { ok: true, max, capacity, reason: null };
+}
+
+// One visible reason per form field, the same rules validatePlan applies.
+// `value` null = not chosen yet (the caller decides if it is required).
+function fieldIssue(field, value, capacity) {
+    if (value == null) return null;
+    if (typeof value !== 'number' || !Number.isFinite(value)) return 'Valore non numerico.';
+    if (field === 'fuelLiters') {
+        const limit = fuelLimit(capacity);
+        if (!limit.ok) return limit.reason;
+        if (!Number.isInteger(value)) return 'Litri interi.';
+        if (value < LIMITS.fuelLiters.min || value > limit.max) return `Fuori limite: ${LIMITS.fuelLiters.min}–${limit.max} L.`;
+        return null;
+    }
+    if (field === 'pressure') {
+        const p = LIMITS.pressure;
+        if (value < p.min || value > p.max) return `Fuori limite: ${decimal(p.min)}–${decimal(p.max)}.`;
+        return onTenth(value) ? null : 'Passo 0,1.';
+    }
+    const range = LIMITS[field];
+    if (!range) return null;
+    if (!Number.isInteger(value)) return 'Numero intero.';
+    return value < range.min || value > range.max ? `Fuori limite: ${range.min}–${range.max}.` : null;
+}
 
 function validatePlan(p) {
     const bad = reason => ({
@@ -1207,17 +1266,26 @@ function validatePlan(p) {
     });
     if (!p || typeof p !== 'object' || Array.isArray(p) || Object.keys(p).some(k => !['version', 'contextId', 'stepMs', 'driverName', 'operation', 'fuelLiters', 'changeTyres', 'compound', 'tyreSet', 'pressures', 'brakes', 'brakeFront', 'brakeRear', 'driverId', 'repairBodywork', 'repairSuspension', 'pitStrategy'].includes(k))) return bad('Payload V4 non valido.');
     if (p.version !== 1 || typeof p.contextId !== 'string' || !/^[a-f0-9]{64}$/.test(p.contextId) || !integer(p.stepMs,60,300)) return bad('Contesto V4 non valido.');
-    if (p.operation === 'preset') return Object.keys(p).length === 5 && integer(p.pitStrategy, 1, 30) ? {
-        ok: true,
-        plan: {
-            ...p
-        }
-    } : bad('Preset V4 non valido.');
-    if (p.operation !== 'strategy' || p.pitStrategy != null || !integer(p.fuelLiters, 0, 140) || !['changeTyres', 'brakes', 'repairBodywork', 'repairSuspension'].every(k => typeof p[k] === 'boolean') || (p.repairSuspension && !p.repairBodywork)) return bad('Completa le scelte V4; le sospensioni richiedono la carrozzeria.');
+    if (p.operation === 'preset') {
+        if (Object.keys(p).length !== 5 || p.pitStrategy == null) return bad('Preset V4 non valido.');
+        return integer(p.pitStrategy, LIMITS.pitStrategy.min, LIMITS.pitStrategy.max) ? { ok: true, plan: { ...p } }
+            : outOfLimits('pitStrategy', `Preset fuori limite: ${LIMITS.pitStrategy.min}–${LIMITS.pitStrategy.max}.`);
+    }
+    if (p.operation !== 'strategy' || p.pitStrategy != null || p.fuelLiters == null || !['changeTyres', 'brakes', 'repairBodywork', 'repairSuspension'].every(k => typeof p[k] === 'boolean') || (p.repairSuspension && !p.repairBodywork)) return bad('Completa le scelte V4; le sospensioni richiedono la carrozzeria.');
+    if (!integer(p.fuelLiters, LIMITS.fuelLiters.min, LIMITS.fuelLiters.transportMax)) return outOfLimits('fuelLiters', `Benzina fuori limite: ${LIMITS.fuelLiters.min}–${LIMITS.fuelLiters.transportMax} L interi.`);
     if (p.driverId != null && (!integer(p.driverId,0,63) || typeof p.driverName !== 'string' || !p.driverName.trim() || p.driverName.length > 160)) return bad('Pilota V4 non valido.');
     if (p.driverId == null && p.driverName != null) return bad('Nome pilota senza selezione.');
-    if (p.changeTyres && (!['dry', 'wet'].includes(p.compound) || (p.compound === 'dry' && !integer(p.tyreSet, 1, 50)) || !p.pressures || Object.keys(p.pressures).length !== 4 || !WHEELS.every(k => typeof p.pressures[k] === 'number' && Number.isFinite(p.pressures[k]) && p.pressures[k] >= 20.3 && p.pressures[k] <= 35 && Math.abs(p.pressures[k] * 10 - Math.round(p.pressures[k] * 10)) < .00001))) return bad('Completa i valori gomme V4.');
-    if (p.brakes && !['brakeFront', 'brakeRear'].every(k => integer(p[k], 1, 4))) return bad('Completa le pastiglie V4.');
+    if (p.changeTyres) {
+        if (!['dry', 'wet'].includes(p.compound) || (p.compound === 'dry' && p.tyreSet == null) || !p.pressures || typeof p.pressures !== 'object' || Object.keys(p.pressures).length !== 4 || !WHEELS.every(k => p.pressures[k] != null)) return bad('Completa i valori gomme V4.');
+        if (p.compound === 'dry' && !integer(p.tyreSet, LIMITS.tyreSet.min, LIMITS.tyreSet.max)) return outOfLimits('tyreSet', `Set gomme fuori limite: ${LIMITS.tyreSet.min}–${LIMITS.tyreSet.max}.`);
+        const wrong = WHEELS.find(k => !pressureOk(p.pressures[k]));
+        if (wrong) return outOfLimits(wrong, `Pressione ${wrong} fuori limite: ${decimal(LIMITS.pressure.min)}–${decimal(LIMITS.pressure.max)}, passo 0,1.`);
+    }
+    if (p.brakes) {
+        if (!['brakeFront', 'brakeRear'].every(k => p[k] != null)) return bad('Completa le pastiglie V4.');
+        const wrong = ['brakeFront', 'brakeRear'].find(k => !integer(p[k], LIMITS.brakePads.min, LIMITS.brakePads.max));
+        if (wrong) return outOfLimits(wrong, `Pastiglie fuori limite: ${LIMITS.brakePads.min}–${LIMITS.brakePads.max}.`);
+    }
     const plan = {
         version: 1, contextId: p.contextId, stepMs: p.stepMs,
         operation: 'strategy',
@@ -1245,6 +1313,17 @@ function validatePlan(p) {
         ok: true,
         plan
     };
+}
+
+// PIP-761: the car's limit, checked by the sender against the capacity the
+// driver's PC published and by the receiver against its live capacity. A
+// preset carries no fuel and needs none.
+function checkCapacity(plan, capacity) {
+    if (plan?.operation !== 'strategy') return { ok: true };
+    const limit = fuelLimit(capacity);
+    if (!limit.ok) return outOfLimits('fuelLiters', limit.reason);
+    if (plan.fuelLiters > limit.max) return outOfLimits('fuelLiters', `Benzina da aggiungere ${plan.fuelLiters} L oltre il limite di questa vettura (${limit.max} L): ordine rifiutato, nessun valore ridotto.`);
+    return { ok: true };
 }
 
 function normalizeV4Order(raw) {
@@ -1305,6 +1384,10 @@ function targets(p) {
 const exported = {
     METHOD,
     WHEELS,
+    LIMITS,
+    fuelLimit,
+    fieldIssue,
+    checkCapacity,
     validatePlan,
     normalizeV4Order,
     targets
@@ -1322,6 +1405,8 @@ else globalThis.MfdV4Contract = exported;
   var invalidatedChecks = new Set(), verificationOrder = null;
   var visualFields = { changeTyre: 'changeTyres', compound: 'compound', brakes: 'brakes',
     brakeFront: 'brakeFront', brakeRear: 'brakeRear', driverIdx: 'driverId', susp: 'repairSuspension', body: 'repairBodywork' };
+  // PIP-761: online-fields.js reads the last room snapshot (live column, tank).
+  globalThis.MfdV4OnlineSnapshot = function () { return snapshot; };
   var nativeSpia = spia;
   function renderTyreBadge() {
     formEl.querySelector('.new-tyre-badge')?.remove();
@@ -1379,12 +1464,12 @@ else globalThis.MfdV4Contract = exported;
   }
   function send(type, value) { parent.postMessage({ channel: 'mfd-v4-online', type: type, value: value }, '*'); }
   etichettaBottone = function () {
-    bA.textContent = busy ? 'INVIO IN CORSO…' : S.applyPitStrategy ? 'CARICA PRESET' : 'Invia strategia' + (snapshot?.recipientLabel ? ' a ' + snapshot.recipientLabel : '');
+    bA.textContent = busy ? 'INVIO IN CORSO…' : S.applyPitStrategy ? 'Invia solo il preset ' + S.pitStrategy : 'Invia strategia' + (snapshot?.recipientLabel ? ' a ' + snapshot.recipientLabel : '');
   };
   var nativeRender = renderForm;
   renderForm = function () {
     var active = document.activeElement;
-    var editing = active && formEl.contains(active) && active.type === 'number' && editingField === active.dataset.f
+    var editing = active && formEl.contains(active) && (active.type === 'number' || active.dataset.numeric === '1') && editingField === active.dataset.f
       ? { field: active.dataset.f, value: active.value } : null;
     // The shared driver control reads this button while rendering.
     bA.disabled = busy || !snapshot?.ready;
@@ -1426,17 +1511,27 @@ else globalThis.MfdV4Contract = exported;
       if (S.driverEntryIndex != null) Object.assign(p, { driverId: S.driverEntryIndex,
         driverName: CREW?.drivers?.[S.driverEntryIndex] ? driverLabelV4(CREW.drivers[S.driverEntryIndex]) : '' });
     }
-    var checked = MfdV4Contract.validatePlan(p);
+    // PIP-761: a value the form marks (comma typo, out of limits, over the
+    // car's tank) blocks the send; nothing is reduced or rounded silently.
+    var blocking = p.operation === 'strategy' ? globalThis.MfdV4OnlineFields?.blocking() : null;
+    var checked = blocking ? { ok: false, reason: blocking } : MfdV4Contract.validatePlan(p);
+    if (checked.ok) {
+      var capacity = MfdV4Contract.checkCapacity(checked.plan, globalThis.MfdV4OnlineFields?.capacity() ?? null);
+      if (!capacity.ok) checked = capacity;
+    }
     if (!checked.ok) { validationMessage = checked.reason; log('err', checked.reason); showResult('Controlla la strategia', checked.reason, true); return; }
     validationMessage = '';
     showResult('Invio in corso', 'Attendo l’esito dal PC del pilota.', false);
     logEl.textContent = 'Invio in corso: attendo il nuovo esito dal PC del pilota.';
+    // PIP-761: a preset is one-shot. The tick is cleared (and the cleared
+    // draft saved) as it leaves, so the next send is a normal strategy again.
+    if (checked.plan.operation === 'preset') { S.applyPitStrategy = false; saved(); }
     busy = true; renderForm(); send('submit', checked.plan);
   });
   S = { applyPitStrategy: false, pitStrategy: 1, fuel: null, changeTyre: null, compound: null, tyreSet: null,
     fl: null, fr: null, rl: null, rr: null, brakes: null, brakeFront: null, brakeRear: null,
     brakeFrontNow: null, brakeRearNow: null, driverIdx: null, driverEntryIndex: null, susp: null, body: null };
-  function saved() { if (!restoring) send('draft', { ...S, initializedFields: Array.from(initializedFields), stepMs: Number(document.getElementById('gap').value), edited: edited,
+  function saved() { if (!restoring) send('draft', { ...S, applyPitStrategy: false, initializedFields: Array.from(initializedFields), stepMs: Number(document.getElementById('gap').value), edited: edited,
     verificationOrder: verificationOrder, invalidatedChecks: Array.from(invalidatedChecks) }); }
   var refresh = document.createElement('button');
   refresh.id = 'refresh-draft'; refresh.className = 'alt';
@@ -1493,7 +1588,7 @@ else globalThis.MfdV4Contract = exported;
   formEl.addEventListener('change', function (event) {
     if (busy) return;
     if (event.target.dataset.f) { edited = true; initializedFields.add(event.target.dataset.f); invalidateChecks(event.target.dataset.f); }
-    if (event.target.type === 'number' && event.target.value === '') { S[event.target.dataset.f] = null; renderForm(); }
+    if ((event.target.type === 'number' || event.target.dataset.numeric === '1') && event.target.value === '') { S[event.target.dataset.f] = null; renderForm(); }
     saved();
   });
   document.getElementById('gap').addEventListener('change', saved);
@@ -1524,7 +1619,7 @@ else globalThis.MfdV4Contract = exported;
       if (snapshot.draft) {
         Object.keys(S).forEach(function(key) {
           if (!Object.prototype.hasOwnProperty.call(snapshot.draft, key)) return;
-          S[key] = snapshot.draft[key];
+          S[key] = key === 'applyPitStrategy' ? false : snapshot.draft[key];
           if (S[key] != null || snapshot.draft.initializedFields?.includes(key)) initializedFields.add(key);
         });
       }
@@ -1565,6 +1660,156 @@ else globalThis.MfdV4Contract = exported;
   poll = async function () {};
   logEl.textContent = 'Pronto: scegli la strategia da inviare al PC del pilota.';
   renderForm(); send('ready', null);
+})();
+
+// PIP-761: engineer form only (generated after online-panel.js). Adds, per row,
+// the field limits, one-step -/+ buttons, the visible reason a value cannot be
+// sent and the column with the driver's current MFD value. Limits come from
+// MfdV4Contract (limits.json): the receiver applies exactly the same rules.
+(function () {
+  var C = MfdV4Contract;
+  var LIMIT_OF = { fuel: 'fuelLiters', tyreSet: 'tyreSet', fl: 'pressure', fr: 'pressure', rl: 'pressure', rr: 'pressure',
+    brakeFront: 'brakePads', brakeRear: 'brakePads', pitStrategy: 'pitStrategy' };
+  var WHEEL = { fl: 'FL', fr: 'FR', rl: 'RL', rr: 'RR' };
+  var invalid = {};   // field -> raw text that is not a number (e.g. "27,5,1"): never sent
+  var dash = '—';
+  function shot() { return globalThis.MfdV4OnlineSnapshot ? globalThis.MfdV4OnlineSnapshot() : null; }
+  // Live values are "current" only from a ready driver whose snapshot belongs
+  // to the context the form is bound to: stale, disconnected or other-target
+  // data is never presented as what is in the MFD now.
+  function live() {
+    var s = shot();
+    return s && s.ready === true && s.contextId && s.strategy && s.strategy.mfdV4 &&
+      s.strategy.mfdV4.contextId === s.contextId ? s.strategy : null;
+  }
+  function capacity() { var l = live(); var value = l && l.mfdV4 && l.mfdV4.maxFuel; return typeof value === 'number' ? value : null; }
+  function range(id) {
+    var kind = LIMIT_OF[id];
+    if (!kind) return null;
+    if (kind === 'fuelLiters') {
+      var limit = C.fuelLimit(capacity());
+      return limit.ok ? { min: C.LIMITS.fuelLiters.min, max: limit.max, step: 1, unit: ' L' } : null;
+    }
+    var l = C.LIMITS[kind];
+    return { min: l.min, max: l.max, step: l.step, unit: '' };
+  }
+  function show(value, step) {
+    return step < 1 ? value.toFixed(1).replace('.', ',') : String(value);
+  }
+  function current(id) {
+    var l = live();
+    if (!l) return null;
+    if (id === 'fuel') return typeof l.fuelToAdd === 'number' ? Math.round(l.fuelToAdd) : null;
+    if (id === 'tyreSet') return typeof l.tyreSet === 'number' ? l.tyreSet + 1 : null;
+    if (WHEEL[id]) { var p = l.pressures && l.pressures[WHEEL[id]]; return typeof p === 'number' ? Math.round(p * 10) / 10 : null; }
+    if (id === 'compound') return l.compound === 'dry' ? 'Dry' : l.compound === 'wet' ? 'Wet' : null;
+    return null;
+  }
+  function currentText(id) {
+    var value = current(id);
+    if (value == null) return dash;
+    if (id === 'fuel') return value + ' L';
+    return WHEEL[id] ? show(value, 0.1) : String(value);
+  }
+  function issue(id) {
+    if (invalid[id] != null) return 'Valore non numerico: ' + invalid[id];
+    if (!LIMIT_OF[id] || S.applyPitStrategy || inattivo(id)) return null;
+    if (id === 'fuel') {
+      var limit = C.fuelLimit(capacity());
+      if (!limit.ok) return limit.reason;
+    }
+    return C.fieldIssue(LIMIT_OF[id], S[id], capacity());
+  }
+  function blocking() {
+    for (var id in LIMIT_OF) { var reason = issue(id); if (reason) return reason; }
+    return null;
+  }
+  function step(id, direction) {
+    var r = range(id), input = formEl.querySelector('input[data-f="' + id + '"]');
+    if (!r || !input || input.disabled) return;
+    var base = typeof S[id] === 'number' && Number.isFinite(S[id]) ? S[id] : current(id) != null ? current(id) : r.min;
+    var next = Math.min(r.max, Math.max(r.min, base + direction * r.step));
+    next = r.step < 1 ? Math.round(next * 10) / 10 : Math.round(next);
+    delete invalid[id];
+    input.value = String(next);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  function button(id, direction) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'alt v4-step'; b.dataset.stepField = id; b.dataset.dir = String(direction);
+    b.textContent = direction > 0 ? '+' : '−';
+    b.setAttribute('aria-label', (direction > 0 ? 'Aumenta ' : 'Diminuisci ') + id);
+    b.addEventListener('click', function () { step(id, direction); });
+    return b;
+  }
+  function decorate() {
+    var focused = document.activeElement;
+    formEl.classList.toggle('preset-only', !!S.applyPitStrategy);
+    var head = document.createElement('tr'); head.className = 'v4-head';
+    head.innerHTML = '<th>Campo</th><th>Da inviare</th><th></th><th>Adesso nel MFD del pilota</th><th></th>';
+    formEl.prepend(head);
+    formEl.querySelectorAll('tr[data-f]').forEach(function (tr) {
+      var id = tr.dataset.f, input = tr.querySelector('input[data-f="' + id + '"]');
+      if (id === 'fuel') tr.querySelector('td.lb').textContent = 'Benzina da aggiungere (L)';
+      if (input && LIMIT_OF[id]) {
+        // Text, not number: "27,5" (Italian comma) is read as 27.5, anything
+        // else is shown as an error instead of silently becoming empty.
+        input.type = 'text'; input.inputMode = 'decimal'; input.dataset.numeric = '1';
+        if (invalid[id] != null && document.activeElement !== input) input.value = invalid[id];
+        var minus = button(id, -1), plus = button(id, 1), r = range(id);
+        minus.disabled = plus.disabled = input.disabled || !r;
+        input.before(minus); input.after(plus);
+        var hint = document.createElement('span'); hint.className = 'v4-limit';
+        hint.textContent = r ? show(r.min, r.step) + '–' + show(r.max, r.step) + r.unit : 'max ?';
+        plus.after(hint);
+      }
+      var now = document.createElement('td'); now.className = 'v4-now'; now.dataset.now = id;
+      tr.lastElementChild.before(now);
+    });
+    var presetRow = formEl.querySelector('tr[data-f="pitStrategy"]');
+    if (presetRow && S.applyPitStrategy) {
+      var note = document.createElement('tr'); note.className = 'v4-preset-note';
+      note.innerHTML = '<td colspan="5">Invii solo il preset: gli altri valori restano nella bozza e non vengono inviati.</td>';
+      presetRow.after(note);
+    }
+    refresh();
+    if (focused && focused !== document.activeElement && formEl.contains(focused)) focused.focus();
+  }
+  // Values and reasons change with every snapshot; inputs are left untouched.
+  function refresh() {
+    formEl.querySelectorAll('td.v4-now').forEach(function (cell) {
+      var text = currentText(cell.dataset.now);
+      if (cell.textContent !== text) cell.textContent = text;
+    });
+    var fuelHint = formEl.querySelector('tr[data-f="fuel"] .v4-limit'), r = range('fuel');
+    if (fuelHint) fuelHint.textContent = r ? '0–' + r.max + ' L' : 'max ?';
+    formEl.querySelectorAll('tr[data-f]').forEach(function (tr) {
+      var id = tr.dataset.f, reason = issue(id), cell = tr.children[1], line = cell && cell.querySelector('.v4-issue');
+      if (!cell || (!reason && !line)) return;
+      if (!reason) { line.remove(); tr.classList.remove('v4-bad'); return; }
+      if (!line) { line = document.createElement('div'); line.className = 'v4-issue'; line.setAttribute('role', 'alert'); cell.appendChild(line); }
+      if (line.textContent !== reason) line.textContent = reason;
+      tr.classList.add('v4-bad');
+    });
+  }
+  var renderBefore = renderForm;
+  renderForm = function () { renderBefore(); decorate(); };
+  var checksBefore = aggiornaSpie;
+  aggiornaSpie = function () { checksBefore(); refresh(); };
+  // Capture runs before the canonical change handler: normalize the comma or
+  // keep the raw text as an error (never a silent blank or a wrong number).
+  formEl.addEventListener('change', function (event) {
+    var input = event.target, id = input.dataset && input.dataset.f;
+    if (!id || input.dataset.numeric !== '1') return;
+    var raw = input.value.trim().replace(',', '.');
+    if (raw === '' || /^\d+(\.\d+)?$/.test(raw)) { delete invalid[id]; input.value = raw; return; }
+    invalid[id] = input.value;
+    event.stopImmediatePropagation();
+    refresh();
+  }, true);
+  globalThis.MfdV4OnlineFields = { blocking: blocking, capacity: capacity, current: current, issue: issue };
+  renderForm();
 })();
 </script><script>// Presentation-only bridge. Never reads fields or sends strategy intents.
 (function () {

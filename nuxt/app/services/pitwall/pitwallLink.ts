@@ -113,7 +113,8 @@ export function boundPitwallTyreCondition(value: unknown): PitwallTyreCondition 
 export interface PitwallStrategySnapshot {
   applicationMethods?: string[]
   applicationMethodsKnown?: boolean
-  mfdV4?: { ready: boolean, reason: string | null, contextId: string | null }
+  /** PIP-761: maxFuel = tank of the driver's car (ACC statics MaxFuel, live), null when unknown. */
+  mfdV4?: { ready: boolean, reason: string | null, contextId: string | null, maxFuel?: number | null }
   fuelToAdd: number | null
   tyreSet: number | null
   /** Numero 1–50 del treno montato, distinto dal candidato MFD in base zero. */
@@ -271,7 +272,9 @@ export function boundPitwallStrategy(strategy: unknown, nowIso: string): Pitwall
     } : {}),
     ...(source.mfdV4 ? { mfdV4: { ready: source.mfdV4.ready === true,
       reason: typeof source.mfdV4.reason === 'string' ? source.mfdV4.reason.slice(0, 240) : null,
-      contextId: typeof source.mfdV4.contextId === 'string' && /^[a-f0-9]{64}$/.test(source.mfdV4.contextId) ? source.mfdV4.contextId : null } } : {}),
+      contextId: typeof source.mfdV4.contextId === 'string' && /^[a-f0-9]{64}$/.test(source.mfdV4.contextId) ? source.mfdV4.contextId : null,
+      // PIP-761: the tank travels with its context; no default when absent (old desktop = unknown).
+      maxFuel: typeof source.mfdV4.maxFuel === 'number' && Number.isFinite(source.mfdV4.maxFuel) && source.mfdV4.maxFuel > 0 && source.mfdV4.maxFuel <= 250 ? source.mfdV4.maxFuel : null } } : {}),
     tyreSet: finiteOrNull(source.tyreSet),
     ...(source.tyreSetCondition ? { tyreSetCondition: boundPitwallTyreCondition(source.tyreSetCondition) } : {}),
     ...(typeof source.fittedTyreSet === 'number' && Number.isInteger(source.fittedTyreSet) && source.fittedTyreSet >= 1 && source.fittedTyreSet <= 50

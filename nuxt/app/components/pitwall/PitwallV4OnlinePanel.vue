@@ -56,11 +56,18 @@ const result = computed(() => {
   const detail = port.orderReason.value
   // Use the completed order, never the editable draft. Keep the raw reason in outcome/console.
   const preset = (port.orderFields.value.pitStrategy as { requested?: unknown } | undefined)?.requested
-  if (['partial', 'failed', 'rejected'].includes(port.orderStatus.value)
-    && Object.keys(port.orderFields.value).length === 1
+  const presetOnly = Object.keys(port.orderFields.value).length === 1
     && typeof preset === 'number' && Number.isInteger(preset) && preset >= 1 && preset <= 30
+  // PIP-761: a preset-only order sends nothing else. Never "all fields verified";
+  // a selection that did not advance is "not confirmed", not proof of absence.
+  if (presetOnly && port.orderStatus.value === 'applied') {
+    return { ...status, label: detail?.includes('già selezionato') ? t('pitwall.v4.presetAlreadySelected', { preset }) : t('pitwall.v4.presetSelected', { preset }),
+      reason: t('pitwall.v4.presetNothingElse') }
+  }
+  if (presetOnly && ['partial', 'failed', 'rejected'].includes(port.orderStatus.value)
     && (detail?.includes('Preset richiesto non disponibile: selezione ferma o limite raggiunto.')
-      || detail?.includes('Preset non applicato: selezione non avanzata entro il tempo previsto.'))) {
+      || detail?.includes('Preset non applicato: selezione non avanzata entro il tempo previsto.')
+      || detail?.includes('non confermato: la selezione non è avanzata'))) {
     return { ...status, label: t('pitwall.v4.presetNotApplied', { preset }),
       reason: t('pitwall.v4.presetReason') }
   }

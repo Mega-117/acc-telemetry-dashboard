@@ -46,24 +46,63 @@ it.each(['partial', 'failed', 'rejected', 'stalled'])('explains an unavailable p
     message(w, 'draft', { applyPitStrategy: true, pitStrategy: 3 })
     await flushPromises()
     const snapshot = post.mock.calls.at(-1)![0].value
-    expect(snapshot.result).toMatchObject({ label: 'Preset 2 non applicato', reason: 'Il MFD non ha consentito di selezionare il preset richiesto.', problem: true, busy: false })
+    expect(snapshot.result).toMatchObject({ label: 'Preset 2 non confermato', reason: 'La selezione nel MFD non è avanzata: forse il preset non esiste sul PC del pilota. Nessun altro valore inviato.', problem: true, busy: false })
     expect(snapshot.outcome).toContain(p.orderReason.value)
     expect(snapshot.verification.fields).toEqual(p.orderFields.value)
   } finally { w.unmount() }
 })
-it.each(['unreadable', 'strategy', 'applied', 'missing-request'])('preserves the original presentation for %s', kind => {
+it.each(['unreadable', 'strategy', 'strategy-applied', 'missing-request'])('preserves the original presentation for %s', kind => {
   const p = port()
-  p.orderStatus.value = kind === 'applied' ? 'applied' : 'partial'
+  p.orderStatus.value = kind === 'strategy-applied' ? 'applied' : 'partial'
   p.orderReason.value = kind === 'unreadable' ? 'Numero preset non leggibile' : 'Preset richiesto non disponibile: selezione ferma o limite raggiunto.'
-  p.orderFields.value = kind === 'strategy' ? { fuelLiters: { requested: 2 } } : { pitStrategy: { requested: kind === 'missing-request' ? null : 2 } }
+  p.orderFields.value = kind === 'strategy' || kind === 'strategy-applied' ? { fuelLiters: { requested: 2 } } : { pitStrategy: { requested: kind === 'missing-request' ? null : 2 } }
   const w = mount(Panel, { attachTo: document.body, props: { port: p as never } })
   try {
     const post = vi.spyOn((w.get('iframe').element as HTMLIFrameElement).contentWindow!, 'postMessage')
     message(w, 'ready', null)
     const result = post.mock.calls.at(-1)![0].value.result
-    expect(result.label).toBe(kind === 'applied' ? 'Impostata e confermata' : 'Impostata in parte: alcuni campi non sono confermabili')
+    expect(result.label).toBe(kind === 'strategy-applied' ? 'Impostata e confermata' : 'Impostata in parte: alcuni campi non sono confermabili')
     expect(result.reason).toBe(p.orderReason.value)
   } finally { w.unmount() }
+})
+// PIP-761: a preset-only order is never presented as "all fields verified",
+// also when an old driver program still answers that way.
+it.each([
+  ['Preset 1 già selezionato: nessun altro valore inviato.', 'Preset 1 già selezionato'],
+  ['Preset 1 selezionato: nessun altro valore inviato.', 'Preset 1 selezionato'],
+  ['Tutti i campi applicabili verificati.', 'Preset 1 selezionato'],
+])('applied preset-only order (%s) says that nothing else was sent', (reason, label) => {
+  const p = port()
+  p.orderStatus.value = 'applied'; p.orderReason.value = reason
+  p.orderFields.value = { pitStrategy: { requested: 1, observed: 1, outcome: 'verified' } }
+  const w = mount(Panel, { attachTo: document.body, props: { port: p as never } })
+  try {
+    const post = vi.spyOn((w.get('iframe').element as HTMLIFrameElement).contentWindow!, 'postMessage')
+    message(w, 'ready', null)
+    const result = post.mock.calls.at(-1)![0].value.result
+    expect(result.label).toBe(label)
+    expect(result.reason).toBe('Nessun altro valore inviato: con «Cambia preset» parte solo il preset.')
+    expect(JSON.stringify(result)).not.toContain('Tutti i campi')
+  } finally { w.unmount() }
+})
+it('PIP-761: the live tank reaches the form with its context; an invalid value is unknown, never a default', () => {
+  const p = port()
+  p.carSnapshot.value.strategy.mfdV4 = { ready: true, contextId, maxFuel: 110 } as never
+  const w = mount(Panel, { attachTo: document.body, props: { port: p as never } })
+  try {
+    const post = vi.spyOn((w.get('iframe').element as HTMLIFrameElement).contentWindow!, 'postMessage')
+    message(w, 'ready', null)
+    expect(post.mock.calls.at(-1)![0].value.strategy.mfdV4).toMatchObject({ contextId, maxFuel: 110 })
+  } finally { w.unmount() }
+  for (const bad of [0, -1, Number.NaN, 999, '110', undefined]) {
+    const q = port(); q.carSnapshot.value.strategy.mfdV4 = { ready: true, contextId, maxFuel: bad } as never
+    const v = mount(Panel, { attachTo: document.body, props: { port: q as never } })
+    try {
+      const post = vi.spyOn((v.get('iframe').element as HTMLIFrameElement).contentWindow!, 'postMessage')
+      message(v, 'ready', null)
+      expect(post.mock.calls.at(-1)![0].value.strategy.mfdV4.maxFuel).toBeNull()
+    } finally { v.unmount() }
+  }
 })
 it('publishes structured field verification with its original order context', () => {
   const p = { ...port(), orderId: ref('order-one'), orderContextId: ref('original-context') }

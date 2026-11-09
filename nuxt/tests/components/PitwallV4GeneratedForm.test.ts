@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { JSDOM } from 'jsdom'
 import { afterEach, expect, it, vi } from 'vitest'
 const contextId = 'a'.repeat(64)
+const tank = { ready: true, reason: null, contextId, maxFuel: 120 }
 const opened: JSDOM[] = []
 
 it('shows SET NUOVO only for the verified selected dry set and clears on draft edits', () => {
@@ -56,9 +57,11 @@ function onlineForm() {
   w.setInterval = () => 0
   const post = vi.spyOn(w, 'postMessage').mockImplementation(() => {})
   for (const script of w.document.querySelectorAll('script')) w.eval(script.textContent)
+  // PIP-761: a real driver PC publishes its V4 context with the car's tank.
   const snapshot = (value: Record<string, unknown> = {}) => w.dispatchEvent(new w.MessageEvent('message', {
     source: w.parent, data: { channel: 'mfd-v4-online', type: 'snapshot', value: {
       contextId, ready: true, busy: false, crew: [{ driverIndex: 0, name: 'Test Driver' }], ...value,
+      ...(value.strategy ? { strategy: { mfdV4: tank, ...value.strategy as object } } : 'strategy' in value ? {} : { strategy: { mfdV4: tank } }),
     } },
   }))
   const field = (name: string) => w.document.querySelector(`[data-f="${name}"] input, input[data-f="${name}"]`)
@@ -213,7 +216,7 @@ it('canonical generated form handles unknowns, dependencies, names, zero and pre
   function snapshot(value: Record<string, unknown> = {}) {
     w.dispatchEvent(new w.MessageEvent('message', { source: w.parent, data: { channel: 'mfd-v4-online', type: 'snapshot', value: {
       contextId, ready: true, busy: false, crew: [{ driverIndex: 0, name: 'Enrico Saiani' }],
-      strategy: { fuelToAdd: 0 }, ...value,
+      strategy: { fuelToAdd: 0, mfdV4: tank }, ...value,
     } } }))
   }
   snapshot()
