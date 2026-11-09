@@ -102,7 +102,10 @@ slot_expired = (
 # a stale rollback or cleanup cannot delete a seat another device of the same
 # account has just committed.
 new_dir = f"{newroot}.child('{ns}/directory').child(auth.uid)"
-slot_referenced = f"({new_dir}.child('roomId').val() == $room && {new_dir}.child('slot').val() == $slot)"
+slot_referenced = (
+    f"({new_dir}.child('roomId').val() == $room"
+    f" && {new_dir}.child('slot').val() == $slot)"
+)
 rooms["slots"] = {
     ".read": preview,
     "$slot": {
