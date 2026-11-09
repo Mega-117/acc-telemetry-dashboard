@@ -503,7 +503,7 @@ const zones = useSessionZones(computed(() => sessionEntries.value.filter(e => co
     <p v-if="refNote" class="analysis-note analysis-note--warn">{{ refNote }}</p>
     <p v-if="coverageNote && !loading" class="analysis-note analysis-note--warn" role="status" data-testid="coverage-note">{{ coverageNote }}</p>
 
-    <p v-if="skipped" class="analysis-note">{{ t('telemetry.skipped', { count: skipped }) }}</p>
+    <p v-if="skipped" class="analysis-note">{{ skipped === 1 ? t('telemetry.skippedOne') : t('telemetry.skipped', { count: skipped }) }}</p>
     <TraceSkeleton v-if="loading" :height="traceHeight" :label="t('telemetry.loading')" />
     <p v-else-if="error" class="analysis-empty">{{ error }}</p>
     <p v-else-if="lapId === refId && entries.length > 1" class="analysis-empty">{{ t('telemetry.sameLap') }}</p>

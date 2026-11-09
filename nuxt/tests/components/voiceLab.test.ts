@@ -311,7 +311,9 @@ describe('Voice Lab user interactions', () => {
     expect(host.querySelector('.server-card strong')?.textContent).toContain('3s')
     await vi.advanceTimersByTimeAsync(3000); await settle()
     expect(host.querySelector('.server-card strong')?.textContent).toBe('Online')
-    expect(mocks.notify).toHaveBeenCalledWith('Motore vocale Kokoro online.', 'success')
+    expect(mocks.notify).toHaveBeenCalledWith('Motore vocale online.', 'success')
+    // Audit 09/11: the pilot sees "motore vocale", never the engine's code name.
+    expect(host.textContent).not.toContain('Kokoro')
     app!.unmount(); app = undefined
     expect(vi.getTimerCount()).toBe(0)
   })
@@ -325,6 +327,6 @@ describe('Voice Lab user interactions', () => {
     await click('.server-card', 'Riprova avvio')
     await vi.advanceTimersByTimeAsync(123000); await settle()
     expect(host.querySelector('.server-card strong')?.textContent).toBe('Offline')
-    expect(host.textContent).toContain('non ha completato il warmup in tempo')
+    expect(host.textContent).toContain('non si è avviato in tempo')
   })
 })

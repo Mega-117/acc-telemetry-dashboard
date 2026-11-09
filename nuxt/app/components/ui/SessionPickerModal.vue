@@ -13,6 +13,7 @@ import { useSessionPickerPages } from '~/composables/useSessionPickerPages'
 import { onHistoryTrack } from '~/services/projections/vehicleHistory'
 import { sessionGame, sessionFilterType } from '~/services/telemetry/gameIdentity'
 import { sessionTiming } from '~/services/telemetry/fuelHistorySummary'
+import { lapCountLabel } from '~/services/session-detail/sessionPresentation'
 import { X } from '@lucide/vue'
 import { useI18n } from '~/i18n'
 
@@ -151,7 +152,7 @@ watch(
                 <span class="session-car">{{ session.car }}</span>
               </span>
               <span class="row-right">
-                <span class="stat">{{ t('sessions.picker.stat', { laps: session.laps, stints: session.stints }) }}</span>
+                <span class="stat">{{ t('sessions.picker.stat', { laps: lapCountLabel(session.laps), stints: session.stints }) }}</span>
                 <span class="time time--qualy" :class="{ 'is-empty': !session.bestQualy }">{{ t('sessions.list.qualifyAbbr') }} {{ session.bestQualy || '—' }}</span>
                 <span class="time time--race" :class="{ 'is-empty': !session.bestRace }">{{ t('sessions.list.raceAbbr') }} {{ session.bestRace || '—' }}</span>
               </span>

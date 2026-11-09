@@ -65,3 +65,14 @@ expect(voiceLab).toContain('flushReferenceAutoSaves()')
     expect(spotterRuntime).not.toMatch(/subscribeTrackVoiceReferencesChanged[\s\S]{0,180}resetTrackVoiceReferenceLapState/)
   })
 })
+
+describe('voice engine wording shown to the pilot (audit 09/11)', () => {
+  // Messages only: code names, events and keys keep "kokoro".
+  const shownKokoro = /(?:push\(|serverMessage\.value = |Error\(|message: |Error\.value = |\|\| )['`][^'`\n]*Kokoro/
+  it('says "motore vocale" and "si spegnerà", never "Kokoro"', () => {
+    expect(lifecycle).not.toMatch(shownKokoro)
+    expect(voiceLab).not.toMatch(shownKokoro)
+    expect(lifecycle).toContain('Il motore vocale si spegnerà tra 10 secondi.')
+    expect(voiceLab).not.toContain('regola Kokoro)')
+  })
+})

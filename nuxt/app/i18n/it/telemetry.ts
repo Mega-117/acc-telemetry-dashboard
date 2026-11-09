@@ -16,6 +16,7 @@ export default {
     versus: 'contro',
     viewAria: 'Vista dell’analisi',
     skipped: '{count} giri non leggibili esclusi.',
+    skippedOne: '1 giro non leggibile escluso.',
     loading: 'Caricamento dei giri…',
     sameLap: 'Scegli un riferimento diverso dal tuo giro per vedere il confronto.',
     backWhole: 'Torna al giro intero',
@@ -138,6 +139,7 @@ export default {
     zones: {
       title: 'Dove lavorare',
       laps: '{laps} giri validi',
+      lapsOne: '1 giro valido',
       segment: 'Segmento {n}',
       mistakesTitle: 'Qui sbagli spesso',
       mistakesOne: '1 giro rovinato su {total} (validi e non)',

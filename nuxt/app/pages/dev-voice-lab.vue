@@ -605,7 +605,7 @@ async function playLapTimeEntry(entry: LapTimeCatalogRow | LapTimeVoiceEntry) {
   if (isSpeaking.value) return
   const needsSynthesis = !('exists' in entry) || !entry.exists
   if (needsSynthesis && serverState.value !== 'online') {
-    lapTimeCatalogError.value = 'Per ascoltare una traccia mancante serve Kokoro online.'
+    lapTimeCatalogError.value = 'Per ascoltare una traccia mancante serve il motore vocale online.'
     return
   }
   isSpeaking.value = true
@@ -777,7 +777,7 @@ async function ensureKokoro() {
   if (initialProbe === 'ready') {
     serverState.value = 'online'
     serverMessage.value = `${labVoiceNames.value} pronte su ${TTS_SERVER}: sintesi verificata.`
-    appNotifications.push('Motore vocale Kokoro online.', 'success')
+    appNotifications.push('Motore vocale online.', 'success')
     return
   }
   if (initialProbe === 'warming') {
@@ -788,11 +788,11 @@ async function ensureKokoro() {
   // Autostart (PIP-100): il dev server lancia Kokoro come processo figlio.
   if (initialProbe !== 'warming') {
     serverState.value = 'starting'
-    serverMessage.value = 'Avvio Kokoro e scaldo il modello con una sintesi reale...'
+    serverMessage.value = 'Avvio il motore vocale e lo preparo con una prova di voce…'
     startBootTimer()
     try {
       const startResult = await voiceLabRuntime.kokoroStart() as { status?: string; message?: string }
-      if (startResult?.status === 'error') throw new Error(startResult.message || 'Avvio Kokoro fallito')
+      if (startResult?.status === 'error') throw new Error(startResult.message || 'Avvio del motore vocale non riuscito')
     } catch (error: any) {
       stopBootTimer()
       serverState.value = 'error'
@@ -808,7 +808,7 @@ async function ensureKokoro() {
       stopBootTimer()
       serverState.value = 'online'
       serverMessage.value = `${labVoiceNames.value} pronte su ${TTS_SERVER}: sintesi verificata.`
-      appNotifications.push('Motore vocale Kokoro online.', 'success')
+      appNotifications.push('Motore vocale online.', 'success')
       return
     }
     if (probe === 'error') {
@@ -819,7 +819,7 @@ async function ensureKokoro() {
     if (Date.now() > deadline) {
       stopBootTimer()
       serverState.value = 'offline'
-      serverMessage.value = 'Il motore vocale non ha completato il warmup in tempo. Dettagli in kokoro_tts_err.log.'
+      serverMessage.value = 'Il motore vocale non si è avviato in tempo. Dettagli in kokoro_tts_err.log.'
       return
     }
     bootPollHandle = setTimeout(poll, KOKORO_BOOT_POLL_MS)
@@ -924,7 +924,7 @@ async function saveAndRegenerateCoachPhrase(phrase: CoachLabPhrase, options: { t
   const text = labText(phrase, language).trim()
   const words = coachWordCount(text)
   if (words < COACH_MIN_WORDS) {
-    coachRowTasks.value[phrase.key] = { state: 'error', message: `${words} parole: minimo ${COACH_MIN_WORDS} (regola Kokoro)` }
+    coachRowTasks.value[phrase.key] = { state: 'error', message: `${words} parole: minimo ${COACH_MIN_WORDS} (regola del motore vocale)` }
     return false
   }
   kokoroLifecycle.beginWork()
@@ -1061,7 +1061,7 @@ async function playAudioSource(sourceUrl: string, label: string, isObjectUrl = f
       return
     }
     previewAudioStatus.value = 'Audio pronto nel player.'
-    previewAudioError.value = `Riproduzione automatica non riuscita: ${error?.message || 'errore'}. Kokoro ha generato il WAV; prova il player manuale.`
+    previewAudioError.value = `Riproduzione automatica non riuscita: ${error?.message || 'errore'}. Il motore vocale ha generato l'audio: prova il player manuale.`
   }
 }
 
@@ -1518,7 +1518,7 @@ onBeforeUnmount(() => {
             <h2>Coach</h2>
             <p>
               Le chiavi sono un contratto col motore: si modificano i testi
-              (minimo {{ COACH_MIN_WORDS }} parole, regola Kokoro), non l'elenco.
+              (minimo {{ COACH_MIN_WORDS }} parole, regola del motore vocale), non l'elenco.
               "Salva + Rigenera" produce {{ labVoiceNames }}.
             </p>
           </div>

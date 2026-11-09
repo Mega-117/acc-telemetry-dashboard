@@ -3,6 +3,8 @@ import { selectOverviewLastSession, buildOverviewSessionPerformance } from '~/se
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import type { SessionDocument, SessionSummary } from '~/types/telemetry'
 import { buildOverviewProjection } from '~/services/projections/buildOverviewProjection'
+import { sessionTiming } from '~/services/telemetry/fuelHistorySummary'
+import { formatLapTime } from '~/utils/telemetryFormat'
 
 const reference = { id: 'latest', car: 'Ferrari 296 GT3', track: 'monza', date: '2026-09-16T10:00:00Z' }
 const summary = (values: Partial<SessionSummary>) => ({ best_rules_version: BEST_RULES_VERSION, ...values } as SessionSummary)
@@ -37,14 +39,25 @@ describe('overview last session', () => {
     expect(result.bestRace).toBe('--:--.---')
     expect(result.bestAvgRace).toBe('--:--.---')
   })
-  it('uses canonical race references, never the broad session best', () => {
+  it('shows the same session Q/G as the Sessions list (audit 09/11)', () => {
+    // Real pilot case: a 4-lap race with no fuel-qualified race reference.
+    const race = summary({ best_session_race_ms: 118887, best_race_ms: null, best_avg_race_ms: null })
+    const result = buildOverviewSessionPerformance(reference, race)
+    const listed = sessionTiming({ sessionId: 'latest', meta: { gameId: 'acc' }, summary: race } as unknown as SessionDocument)
+    expect(result.bestRace).toBe(formatLapTime(listed.raceMs))
+    expect(result.bestRace).toBe('1:58.887')
+    expect(result.bestQualy).toBe('--:--.---')
+    // The average has no session-wide equivalent: it stays the fuel-qualified reference.
+    expect(result.bestAvgRace).toBe('--:--.---')
+  })
+  it('keeps the fuel-qualified race average and the session race best', () => {
     const result = buildOverviewSessionPerformance(reference, summary({ best_session_race_ms: 90000, best_race_ms: 94295, best_avg_race_ms: 94692 }))
-    expect(result.bestRace).toBe('1:34.295')
+    expect(result.bestRace).toBe('1:30.000')
     expect(result.bestAvgRace).toBe('1:34.692')
     expect(result.bestQualy).toBe('--:--.---')
   })
-  it('does not label outdated or missing summaries as valid race references', () => {
-    expect(buildOverviewSessionPerformance(reference, summary({ best_rules_version: 0, best_race_ms: 90000 })).bestRace).toBe('--:--.---')
+  it('does not label an outdated summary average as a valid race reference', () => {
+    expect(buildOverviewSessionPerformance(reference, summary({ best_rules_version: 0, best_avg_race_ms: 90000 })).bestAvgRace).toBe('--:--.---')
     expect(buildOverviewSessionPerformance(reference, null).id).toBe('latest')
   })
 })

@@ -76,7 +76,7 @@ export default {
     },
     warning: {
       allInvalid: 'Tutti i giri invalidi',
-      raceShort: 'Stint gara troppo corto ({laps} giri, min. 5)',
+      raceShort: 'Stint gara troppo corto ({laps}, min. 5)',
       limited: 'Dati limitati (1 giro)',
     },
     conditions: {

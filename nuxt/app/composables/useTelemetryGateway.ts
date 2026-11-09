@@ -336,7 +336,7 @@ export function useTelemetryGateway(explicitGameId?: string) {
             lastSession: snapshot.lastSession ? buildOverviewSessionPerformance({
                 id: snapshot.lastSession.sessionId, car: snapshot.lastSession.meta.car,
                 track: snapshot.lastSession.meta.track, date: snapshot.lastSession.meta.date_start,
-            }, snapshot.lastSession.summary) : null,
+            }, snapshot.lastSession.summary, gameId) : null,
             lastUsedCar: snapshot.lastUsedCar,
             lastSessionDate: snapshot.lastSession?.meta.date_start || null,
             trackStats: snapshot.trackStats,
@@ -407,7 +407,7 @@ export function useTelemetryGateway(explicitGameId?: string) {
             const lastSummary = reference
                 ? pendingSummary || await loadOverviewSessionSummary(resolvedUserId, reference.id)
                 : null
-            const lastSession = reference ? buildOverviewSessionPerformance(reference, lastSummary) : null
+            const lastSession = reference ? buildOverviewSessionPerformance(reference, lastSummary, gameId) : null
 
             pushGatewayDiagnostic({
                 source: pendingSessions.length > 0 ? 'mixed' : 'index_cache',

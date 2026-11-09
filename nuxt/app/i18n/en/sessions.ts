@@ -104,7 +104,7 @@ export default {
       yours: 'Your sessions',
       loadingLower: 'loading…',
       onTrack: '{count} on this track',
-      stat: '{laps} laps · {stints} stints',
+      stat: '{laps} · {stints} stints',
       noneRecent: 'No session on this track among the most recent.',
       noneOther: 'No other session available for this track.',
       listError: 'Loading failed: try again.',

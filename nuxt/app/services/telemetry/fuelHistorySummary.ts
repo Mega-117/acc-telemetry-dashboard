@@ -15,9 +15,13 @@ export function readFuelHistory(summary: unknown, gameId: string): Partial<Sessi
 
 /** Both session lists show session Q/G, independently of historical eligibility. */
 export function sessionTiming(session: SessionDocument) {
-  const game = sessionGame(session)
-  if (game !== 'acc' && game !== 'evo') return { qualyMs: null, raceMs: null }
-  const summary = { ...session.summary, ...readFuelHistory(session.summary, game) }
+  return summaryTiming(session.summary, sessionGame(session))
+}
+
+/** Session Q/G from a summary alone (e.g. the overview's last session), same rules as the lists. */
+export function summaryTiming(sessionSummary: SessionSummary | null | undefined, game: string | null) {
+  if (!sessionSummary || (game !== 'acc' && game !== 'evo')) return { qualyMs: null, raceMs: null }
+  const summary = { ...sessionSummary, ...readFuelHistory(sessionSummary, game) }
   return {
     qualyMs: summary.best_qualy_ms || null,
     raceMs: summary.best_session_race_ms || summary.best_race_ms || null

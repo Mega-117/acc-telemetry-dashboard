@@ -17,6 +17,7 @@ export default {
     versus: 'vs',
     viewAria: 'Analysis view',
     skipped: '{count} unreadable laps left out.',
+    skippedOne: '1 unreadable lap left out.',
     loading: 'Loading laps…',
     sameLap: 'Pick a reference other than your lap to see the comparison.',
     backWhole: 'Back to the whole lap',
@@ -139,6 +140,7 @@ export default {
     zones: {
       title: 'Where to work',
       laps: '{laps} valid laps',
+      lapsOne: '1 valid lap',
       segment: 'Segment {n}',
       mistakesTitle: 'You often make mistakes here',
       mistakesOne: '1 lap spoiled out of {total} (valid or not)',

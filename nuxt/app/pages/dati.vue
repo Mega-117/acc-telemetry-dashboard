@@ -8,7 +8,8 @@ import { mergeSessionsDeterministic } from '~/services/telemetry/telemetryMergeS
 import { sessionGame } from '~/services/telemetry/gameIdentity'
 import { sessionDataCheck, sessionSettled, sessionDataReferences, stintDataFacts, stintEndFacts, lapStatus } from '~/services/session-detail/sessionDataPresentation'
 import { noteFeatureUse } from '~/services/usage/featureUseNote'
-import { formatLapTime, formatTrackName, formatCarName, getSessionTypeLabel } from '~/utils/telemetryFormat'
+import { formatLapTime, formatTrackName, formatCarName } from '~/utils/telemetryFormat'
+import { lapCountLabel, sessionKindLabel } from '~/services/session-detail/sessionPresentation'
 import { brakeColor, pressureColor, tyreColor, type BrakePad } from '~/utils/temperatureColor'
 import type { FullSession, SectorTelemetry, SessionDocument } from '~/types/telemetry'
 import { useI18n, type TranslationKey } from '~/i18n'
@@ -270,10 +271,10 @@ const deltaClass = (value: number | null) => value === null || value === 0 ? und
     <div class="data-bar">
       <select class="data-session" :value="sessionId" :disabled="busy || !sessions.length" :aria-label="t('data.session')" @change="selectSession(($event.target as HTMLSelectElement).value)">
         <option v-if="!sessions.length" value="">{{ t('tracks.noSession') }}</option>
-        <option v-for="s in sessions" :key="s.sessionId" :value="s.sessionId">{{ new Date(s.meta.date_start).toLocaleString(intlLocale, { dateStyle: 'short', timeStyle: 'short' }) }} · {{ formatTrackName(s.meta.track) }} · {{ formatCarName(s.meta.car) }} · {{ getSessionTypeLabel(s.meta.session_type) }}</option>
+        <option v-for="s in sessions" :key="s.sessionId" :value="s.sessionId">{{ new Date(s.meta.date_start).toLocaleString(intlLocale, { dateStyle: 'short', timeStyle: 'short' }) }} · {{ formatTrackName(s.meta.track) }} · {{ formatCarName(s.meta.car) }} · {{ sessionKindLabel(s.meta.session_type) }}</option>
       </select>
       <select v-model.number="stintNumber" class="data-stint" :disabled="busy || !stints.length" aria-label="Stint">
-        <option v-for="s in stints" :key="s.stint_number" :value="s.stint_number">Stint {{ s.stint_number }} · {{ s.laps.length }} {{ t('sessions.list.lapsUnit') }}</option>
+        <option v-for="s in stints" :key="s.stint_number" :value="s.stint_number">Stint {{ s.stint_number }} · {{ lapCountLabel(s.laps.length) }}</option>
       </select>
       <button type="button" class="rc-btn" :disabled="!latest || busy || isLatest" @click="latest && selectSession(latest.sessionId)">{{ t('overview.lastSession') }}</button>
       <button type="button" class="data-refresh" :disabled="busy" :aria-label="t('data.refresh')" :title="t('data.refresh')" @click="load">↻</button>

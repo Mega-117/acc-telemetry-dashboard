@@ -103,7 +103,7 @@ export default {
       yours: 'Le tue sessioni',
       loadingLower: 'caricamento…',
       onTrack: '{count} su questa pista',
-      stat: '{laps} giri · {stints} stint',
+      stat: '{laps} · {stints} stint',
       noneRecent: 'Nessuna sessione di questa pista tra le più recenti.',
       noneOther: 'Nessuna altra sessione disponibile per questa pista.',
       listError: 'Caricamento non riuscito: riprova.',

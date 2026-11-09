@@ -31,7 +31,7 @@ const rows = computed(() => {
   <section class="zones">
     <header class="zones__head">
       <h4>{{ t('telemetry.zones.title') }}</h4>
-      <span class="zones__laps">{{ t('telemetry.zones.laps', { laps: insight.laps }) }}</span>
+      <span class="zones__laps">{{ insight.laps === 1 ? t('telemetry.zones.lapsOne') : t('telemetry.zones.laps', { laps: insight.laps }) }}</span>
     </header>
     <!-- 05/11 (user): the page is always there; with too few laps it says how many it needs. -->
     <p v-if="!insight.zones.length" class="zones__few" data-testid="zones-few">{{ t('telemetry.zones.fewLaps', { min: MIN_ZONE_LAPS, laps: insight.laps }) }}</p>

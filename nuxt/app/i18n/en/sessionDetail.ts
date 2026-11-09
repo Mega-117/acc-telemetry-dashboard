@@ -77,7 +77,7 @@ export default {
     },
     warning: {
       allInvalid: 'All laps invalid',
-      raceShort: 'Race stint too short ({laps} laps, min. 5)',
+      raceShort: 'Race stint too short ({laps}, min. 5)',
       limited: 'Limited data (1 lap)',
     },
     conditions: {

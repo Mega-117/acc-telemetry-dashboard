@@ -1,6 +1,7 @@
 import type { SessionDocument, SessionSummary } from '~/types/telemetry'
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { formatLapTime } from '~/utils/telemetryFormat'
+import { readFuelHistory, summaryTiming } from '~/services/telemetry/fuelHistorySummary'
 
 export interface OverviewSessionReference { id: string; car: string; track: string; date: string }
 export interface OverviewSessionPerformance extends OverviewSessionReference {
@@ -18,14 +19,17 @@ export function selectOverviewLastSession(
 }
 
 export function buildOverviewSessionPerformance(
-  reference: OverviewSessionReference, summary: SessionSummary | null,
+  reference: OverviewSessionReference, summary: SessionSummary | null, gameId = 'acc',
 ): OverviewSessionPerformance {
-  // The broad session best is not a fuel-qualified race reference.
-  const compatible = Number(summary?.best_rules_version || 0) >= BEST_RULES_VERSION
+  // "Ultima" Q/G is the session's own time, the same one the Sessions list shows (audit 09/11);
+  // the average has no session-wide equivalent and stays the fuel-qualified reference.
+  const timing = summaryTiming(summary, gameId)
+  const fuel = summary ? { ...summary, ...readFuelHistory(summary, gameId) } : null
+  const compatible = Number(fuel?.best_rules_version || 0) >= BEST_RULES_VERSION
   return {
     ...reference,
-    bestQualy: formatLapTime(summary?.best_qualy_ms),
-    bestRace: formatLapTime(compatible ? summary?.best_race_ms : null),
-    bestAvgRace: formatLapTime(compatible ? summary?.best_avg_race_ms : null),
+    bestQualy: formatLapTime(timing.qualyMs),
+    bestRace: formatLapTime(timing.raceMs),
+    bestAvgRace: formatLapTime(compatible ? fuel?.best_avg_race_ms : null),
   }
 }

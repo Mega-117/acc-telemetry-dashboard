@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { vRcSwitch } from '~/directives/rcSwitch'
 import { Info } from '@lucide/vue'
-import { stintTypeLabel, gripAbbreviation, lapPointAppearance } from '~/services/session-detail/sessionPresentation'
+import { stintTypeLabel, gripAbbreviation, lapPointAppearance, lapCountLabel } from '~/services/session-detail/sessionPresentation'
 import { useHeaderBack } from '~/composables/useHeaderBack'
 import { initialDetailTab, lapTokenInArchive } from '~/utils/sessionDetailTab'
 import { noteFeatureUse } from '~/services/usage/featureUseNote'
@@ -1438,7 +1438,7 @@ function getStintWarning(stint: { type: string; number: number }): { icon: strin
 
   // Race stint with < 5 laps = unreliable
   if (stint.type === 'R' && nonPitLaps.length < 5) {
-    return { icon: '⚠️', message: t('sessionDetail.warning.raceShort', { laps: nonPitLaps.length }) }
+    return { icon: '⚠️', message: t('sessionDetail.warning.raceShort', { laps: lapCountLabel(nonPitLaps.length) }) }
   }
 
   // Qualy stint with only 1 lap = unreliable

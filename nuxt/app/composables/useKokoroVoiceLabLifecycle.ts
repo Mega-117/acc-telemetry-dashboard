@@ -40,21 +40,21 @@ export function useKokoroVoiceLabLifecycle() {
     if (isVoiceLabActive.value || isVoiceLabPathActive() || isWorking()) return
 
     cancelShutdown()
-    push('Kokoro si spegnera tra 10 secondi.', 'info')
+    push('Il motore vocale si spegnerà tra 10 secondi.', 'info')
     idleShutdownHandle = setTimeout(async () => {
       idleShutdownHandle = null
       if (isVoiceLabActive.value || isVoiceLabPathActive() || isWorking()) return
       try {
         const result = await voiceLabRuntime.kokoroStop() as { status: string; message?: string }
         if (result.status === 'stopped' || result.status === 'already-stopped' || result.status === 'offline') {
-          push('Motore vocale Kokoro spento.', 'success')
+          push('Motore vocale spento.', 'success')
           return
         }
         if (result.status === 'skipped') {
-          push(result.message || `Kokoro non spento: processo non gestito da ${PRODUCT.displayName}.`, 'info')
+          push(result.message || `Motore vocale non spento: non è stato avviato da ${PRODUCT.displayName}.`, 'info')
         }
       } catch (error: any) {
-        push(`Spegnimento Kokoro non riuscito: ${error?.data?.statusMessage || error?.message || 'errore'}`, 'error')
+        push(`Spegnimento del motore vocale non riuscito: ${error?.data?.statusMessage || error?.message || 'errore'}`, 'error')
       }
     }, KOKORO_IDLE_SHUTDOWN_MS)
   }
