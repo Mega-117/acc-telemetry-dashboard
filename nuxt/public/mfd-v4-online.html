@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 6d264d14aba254eafe7ffdc862e0d38666960c55a3951abe6dce648c479063e7 -->
+<!-- Generated V4 online; SHA256 e7c48dcc3e7508f191b4e89c27e81a918951b8b006dbb9ddd806bda5f5f418e3 -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -197,7 +197,7 @@ tr.v4-preset-note td { padding: 8px 10px; color: #ffc400; background: #ffc40010;
 #form::after { content: ''; position: absolute; top: var(--v4-band-top, 0); bottom: 0; left: 328px; width: 144px; border-left: 1px solid #ffffff22; background: #ffffff05; pointer-events: none; }
 
 /* Kind of order: two-button switch. */
-#form tr.v4-mode > th { grid-column: 1 / -1; padding-bottom: 8px; }
+#form tr.v4-mode > th { grid-column: 1 / -1; padding-bottom: 12px; }
 /* Same look as the app's .rc-switch (Sessione / Telemetria): copied because
    this page is a separate document and does not load the app's theme. */
 .rc-switch { display: flex; gap: 3px; width: max-content; max-width: 100%; padding: 3px; border: 1px solid #ffffff40; background: transparent; }
@@ -208,10 +208,17 @@ tr.v4-preset-note td { padding: 8px 10px; color: #ffc400; background: #ffc40010;
 .rc-switch button:disabled { opacity: .5; cursor: default; }
 @media (forced-colors: active) { .rc-switch button[aria-pressed=true] { outline: 1px solid Highlight; outline-offset: -2px; } }
 #form tr[data-f=applyPitStrategy] { display: none; }
-#form:not(.preset-only) tr[data-f=pitStrategy] { display: none; }
-#form.preset-only tr.v4-colhead, #form.preset-only tr.v4-group, #form.preset-only tr[data-f]:not([data-f=pitStrategy]) { display: none; }
+#form:not(.preset-only) tr[data-f=pitStrategy], #form:not(.preset-only) tr.v4-preset-head { display: none; }
+#form.preset-only tr.v4-group:not(.v4-preset-head), #form.preset-only tr[data-f]:not([data-f=pitStrategy]) { display: none; }
+/* Same headings row in both tabs; the preset tab has no "in macchina" column. */
+#form.preset-only tr.v4-colhead > th:nth-child(3) { visibility: hidden; }
 #form.preset-only::after { display: none; }
-#form tr.v4-preset-note > td { grid-column: 2 / 4; padding: 0; border: 0; background: transparent; color: #a9a9b2; font-size: 12px; line-height: 1.5; }
+/* Tab switch: the new content fades and settles in; the switch stays put. */
+@keyframes v4-swap-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+#form.v4-swap tr:not(.v4-mode) > td, #form.v4-swap tr:not(.v4-mode) > th { animation: v4-swap-in 260ms cubic-bezier(.2,.8,.2,1) both; }
+#form.v4-swap::after { animation: v4-swap-in 260ms cubic-bezier(.2,.8,.2,1) both; }
+@media (prefers-reduced-motion: reduce) { #form.v4-swap tr > td, #form.v4-swap tr > th, #form.v4-swap::after { animation: none; } }
+#form tr.v4-preset-note > td { grid-column: 2 / 4; padding: 4px 0 0; border: 0; background: transparent; color: #a9a9b2; font-size: 12px; line-height: 1.5; }
 /* "Usa valori attuali" restores single values: not part of a preset order. */
 .wrap:has(#form.preset-only) #refresh-draft { display: none; }
 
@@ -219,7 +226,8 @@ tr.v4-preset-note td { padding: 8px 10px; color: #ffc400; background: #ffc40010;
 #form tr.v4-colhead > th { padding: 8px 0 0; color: #8b8b94; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 #form tr.v4-colhead > th:nth-child(2) { grid-column: 2; }
 #form tr.v4-colhead > th:nth-child(3) { grid-column: 3; padding-left: 12px; }
-#form tr.v4-group > th { grid-column: 1 / -1; padding: 14px 0 2px; border-top: 1px solid #ffffff14; color: #f0f0f3; font-size: 13px; font-weight: 600; letter-spacing: 0; text-transform: none; }
+/* Section titles in capitals, in the app's display face (like its section headings). */
+#form tr.v4-group > th { grid-column: 1 / -1; padding: 14px 0 2px; border-top: 1px solid #ffffff14; color: #f0f0f3; font: italic 700 14px 'Racer Display', 'Arial Narrow', sans-serif; letter-spacing: .02em; text-transform: uppercase; }
 #form tr.v4-colhead + tr.v4-group > th { border-top: 0; padding-top: 6px; }
 
 /* One control style: 32px, same border and surface. */
@@ -1927,21 +1935,29 @@ else globalThis.MfdV4Contract = exported;
         // Never switch kind while a field is composing (IME): the deferred
         // rebuild would leave the shown kind and the order kind apart.
         if (!box || box.disabled || on || composing) return;
+        swapping = true;
         box.checked = b.dataset.mode === 'preset';
         box.dispatchEvent(new Event('change', { bubbles: true }));
       });
     });
     return row;
   }
+  // Both tabs share one structure under the switch: the column headings, then
+  // a titled section. The preset tab has no "in macchina" values (the game does
+  // not publish the preset number), so that heading and band are not shown there.
+  var swapping = false;
   function group() {
     formEl.appendChild(mode());
+    var cols = document.createElement('tr'); cols.className = 'v4-colhead';
+    cols.innerHTML = '<th></th><th>Da inviare</th><th>In macchina</th>';
+    formEl.appendChild(cols);
+    var presetHead = document.createElement('tr'); presetHead.className = 'v4-group v4-preset-head';
+    presetHead.innerHTML = '<th colspan="5">Preset</th>';
+    formEl.appendChild(presetHead);
     ['applyPitStrategy', 'pitStrategy'].forEach(function (id) {
       var tr = formEl.querySelector('tr[data-f="' + id + '"]');
       if (tr) { formEl.appendChild(tr); tr.querySelector('td.lb').textContent = LABEL[id]; tr.classList.add('v4-preset-row'); }
     });
-    var cols = document.createElement('tr'); cols.className = 'v4-colhead';
-    cols.innerHTML = '<th></th><th>Da inviare</th><th>In macchina</th>';
-    formEl.appendChild(cols);
     GROUPS.forEach(function (g) {
       var first = true;
       g[1].forEach(function (id) {
@@ -1989,6 +2005,12 @@ else globalThis.MfdV4Contract = exported;
       var note = document.createElement('tr'); note.className = 'v4-preset-note';
       note.innerHTML = '<td colspan="5">Il preset sostituisce tutti i valori del pit stop.</td>';
       presetRow.after(note);
+    }
+    // A tab switch fades the new content in (not the switch itself).
+    if (swapping) {
+      swapping = false;
+      formEl.classList.remove('v4-swap'); void formEl.offsetWidth; formEl.classList.add('v4-swap');
+      setTimeout(function () { formEl.classList.remove('v4-swap'); }, 400);
     }
     // The "in macchina" band starts at its column heading.
     var colhead = formEl.querySelector('tr.v4-colhead th');

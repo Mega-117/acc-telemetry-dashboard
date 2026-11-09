@@ -236,7 +236,8 @@ it('layout (09/11): kind switch, two columns (send / in the car), sections in or
   const rows = [...f.w.document.querySelectorAll('#form tr[data-f], #form tr.v4-group, #form tr.v4-colhead, #form tr.v4-mode')]
     .map((tr: any) => tr.classList.contains('v4-group') ? `#${tr.textContent}` : tr.classList.contains('v4-colhead') ? 'COLS'
       : tr.classList.contains('v4-mode') ? 'MODE' : tr.dataset.f)
-  expect(rows).toEqual(['MODE', 'applyPitStrategy', 'pitStrategy', 'COLS', '#Benzina', 'fuel',
+  // Both tabs share the headings row right under the switch, then a titled section.
+  expect(rows).toEqual(['MODE', 'COLS', '#Preset', 'applyPitStrategy', 'pitStrategy', '#Benzina', 'fuel',
     '#Gomme', 'changeTyre', 'compound', 'tyreSet', 'fl', 'fr', 'rl', 'rr',
     '#Freni', 'brakes', 'brakeFront', 'brakeRear', '#Pilota', 'driverIdx', '#Riparazioni', 'susp', 'body'])
   expect([...f.q('tr.v4-colhead').children].map((th: any) => th.textContent)).toEqual(['', 'Da inviare', 'In macchina'])
@@ -264,6 +265,8 @@ it('kind switch drives the canonical preset checkbox both ways; preset mode send
   expect(f.q('#form').classList.contains('preset-only')).toBe(true)
   expect(button('preset').getAttribute('aria-pressed')).toBe('true')
   expect(f.q('tr.v4-preset-note').textContent).toBe('Il preset sostituisce tutti i valori del pit stop.')
+  // The switch animates the new content in.
+  expect(f.q('#form').classList.contains('v4-swap')).toBe(true)
   f.q('#apply').click()
   expect(f.submits().at(-1)).toMatchObject({ operation: 'preset', pitStrategy: 1 })
   expect(Object.keys(f.submits().at(-1))).not.toContain('fuelLiters')
