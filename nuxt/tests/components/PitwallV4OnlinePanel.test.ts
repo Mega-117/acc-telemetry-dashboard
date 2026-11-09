@@ -61,7 +61,9 @@ it.each(['unreadable', 'strategy', 'strategy-applied', 'missing-request'])('pres
     const post = vi.spyOn((w.get('iframe').element as HTMLIFrameElement).contentWindow!, 'postMessage')
     message(w, 'ready', null)
     const result = post.mock.calls.at(-1)![0].value.result
-    expect(result.label).toBe(kind === 'strategy-applied' ? 'Impostata e confermata' : 'Impostata in parte: alcuni campi non sono confermabili')
+    // Texts 09/11: a partial result names the fields that were not verified.
+    expect(result.label).toBe(kind === 'strategy-applied' ? 'Impostata e confermata'
+      : kind === 'strategy' ? 'Impostata in parte: Benzina' : 'Impostata in parte: Preset')
     expect(result.reason).toBe(p.orderReason.value)
   } finally { w.unmount() }
 })
@@ -81,7 +83,7 @@ it.each([
     message(w, 'ready', null)
     const result = post.mock.calls.at(-1)![0].value.result
     expect(result.label).toBe(label)
-    expect(result.reason).toBe('Nessun altro valore inviato: con «Cambia preset» parte solo il preset.')
+    expect(result.reason).toBe('Nessun altro valore inviato.')
     expect(JSON.stringify(result)).not.toContain('Tutti i campi')
   } finally { w.unmount() }
 })

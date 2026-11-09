@@ -689,7 +689,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
         if (!document) {
           if (orderStatus.value && isPitwallOrderSettled(orderStatus.value as PitwallOrderStatus)) return
           orderStatus.value = 'unknown'
-          orderReason.value = 'Conferma non disponibile. Verifica il MFD prima di un nuovo invio.'
+          orderReason.value = 'Esito non arrivato: controlla l’MFD del pilota prima di un nuovo invio.'
           orderFields.value = {}
           return
         }

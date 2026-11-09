@@ -7,6 +7,12 @@ import { usePitwallApplicationMethod } from '~/composables/usePitwallApplication
 import { useI18n } from '~/i18n'
 const { t } = useI18n()
 const props = defineProps<{ port?: ReturnType<typeof usePitwallRoom> }>()
+// Same short names as the form (texts 09/11), for "Impostata in parte: Set, FL".
+const V4_FIELD_LABEL: Record<string, string> = {
+  fuelLiters: 'Benzina', changeTyres: 'Cambia gomme', compound: 'Mescola', tyreSet: 'Set', FL: 'FL', FR: 'FR', RL: 'RL', RR: 'RR',
+  brakes: 'Freni', brakeFront: 'Pastiglia ant.', brakeRear: 'Pastiglia post.', repairSuspension: 'Sospensioni',
+  repairBodywork: 'Carrozzeria', driverId: 'Pilota', pitStrategy: 'Preset', newTyreMarker: 'Gomme nuove',
+}
 // Public assets share Nuxt's deployment base, including static hosted builds.
 const formUrl = `${useRuntimeConfig().app.baseURL}mfd-v4-online.html`
 const { v4Drafts } = usePitwallApplicationMethod()
@@ -71,6 +77,13 @@ const result = computed(() => {
     return { ...status, label: t('pitwall.v4.presetNotApplied', { preset }),
       reason: t('pitwall.v4.presetReason') }
   }
+  // Texts 09/11: a partial result names the fields that did not match.
+  if (port.orderStatus.value === 'partial') {
+    const off = Object.entries(port.orderFields.value)
+      .filter(([, value]) => (value as { outcome?: unknown } | null)?.outcome !== 'verified')
+      .map(([key]) => V4_FIELD_LABEL[key] ?? key)
+    if (off.length) return { ...status, label: t('pitwall.v4.partialFields', { fields: off.join(', ') }), reason: detail }
+  }
   return { ...status, reason: detail }
 })
 function publish() {
@@ -129,7 +142,7 @@ onBeforeUnmount(() => window.removeEventListener('message', message))
         <option v-for="target in port.availableTargets.value" :key="target.uid" :value="target.uid">{{ target.nickname }}</option>
       </select>
     </label>
-    <p v-else class="v4-recipient">{{ t('pitwall.v4.recipient') }} <strong>{{ recipientLabel || t('pitwall.v4.noDriver') }}</strong></p>
+    <p v-else class="v4-recipient"><span>{{ t('pitwall.v4.sendTo') }} <strong>{{ recipientLabel || t('pitwall.v4.noDriver') }}</strong><template v-if="recipientLabel && receive?.state === 'ready'"> · {{ t('pitwall.v4.readyShort') }}</template></span></p>
     <p v-if="receive" class="v4-receive" :class="`v4-receive--${receive.state}`" role="status">{{ receive.label }}</p>
     <details v-if="development" class="v4-tools">
       <summary>Strumenti di sviluppo</summary>

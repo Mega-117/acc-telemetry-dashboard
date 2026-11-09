@@ -428,7 +428,7 @@ export interface PitwallOrderProgress {
 export function describePitwallOrderStatus(status: PitwallDisplayOrderStatus | null | undefined): PitwallOrderProgress {
   switch (status) {
     case 'not_sent': return { label: 'Non inviata', busy: false, problem: true }
-    case 'unknown': return { label: 'Conferma non disponibile', busy: false, problem: true }
+    case 'unknown': return { label: 'Esito non arrivato: controlla l’MFD del pilota', busy: false, problem: true }
     case 'pending': return { label: 'Inviato, in attesa del pilota', busy: true, problem: false }
     case 'applying': return { label: 'Il pilota la sta impostando', busy: true, problem: false }
     case 'applied': return { label: 'Impostata e confermata', busy: false, problem: false }

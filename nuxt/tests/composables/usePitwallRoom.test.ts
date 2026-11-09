@@ -271,7 +271,7 @@ describe('la connessione browser distinta dal runtime pilota', () => {
     await link.sendPlan({ fuelLiters: 20 })
     fakes.pushOrder?.(null)
     expect(link.orderStatus.value).toBe('unknown')
-    expect(link.orderReason.value).toContain('Conferma non disponibile')
+    expect(link.orderReason.value).toContain('Esito non arrivato')
   })
 
   it('annuncia il browser con identita distinta anche se il runtime dello stesso utente guida', async () => {

@@ -59,7 +59,7 @@ it('unknown car with a valid live tank: limit shown, litres TO ADD sent as typed
   // The car-dependent range sits under the label, so the field column keeps one width.
   expect(f.q('tr[data-f="fuel"] td.lb').firstChild.textContent).toBe('Da aggiungere (L)')
   expect(f.q('tr[data-f="fuel"] td.lb .v4-limit').textContent).toBe('0–110 L')
-  expect(f.q('tr[data-f="fuel"]').previousElementSibling.textContent).toBe('Benzina')
+  expect(f.q('tr[data-f="fuel"]').previousElementSibling.firstChild.firstChild.textContent).toBe('Benzina')
   f.edit('fuel', '40'); f.q('#apply').click()
   expect(f.submits()).toEqual([expect.objectContaining({ operation: 'strategy', fuelLiters: 40 })])
 })
@@ -122,7 +122,7 @@ it('-/+ buttons: one step per click, clamped to the limits, disabled with the fi
 it('preset: other fields visibly off with "Invii solo il preset"; tick cleared and saved as it leaves; draft kept', () => {
   const f = form(); f.snapshot(); f.ready(); f.edit('fuel', '60')
   const tick = f.field('applyPitStrategy'); tick.checked = true; tick.dispatchEvent(new f.w.Event('change', { bubbles: true }))
-  expect(f.q('tr.v4-preset-note').textContent).toContain('Invii solo il preset')
+  expect(f.q('tr.v4-preset-note').textContent).toBe('Gli altri campi non vengono inviati.')
   expect(f.q('#form').classList.contains('preset-only')).toBe(true)
   expect(f.field('fuel').disabled).toBe(true)
   expect(f.q('button[data-step-field="fuel"]').disabled).toBe(true)
@@ -233,7 +233,7 @@ it('one source of limits: the form, the receiver and the RTDB order rules agree'
 it('minimal layout (09/11): groups in reading order, preset first, short labels, no technical source tags shown', () => {
   const f = form()
   f.snapshot({ strategy: car() })
-  const rows = [...f.w.document.querySelectorAll('#form tr')].map((tr: any) => tr.classList.contains('v4-group') ? `#${tr.textContent}` : tr.dataset.f)
+  const rows = [...f.w.document.querySelectorAll('#form tr[data-f], #form tr.v4-group')].map((tr: any) => tr.classList.contains('v4-group') ? `#${tr.firstChild.firstChild.textContent}` : tr.dataset.f)
   expect(rows).toEqual(['#Preset', 'applyPitStrategy', 'pitStrategy', '#Benzina', 'fuel',
     '#Gomme', 'changeTyre', 'compound', 'tyreSet', 'fl', 'fr', 'rl', 'rr',
     '#Freni', 'brakes', 'brakeFront', 'brakeRear', '#Riparazioni', 'susp', 'body', '#Pilota', 'driverIdx'])
@@ -246,6 +246,10 @@ it('minimal layout (09/11): groups in reading order, preset first, short labels,
   const css = [...f.w.document.querySelectorAll('style')].map((s: any) => s.textContent).join('\n')
   expect(css).toContain('#form tr[data-f] > td:nth-child(3)')
   expect(f.q('#refresh-draft').textContent).toBe('Usa valori attuali')
+  // One heading for the current-value column instead of "ora" on every row.
+  expect(f.q('tr.v4-cols .v4-col-now').textContent).toBe('Adesso')
+  expect(f.q('tr.v4-cols').firstChild.firstChild.textContent).toBe('Benzina')
+  expect(f.w.document.title).toBe('Strategia pit')
   // A crew with names needs no explanatory note under the driver select.
   f.snapshot({ strategy: car(), crew: [{ driverIndex: 0, name: 'Test Driver' }] })
   expect(f.q('tr[data-f="driverIdx"] div')).toBeNull()

@@ -1,9 +1,9 @@
-<!-- Generated V4 online; SHA256 bba6b7ef5f2a4c22857e939416c9cb335caac951d9ef38e07bbde804aa1cd754 -->
+<!-- Generated V4 online; SHA256 535943958ab2fdd62c04be0c7609b248cc04a3c108b4bbb6fcc63e2f9c01b459 -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<title>ACC Drive — invio strategia al gioco</title>
+<title>Strategia pit</title>
 <style>
   :root{--live:#3ddc84;--probe:#ffb020;--geo:#4aa3ff;--blind:#ff4d4d;--yellow:#e8e14a;}
   *{box-sizing:border-box;}
@@ -196,9 +196,12 @@ tr.v4-preset-note td { padding: 8px 10px; color: #ffc400; background: #ffc40010;
 #form select { width: 140px; min-width: 0; max-width: none; box-sizing: border-box; }
 #form tr.v4-group > th { grid-column: 1 / -1; padding: 16px 0 2px; border-top: 1px solid #ffffff18; color: #f0f0f3; font-size: 13px; font-weight: 600; letter-spacing: 0; text-transform: none; text-align: left; }
 #form tr.v4-group:first-child > th { padding-top: 2px; border-top: 0; }
+#form tr.v4-cols > th { position: relative; }
+#form tr.v4-cols .v4-col-now { position: absolute; left: 340px; bottom: 2px; color: #8b8b94; font-size: 11px; font-weight: 600; }
+@media(max-width:520px) { #form tr.v4-cols .v4-col-now { left: 280px; } }
+#conn[hidden] { display: none; }
 #form.preset-only tr[data-f]:not([data-f=applyPitStrategy]):not([data-f=pitStrategy]) > td { opacity: .35; }
 td.v4-now { min-width: 0; padding: 0; border: 0; color: #9a9aa3; font-size: 12px; white-space: nowrap; }
-td.v4-now::before { content: 'ora'; color: #8b8b94; }
 td.v4-now.v4-now-empty { visibility: hidden; }
 .v4-limit.v4-quiet { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 #form tr.v4-preset-note td { grid-column: 1 / -1; padding: 8px 10px; border: 1px solid #ffc40055; background: #ffc4000c; color: #ffd75a; }
@@ -1760,7 +1763,11 @@ else globalThis.MfdV4Contract = exported;
     if (busy) confirmation.hidden = true;
     devTools.hidden = snapshot.development !== true;
     if (!snapshot.development) document.getElementById('gap').value = 60;
-    document.getElementById('connTxt').textContent = busy ? 'Invio in corso al PC del pilota.' : snapshot.reason || 'Pilota pronto';
+    // Ready is said once, next to the recipient in the page (texts 09/11); only a
+    // problem or a send in flight needs this line.
+    var connText = busy ? 'Invio in corso al PC del pilota.' : snapshot.reason || '';
+    document.getElementById('connTxt').textContent = connText;
+    document.getElementById('conn').hidden = !connText;
     if (busy) {
       showResult('Invio in corso', 'Attendo l’esito dal PC del pilota.', false);
       logEl.textContent = 'Invio in corso: attendo il nuovo esito dal PC del pilota.';
@@ -1882,7 +1889,7 @@ else globalThis.MfdV4Contract = exported;
     ['Gomme', ['changeTyre', 'compound', 'tyreSet', 'fl', 'fr', 'rl', 'rr']],
     ['Freni', ['brakes', 'brakeFront', 'brakeRear']], ['Riparazioni', ['susp', 'body']], ['Pilota', ['driverIdx']]];
   var LABEL = { fuel: 'Da aggiungere (L)', changeTyre: 'Cambia gomme', tyreSet: 'Set', fl: 'FL', fr: 'FR', rl: 'RL', rr: 'RR',
-    brakes: 'Sostituisci', brakeFront: 'Anteriore', brakeRear: 'Posteriore', driverIdx: 'Cambio pilota',
+    brakes: 'Sostituisci', brakeFront: 'Pastiglia ant.', brakeRear: 'Pastiglia post.', driverIdx: 'Al cambio',
     applyPitStrategy: 'Carica solo il preset', pitStrategy: 'Numero' };
   var HALF = { fl: 1, fr: 1, rl: 1, rr: 1, brakeFront: 1, brakeRear: 1, susp: 1, body: 1 };
   var RIGHT = { fr: 1, rr: 1, brakeRear: 1, body: 1 };
@@ -1895,6 +1902,9 @@ else globalThis.MfdV4Contract = exported;
         if (first) {
           var head = document.createElement('tr'); head.className = 'v4-group';
           head.innerHTML = '<th colspan="5"></th>'; head.firstChild.textContent = g[0];
+          // One heading for the current-value column instead of "ora" on every
+          // row, on the title of the first group that has current values.
+          if (g[0] === 'Benzina') { head.classList.add('v4-cols'); head.firstChild.insertAdjacentHTML('beforeend', '<span class="v4-col-now">Adesso</span>'); }
           formEl.appendChild(head); first = false;
         }
         formEl.appendChild(tr);
@@ -1935,7 +1945,7 @@ else globalThis.MfdV4Contract = exported;
     var presetRow = formEl.querySelector('tr[data-f="pitStrategy"]');
     if (presetRow && S.applyPitStrategy) {
       var note = document.createElement('tr'); note.className = 'v4-preset-note';
-      note.innerHTML = '<td colspan="5">Invii solo il preset: gli altri valori restano nella bozza e non vengono inviati.</td>';
+      note.innerHTML = '<td colspan="5">Gli altri campi non vengono inviati.</td>';
       presetRow.after(note);
     }
     refresh();
