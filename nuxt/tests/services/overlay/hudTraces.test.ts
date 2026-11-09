@@ -114,6 +114,23 @@ describe('PIP-704 hud.shift', () => {
     expect(report.mock.calls[0]![0]).toMatchObject({ plainMissed: 1, leadMissed: 0 })
   })
 
+  it('fourth Codex review: a due and dark rise is missed even when a long neutral or missing data ends it', () => {
+    for (const end of ['neutral', 'no-data'] as const) {
+      const report = vi.fn()
+      const trace = createShiftTraceAggregator(report, 1)
+      trace.feed(frame(0, 3, 7000, false))
+      trace.feed(frame(60, 3, 7200, false))                    // armed, due, light off
+      if (end === 'neutral') {
+        trace.feed(frame(120, 0, 6000, false))
+        trace.feed(frame(720, 0, 5000, false))                  // 600 ms: a real neutral
+      } else trace.feed(frame(120, 3, 7300, false, { rpm: null }))
+      trace.feed(frame(780, 4, 6000, false))
+      trace.feed(frame(840, 4, 7180, true))                     // the next rise, on time
+      trace.feed(frame(900, 5, 5200, false))
+      expect(report.mock.calls[0]![0]).toMatchObject({ leadMissed: 1, leadOnTime: 1 })
+    }
+  })
+
   it('third Codex review: the page feeds the model own prerequisites to the trace', async () => {
     const { readFileSync } = await import('node:fs')
     const page = readFileSync('app/pages/dashboard-overlay.vue', 'utf8')

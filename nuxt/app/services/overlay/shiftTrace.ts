@@ -101,6 +101,16 @@ export function createShiftTraceAggregator(report: (summary: ShiftTraceSummary) 
   let flashed = 0, beforeFlash = 0, late = 0
   let health: ShiftTraceHealth = { frames: 0, noCar: 0, noTarget: 0, noGearOrRpm: 0, upshifts: 0, reports: 0 }
 
+  /**
+   * The rise ends, whatever ends it (shift, lift, rpm drop, engine not eligible, a long neutral,
+   * missing data): a light that was due and never lit is a missed onset, counted before any reset
+   * (fourth Codex review 09/11: a long neutral or a data gap erased a real KO).
+   */
+  function endRise() {
+    if (firstDue && !lit) (firstDue.lead ? lead : plain).missed++
+    firstDue = null; lit = false
+  }
+
   function clear() {
     onsets = []; upshifts = []; leads = []; leadOnsets = []; plainOnsets = []
     flashed = beforeFlash = late = 0
@@ -121,10 +131,11 @@ export function createShiftTraceAggregator(report: (summary: ShiftTraceSummary) 
       else if (targetRpm === null) health.noTarget++
       else if (gear === null || rpm === null || !Number.isFinite(gear) || !Number.isFinite(rpm)) health.noGearOrRpm++
       if (frameCar === null || targetRpm === null || gear === null || rpm === null
-        || !Number.isFinite(gear) || !Number.isFinite(rpm)) { prev = null; onset = null; neutralAt = null; firstDue = null; lit = false; return }
+        || !Number.isFinite(gear) || !Number.isFinite(rpm)) { endRise(); prev = null; onset = null; neutralAt = null; return }
       if (frameCar !== car || targetRpm !== target) {
         // Another car or shift point: the batch would mix two rules.
-        car = frameCar; target = targetRpm; clear(); prev = null; onset = null; neutralAt = null; firstDue = null; lit = false
+        // The batch of the old car or shift point is dropped: its rise ends with it.
+        endRise(); car = frameCar; target = targetRpm; clear(); prev = null; onset = null; neutralAt = null
       }
       // PIP-755: ACC passes through neutral between two gears (g -> N -> g+1, as the logger's
       // ShiftTracker knows): the gear, its last rpm and the flash onset wait across it. Without
@@ -134,7 +145,7 @@ export function createShiftTraceAggregator(report: (summary: ShiftTraceSummary) 
         return
       }
       if (neutralAt !== null) {
-        if (frame.now - neutralAt > SHIFT_TRACE_NEUTRAL_MAX_MS) { prev = null; onset = null; firstDue = null; lit = false }
+        if (frame.now - neutralAt > SHIFT_TRACE_NEUTRAL_MAX_MS) { endRise(); prev = null; onset = null }
         neutralAt = null
       }
       // Codex 02/11: a flash followed by a lift belongs to no shift: it expires after 3 s.
@@ -142,9 +153,7 @@ export function createShiftTraceAggregator(report: (summary: ShiftTraceSummary) 
       const throttle = frame.throttle ?? null, brake = frame.brake ?? null
       const due = frame.eligible && shiftFlashDue(rpm, targetRpm, throttle, brake)
       if (!prev || gear !== prev.gear || (!due && !frame.flash)) {
-        // The rise ends (shift, lift, rpm drop, engine not eligible): due and never lit = missed.
-        if (firstDue && !lit) (firstDue.lead ? lead : plain).missed++
-        firstDue = null; lit = false
+        endRise()   // shift, lift, rpm drop, engine not eligible
       }
       if (due && !firstDue) firstDue = { at: frame.now, lead: rpm < targetRpm }
       if (prev && gear === prev.gear && frame.flash && !prev.flash) {
