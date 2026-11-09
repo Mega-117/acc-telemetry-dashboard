@@ -191,6 +191,20 @@ it('a typo in a field excluded from the order does not block it, and returns whe
   expect(f.issue('fl')).toBe('Valore non numerico: abc'); expect(f.field('fl').value).toBe('abc')
 })
 
+// Codex review round 2 (P2): a confirmed live restore replaces value AND typed/error state.
+it('a confirmed live restore clears the kept text and error of restored fields only', () => {
+  const f = form(); f.snapshot(); f.ready()
+  Object.assign(f.w.S, { changeTyre: true, compound: 'Dry', tyreSet: 3, fl: 27, fr: 26, rl: 26, rr: 26, brakes: true, brakeFront: 2, brakeRear: 2 }); f.w.renderForm()
+  f.edit('fl', 'abc'); f.edit('brakeFront', '5')
+  expect(f.issue('fl')).toBe('Valore non numerico: abc')
+  f.q('#refresh-draft').click(); f.q('.draft-confirm').querySelectorAll('button')[1].click()
+  expect(f.w.S.fl).toBe(26); expect(f.field('fl').value).toBe('26'); expect(f.issue('fl')).toBeNull()
+  // Pads are not restored from live data: their typed value and error stay.
+  expect(f.field('brakeFront').value).toBe('5'); expect(f.issue('brakeFront')).toBe('5: Fuori limite: 1–4.')
+  f.edit('brakeFront', '3'); f.q('#apply').click()
+  expect(f.submits()).toEqual([expect.objectContaining({ operation: 'strategy', pressures: { FL: 26, FR: 26.1, RL: 25.5, RR: 25.6 }, brakeFront: 3 })])
+})
+
 it('one source of limits: the form, the receiver and the RTDB order rules agree', () => {
   const html = readFileSync(new URL('../../public/mfd-v4-online.html', import.meta.url), 'utf8')
   const limits = JSON.parse(html.match(/globalThis\.MfdV4Limits = (\{.*?\});\r?\n/)![1])

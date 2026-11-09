@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 f4f78b875930789e4003fe5d93f4d1af418b53f4fd59b3c9bfaf1636137cd442 -->
+<!-- Generated V4 online; SHA256 908e3f715825650d5817ec37b9def57e12359ce3242c4134f7b58f62742972ef -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -1447,7 +1447,7 @@ else globalThis.MfdV4Contract = exported;
     if (key === 'applyPitStrategy') Object.keys(visualFields).forEach(function (k) { invalidatedChecks.add(k); });
     aggiornaSpie();
   }
-  function seedStrategy(strategy, replace) {
+  function seedStrategy(strategy, replace, restored) {
     var values = { fuel: strategy.fuelToAdd ?? null,
       tyreSet: strategy.tyreSet == null ? null : strategy.tyreSet + 1,
       compound: strategy.compound === 'dry' ? 'Dry' : strategy.compound === 'wet' ? 'Wet' : null };
@@ -1458,7 +1458,7 @@ else globalThis.MfdV4Contract = exported;
     var changed = false;
     Object.keys(values).forEach(function(key) {
       if (!replace && (initializedFields.has(key) || values[key] == null)) return;
-      S[key] = values[key]; initializedFields.add(key); changed = true;
+      S[key] = values[key]; initializedFields.add(key); changed = true; if (restored) restored.push(key);
     });
     return changed;
   }
@@ -1547,7 +1547,10 @@ else globalThis.MfdV4Contract = exported;
   confirmation.append(explanation, cancel, confirm);
   function restoreLive() {
     if (busy || !snapshot?.strategy) return;
-    seedStrategy(snapshot.strategy, true);
+    // PIP-761: a confirmed restore replaces the value AND the typed/error state
+    // of every field it restores; the other fields keep theirs.
+    var restored = []; seedStrategy(snapshot.strategy, true, restored);
+    globalThis.MfdV4OnlineFields?.clear(restored);
     edited = false; confirmation.hidden = true;
     renderForm(); saved(); refresh.focus();
   }
@@ -1818,7 +1821,9 @@ else globalThis.MfdV4Contract = exported;
     event.stopImmediatePropagation();
     refresh();
   }, true);
-  globalThis.MfdV4OnlineFields = { blocking: blocking, capacity: capacity, current: current, issue: issue };
+  // A confirmed live restore owns these fields again: drop their kept text/error.
+  function clear(ids) { (ids || []).forEach(function (id) { delete invalid[id]; }); }
+  globalThis.MfdV4OnlineFields = { blocking: blocking, capacity: capacity, current: current, issue: issue, clear: clear };
   renderForm();
 })();
 </script><script>// Presentation-only bridge. Never reads fields or sends strategy intents.
