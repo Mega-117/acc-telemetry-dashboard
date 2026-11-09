@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 e7c48dcc3e7508f191b4e89c27e81a918951b8b006dbb9ddd806bda5f5f418e3 -->
+<!-- Generated V4 online; SHA256 6c3856b783f64dfd3d9bbf9b5a9eac00524a72e42d8bfdfa6fecf6beea1860f2 -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -215,8 +215,8 @@ tr.v4-preset-note td { padding: 8px 10px; color: #ffc400; background: #ffc40010;
 #form.preset-only::after { display: none; }
 /* Tab switch: the new content fades and settles in; the switch stays put. */
 @keyframes v4-swap-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-#form.v4-swap tr:not(.v4-mode) > td, #form.v4-swap tr:not(.v4-mode) > th { animation: v4-swap-in 260ms cubic-bezier(.2,.8,.2,1) both; }
-#form.v4-swap::after { animation: v4-swap-in 260ms cubic-bezier(.2,.8,.2,1) both; }
+#form.v4-swap tr:not(.v4-mode) > td, #form.v4-swap tr:not(.v4-mode) > th { animation: v4-swap-in 450ms cubic-bezier(.2,.8,.2,1) both; }
+#form.v4-swap::after { animation: v4-swap-in 450ms cubic-bezier(.2,.8,.2,1) both; }
 @media (prefers-reduced-motion: reduce) { #form.v4-swap tr > td, #form.v4-swap tr > th, #form.v4-swap::after { animation: none; } }
 #form tr.v4-preset-note > td { grid-column: 2 / 4; padding: 4px 0 0; border: 0; background: transparent; color: #a9a9b2; font-size: 12px; line-height: 1.5; }
 /* "Usa valori attuali" restores single values: not part of a preset order. */
@@ -2010,7 +2010,7 @@ else globalThis.MfdV4Contract = exported;
     if (swapping) {
       swapping = false;
       formEl.classList.remove('v4-swap'); void formEl.offsetWidth; formEl.classList.add('v4-swap');
-      setTimeout(function () { formEl.classList.remove('v4-swap'); }, 400);
+      setTimeout(function () { formEl.classList.remove('v4-swap'); }, 600);
     }
     // The "in macchina" band starts at its column heading.
     var colhead = formEl.querySelector('tr.v4-colhead th');
