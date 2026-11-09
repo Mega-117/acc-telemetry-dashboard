@@ -91,9 +91,12 @@ describe('AnalysisMap: a lap with recovered (partial) coordinates (PIP-760)', ()
   })
 
   it('never joins the two sides of a hole with a chord', () => {
-    const view = mount(AnalysisMap, { props: { lap: trace({ time: lapTime, hole: i => i >= 60 && i <= 61 }), reference: null, corners, cursor: null, colorMode: 'laps' } })
-    // No reference: nothing to borrow. The lap has holes, so it cannot frame the map either: the message.
-    expect(view.find('.map-none').exists()).toBe(true)
+    // No reference: a recovered lap frames the map from its recorded samples (Codex review 09/11) and draws two lines.
+    const view = mount(AnalysisMap, { props: { lap: trace({ time: lapTime, hole: i => i >= 60 && i <= 61 }), reference: null, corners, cursor: 0.3, colorMode: 'laps' } })
+    expect(view.find('.map-none').exists()).toBe(false)
+    expect(view.findAll('.map-lap-line')).toHaveLength(2)
+    expect(view.findAll('.map-track')).toHaveLength(2)                     // the track outline breaks there too
+    noNaN(view)
     view.unmount()
     const withRef = mount(AnalysisMap, { props: { lap: trace({ time: lapTime, hole: i => i >= 60 && i <= 61 }), reference: trace(), corners, cursor: null, colorMode: 'laps' } })
     const runs = withRef.findAll('.map-lap-line')
@@ -103,6 +106,41 @@ describe('AnalysisMap: a lap with recovered (partial) coordinates (PIP-760)', ()
     expect(Math.hypot(end[0]! - start[0]!, end[1]! - start[1]!)).toBeGreaterThan(0)   // two separate lines
     noNaN(withRef)
     withRef.unmount()
+  })
+})
+
+describe('AnalysisMap: two recovered laps (Codex review 09/11)', () => {
+  it('both partial (from a MoTeC repair): the map is drawn from what was recorded, the gap borrowed where only one has it', () => {
+    const view = mount(AnalysisMap, { props: { lap: trace({ time: lapTime, hole: i => i < 12 }), reference: trace({ hole: i => i < 6 }), corners, cursor: 0.02 } })
+    expect(view.find('svg.map').exists()).toBe(true)
+    expect(view.find('.map-none').exists()).toBe(false)
+    expect(view.findAll('.map-lap').length).toBeGreaterThan(400)            // your own colours where recorded...
+    expect(view.find('[data-testid="map-geometry-note"]').exists()).toBe(true)   // ...and on the reference where only it was
+    expect(view.find('.map-finish').exists()).toBe(false)                   // no finish line where nothing was recorded
+    noNaN(view)
+    view.unmount()
+    const laps = mount(AnalysisMap, { props: { lap: trace({ time: lapTime, hole: i => i < 12 }), reference: trace({ hole: i => i < 6 }), corners, cursor: null, colorMode: 'laps' } })
+    expect(laps.findAll('.map-ref')).toHaveLength(1)
+    expect(laps.findAll('.map-lap-line')).toHaveLength(1)
+    noNaN(laps)
+    laps.unmount()
+  })
+})
+
+describe('AnalysisMap: a one-sample hole in the frame (Codex review 09/11)', () => {
+  it('breaks the reference line and the track outline even when no map point falls on the missing sample', () => {
+    const big = 3000
+    const make = (hole: number | null) => normalizeLapTrace({ schema: 'acc.laptrace.v1', grid_step_m: 2,
+      meta: { track: 'Silverstone', car: 'ferrari_296_gt3', source: 'logger', lap_time_s: 119, complete: true, valid: true, extra: { lap_number: 2 } },
+      channels: { time_s: Array.from({ length: big }, (_, i) => i / 25), speed_kmh: Array.from({ length: big }, () => 150),
+        brake_pct: Array.from({ length: big }, () => 0), throttle_pct: Array.from({ length: big }, () => 100),
+        pos_x: Array.from({ length: big }, (_, i) => (i === hole ? null : Math.cos(i / big * 2 * Math.PI) * 300)),
+        pos_z: Array.from({ length: big }, (_, i) => Math.sin(i / big * 2 * Math.PI) * 200) } })!
+    const view = mount(AnalysisMap, { props: { lap: make(null), reference: make(1501), corners, cursor: null, colorMode: 'laps' } })
+    expect(view.findAll('.map-ref')).toHaveLength(2)
+    expect(view.findAll('.map-track')).toHaveLength(2)
+    noNaN(view)
+    view.unmount()
   })
 })
 

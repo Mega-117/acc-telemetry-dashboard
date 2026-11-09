@@ -4,8 +4,9 @@
 // Corner zoom: the two racing lines, yours blue and the reference amber.
 // Two dots follow the cursor: you (blue, filled) and the reference (amber, hollow).
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { deltaTrend, finishLine, glideFrame, fractions, lapDelta, lapMapLine, mapPoints, worldToMap, type Corner, type MapPoint } from '~/services/telemetry/lapAnalysis'
-import { hasMapPositions } from '~/services/telemetry/mapPositions'
+import { deltaTrend, glideFrame, fractions, lapDelta, type Corner } from '~/services/telemetry/lapAnalysis'
+import { finishLine, lapMapLine, worldToMap, type MapPoint } from '~/services/telemetry/mapProjection'
+import { ownMapPositions } from '~/services/telemetry/mapPositions'
 import type { LapTraceView } from '~/services/telemetry/lapTraceChart'
 import { placeMapLabels } from '~/services/telemetry/mapLabelPlacement'
 import { useI18n } from '~/i18n'
@@ -45,12 +46,29 @@ const H = computed(() => Math.round(props.size * 0.8))
 // dev.11 (05/11): a reference without coordinates (laps saved before late October) used to hide the
 // whole map, with a message blaming your lap. It now gives way: the map follows your lap alone.
 // 06/11: also a reference whose coordinates do not draw a track (all equal) gives way.
-const mapRef = computed(() => hasMapPositions(props.reference) ? props.reference! : null)
-const frame = computed(() => mapRef.value ?? props.lap)
-const base = computed(() => mapPoints(frame.value, at, W.value, H.value, 18))
+// PIP-760: a line frames the map from its recorded samples, full or recovered (partial): two recovered laps, or a
+// recovered lap alone, still draw what was recorded. The frame's own holes are never bridged (frameLine.joined).
+const mapRef = computed(() => ownMapPositions(props.reference) ? props.reference! : null)
+const frame = computed(() => mapRef.value ?? (ownMapPositions(props.lap) ? props.lap : null))
+const frameLine = computed(() => frame.value ? lapMapLine(frame.value, at, W.value, H.value, 18, frame.value) : null)
+const base = computed(() => frameLine.value?.points ?? null)
+const baseJoined = (i: number) => !!frameLine.value?.joined[i]
+// The frame's line as runs of recorded stretches (only those inside `keep`), for polylines that never cross a hole.
+function runsOf(keep: (i: number) => boolean = () => true): MapPoint[][] {
+  const points = base.value
+  const runs: MapPoint[][] = []
+  let run: MapPoint[] = []
+  for (let i = 0; points && i < points.length - 1; i++) {
+    if (baseJoined(i) && keep(i) && keep(i + 1)) { if (!run.length) run.push(points[i]!); run.push(points[i + 1]!) } else if (run.length) { runs.push(run); run = [] }
+  }
+  if (run.length) runs.push(run)
+  return runs
+}
+const baseRuns = computed(() => runsOf())
+const recorded = computed(() => (base.value ?? []).filter((p): p is MapPoint => !!p))
 // Edges through the same transform as the laps: they line up with no adjustment of their own.
 const edgePaths = computed(() => {
-  if (!props.edges) return null
+  if (!props.edges || !frame.value) return null
   const project = worldToMap(frame.value, at, W.value, H.value, 18)
   if (!project) return null
   const left = props.edges.left.map(([x, z]) => project(x, z))
@@ -60,7 +78,7 @@ const edgePaths = computed(() => {
 // PIP-760: your lap's own line (full or recovered coordinates, holes never bridged). Where it has no coordinates
 // (laps saved before late October, the stretch a MoTeC repair could not recover) gain and loss, which depend on the
 // distance only, are drawn on the reference's line and the note says so: never a made-up line of your lap.
-const own = computed(() => base.value ? lapMapLine(props.lap, at, W.value, H.value, 18, frame.value) : null)
+const own = computed(() => frame.value ? lapMapLine(props.lap, at, W.value, H.value, 18, frame.value) : null)
 const ownAt = (i: number) => own.value?.points[i] ?? null
 const ownJoined = (i: number) => !!own.value?.joined[i]
 const zoomed = computed(() => props.zoom && props.selected !== null && !!props.corners[props.selected - 1])
@@ -88,7 +106,7 @@ const stretches = computed(() => {
   if (!points) return []
   return points.slice(1).map((_, i) => {
     if (ownJoined(i)) return { a: ownAt(i)!, b: ownAt(i + 1)!, borrowed: false }
-    return mapRef.value ? { a: points[i]!, b: points[i + 1]!, borrowed: true } : null
+    return mapRef.value && baseJoined(i) ? { a: points[i]!, b: points[i + 1]!, borrowed: true } : null
   })
 })
 const segments = computed(() => {
@@ -120,7 +138,7 @@ const lapRuns = computed(() => {
 // PIP-760: which geometry the colours use, said whenever a stretch is drawn on the reference's line.
 const geometryNote = computed(() => !stretches.value.some(s => s?.borrowed) ? null
   : t(own.value ? 'telemetry.map.onReferencePartial' : 'telemetry.map.onReference'))
-const dot = (points: MapPoint[] | null, fraction: number | null) => fraction === null || !points ? null : points[Math.round(fraction * (POINTS - 1))] ?? null
+const dot = (points: (MapPoint | null)[] | null, fraction: number | null) => fraction === null || !points ? null : points[Math.round(fraction * (POINTS - 1))] ?? null
 // Your position along the lap: on your own line, else (no coordinates there) on the reference's at the same distance.
 const lapPointAt = (i: number) => ownAt(i) ?? (mapRef.value ? base.value?.[i] ?? null : null)
 const lapDot = computed(() => props.cursor === null ? null : lapPointAt(Math.round(props.cursor * (POINTS - 1))))
@@ -163,9 +181,11 @@ const labels = computed(() => {
   const points = base.value
   if (!points) return []
   const n = points.length
-  const raw = props.corners.map(c => {
+  // PIP-760: a bend whose stretch was not recorded on the frame's line gets no number (nothing to put it beside).
+  const raw = props.corners.flatMap(c => {
     const i = Math.round(c.apex * (POINTS - 1))
-    const a = points[(i - 6 + n) % n]!, p = points[i]!, b = points[(i + 6) % n]!
+    const a = points[(i - 6 + n) % n], p = points[i], b = points[(i + 6) % n]
+    if (!a || !p || !b) return []
     const tx = b.x - a.x, ty = b.y - a.y
     const length = Math.hypot(tx, ty) || 1
     // Turn direction from the cross product; the outside is the other side.
@@ -184,9 +204,9 @@ const labels = computed(() => {
     // 01/11 (Codex): the bend out of the visible frame: no time pushed onto the edge, far from its corner.
     const inView = p.x >= box.x && p.x <= box.x + box.w && p.y >= box.y && p.y <= box.y + box.h
     const keepInside = (q: { x: number, y: number }) => ({ x: clamp(q.x, box.x + margin * 1.6, box.x + box.w - margin * 1.6), y: clamp(q.y, box.y + margin, box.y + box.h - margin * 0.6) })
-    return { number: c.number, apex: p, point: { x: p.x + nx * offset, y: p.y + ny * offset }, keepInside,
+    return [{ number: c.number, apex: p, point: { x: p.x + nx * offset, y: p.y + ny * offset }, keepInside,
       preferred: { x: p.x + nx * far, y: p.y + ny * far },
-      gap: gap === null || !inView ? null : { text: `${gap > 0 ? '+' : gap < 0 ? '−' : '±'}${Math.abs(gap).toFixed(3)}`, loss: gap > 0 } }
+      gap: gap === null || !inView ? null : { text: `${gap > 0 ? '+' : gap < 0 ? '−' : '±'}${Math.abs(gap).toFixed(3)}`, loss: gap > 0 } }]
   })
   // 05/11 (user): close bends (Monza 3-4) wrote their times on top of each other: each time takes the first free
   // spot around its own corner, never over another time or a corner number.
@@ -204,27 +224,29 @@ const worstNumber = computed(() => {
   const worst = Object.entries(deltas).filter(([, d]) => typeof d === 'number' && d >= 0.01).sort((a, b) => b[1] - a[1])[0]
   return worst ? Number(worst[0]) : null
 })
-const finish = computed(() => base.value ? finishLine(base.value, 10) : null)
+// The finish line only where the frame's line was recorded at the start (a recovered lap starts after it).
+const finish = computed(() => base.value?.[0] && base.value[1] && baseJoined(0) ? finishLine([base.value[0], base.value[1]], 10) : null)
 // Selected sector on the track: a coloured band under the lines, a mark where it starts and ends.
 const sector = computed(() => {
   const points = base.value, range = props.focus
   if (!points || !range || (range[0] <= 0 && range[1] >= 1)) return null
-  const inside = points.filter((_, i) => at[i]! >= range[0] && at[i]! <= range[1])
-  if (inside.length < 2) return null
+  const runs = runsOf(i => at[i]! >= range[0] && at[i]! <= range[1])
+  if (!runs.length) return null
   const mark = (fraction: number) => {
     const i = Math.min(Math.max(Math.round(fraction * (POINTS - 1)), 1), POINTS - 2)
-    const a = points[i - 1]!, p = points[i]!, b = points[i + 1]!
+    const a = points[i - 1], p = points[i], b = points[i + 1]
+    if (!a || !p || !b) return null
     const tx = b.x - a.x, ty = b.y - a.y, length = Math.hypot(tx, ty) || 1
     const half = 9 * zoomScale.value
     return { x1: p.x - (ty / length) * half, y1: p.y + (tx / length) * half, x2: p.x + (ty / length) * half, y2: p.y - (tx / length) * half }
   }
-  return { path: path(inside), start: mark(range[0]), end: mark(range[1]) }
+  return { paths: runs.map(run => path(run)), start: mark(range[0]), end: mark(range[1]) }
 })
 const autoFrame = computed(() => {
   // Frame: the focused stretch (corner or sector) or the whole track.
   let cx = W.value / 2, cy = H.value / 2, span = W.value
   const range = focusRange.value
-  const inside = range && base.value ? base.value.filter((_, i) => at[i]! >= range[0] && at[i]! <= range[1]) : []
+  const inside = range && base.value ? base.value.filter((p, i): p is MapPoint => !!p && at[i]! >= range[0] && at[i]! <= range[1]) : []
   if (inside.length >= 2) {
     const xs = inside.map(p => p.x), ys = inside.map(p => p.y)
     // Generous margin: corner numbers near the edge stay inside the frame.
@@ -252,8 +274,8 @@ function mapPoint(event: PointerEvent | WheelEvent | MouseEvent, svg: SVGSVGElem
 // The track never leaves the map: the view centre stays inside the track's own bounds,
 // however far the mouse goes while dragging.
 const bounds = computed(() => {
-  const points = base.value
-  if (!points?.length) return { x0: 0, x1: W.value, y0: 0, y1: H.value }
+  const points = recorded.value
+  if (!points.length) return { x0: 0, x1: W.value, y0: 0, y1: H.value }
   const xs = points.map(p => p.x), ys = points.map(p => p.y)
   return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) }
 })
@@ -328,7 +350,7 @@ function onMove(event: PointerEvent) {
   if (!points) return
   const { x, y } = mapPoint(event, svg)
   let best = 0, bestDistance = Infinity
-  points.forEach((p, i) => { const d = (p.x - x) ** 2 + (p.y - y) ** 2; if (d < bestDistance) { bestDistance = d; best = i } })
+  points.forEach((p, i) => { if (!p) return; const d = (p.x - x) ** 2 + (p.y - y) ** 2; if (d < bestDistance) { bestDistance = d; best = i } })
   emit('hover', bestDistance < (30 * zoomScale.value) ** 2 ? at[best]! : null)
 }
 </script>
@@ -347,10 +369,10 @@ function onMove(event: PointerEvent) {
       <polyline :points="edgePaths.left" class="map-edge" />
       <polyline :points="edgePaths.right" class="map-edge" />
     </template>
-    <polyline v-else :points="path(base)" class="map-track" />
-    <polyline v-if="sector" :points="sector.path" class="map-sector" />
+    <template v-else><polyline v-for="(run, r) in baseRuns" :key="`track-${r}`" :points="path(run)" class="map-track" /></template>
+    <template v-if="sector"><polyline v-for="(p, r) in sector.paths" :key="`sector-${r}`" :points="p" class="map-sector" /></template>
     <template v-if="zoomed || lapsMode">
-      <polyline v-if="mapRef" :points="path(base)" class="map-ref" />
+      <template v-if="mapRef"><polyline v-for="(run, r) in baseRuns" :key="`ref-${r}`" :points="path(run)" class="map-ref" /></template>
       <polyline v-for="(run, r) in lapRuns" :key="`run-${r}`" :points="path(run)" class="map-lap-line" />
     </template>
     <line v-for="(s, i) in segments" :key="i" :x1="s.x1" :y1="s.y1" :x2="s.x2" :y2="s.y2" :stroke="s.color" :stroke-opacity="s.opacity" class="map-lap" />
@@ -360,8 +382,8 @@ function onMove(event: PointerEvent) {
       <line :x1="finish.x1" :y1="finish.y1" :x2="finish.x2" :y2="finish.y2" class="map-finish-black" />
     </g>
     <template v-if="sector">
-      <line v-bind="sector.start" class="map-sector-mark" />
-      <line v-bind="sector.end" class="map-sector-mark" />
+      <line v-if="sector.start" v-bind="sector.start" class="map-sector-mark" />
+      <line v-if="sector.end" v-bind="sector.end" class="map-sector-mark" />
     </template>
     <!-- 01/11: on a zoomed corner no numbers and no times: those around the edge belonged to corners out of sight. -->
     <g v-for="l in zoomed ? [] : labels" :key="l.number" class="map-corner" :class="{ active: selected === l.number, 'is-worst': l.number === worstNumber }" @click="!dragged && emit('select', l.number)">

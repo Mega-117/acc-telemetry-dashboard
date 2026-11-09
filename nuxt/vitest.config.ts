@@ -127,6 +127,7 @@ export default defineConfig({
         'app/i18n/index.ts',
         'app/services/telemetry/lapAnalysis.ts',
         'app/services/telemetry/mapPositions.ts',
+        'app/services/telemetry/mapProjection.ts',
         'app/services/telemetry/segmentApproach.ts',
         // PIP-751: does a trace cover the lap ACC timed (the gate of delta, segments and measured sectors).
         'app/services/telemetry/traceCoverage.ts',

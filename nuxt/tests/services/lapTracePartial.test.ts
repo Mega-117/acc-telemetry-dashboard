@@ -59,7 +59,8 @@ describe('decodeLapChannels with channels_partial_qd (PIP-760)', () => {
 
 describe('lapMapLine (PIP-760)', () => {
   it('a hole of one sample between two map points still breaks the line (no chord)', async () => {
-    const { lapMapLine, fractions } = await import('~/services/telemetry/lapAnalysis')
+    const { fractions } = await import('~/services/telemetry/lapAnalysis')
+    const { lapMapLine } = await import('~/services/telemetry/mapProjection')
     const big = 3000
     const x = Array.from({ length: big }, (_, i) => Math.cos(i / big * 2 * Math.PI) * 300)
     const z = Array.from({ length: big }, (_, i) => Math.sin(i / big * 2 * Math.PI) * 200)
@@ -74,5 +75,24 @@ describe('lapMapLine (PIP-760)', () => {
     expect(line.points.every(p => p !== null)).toBe(true)                 // no map point falls on the missing sample...
     expect(line.joined.filter(j => !j)).toHaveLength(1)                   // ...the stretch across it is still not joined
     expect(lapMapLine(full, at, 320, 256, 18, full)!.joined.every(Boolean)).toBe(true)
+  })
+})
+
+describe('worldToMap on a recovered line (Codex review 09/11)', () => {
+  it('fits the map on the recorded samples only: a hole never pulls the frame towards the world origin', async () => {
+    const { worldToMap, lapMapLine } = await import('~/services/telemetry/mapProjection')
+    const { fractions } = await import('~/services/telemetry/lapAnalysis')
+    const m = 400
+    const xs = Array.from({ length: m }, (_, i) => (i < 40 ? null : 5000 + Math.cos(i / m * 2 * Math.PI) * 300))
+    const zs = Array.from({ length: m }, (_, i) => (i < 40 ? null : -3000 + Math.sin(i / m * 2 * Math.PI) * 200))
+    const lap = normalizeLapTrace({ schema: 'acc.laptrace.v1', grid_step_m: 2, meta: { track: 's', car: 'c', source: 'logger', lap_time_s: 100, complete: true, valid: true },
+      channels: { time_s: xs.map((_, i) => i), speed_kmh: xs.map(() => 150), brake_pct: xs.map(() => 0), throttle_pct: xs.map(() => 100), pos_x: xs, pos_z: zs } })!
+    const at = fractions(600)
+    expect(worldToMap(lap, at, 320, 256, 18)).not.toBeNull()
+    const drawn = lapMapLine(lap, at, 320, 256, 18)!.points.filter((p): p is { x: number, y: number } => !!p)
+    const spanX = Math.max(...drawn.map(p => p.x)) - Math.min(...drawn.map(p => p.x))
+    const spanY = Math.max(...drawn.map(p => p.y)) - Math.min(...drawn.map(p => p.y))
+    expect(Math.max(spanX / (320 - 36), spanY / (256 - 36))).toBeGreaterThan(0.95)   // the line fills the map
+    expect(drawn.every(p => p.x >= 0 && p.x <= 320 && p.y >= 0 && p.y <= 256)).toBe(true)
   })
 })
