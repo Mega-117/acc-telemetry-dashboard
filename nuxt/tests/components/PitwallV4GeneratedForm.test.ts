@@ -140,10 +140,10 @@ it('updates LIVE indicators in place while preserving input identity, typing and
   live(30, 2, 25)
   expect(indicator('fuel')).toBe('✗'); expect(indicator('fl')).toBe('✓'); expect(indicator('tyreSet')).toBe('✗')
   expect(field('fuel')).toBe(fuel); expect(w.document.activeElement).toBe(fuel); expect(fuel.value).toBe('18')
-  // A default follows live (rebuild): typed text, focus and user values survive.
+  // A default follows live, written in place (no rebuild): typed text, focus and user values survive.
   live(30, 2, 26)
-  expect(w.S.fl).toBe(26); expect(indicator('fl')).toBe('✓')
-  expect(field('fuel').value).toBe('18'); expect(w.document.activeElement).toBe(field('fuel'))
+  expect(w.S.fl).toBe(26); expect(indicator('fl')).toBe('✓'); expect(field('fl').value).toBe('26')
+  expect(field('fuel')).toBe(fuel); expect(fuel.value).toBe('18'); expect(w.document.activeElement).toBe(fuel)
   expect(w.S.fr).toBe(27.5); expect(field('fr').value).toBe('27.5')
   field('fuel').dispatchEvent(new w.Event('change', { bubbles: true }))
   live(18, 1, 26)

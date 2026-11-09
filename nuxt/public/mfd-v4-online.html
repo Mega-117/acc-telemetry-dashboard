@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 c4003b91506d3c2f61625c0d7a2bb0e5c90a45e8ed9c114a814d9607441b0a64 -->
+<!-- Generated V4 online; SHA256 fe868bf46049cc53bdba468585e8d174a60cb495d03649303ef1a7894203ca3f -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -1477,10 +1477,17 @@ else globalThis.MfdV4Contract = exported;
     if (!Number.isInteger(mounted) || mounted < L.min || mounted > L.max) return { value: S.tyreSet ?? L.min, live: false };
     return { value: mounted === L.max ? L.max - 1 : mounted + 1, live: true };
   }
+  // Returns the keys it changed. Live-following defaults (LIVE_DEFAULTS) are
+  // written in place by the caller, never through a rebuild (Codex round 6).
+  var LIVE_DEFAULTS = ['tyreSet', 'fl', 'fr', 'rl', 'rr'];
+  function focusedField(key) {
+    var a = document.activeElement;
+    return !!a && formEl.contains(a) && a.dataset && a.dataset.f === key;
+  }
   function applyDefaults(strategy) {
-    var changed = false;
+    var changed = [];
     function put(key, value, seeded) {
-      if (S[key] !== value) { S[key] = value; changed = true; }
+      if (S[key] !== value) { S[key] = value; changed.push(key); }
       if (seeded) initializedFields.add(key);
     }
     TWO_STATE.forEach(function (key) { if (typeof S[key] !== 'boolean') put(key, FIXED[key], true); });
@@ -1488,7 +1495,8 @@ else globalThis.MfdV4Contract = exported;
     ['pitStrategy', 'fuel', 'brakeFront', 'brakeRear'].forEach(function (key) {
       if (!initializedFields.has(key) && S[key] == null) put(key, FIXED[key], true);
     });
-    if (!initializedFields.has('tyreSet')) put('tyreSet', defaultTyreSet(strategy).value, false);
+    // A focused field is never written by live data, not even a default one.
+    if (!initializedFields.has('tyreSet') && !focusedField('tyreSet')) put('tyreSet', defaultTyreSet(strategy).value, false);
     // Pressures: the driver's current MFD values when known and inside the
     // limits, otherwise 26.0 until they arrive. They follow live until the user
     // edits them. The RAW value is checked (tolerance for float noise such as
@@ -1496,7 +1504,7 @@ else globalThis.MfdV4Contract = exported;
     var P = MfdV4Contract.LIMITS.pressure;
     ['FL', 'FR', 'RL', 'RR'].forEach(function (wheel) {
       var key = wheel.toLowerCase();
-      if (initializedFields.has(key)) return;
+      if (initializedFields.has(key) || focusedField(key)) return;
       var raw = strategy?.pressures?.[wheel];
       var ok = Number.isFinite(raw) && raw >= P.min - 1e-6 && raw <= P.max + 1e-6;
       if (ok) put(key, Math.round(raw * 10) / 10, false);
@@ -1504,6 +1512,13 @@ else globalThis.MfdV4Contract = exported;
       else if (Number.isFinite(raw) || S[key] == null) put(key, 26, false);
     });
     return changed;
+  }
+  // In place: only the value of an untouched default input, never the focused one.
+  function writeDefaults(keys) {
+    keys.forEach(function (key) {
+      var input = formEl.querySelector('input[data-f="' + key + '"]');
+      if (input && input !== document.activeElement) input.value = String(S[key]);
+    });
   }
   function send(type, value) { parent.postMessage({ channel: 'mfd-v4-online', type: type, value: value }, '*'); }
   etichettaBottone = function () {
@@ -1674,7 +1689,10 @@ else globalThis.MfdV4Contract = exported;
       edited = snapshot.draft ? snapshot.draft.edited !== false : false;
       initialized = true;
     }
-    if (snapshot.busy !== true && applyDefaults(snapshot.strategy)) redraw = true;
+    var defaulted = snapshot.busy !== true ? applyDefaults(snapshot.strategy) : [];
+    // A live update never rebuilds the inputs: only a structural default (a
+    // boolean or the compound filled in) or the triggers above do.
+    if (defaulted.some(function (key) { return LIVE_DEFAULTS.indexOf(key) < 0; })) redraw = true;
     if ((crewSignature !== null && crewChanged) || (crewIdentityV4 && crewIdentityV4 !== snapshot.contextId)) S.driverEntryIndex = null;
     crewSignature = nextCrewSignature;
     crewIdentityV4 = snapshot.contextId;
@@ -1697,7 +1715,7 @@ else globalThis.MfdV4Contract = exported;
     }
     if (!busy && snapshot.result && !validationMessage) showResult(snapshot.result.label, snapshot.result.reason, snapshot.result.problem);
     if (redraw) renderForm();
-    else { aggiornaSpie(); bA.disabled = busy || !snapshot.ready; etichettaBottone(); }
+    else { writeDefaults(defaulted); aggiornaSpie(); bA.disabled = busy || !snapshot.ready; etichettaBottone(); }
     if (!grid.children.length) renderSM();
     KEYS.forEach(function (key, index) { var value = cache[key]; grid.children[index].lastChild.textContent = value == null ? '—' : String(value); });
     restoring = false;
@@ -1859,17 +1877,22 @@ else globalThis.MfdV4Contract = exported;
     });
   }
   var renderBefore = renderForm;
-  // A rebuild (live update, readiness) never touches what the user is typing:
-  // the raw text ("27,5") is taken before the canonical number input could
-  // sanitize it to "" and put back, with focus, once the field is text again.
+  // Live updates never rebuild (online-panel.js writes defaults in place). A
+  // structural rebuild (readiness, order start/end, crew, a toggle) keeps the
+  // field being typed: raw text ("27,5", taken before the canonical number
+  // input could sanitize it), focus and selection/caret.
   renderForm = function () {
     var active = document.activeElement;
-    var typing = active && formEl.contains(active) && active.dataset && active.dataset.numeric === '1'
-      ? { id: active.dataset.f, value: active.value } : null;
+    var focused = active && formEl.contains(active) && active.dataset && active.dataset.f
+      ? { id: active.dataset.f, tag: active.tagName, numeric: active.dataset.numeric === '1', value: active.value,
+          start: active.selectionStart, end: active.selectionEnd, direction: active.selectionDirection } : null;
     renderBefore(); decorate();
-    if (!typing) return;
-    var input = formEl.querySelector('input[data-f="' + typing.id + '"]');
-    if (input && !input.disabled) { input.value = typing.value; input.focus(); }
+    if (!focused) return;
+    var input = formEl.querySelector(focused.tag + '[data-f="' + focused.id + '"]');
+    if (!input || input.disabled) return;
+    if (focused.numeric) input.value = focused.value;
+    input.focus();
+    if (focused.numeric && focused.start != null) input.setSelectionRange(focused.start, focused.end, focused.direction || 'none');
   };
   var checksBefore = aggiornaSpie;
   aggiornaSpie = function () { checksBefore(); refresh(); };
