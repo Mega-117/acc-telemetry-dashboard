@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 535943958ab2fdd62c04be0c7609b248cc04a3c108b4bbb6fcc63e2f9c01b459 -->
+<!-- Generated V4 online; SHA256 23095832adfd22b88eb1adeed7d2efd2baec50eef75c42c3ed1dc352b0c91e9e -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -171,57 +171,70 @@ tr.v4-bad input[data-numeric] { border-color: #ff6178; }
 tr.v4-preset-note td { padding: 8px 10px; color: #ffc400; background: #ffc40010; border-left: 3px solid #ffc400; font-size: 12px; }
 .v4-hint { display: block; margin-top: 3px; color: #8b8b94; font-size: 10px; }
 
-/* Minimal layout (user 09/11): groups with short headings, one column, the
-   driver's current value in grey next to the field. Technical source tags,
-   check marks, layout diagnostics and the method legend are not shown. */
+/* Strategy form (user 09/11). One grid, three columns: label | what the
+   engineer sends | what is in the driver's MFD now. The right column sits on
+   its own band behind a divider. Every control is 32px high and shares one
+   style. Technical source tags, check marks, layout diagnostics and the
+   method legend are not shown. Presentation only. */
 .draft-heading, #layout, .legend, #form tr[data-f] > td:nth-child(3), #form tr[data-f] > td:last-child { display: none; }
-/* One column, one grid: every field on its own row, label / field / current
-   value always in the same three columns, every field the same width. */
-#form { display: grid; grid-template-columns: 168px 140px 96px; column-gap: 16px; row-gap: 8px; align-items: center; max-width: none; }
-#form > tbody, #form tr { display: contents; }
-#form td { display: block; height: auto; padding: 0; border: 0; min-width: 0; }
-#form tr > td.lb { grid-column: 1; width: auto; color: #c9c9cf; white-space: nowrap; }
-#form tr > td:nth-child(2) { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 0; }
-#form tr > td.v4-now { grid-column: 3; }
-#form tr > td:nth-child(2) .v4-issue { flex-basis: 100%; }
-/* Same height for every row (checkbox rows included): an even vertical rhythm. */
-#form tr[data-f] > td.lb, #form tr[data-f] > td:nth-child(2), #form tr[data-f] > td.v4-now { min-height: 30px; }
-#form tr[data-f] > td.lb { display: flex; flex-direction: column; justify-content: center; }
-#form tr[data-f] > td.v4-now { display: flex; align-items: center; gap: 4px; }
-#form tr > td:nth-child(2) > input[data-numeric] { width: 76px; box-sizing: border-box; }
-#form tr > td:nth-child(2) > button.v4-step { width: 28px; margin: 0; flex: none; }
-#form tr > td:nth-child(2) > button.v4-step:first-child { margin-right: 4px; }
-#form tr > td:nth-child(2) > input + button.v4-step { margin-left: 4px; }
-#form tr > td:nth-child(2) > input[type=checkbox] { margin: 0; }
-#form select { width: 140px; min-width: 0; max-width: none; box-sizing: border-box; }
-#form tr.v4-group > th { grid-column: 1 / -1; padding: 16px 0 2px; border-top: 1px solid #ffffff18; color: #f0f0f3; font-size: 13px; font-weight: 600; letter-spacing: 0; text-transform: none; text-align: left; }
-#form tr.v4-group:first-child > th { padding-top: 2px; border-top: 0; }
-#form tr.v4-cols > th { position: relative; }
-#form tr.v4-cols .v4-col-now { position: absolute; left: 340px; bottom: 2px; color: #8b8b94; font-size: 11px; font-weight: 600; }
-@media(max-width:520px) { #form tr.v4-cols .v4-col-now { left: 280px; } }
+.wrap > .panel:first-child { display: flex; flex-direction: column; gap: 0; }
+#conn { order: 0; width: 100%; max-width: 472px; box-sizing: border-box; margin: 0 0 8px; }
 #conn[hidden] { display: none; }
-#form.preset-only tr[data-f]:not([data-f=applyPitStrategy]):not([data-f=pitStrategy]) > td { opacity: .35; }
-td.v4-now { min-width: 0; padding: 0; border: 0; color: #9a9aa3; font-size: 12px; white-space: nowrap; }
-td.v4-now.v4-now-empty { visibility: hidden; }
+#form { order: 1; position: relative; display: grid; grid-template-columns: 152px 140px 132px; column-gap: 24px; row-gap: 8px; align-items: center; max-width: none; }
+.ctl { order: 2; width: 100%; max-width: 472px; box-sizing: border-box; margin-top: 20px; }
+#form > tbody, #form tr { display: contents; }
+#form td, #form th { display: block; height: auto; padding: 0; border: 0; min-width: 0; text-align: left; }
+#form tr[data-f] > td.lb { grid-column: 1; min-height: 32px; display: flex; flex-direction: column; justify-content: center; color: #c9c9cf; white-space: nowrap; }
+#form tr[data-f] > td:nth-child(2) { grid-column: 2; min-height: 32px; display: flex; flex-wrap: wrap; align-items: center; }
+#form tr[data-f] > td.v4-now { grid-column: 3; min-height: 32px; display: flex; align-items: center; padding-left: 12px; color: #e8e8eb; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#form td.v4-now.v4-now-empty { color: #6f6f78; }
+#form td.lb .v4-limit { display: block; margin: 2px 0 0; color: #8b8b94; font-size: 11px; }
+#form tr > td:nth-child(2) .v4-issue { flex-basis: 100%; margin-top: 4px; }
 .v4-limit.v4-quiet { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-#form tr.v4-preset-note td { grid-column: 1 / -1; padding: 8px 10px; border: 1px solid #ffc40055; background: #ffc4000c; color: #ffd75a; }
+
+/* The "in macchina" band: a divider and a faint surface behind column 3. */
+#form::after { content: ''; position: absolute; top: var(--v4-band-top, 0); bottom: 0; left: 328px; width: 144px; border-left: 1px solid #ffffff22; background: #ffffff05; pointer-events: none; }
+
+/* Kind of order: two-button switch. */
+#form tr.v4-mode > th { grid-column: 1 / -1; padding-bottom: 8px; }
+.v4-switch { display: inline-flex; border: 1px solid #ffffff30; }
+.v4-switch button, .ctl .v4-switch button { min-height: 32px; padding: 0 16px; margin: 0; border: 0; background: transparent; color: #a9a9b2; font-size: 13px; font-weight: 600; clip-path: none; }
+.v4-switch button + button { border-left: 1px solid #ffffff30; }
+.v4-switch button[aria-pressed=true] { background: #ffffff1a; color: #f4f4f6; }
+.v4-switch button:hover:not(:disabled):not([aria-pressed=true]) { background: #ffffff0c; color: #e8e8eb; }
+.v4-switch button:disabled { opacity: .5; }
+#form tr[data-f=applyPitStrategy] { display: none; }
+#form:not(.preset-only) tr[data-f=pitStrategy] { display: none; }
+#form.preset-only tr.v4-colhead, #form.preset-only tr.v4-group, #form.preset-only tr[data-f]:not([data-f=pitStrategy]) { display: none; }
+#form.preset-only::after { display: none; }
+#form tr.v4-preset-note > td { grid-column: 2 / 4; padding: 0; border: 0; background: transparent; color: #a9a9b2; font-size: 12px; line-height: 1.5; }
+/* "Usa valori attuali" restores single values: not part of a preset order. */
+.wrap:has(#form.preset-only) #refresh-draft { display: none; }
+
+/* Column headings and section titles. */
+#form tr.v4-colhead > th { padding: 8px 0 0; color: #8b8b94; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+#form tr.v4-colhead > th:nth-child(2) { grid-column: 2; }
+#form tr.v4-colhead > th:nth-child(3) { grid-column: 3; padding-left: 12px; }
+#form tr.v4-group > th { grid-column: 1 / -1; padding: 14px 0 2px; border-top: 1px solid #ffffff14; color: #f0f0f3; font-size: 13px; font-weight: 600; letter-spacing: 0; text-transform: none; }
+#form tr.v4-colhead + tr.v4-group > th { border-top: 0; padding-top: 6px; }
+
+/* One control style: 32px, same border and surface. */
+#form input[data-numeric], #form select, #form button.v4-step { height: 32px; min-height: 32px; box-sizing: border-box; border: 1px solid #ffffff30; border-radius: 0; background: #141417; color: #f0f0f3; font: inherit; font-size: 13px; }
+#form input[data-numeric] { width: 76px; padding: 0 8px; border-left: 0; border-right: 0; text-align: center; font-variant-numeric: tabular-nums; }
+#form button.v4-step { width: 32px; padding: 0; margin: 0; clip-path: none; font-size: 16px; line-height: 1; color: #d4d4da; }
+#form button.v4-step:hover:not(:disabled) { background: #222227; color: #fff; }
+#form select { width: 140px; padding: 0 8px; }
+#form input[type=checkbox] { width: 18px; height: 18px; margin: 0; accent-color: #21ff83; }
+#form input:disabled, #form select:disabled, #form button.v4-step:disabled { opacity: .4; }
+tr.v4-bad input[data-numeric] { border-color: #ff6178; border-left: 1px solid #ff6178; border-right: 1px solid #ff6178; }
+.v4-crew-missing { flex-basis: 100%; margin-top: 4px; color: #9a9aa3; font-size: 12px; }
+
 #strategy-result { border: 1px solid #16bd9166; border-left-width: 1px; }
 #strategy-result[data-problem=true] { border-color: #ff617866; }
 #conn { color: #c9c9cf; }
-/* One column, in reading order: status, fields, actions. */
-.wrap > .panel:first-child { display: flex; flex-direction: column; gap: 0; }
-#conn, .ctl { width: 100%; max-width: 640px; box-sizing: border-box; }
-#conn { order: 0; margin-bottom: 4px; }
-#form { order: 1; }
-.ctl { order: 2; margin-top: 16px; }
-#form tr[data-f="driverIdx"] > td:nth-child(2) { grid-column: 2 / span 2; }
-#form tr[data-f="driverIdx"] select { width: 236px; }
-#form td.lb .v4-limit { display: block; margin: 2px 0 0; color: #8b8b94; font-size: 11px; }
-#form tr[data-f="driverIdx"] > td.v4-now { display: none; }
-.v4-crew-missing { flex-basis: 100%; margin-top: 4px; color: #9a9aa3; font-size: 12px; }
-#conn, .ctl { max-width: 436px; }
 @media(max-width:520px) {
- #form { grid-template-columns: 120px 140px 1fr; column-gap: 10px; }
+ #form { grid-template-columns: 112px 140px 1fr; column-gap: 12px; }
+ #form::after { left: 270px; width: auto; right: 0; }
 }
 </style></head>
 <body>
@@ -1881,19 +1894,49 @@ else globalThis.MfdV4Contract = exported;
     b.addEventListener('click', function () { step(id, direction); });
     return b;
   }
-  // Minimal layout (user 09/11): rows grouped under short headings, short
-  // labels, preset last. Presentation only: rows keep their data-f and the
-  // canonical inputs; the source-tag and check cells are hidden by the theme.
-  // Preset first (user 09/11): loading a preset replaces everything below it.
-  var GROUPS = [['Preset', ['applyPitStrategy', 'pitStrategy']], ['Benzina', ['fuel']],
-    ['Gomme', ['changeTyre', 'compound', 'tyreSet', 'fl', 'fr', 'rl', 'rr']],
-    ['Freni', ['brakes', 'brakeFront', 'brakeRear']], ['Riparazioni', ['susp', 'body']], ['Pilota', ['driverIdx']]];
+  // Layout (user 09/11): two kinds of order. "Preset" loads a whole saved pit
+  // setup and nothing else; "Valori singoli" sets each field. A two-button
+  // switch picks the kind (it drives the canonical applyPitStrategy checkbox);
+  // the other kind's rows are not shown. Fields sit in two columns: what the
+  // engineer sends, and what is in the driver's MFD now (only the values the
+  // game publishes live). Presentation only: rows keep data-f and inputs.
+  var GROUPS = [['Benzina', ['fuel']], ['Gomme', ['changeTyre', 'compound', 'tyreSet', 'fl', 'fr', 'rl', 'rr']],
+    ['Freni', ['brakes', 'brakeFront', 'brakeRear']], ['Pilota', ['driverIdx']], ['Riparazioni', ['susp', 'body']]];
   var LABEL = { fuel: 'Da aggiungere (L)', changeTyre: 'Cambia gomme', tyreSet: 'Set', fl: 'FL', fr: 'FR', rl: 'RL', rr: 'RR',
     brakes: 'Sostituisci', brakeFront: 'Pastiglia ant.', brakeRear: 'Pastiglia post.', driverIdx: 'Al cambio',
-    applyPitStrategy: 'Carica solo il preset', pitStrategy: 'Numero' };
+    applyPitStrategy: 'Carica solo il preset', pitStrategy: 'Numero preset' };
+  // Values the game publishes live (shared memory); the others are only checked
+  // on screen when the order is applied, so they have no "in macchina" value.
+  var READABLE = { fuel: 1, compound: 1, tyreSet: 1, fl: 1, fr: 1, rl: 1, rr: 1 };
   var HALF = { fl: 1, fr: 1, rl: 1, rr: 1, brakeFront: 1, brakeRear: 1, susp: 1, body: 1 };
-  var RIGHT = { fr: 1, rr: 1, brakeRear: 1, body: 1 };
+  function mode() {
+    var row = document.createElement('tr'); row.className = 'v4-mode';
+    row.innerHTML = '<th colspan="5"><div class="v4-switch" role="group" aria-label="Tipo di invio">' +
+      '<button type="button" data-mode="values">Valori singoli</button><button type="button" data-mode="preset">Preset</button></div></th>';
+    var box = formEl.querySelector('input[data-f="applyPitStrategy"]');
+    row.querySelectorAll('button').forEach(function (b) {
+      var on = (b.dataset.mode === 'preset') === !!S.applyPitStrategy;
+      b.setAttribute('aria-pressed', String(on));
+      b.disabled = !box || box.disabled;
+      b.addEventListener('click', function () {
+        // Never switch kind while a field is composing (IME): the deferred
+        // rebuild would leave the shown kind and the order kind apart.
+        if (!box || box.disabled || on || composing) return;
+        box.checked = b.dataset.mode === 'preset';
+        box.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    });
+    return row;
+  }
   function group() {
+    formEl.appendChild(mode());
+    ['applyPitStrategy', 'pitStrategy'].forEach(function (id) {
+      var tr = formEl.querySelector('tr[data-f="' + id + '"]');
+      if (tr) { formEl.appendChild(tr); tr.querySelector('td.lb').textContent = LABEL[id]; tr.classList.add('v4-preset-row'); }
+    });
+    var cols = document.createElement('tr'); cols.className = 'v4-colhead';
+    cols.innerHTML = '<th></th><th>Da inviare</th><th>In macchina</th>';
+    formEl.appendChild(cols);
     GROUPS.forEach(function (g) {
       var first = true;
       g[1].forEach(function (id) {
@@ -1902,16 +1945,11 @@ else globalThis.MfdV4Contract = exported;
         if (first) {
           var head = document.createElement('tr'); head.className = 'v4-group';
           head.innerHTML = '<th colspan="5"></th>'; head.firstChild.textContent = g[0];
-          // One heading for the current-value column instead of "ora" on every
-          // row, on the title of the first group that has current values.
-          if (g[0] === 'Benzina') { head.classList.add('v4-cols'); head.firstChild.insertAdjacentHTML('beforeend', '<span class="v4-col-now">Adesso</span>'); }
           formEl.appendChild(head); first = false;
         }
         formEl.appendChild(tr);
         if (LABEL[id]) tr.querySelector('td.lb').textContent = LABEL[id];
         if (HALF[id]) tr.classList.add('v4-half');
-        // The second field of each pair sits in the right-hand columns of the grid.
-        if (RIGHT[id]) tr.classList.add('v4-right');
       });
     });
   }
@@ -1939,15 +1977,17 @@ else globalThis.MfdV4Contract = exported;
         // PIP-761: the default rule (online-panel.js defaultTyreSet), as a tooltip.
         if (id === 'tyreSet') input.title += '. Predefinito: il set dopo quello montato (50 → 49; montato ignoto → 1)';
       }
-      var now = document.createElement('td'); now.className = 'v4-now'; now.dataset.now = id;
-      tr.lastElementChild.before(now);
+      if (READABLE[id]) { var now = document.createElement('td'); now.className = 'v4-now'; now.dataset.now = id; tr.lastElementChild.before(now); }
     });
     var presetRow = formEl.querySelector('tr[data-f="pitStrategy"]');
     if (presetRow && S.applyPitStrategy) {
       var note = document.createElement('tr'); note.className = 'v4-preset-note';
-      note.innerHTML = '<td colspan="5">Gli altri campi non vengono inviati.</td>';
+      note.innerHTML = '<td colspan="5">Il preset sostituisce tutti i valori del pit stop.</td>';
       presetRow.after(note);
     }
+    // The "in macchina" band starts at its column heading.
+    var colhead = formEl.querySelector('tr.v4-colhead th');
+    if (colhead) formEl.style.setProperty('--v4-band-top', colhead.offsetTop + 'px');
     refresh();
     if (focused && focused !== document.activeElement && formEl.contains(focused)) focused.focus();
   }

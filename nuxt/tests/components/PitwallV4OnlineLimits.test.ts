@@ -59,7 +59,7 @@ it('unknown car with a valid live tank: limit shown, litres TO ADD sent as typed
   // The car-dependent range sits under the label, so the field column keeps one width.
   expect(f.q('tr[data-f="fuel"] td.lb').firstChild.textContent).toBe('Da aggiungere (L)')
   expect(f.q('tr[data-f="fuel"] td.lb .v4-limit').textContent).toBe('0–110 L')
-  expect(f.q('tr[data-f="fuel"]').previousElementSibling.firstChild.firstChild.textContent).toBe('Benzina')
+  expect(f.q('tr[data-f="fuel"]').previousElementSibling.textContent).toBe('Benzina')
   f.edit('fuel', '40'); f.q('#apply').click()
   expect(f.submits()).toEqual([expect.objectContaining({ operation: 'strategy', fuelLiters: 40 })])
 })
@@ -122,7 +122,7 @@ it('-/+ buttons: one step per click, clamped to the limits, disabled with the fi
 it('preset: other fields visibly off with "Invii solo il preset"; tick cleared and saved as it leaves; draft kept', () => {
   const f = form(); f.snapshot(); f.ready(); f.edit('fuel', '60')
   const tick = f.field('applyPitStrategy'); tick.checked = true; tick.dispatchEvent(new f.w.Event('change', { bubbles: true }))
-  expect(f.q('tr.v4-preset-note').textContent).toBe('Gli altri campi non vengono inviati.')
+  expect(f.q('tr.v4-preset-note').textContent).toBe('Il preset sostituisce tutti i valori del pit stop.')
   expect(f.q('#form').classList.contains('preset-only')).toBe(true)
   expect(f.field('fuel').disabled).toBe(true)
   expect(f.q('button[data-step-field="fuel"]').disabled).toBe(true)
@@ -230,27 +230,54 @@ it('one source of limits: the form, the receiver and the RTDB order rules agree'
   agree('FL', `newData.val() >= ${limits.pressure.min} && newData.val() <= ${limits.pressure.max}`)
 })
 
-it('minimal layout (09/11): groups in reading order, preset first, short labels, no technical source tags shown', () => {
+it('layout (09/11): kind switch, two columns (send / in the car), sections in order, live values only where the game publishes them', () => {
   const f = form()
   f.snapshot({ strategy: car() })
-  const rows = [...f.w.document.querySelectorAll('#form tr[data-f], #form tr.v4-group')].map((tr: any) => tr.classList.contains('v4-group') ? `#${tr.firstChild.firstChild.textContent}` : tr.dataset.f)
-  expect(rows).toEqual(['#Preset', 'applyPitStrategy', 'pitStrategy', '#Benzina', 'fuel',
+  const rows = [...f.w.document.querySelectorAll('#form tr[data-f], #form tr.v4-group, #form tr.v4-colhead, #form tr.v4-mode')]
+    .map((tr: any) => tr.classList.contains('v4-group') ? `#${tr.textContent}` : tr.classList.contains('v4-colhead') ? 'COLS'
+      : tr.classList.contains('v4-mode') ? 'MODE' : tr.dataset.f)
+  expect(rows).toEqual(['MODE', 'applyPitStrategy', 'pitStrategy', 'COLS', '#Benzina', 'fuel',
     '#Gomme', 'changeTyre', 'compound', 'tyreSet', 'fl', 'fr', 'rl', 'rr',
-    '#Freni', 'brakes', 'brakeFront', 'brakeRear', '#Riparazioni', 'susp', 'body', '#Pilota', 'driverIdx'])
+    '#Freni', 'brakes', 'brakeFront', 'brakeRear', '#Pilota', 'driverIdx', '#Riparazioni', 'susp', 'body'])
+  expect([...f.q('tr.v4-colhead').children].map((th: any) => th.textContent)).toEqual(['', 'Da inviare', 'In macchina'])
+  // Only the values the game publishes live have an "in macchina" cell.
+  expect([...f.w.document.querySelectorAll('td.v4-now')].map((td: any) => td.dataset.now)).toEqual(['fuel', 'compound', 'tyreSet', 'fl', 'fr', 'rl', 'rr'])
   expect(f.q('tr[data-f="fl"] td.lb').textContent).toBe('FL')
-  expect(f.q('tr[data-f="fl"]').classList.contains('v4-half')).toBe(true)
   // Fixed ranges are not repeated on screen; the fuel range (it depends on the car) is.
   expect(f.q('tr[data-f="fl"] .v4-limit').classList.contains('v4-quiet')).toBe(true)
   expect(f.q('tr[data-f="fuel"] .v4-limit').classList.contains('v4-quiet')).toBe(false)
-  // The canonical source-tag cell still exists (canonical code writes it) but the theme hides it.
   const css = [...f.w.document.querySelectorAll('style')].map((s: any) => s.textContent).join('\n')
   expect(css).toContain('#form tr[data-f] > td:nth-child(3)')
   expect(f.q('#refresh-draft').textContent).toBe('Usa valori attuali')
-  // One heading for the current-value column instead of "ora" on every row.
-  expect(f.q('tr.v4-cols .v4-col-now').textContent).toBe('Adesso')
-  expect(f.q('tr.v4-cols').firstChild.firstChild.textContent).toBe('Benzina')
   expect(f.w.document.title).toBe('Strategia pit')
-  // A crew with names needs no explanatory note under the driver select.
   f.snapshot({ strategy: car(), crew: [{ driverIndex: 0, name: 'Test Driver' }] })
   expect(f.q('tr[data-f="driverIdx"] div')).toBeNull()
+})
+
+it('kind switch drives the canonical preset checkbox both ways; preset mode sends only the preset', () => {
+  const f = form()
+  f.snapshot({ strategy: car() })
+  const button = (mode: string) => f.q(`.v4-switch button[data-mode="${mode}"]`)
+  expect(button('values').getAttribute('aria-pressed')).toBe('true')
+  button('preset').click()
+  expect(f.w.S.applyPitStrategy).toBe(true)
+  expect(f.q('#form').classList.contains('preset-only')).toBe(true)
+  expect(button('preset').getAttribute('aria-pressed')).toBe('true')
+  expect(f.q('tr.v4-preset-note').textContent).toBe('Il preset sostituisce tutti i valori del pit stop.')
+  f.q('#apply').click()
+  expect(f.submits().at(-1)).toMatchObject({ operation: 'preset', pitStrategy: 1 })
+  expect(Object.keys(f.submits().at(-1))).not.toContain('fuelLiters')
+  button('values').click()
+  expect(f.w.S.applyPitStrategy).toBe(false)
+  expect(f.q('#form').classList.contains('preset-only')).toBe(false)
+  // Codex 09/11: no kind switch while a field is composing (IME). Fresh form: the one above is busy sending.
+  const g = form(); g.snapshot({ strategy: car() })
+  const fresh = (mode: string) => g.q(`.v4-switch button[data-mode="${mode}"]`)
+  const fuel = g.q('input[data-f="fuel"]')
+  fuel.dispatchEvent(new g.w.CompositionEvent('compositionstart', { bubbles: true }))
+  fresh('preset').click()
+  expect(g.w.S.applyPitStrategy).toBe(false)
+  fuel.dispatchEvent(new g.w.CompositionEvent('compositionend', { bubbles: true }))
+  fresh('preset').click()
+  expect(g.w.S.applyPitStrategy).toBe(true)
 })

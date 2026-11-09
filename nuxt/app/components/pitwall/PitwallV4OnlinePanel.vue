@@ -143,7 +143,7 @@ onBeforeUnmount(() => window.removeEventListener('message', message))
       </select>
     </label>
     <p v-else class="v4-recipient"><span>{{ t('pitwall.v4.sendTo') }} <strong>{{ recipientLabel || t('pitwall.v4.noDriver') }}</strong><template v-if="recipientLabel && receive?.state === 'ready'"> · {{ t('pitwall.v4.readyShort') }}</template></span></p>
-    <p v-if="receive" class="v4-receive" :class="`v4-receive--${receive.state}`" role="status">{{ receive.label }}</p>
+    <p v-if="receive && receive.state !== 'ready'" class="v4-receive" :class="`v4-receive--${receive.state}`" role="status">{{ receive.label }}</p>
     <details v-if="development" class="v4-tools">
       <summary>Strumenti di sviluppo</summary>
       <label v-if="port?.availableTargets" class="v4-target">
