@@ -1,0 +1,1 @@
+import{aP as a,cv as t,aE as o,d4 as n,a4 as s}from"./I5jTG82T.js";const _={class:"page-container","data-page-scroll":""},c=a({__name:"PageContainer",setup(r){return(e,p)=>(t(),o("div",_,[n(e.$slots,"default",{},void 0,!0)]))}}),i=Object.assign(s(c,[["__scopeId","data-v-3b5d0396"]]),{__name:"LayoutPageContainer"});export{i as _};
