@@ -2,6 +2,11 @@ import type { FullSession } from '~/types/telemetry'
 import { buildRawStintMetrics, isCleanSessionLap } from './sessionStintMetrics'
 import type { SessionDisplayModel, SessionDisplayLap, SessionDisplayStint } from '~/types/sessionDisplayModel'
 import { sessionDetailTrackId } from './recordedSessionAdapter'
+import { resolveTrackMetadata } from '../projections/trackMetadata'
+import { formatDelta } from '../telemetry/lapAnalysis'
+
+// QA 10/11: a lap faster than the reference (e.g. an invalid one) showed "+-0.070".
+const signedSeconds = (ms: number) => formatDelta(ms / 1000)
 
 export function createEmptySessionDisplayModel(sessionId: string): SessionDisplayModel {
   return {
@@ -78,7 +83,7 @@ export function buildSessionDisplayModel(params: {
       avgMs: avgLapMs,
       durationMs: stint.stint_drive_time_ms || stint.laps.reduce((sum, lap) => sum + (lap.lap_time_ms || 0), 0),
       theoretical: formatLapTime(sessionBestLap),
-      deltaVsTheo: bestLapMs && sessionBestLap ? `+${((bestLapMs - sessionBestLap) / 1000).toFixed(3)}` : '-',
+      deltaVsTheo: bestLapMs && sessionBestLap ? signedSeconds(bestLapMs - sessionBestLap) : '-',
       conditions: {
         weather: info.start_weather,
         avgAirTemp: info.start_air_temp,
@@ -94,7 +99,7 @@ export function buildSessionDisplayModel(params: {
       lap: lap.lap_number,
       time: formatLapTime(lap.lap_time_ms),
       lap_time_ms: lap.lap_time_ms,
-      delta: sessionBestLap ? `+${((lap.lap_time_ms - sessionBestLap) / 1000).toFixed(3)}` : '-',
+      delta: sessionBestLap ? signedSeconds(lap.lap_time_ms - sessionBestLap) : '-',
       valid: lap.is_valid,
       pit: lap.has_pit_stop,
       pitOut: lap.pit_out_lap === true,
@@ -140,7 +145,8 @@ export function buildSessionDisplayModel(params: {
 
   return {
     id: sessionId,
-    track: [info.track, info.track_variant].filter(Boolean).join(' · '),
+    // QA 10/11: the header showed the raw id ("OULTON_PARK"); the catalogue name, as in Piste.
+    track: [resolveTrackMetadata(info.track).name, info.track_variant].filter(Boolean).join(' · '),
     trackId: sessionDetailTrackId(fs),
     type: info.session_type < 0 ? 'unknown' : getSessionTypeLabel(info.session_type),
     date: formatDateFull(info.date_start),
@@ -156,11 +162,11 @@ export function buildSessionDisplayModel(params: {
     theoQualy: formatLapTime(sessionBestLap),
     theoRace: formatLapTime(sessionBestLap),
     bestDeltaQ: {
-      value: bestQualyMs && sessionBestLap ? `+${((bestQualyMs - sessionBestLap) / 1000).toFixed(3)}` : '-',
+      value: bestQualyMs && sessionBestLap ? signedSeconds(bestQualyMs - sessionBestLap) : '-',
       stintNum: bestQualyStintNum
     },
     bestDeltaR: {
-      value: bestRaceMs && sessionBestLap ? `+${((bestRaceMs - sessionBestLap) / 1000).toFixed(3)}` : '-',
+      value: bestRaceMs && sessionBestLap ? signedSeconds(bestRaceMs - sessionBestLap) : '-',
       stintNum: bestRaceStintNum
     },
     stints,

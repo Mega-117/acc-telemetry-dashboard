@@ -2,13 +2,17 @@
 import type { LapSource } from './lapSources'
 import { normalizeLapTrace, type LapTraceView } from './lapTraceChart'
 import type { Entry } from '~/composables/useReferenceLibrary'
+import { ARCHIVE_READS_AT_ONCE, readLimited } from './readLimited'
+
+export { ARCHIVE_READS_AT_ONCE }
 
 export interface SessionLapRead { trace: LapTraceView, entry: Entry }
+
 export interface SessionLapResult { total: number, ok: SessionLapRead[] }
 
 /**
  * All laps of the session (about 120 KB each). A lap that cannot be read (pruned meanwhile, damaged) is
- * left out here, never on a later click. Laps on the PC are read together; from the archive one at a time,
+ * left out here, never on a later click. Laps on the PC are read together; from the archive a few at a time,
  * stopping as soon as the view changed (`null`).
  */
 export async function readSessionLaps(source: LapSource, sessionToken: string, validByLap: Map<number, boolean | null>,
@@ -26,10 +30,9 @@ export async function readSessionLaps(source: LapSource, sessionToken: string, v
   }
   let read: (SessionLapRead | null)[] = []
   if (oneByOne) {
-    for (const d of list) {
-      if (!isCurrent()) return null
-      read.push(await readOne(d))
-    }
+    const limited = await readLimited(list, ARCHIVE_READS_AT_ONCE, readOne, isCurrent)
+    if (!limited) return null
+    read = limited
   } else read = await Promise.all(list.map(readOne))
   if (!isCurrent()) return null
   return { total: list.length, ok: read.filter((r): r is SessionLapRead => r !== null) }

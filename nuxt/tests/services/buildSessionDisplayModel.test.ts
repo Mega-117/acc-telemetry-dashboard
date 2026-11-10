@@ -60,4 +60,20 @@ describe('buildSessionDisplayModel', () => {
       avgWarning: false
     })
   })
+
+  // QA 10/11 (Oulton Park race): an invalid lap faster than the reference showed "+-0.070",
+  // and the header showed the raw id "OULTON_PARK".
+  it('signs a faster lap with a minus and names the track as the catalogue does', () => {
+    const fs = session()
+    fs.session_info.track = 'oulton_park'
+    fs.session_info.session_best_lap = 116_000
+    const result = buildSessionDisplayModel({
+      sessionId: 's', fullSession: fs, maxReasonableLapMs: 300_000,
+      formatLapTime: (value) => `${value}`, formatCarName: (value) => value,
+      formatDateFull: (value) => value, formatTime: (value) => value, getSessionTypeLabel: () => 'race'
+    })
+    expect(result.track).toBe('Oulton Park')
+    expect(result.lapsData[1]!.map((l) => l.delta)).toEqual(['−1.940', '+0.000', '+0.200', '+1.000', '+2.150'])
+    expect(result.bestDeltaR.value).toBe('−1.940')
+  })
 })

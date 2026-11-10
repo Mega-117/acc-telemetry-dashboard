@@ -18,6 +18,7 @@ import { loadPublicNickname } from '~/repositories/publicProfileRepository'
 import { noteFeatureUse } from '~/services/usage/featureUseNote'
 import { useI18n } from '~/i18n'
 import { traceCoversLap } from '~/services/telemetry/traceCoverage'
+import { readLimited, ARCHIVE_READS_AT_ONCE } from '~/services/telemetry/readLimited'
 
 /** One lap of the Telemetria menus. Only "local"/"pilot" laps of the shown session can be "Tu". */
 export interface Entry {
@@ -209,7 +210,7 @@ export function useReferenceLibrary(o: {
     youKind: () => LapKind | null = () => null): Promise<string | null> {
     try {
       const list = await source.list(target.sessionToken)
-      // One lap at a time, as the archive is read for a coach, and one retry: a lap that does not arrive
+      // A few laps at a time (QA 10/11), and one retry: a lap that does not arrive
       // once (a busy network) is not silently missing from the comparison.
       const readOne = async (d: LapDescriptor): Promise<Loaded | null> => {
         for (let attempt = 0; attempt < 2; attempt++) {
@@ -221,9 +222,8 @@ export function useReferenceLibrary(o: {
         }
         return null
       }
-      const read: (Loaded | null)[] = []
-      for (const d of list) { if (!isCurrent()) return null; read.push(await readOne(d)) }
-      if (!isCurrent()) return null
+      const read = await readLimited(list, ARCHIVE_READS_AT_ONCE, readOne, isCurrent)
+      if (!read) return null
       o.entries.value = o.entries.value.filter(e => e.origin !== 'compare')
       const ok = read.filter((r): r is Loaded => r !== null).sort((a, b) => a.entry.lapTimeMs - b.entry.lapTimeMs)
       add(ok)
