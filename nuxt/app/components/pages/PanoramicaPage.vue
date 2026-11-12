@@ -18,6 +18,7 @@ import { getOverviewCarImage } from '~/utils/overviewCarImage'
 import { overviewEntryKey } from '~/services/auth/overviewEntryPreparation'
 import { rememberPage } from '~/services/ui/pagePreparation'
 import { noteFeatureUse } from '~/services/usage/featureUseNote'
+import { pickLastSessionTarget } from '~/services/projections/overviewLastSession'
 import type { OverviewProjection } from '~/types/overviewProjections'
 import type { RaceCalendarEvent } from '~/repositories/raceCalendarRepository'
 import { useI18n, type TranslationKey } from '~/i18n'
@@ -155,10 +156,43 @@ function goToTrack() {
   if (pilotContext.value) emit('go-to-track', lastTrack.value.id)
   else router.push(`/piste/${encodeURIComponent(lastTrack.value.id)}`)
 }
-function goToSession() {
-  if (!lastSession.value?.id) return
-  if (pilotContext.value) emit('go-to-session', lastSession.value.id)
-  else router.push(`/sessioni/${encodeURIComponent(lastSession.value.id)}`)
+// PIP-767: own data in the program: the destination is decided at the click, not when the page was
+// built (Marik 12/11: page open at 08:48, 9 laps driven, the click at 09:05 opened yesterday's race).
+const checksLocalSessions = computed(() => !pilotContext.value && typeof window !== 'undefined' && !!(window as Window & { electronAPI?: unknown }).electronAPI)
+let sessionClick = 0
+let unmounted = false
+onBeforeUnmount(() => { unmounted = true })
+const openingSession = ref(false)
+async function goToSession() {
+  if (pilotContext.value) {
+    if (lastSession.value?.id) emit('go-to-session', lastSession.value.id)
+    return
+  }
+  if (openingSession.value) return
+  openingSession.value = true
+  const click = ++sessionClick
+  const owner = targetUserId.value
+  const game = consultedGame.value
+  const shown = lastSession.value?.id ? { id: lastSession.value.id, date: lastSession.value.date } : null
+  try {
+    const found = checksLocalSessions.value
+      ? await telemetryGateway.findNewestOwnSession(owner, game)
+      : { local: null, newestStart: null, checked: false }
+    // A late answer for another owner, game or page is dropped.
+    if (unmounted || click !== sessionClick || owner !== targetUserId.value || game !== consultedGame.value) return
+    const target = pickLastSessionTarget(shown, found.local)
+    if (checksLocalSessions.value) {
+      // KO measured against the program's own lap counters, not against the choice just made.
+      const newest = found.newestStart ? parseTelemetryDate(found.newestStart)?.getTime() : undefined
+      const opened = target?.date ? parseTelemetryDate(target.date)?.getTime() : undefined
+      const behind = newest !== undefined && Number.isFinite(newest) && (opened === undefined || !Number.isFinite(opened) || newest > opened)
+      noteFeatureUse({ event: 'overview.last_session', newer: target && target.id !== shown?.id ? 1 : 0, behind: behind ? 1 : 0, fallback: found.checked ? 0 : 1 })
+    }
+    if (target?.id) await router.push(`/sessioni/${encodeURIComponent(target.id)}`)
+    else await router.push('/sessioni')
+  } finally {
+    openingSession.value = false
+  }
 }
 // PIP-619: the coach stays inside the pilot page (explicit pilot context), the pilot gets the route.
 function goToStats() {
@@ -204,7 +238,7 @@ function goToStats() {
           </table>
           <div class="last-drive__actions">
             <button class="rc-btn" :disabled="!lastTrack" @click="goToTrack">{{ t('overview.trackDetail') }}<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" /></button>
-            <button class="rc-btn rc-btn--primary" :disabled="!lastSession?.id" @click="goToSession">{{ t('overview.lastSession') }}<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" /></button>
+            <button class="rc-btn rc-btn--primary" :disabled="(!lastSession?.id && !checksLocalSessions) || openingSession" @click="goToSession">{{ t('overview.lastSession') }}<UiRacingIcon name="chevron" :size="16" class="rc-btn__arrow" /></button>
           </div>
         </div>
         <span v-if="isOverviewPlaceholder" class="overview-loading-label" role="status">{{ t('common.loadingData') }}</span>

@@ -19,6 +19,8 @@ export type FeatureUseNote =
   /** PIP-751: the shown pair against ACC's lap times (comparable 0/1, ms always >= 0). */
   | { event: 'laps.gap_check', comparable: number, spanGapMs: number, mismatch: number }
   | { event: 'overview.remembered', changed: number, older: number }
+  /** PIP-767: "Ultima sessione" clicked (newer: a session newer than the page showed; behind/fallback: the KO). */
+  | { event: 'overview.last_session', newer: number, behind: number, fallback: number }
   /** PIP-743: the Dati page's laps against the logger's counters and the Sessioni list summary. */
   | { event: 'data.session_check', laps: number, lapsOff: number, validOff: number, off: number, bestOff: number }
   /** PIP-742: a page of the main window appearing after a click (page: closed list of codes). */

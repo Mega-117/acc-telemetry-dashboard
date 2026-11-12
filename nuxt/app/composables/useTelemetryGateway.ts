@@ -41,7 +41,7 @@ import { checkFirebaseCacheFreshness, recordFirebaseCacheHit } from '~/services/
 // PIP-442: cache dell'owner corrente senza scadenza (controllo di revisione); di un altro
 // pilota (coach) 15 minuti.
 import { ownerDataCacheTtlFor } from '~/services/cache/cachePolicy'
-import { loadLocalTelemetrySessions } from '~/repositories/telemetryLocalRepository'
+import { findNewestLocalSession, loadLocalTelemetrySessions } from '~/repositories/telemetryLocalRepository'
 import { peekSessionListProjectionCache } from '~/services/sync/sessionListProjectionService'
 import { OverviewNotReadyError, selectOfflineOverviewSessions, shouldWaitForCloud } from '~/services/gateway/offlineOverviewPolicy'
 import {
@@ -543,6 +543,29 @@ export function useTelemetryGateway(explicitGameId?: string) {
         return mergePendingLocal(source.sessions, local, true)
     }
 
+    /**
+     * PIP-767: the newest session with a lap on this computer, for the Panoramica's "Ultima sessione".
+     * Own data in the program only (a coach or the browser: `local: null, checked: false`); an answer
+     * later than `timeoutMs` or a failure is `checked: false`, and the caller keeps the session it shows.
+     */
+    async function findNewestOwnSession(targetUserId: string | null | undefined, selectedGame: string, timeoutMs = 2000): Promise<{ local: { id: string; date: string } | null; newestStart: string | null; checked: boolean }> {
+        const uid = resolveTargetUserId(targetUserId || undefined)
+        if (!uid || !isElectron.value || uid !== currentUser.value?.uid) return { local: null, newestStart: null, checked: false }
+        let timer: ReturnType<typeof setTimeout> | undefined
+        try {
+            const found = await Promise.race([
+                findNewestLocalSession({ electronAPI: (window as Window & { electronAPI?: Parameters<typeof findNewestLocalSession>[0]['electronAPI'] }).electronAPI, ownerId: uid, gameId: selectedGame }),
+                new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('recent-sessions-timeout')), timeoutMs) }),
+            ])
+            // Incomplete (a file not readable as a session): still the best found, but not "checked".
+            return { local: found.session, newestStart: found.newestStart, checked: found.complete }
+        } catch {
+            return { local: null, newestStart: null, checked: false }
+        } finally {
+            if (timer) clearTimeout(timer)
+        }
+    }
+
     async function getVehicleHistory(targetUserId?: string, trackId?: string, references = false): Promise<SessionDocument[]> {
         const uid = resolveTargetUserId(targetUserId)
         if (!uid) return []
@@ -908,6 +931,7 @@ export function useTelemetryGateway(explicitGameId?: string) {
         getVehicleHistory,
         getCommonHistoryOverview,
         getCommonOverviewProjection,
+        findNewestOwnSession,
         getTrackSnapshot,
         getTracksOverviewProjection,
         getTrackDetailProjection,

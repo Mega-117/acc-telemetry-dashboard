@@ -1,6 +1,6 @@
 import type { SessionDocument, SessionSummary } from '~/types/telemetry'
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
-import { formatLapTime } from '~/utils/telemetryFormat'
+import { formatLapTime, parseTelemetryDate } from '~/utils/telemetryFormat'
 import { readFuelHistory, summaryTiming } from '~/services/telemetry/fuelHistorySummary'
 
 export interface OverviewSessionReference { id: string; car: string; track: string; date: string }
@@ -16,6 +16,23 @@ export function selectOverviewLastSession(
     id: s.sessionId, car: s.meta.car, track: s.meta.track, date: s.meta.date_start,
   }))].filter(s => s.id && Number.isFinite(Date.parse(s.date)))
   return candidates.sort((a, b) => Date.parse(b.date) - Date.parse(a.date))[0] || null
+}
+
+type SessionRef = { id: string; date: string }
+
+/**
+ * PIP-767: where the Panoramica's "Ultima sessione" goes at the click: the session on this computer
+ * when it started after the one the page shows (the running one, opened hours later), otherwise the
+ * shown one. An unreadable date never wins over a readable one.
+ */
+export function pickLastSessionTarget(shown: SessionRef | null, local: SessionRef | null): SessionRef | null {
+  if (!local?.id) return shown?.id ? shown : null
+  if (!shown?.id || shown.id === local.id) return local
+  const localAt = parseTelemetryDate(local.date)?.getTime()
+  const shownAt = parseTelemetryDate(shown.date)?.getTime()
+  if (localAt === undefined || !Number.isFinite(localAt)) return shown
+  if (shownAt === undefined || !Number.isFinite(shownAt)) return local
+  return localAt > shownAt ? local : shown
 }
 
 export function buildOverviewSessionPerformance(
