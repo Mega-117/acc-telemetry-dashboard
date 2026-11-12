@@ -1,0 +1,1 @@
+import{aP as s,eg as o,cr as t,cv as r,aE as n,aB as c,a4 as _}from"./CGs-bjeI.js";const p={class:"redirect-screen"},d=s({__name:"[...slug]",setup(u){const a=o();return t(()=>{a.replace("/panoramica")}),(i,e)=>(r(),n("div",p,[...e[0]||(e[0]=[c("p",null,"Reindirizzamento...",-1)])]))}}),m=_(d,[["__scopeId","data-v-5c5ada89"]]);export{m as default};
